@@ -40,16 +40,23 @@ async function main(): Promise<void> {
       console.log(`[seed] Tenant creado: ${slug} (${tenantId})`);
     }
 
+    // Re-hashear siempre — así si cambian SEED_ADMIN_PASSWORD en el .env y
+    // se re-ejecuta el seed, la password queda sincronizada.
+    const passwordHash = await hash(adminPassword, 12);
+
     const existingUser = (await AppDataSource.query(`SELECT id FROM users WHERE email = $1`, [
       adminEmail,
     ])) as Array<{ id: string }>;
     let userId: string;
     if (existingUser.length > 0) {
       userId = existingUser[0]!.id;
+      await AppDataSource.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [
+        passwordHash,
+        userId,
+      ]);
       // eslint-disable-next-line no-console
-      console.log(`[seed] User "${adminEmail}" ya existe (${userId})`);
+      console.log(`[seed] User "${adminEmail}" ya existe (${userId}) — password actualizada`);
     } else {
-      const passwordHash = await hash(adminPassword, 12);
       const inserted = (await AppDataSource.query(
         `INSERT INTO users (email, password_hash, nombre, apellido, idioma_pref) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [adminEmail, passwordHash, 'Admin', 'Demo', 'es'],
