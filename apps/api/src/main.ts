@@ -15,6 +15,14 @@ import { initializeTransactionalContext } from 'typeorm-transactional';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
+  // Tracers crudos a stdout — útiles para diagnosticar dónde se cuelga
+  // el bootstrap cuando bufferLogs oculta errores. Quitar cuando esté
+  // estable.
+  // eslint-disable-next-line no-console
+  const trace = (step: string): void => console.log(`[bootstrap] ${step}`);
+
+  trace('1/8 starting bootstrap');
+
   // Inicializar el contexto transaccional ANTES de crear la app.
   // typeorm-transactional usa AsyncLocalStorage para propagar la transacción
   // activa a todas las queries de TypeORM dentro del request, sin tener que
@@ -22,12 +30,19 @@ async function bootstrap(): Promise<void> {
   // envuelva cada request en una tx donde SET LOCAL app.current_tenant_id
   // se propaga correctamente — pre-requisito de RLS.
   initializeTransactionalContext();
+  trace('2/8 transactional context initialized');
 
+  // bufferLogs: false — los logs van a stdout desde el momento 0. Si fuera
+  // true y NestFactory.create() lanzara una excepción ANTES de que se
+  // ejecute app.useLogger(), los logs bufferizados nunca se flushean y el
+  // bootstrap "se cuelga" silenciosamente.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    bufferLogs: true,
+    bufferLogs: false,
   });
+  trace('3/8 NestFactory.create OK');
 
   app.useLogger(app.get(PinoLogger));
+  trace('4/8 Pino logger attached');
   const logger = new Logger('Bootstrap');
 
   // ─── Validación temprana de secretos críticos ───────────────────────
@@ -167,6 +182,8 @@ async function bootstrap(): Promise<void> {
     );
   }
 
+  trace('5/8 about to configure CORS, allowedOrigins=' + (allowedOrigins?.join(',') ?? 'reflect'));
+
   app.enableCors({
     origin: (
       origin: string | undefined,
@@ -192,13 +209,16 @@ async function bootstrap(): Promise<void> {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+  trace('6/8 validation pipe configured');
 
   app.setGlobalPrefix('api/v1', {
     exclude: ['health', 'health/live', 'health/ready', 'health/version', 'metrics'],
   });
+  trace('7/8 about to listen on :3000');
 
   const port = Number.parseInt(process.env.PORT ?? '3000', 10);
   await app.listen(port);
+  trace(`8/8 listening on :${port}`);
   logger.log(`Fixtura API running on port ${port}`);
   logger.log(
     `CORS allowed origins: ${allowedOrigins ? allowedOrigins.join(', ') : 'all (reflect — dev only)'}`,
