@@ -21,6 +21,10 @@ RUN pnpm install --frozen-lockfile=false
 COPY packages/ packages/
 COPY apps/web/ apps/web/
 
+# Compilar packages compartidos primero. El web usa @fixtura/types y
+# Next.js no transpila las deps workspace por default.
+RUN pnpm --filter @fixtura/types run build
+
 RUN pnpm --filter @fixtura/web run build
 
 # ─── Runtime ────────────────────────────────────────────────────────────

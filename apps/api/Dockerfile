@@ -22,7 +22,13 @@ RUN pnpm install --frozen-lockfile=false
 COPY packages/ packages/
 COPY apps/api/ apps/api/
 
-# Build packages compartidos y el API
+# Compilar packages compartidos primero (orden importa: types primero
+# porque domain depende de types). El API hace require('@fixtura/types')
+# y Node necesita el JS compilado en dist/.
+RUN pnpm --filter @fixtura/types run build
+RUN pnpm --filter @fixtura/domain run build
+
+# Build del API
 RUN pnpm --filter @fixtura/api run build
 
 # ─── Runtime ────────────────────────────────────────────────────────────
