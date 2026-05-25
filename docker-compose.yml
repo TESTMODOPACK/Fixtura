@@ -189,9 +189,13 @@ services:
     depends_on:
       - api
       - web
+    # Puertos 8080/8443 para coexistir con otro proyecto que ya usa 80/443
+    # en este VPS. Para producción definitiva (cuando Fixtura tenga su
+    # propio VPS o un reverse proxy host-level con SNI routing), volver a
+    # 80:80 y 443:443.
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
     # Sin volumes — el conf está adentro de la imagen.
     # Cuando agregues dominio y certs Let's Encrypt: descomentar este mount
     # (asegurate de que /etc/letsencrypt/live/<dominio>/ exista en el host).
