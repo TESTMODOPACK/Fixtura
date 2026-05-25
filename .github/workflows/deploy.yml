@@ -1,0 +1,107 @@
+name: Deploy to VPS
+
+# Se dispara con push a main (después de que pase CI) o manualmente
+# desde la UI de GitHub Actions.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Cancela deploys anteriores si llega uno nuevo — el último gana.
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Hostinger
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ secrets.PRODUCTION_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Necesario para que git rev-parse funcione en el VPS
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Add VPS to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy via SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=no $VPS_USER@$VPS_HOST << 'ENDSSH'
+            set -euo pipefail
+
+            cd ~/fixtura
+
+            echo "==> Pull del repo"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "==> Setear GIT_SHA"
+            export GIT_SHA=$(git rev-parse --short HEAD)
+            echo "GIT_SHA=$GIT_SHA"
+
+            echo "==> Build de imágenes (api + web)"
+            docker compose -f docker-compose.prod.yml build --no-cache api web
+
+            echo "==> Levantar DB y Redis (si no están)"
+            docker compose -f docker-compose.prod.yml up -d db redis
+
+            # Esperar que la DB esté lista antes de migrar
+            echo "==> Esperando DB healthy"
+            timeout 60 bash -c 'until docker inspect fixtura_db --format "{{.State.Health.Status}}" 2>/dev/null | grep -q healthy; do sleep 3; done'
+
+            echo "==> Migraciones (idempotente)"
+            docker compose -f docker-compose.prod.yml run --rm api \
+              sh -c "node dist/database/cleanup-orphans.js && pnpm migration:run"
+
+            echo "==> Deploy rolling de api y web"
+            docker compose -f docker-compose.prod.yml up -d --no-deps api web nginx
+
+            echo "==> Esperar healthy"
+            timeout 120 bash -c 'until docker inspect fixtura_api --format "{{.State.Health.Status}}" 2>/dev/null | grep -q healthy; do echo "esperando api healthy..."; sleep 5; done'
+            timeout 120 bash -c 'until docker inspect fixtura_web --format "{{.State.Health.Status}}" 2>/dev/null | grep -q healthy; do echo "esperando web healthy..."; sleep 5; done'
+
+            echo "==> Cleanup de imágenes viejas"
+            docker image prune -f
+
+            echo "==> Smoke test"
+            curl -fsS http://localhost/api/health/live || (echo "Smoke test falló"; exit 1)
+            curl -fsS http://localhost/api/health/version
+
+            echo "==> Deploy OK (SHA: $GIT_SHA)"
+          ENDSSH
+
+      - name: Post-deploy verification
+        env:
+          PROD_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          # Validación externa: ¿el deploy es visible desde afuera?
+          if [ -n "$PROD_URL" ]; then
+            echo "==> Verificando $PROD_URL desde GitHub runner"
+            for i in 1 2 3; do
+              if curl -fsS "$PROD_URL/api/health/live"; then
+                echo "OK"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "Smoke externo falló"
+            exit 1
+          else
+            echo "PRODUCTION_URL no configurado — skip verificación externa"
+          fi

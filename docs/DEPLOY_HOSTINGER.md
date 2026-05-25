@@ -1,0 +1,462 @@
+# Deploy a Hostinger — runbook completo
+
+Guía paso a paso para llevar Fixtura de cero a producción en un VPS Hostinger
+con deploy automatizado vía GitHub Actions.
+
+> **Target**: VPS Hostinger KVM 2 (2 vCPU / 8 GB RAM / 100 GB SSD), Ubuntu 24.04 LTS.
+> **Tiempo total**: ~45 min la primera vez (incluyendo provisioning).
+
+---
+
+## Resumen de la arquitectura de deploy
+
+```
+   GitHub Push a main
+          │
+          ▼
+   GitHub Actions CI (lint + test + build)
+          │ (si pasa)
+          ▼
+   GitHub Actions Deploy
+          │ SSH al VPS con clave privada (secret)
+          ▼
+   VPS Hostinger (usuario "fixtura")
+          │ git pull → docker compose build → migrate → up -d → healthcheck
+          ▼
+   Nginx (puerto 80 / 443) → API:3000 + Web:3001 + DB + Redis
+```
+
+---
+
+## Paso 1 — Provisionar el VPS en Hostinger
+
+1. Comprar el plan KVM 2 (Ubuntu 24.04 LTS).
+2. Durante el provisioning, en el panel de Hostinger:
+   - **OS**: Ubuntu 24.04 LTS
+   - **Hostname**: `fixtura-prod` (lo que quieras)
+   - **SSH key**: pegar tu clave **pública** personal (`~/.ssh/id_rsa.pub` o similar).
+     Si no tenés clave, generala en tu máquina:
+     ```powershell
+     ssh-keygen -t ed25519 -C "rmorales.olate@gmail.com"
+     # Acepta los defaults. Se crea ~/.ssh/id_ed25519 + .pub
+     type $HOME\.ssh\id_ed25519.pub
+     # Copiar el contenido al campo de Hostinger
+     ```
+3. Esperar que termine el provisioning (~3-5 min). Hostinger te muestra la
+   IP pública del VPS.
+
+### Verificar acceso SSH
+
+```powershell
+ssh root@<IP-DEL-VPS>
+# Si entra sin pedir password, todo OK
+# Probá: whoami → debería decir "root"
+```
+
+---
+
+## Paso 2 — Bootstrap del VPS
+
+El script `scripts/bootstrap-vps.sh` configura todo lo necesario:
+firewall UFW, fail2ban, Docker Engine + Compose, usuario `fixtura`, swap,
+y endurece SSH (deshabilita password auth, root login solo con key).
+
+Es **idempotente** — podés correrlo varias veces sin romper nada.
+
+```bash
+# Como root en el VPS
+wget https://raw.githubusercontent.com/TESTMODOPACK/Fixtura/main/scripts/bootstrap-vps.sh
+chmod +x bootstrap-vps.sh
+./bootstrap-vps.sh
+```
+
+Si tu repo es privado, GitHub bloquea el wget. Alternativa:
+
+```powershell
+# Desde tu máquina local
+scp scripts/bootstrap-vps.sh root@<IP-VPS>:/root/
+
+# Luego en el VPS
+ssh root@<IP-VPS>
+chmod +x /root/bootstrap-vps.sh
+/root/bootstrap-vps.sh
+```
+
+El script al terminar te imprime los próximos pasos.
+
+---
+
+## Paso 3 — Clonar el repo en el VPS (primera vez)
+
+Como el repo es privado, necesitás autenticación. Tres opciones:
+
+### Opción A — Deploy key (recomendado)
+
+Una SSH key específica para que el VPS pueda clonar este repo (read-only):
+
+```bash
+# En el VPS como usuario fixtura
+sudo su - fixtura
+ssh-keygen -t ed25519 -C "fixtura-vps-deploy" -f ~/.ssh/github_deploy -N ""
+cat ~/.ssh/github_deploy.pub
+# Copiar la salida
+```
+
+En GitHub: <https://github.com/TESTMODOPACK/Fixtura/settings/keys/new>
+- Title: `VPS Hostinger`
+- Key: pegar el contenido `.pub`
+- **NO** marcar "Allow write access" (el VPS solo necesita pull)
+
+Configurar SSH para usar esa key con GitHub:
+
+```bash
+cat >> ~/.ssh/config <<'EOF'
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/github_deploy
+  IdentitiesOnly yes
+EOF
+chmod 600 ~/.ssh/config
+ssh -T git@github.com  # Debe responder "Hi TESTMODOPACK/Fixtura! You've successfully authenticated"
+```
+
+Ahora clonar:
+
+```bash
+cd ~/fixtura
+git clone git@github.com:TESTMODOPACK/Fixtura.git .
+```
+
+### Opción B — Personal Access Token (más simple, menos seguro)
+
+```bash
+cd ~/fixtura
+git clone https://<USERNAME>:<TOKEN>@github.com/TESTMODOPACK/Fixtura.git .
+```
+
+OJO: el token queda en `.git/config`. Si alguien tiene acceso al VPS, lo ve.
+
+---
+
+## Paso 4 — Configurar `.env` de producción
+
+```bash
+cd ~/fixtura
+cp .env.example .env
+nano .env
+```
+
+Valores **mínimos obligatorios** (el resto pueden quedar vacíos en Fase 0):
+
+```env
+NODE_ENV=production
+
+# DB — generar passwords fuertes
+# openssl rand -base64 24
+DB_NAME=fixtura
+DB_USER=fixtura
+DB_PASSWORD=<password-fuerte-aleatorio>
+DB_APP_USER=fixtura_app
+DB_APP_PASSWORD=<otro-password-fuerte-distinto>
+DB_SSL=false
+
+# Redis
+REDIS_URL=redis://redis:6379
+
+# JWT secretos (≥32 chars cada uno, distintos entre sí)
+# openssl rand -base64 32
+JWT_SECRET=<32-chars-aleatorios>
+SSO_STATE_SECRET=<otros-32-chars-aleatorios-distintos>
+
+# URLs — usar la IP del VPS hasta que tengas dominio
+APP_URL=http://<IP-VPS>
+API_URL=http://<IP-VPS>/api
+FRONTEND_URL=http://<IP-VPS>
+NEXT_PUBLIC_API_URL=http://<IP-VPS>/api
+
+# Nginx — usar config sin TLS hasta tener dominio
+NGINX_CONF=nginx.bootstrap.conf
+
+# Email demo (sin Resend activo en Fase 0)
+EMAIL_FROM=Fixtura <onboarding@resend.dev>
+
+# Seed
+SEED_TENANT_SLUG=liga-demo
+SEED_TENANT_NAME=Liga Demo
+SEED_ADMIN_EMAIL=admin@fixtura.local
+SEED_ADMIN_PASSWORD=<password-fuerte-para-el-admin>
+
+# Métricas (basic auth, recomendado en prod)
+METRICS_USER=prometheus
+METRICS_PASSWORD=<password-fuerte>
+```
+
+Generar todos los secretos de una con:
+
+```bash
+echo "DB_PASSWORD=$(openssl rand -base64 24)"
+echo "DB_APP_PASSWORD=$(openssl rand -base64 24)"
+echo "JWT_SECRET=$(openssl rand -base64 32)"
+echo "SSO_STATE_SECRET=$(openssl rand -base64 32)"
+echo "METRICS_PASSWORD=$(openssl rand -base64 16)"
+echo "SEED_ADMIN_PASSWORD=$(openssl rand -base64 12)"
+```
+
+---
+
+## Paso 5 — Primer arranque
+
+```bash
+cd ~/fixtura
+export GIT_SHA=$(git rev-parse --short HEAD)
+
+# Build de imágenes (~5-8 min la primera vez)
+docker compose -f docker-compose.prod.yml build api web
+
+# Levantar DB + Redis primero
+docker compose -f docker-compose.prod.yml up -d db redis
+
+# Esperar a que la DB pase healthcheck
+sleep 15
+docker compose -f docker-compose.prod.yml ps
+
+# Migrations
+docker compose -f docker-compose.prod.yml run --rm api \
+  sh -c "node dist/database/cleanup-orphans.js && pnpm migration:run"
+
+# Seed (crea tenant demo + admin)
+docker compose -f docker-compose.prod.yml run --rm api pnpm db:seed
+
+# Levantar el resto
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Verificar
+
+```bash
+# Healthcheck local
+curl http://localhost/api/health/live
+# {"status":"ok"}
+
+curl http://localhost/api/health/version
+# {"gitSha":"abc1234","nodeEnv":"production"}
+
+# Desde tu máquina
+curl http://<IP-VPS>/api/health/live
+# Si el firewall está OK, debería responder
+```
+
+Si todo funciona: <http://IP-VPS> te muestra el landing público de Fixtura.
+
+---
+
+## Paso 6 — Configurar deploy automático desde GitHub Actions
+
+### 6.1. Generar SSH key específica para CI/CD
+
+Esta clave la usa **GitHub Actions** para entrar al VPS, separada de tu clave personal.
+
+**En tu máquina local**:
+
+```powershell
+ssh-keygen -t ed25519 -C "github-actions-fixtura" -f $HOME\.ssh\fixtura_deploy -N '""'
+type $HOME\.ssh\fixtura_deploy.pub
+# Copia el contenido — esta es la pública
+type $HOME\.ssh\fixtura_deploy
+# Esta es la privada — la pegás a GitHub abajo
+```
+
+**Agregar la pública al VPS** (como usuario `fixtura`):
+
+```bash
+# En el VPS
+sudo su - fixtura
+echo "ssh-ed25519 AAAA... github-actions-fixtura" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+Verificar que la clave funciona — desde tu máquina:
+
+```powershell
+ssh -i $HOME\.ssh\fixtura_deploy fixtura@<IP-VPS> "whoami"
+# Debería responder: fixtura
+```
+
+### 6.2. Configurar secretos en GitHub
+
+<https://github.com/TESTMODOPACK/Fixtura/settings/secrets/actions> → "New repository secret"
+
+Crear estos cuatro:
+
+| Nombre | Valor |
+|---|---|
+| `VPS_HOST` | IP del VPS (ej. `123.45.67.89`) |
+| `VPS_USER` | `fixtura` |
+| `VPS_SSH_KEY` | **Contenido de la clave privada** (`$HOME\.ssh\fixtura_deploy` entero, incluyendo `-----BEGIN ... END-----`) |
+| `PRODUCTION_URL` | `http://<IP-VPS>` (o el dominio cuando lo tengas) |
+
+### 6.3. Probar el workflow
+
+Hacé cualquier cambio chico (ej. agregar línea al README) y push:
+
+```powershell
+cd C:\Claude\Dev\Fixtura
+echo "" >> README.md
+git add README.md
+git commit -m "chore: trigger deploy"
+git push origin main
+```
+
+En <https://github.com/TESTMODOPACK/Fixtura/actions> debería arrancar el workflow `Deploy to VPS`. Si pasa: deploy automático funcionando.
+
+---
+
+## Paso 7 — Configurar dominio (cuando lo tengas)
+
+1. Comprar dominio (ej. `fixtura.cl` en NIC Chile, ~10k CLP/año).
+2. Crear A record apuntando a la IP del VPS:
+   ```
+   A    fixtura.cl       <IP-VPS>    TTL 300
+   A    www.fixtura.cl   <IP-VPS>    TTL 300
+   ```
+3. Esperar propagación DNS (5-30 min). Verificar:
+   ```bash
+   dig fixtura.cl  # Debe mostrar la IP del VPS
+   ```
+4. En el VPS, generar certificado Let's Encrypt:
+   ```bash
+   cd ~/fixtura
+   # Detener nginx temporalmente para liberar puerto 80
+   docker compose -f docker-compose.prod.yml stop nginx
+
+   # Generar cert via standalone
+   docker run --rm -p 80:80 \
+     -v /etc/letsencrypt:/etc/letsencrypt \
+     certbot/certbot certonly --standalone \
+     -d fixtura.cl -d www.fixtura.cl \
+     --agree-tos -m rmorales.olate@gmail.com --non-interactive
+
+   # Editar nginx/nginx.conf y cambiar fixtura.cl por tu dominio real
+   nano nginx/nginx.conf
+
+   # Cambiar config a la versión con TLS
+   sed -i 's/NGINX_CONF=.*/NGINX_CONF=nginx.conf/' .env
+
+   # Actualizar URLs
+   sed -i 's|APP_URL=.*|APP_URL=https://fixtura.cl|' .env
+   sed -i 's|API_URL=.*|API_URL=https://fixtura.cl/api|' .env
+   sed -i 's|FRONTEND_URL=.*|FRONTEND_URL=https://fixtura.cl|' .env
+
+   # Recrear nginx y web (NEXT_PUBLIC_API_URL se inyecta en build time)
+   docker compose -f docker-compose.prod.yml up -d --build nginx web
+   ```
+5. Configurar renovación automática (cron del host):
+   ```bash
+   sudo crontab -e
+   # Agregar:
+   0 3 * * * cd /home/fixtura/fixtura && docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v $(pwd)/nginx/certbot/www:/var/www/certbot certbot/certbot renew --quiet && docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+   ```
+
+---
+
+## Operación diaria
+
+### Ver logs
+
+```bash
+ssh fixtura@<IP-VPS>
+cd ~/fixtura
+docker compose -f docker-compose.prod.yml logs -f api
+docker compose -f docker-compose.prod.yml logs --tail=100 web
+```
+
+### Conectarse a la DB
+
+```bash
+docker compose -f docker-compose.prod.yml exec db psql -U fixtura -d fixtura
+```
+
+### Ejecutar migraciones manualmente
+
+```bash
+docker compose -f docker-compose.prod.yml exec api pnpm migration:run
+```
+
+### Restart de un servicio
+
+```bash
+docker compose -f docker-compose.prod.yml restart api
+```
+
+### Ver recursos
+
+```bash
+docker stats --no-stream
+df -h
+free -h
+```
+
+---
+
+## Troubleshooting
+
+### El deploy de GitHub Actions falla con "Permission denied (publickey)"
+
+- La clave privada en el secret `VPS_SSH_KEY` está mal pegada (faltan saltos de línea).
+- La clave pública NO está en `~/.ssh/authorized_keys` del usuario `fixtura` en el VPS.
+- Verificar con: `ssh -i fixtura_deploy fixtura@<IP-VPS>` desde tu máquina.
+
+### "Container api: unhealthy"
+
+```bash
+docker compose -f docker-compose.prod.yml logs --tail=100 api
+docker compose -f docker-compose.prod.yml exec api curl http://localhost:3000/health/ready
+```
+
+Causas típicas:
+- DB no llegó a healthy antes que el API
+- `.env` incompleto o malformado
+- Migración pendiente que necesita ejecutarse manualmente
+
+### "JWT_SECRET is weak or missing in production"
+
+El API valida secretos al bootstrap. Generá uno fuerte:
+```bash
+openssl rand -base64 32
+```
+
+### Disco lleno
+
+```bash
+docker system prune -af   # imágenes y containers no usados
+df -h
+```
+
+Cuidado: **no borres volumes** (`postgres_data`, `redis_data`).
+
+---
+
+## Backups (TODO antes de tener data real)
+
+Ver [`BACKUPS_RUNBOOK.md`](BACKUPS_RUNBOOK.md). Hay que implementar el cron de
+`pg_dump` antes de tener data de cliente.
+
+---
+
+## Checklist de "listo para producción"
+
+- [ ] VPS provisionado y bootstrap corrido
+- [ ] Repo clonado en `/home/fixtura/fixtura`
+- [ ] `.env` con secretos fuertes (no defaults)
+- [ ] Primer deploy manual funciona
+- [ ] SSH key de CI/CD configurada
+- [ ] Secrets de GitHub Actions configurados
+- [ ] Workflow `Deploy to VPS` corre verde
+- [ ] Smoke tests responden en `<IP-VPS>/api/health/live`
+- [ ] Dominio comprado y A record apuntado al VPS
+- [ ] Cert Let's Encrypt activo, HTTPS funciona
+- [ ] Backups automáticos configurados
+- [ ] Renovación de certs automatizada
+- [ ] Sentry conectado (opcional pero recomendado)
+- [ ] Alguien tiene acceso a `/etc/letsencrypt` además de vos
