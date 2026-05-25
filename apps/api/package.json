@@ -17,11 +17,15 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "_": "─── Migration scripts. En dist/ (producción container) usar `:prod`. En dev local con código fuente, usar la versión normal con :ts ───",
     "migration:generate": "npx typeorm-ts-node-commonjs migration:generate -d src/database/datasource.ts",
-    "migration:run": "npx typeorm-ts-node-commonjs migration:run -d src/database/datasource.ts",
-    "migration:revert": "npx typeorm-ts-node-commonjs migration:revert -d src/database/datasource.ts",
-    "migration:show": "npx typeorm-ts-node-commonjs migration:show -d src/database/datasource.ts",
-    "db:seed": "ts-node -r tsconfig-paths/register src/database/seed.ts"
+    "migration:run": "node ./node_modules/typeorm/cli.js migration:run -d dist/database/datasource.js",
+    "migration:revert": "node ./node_modules/typeorm/cli.js migration:revert -d dist/database/datasource.js",
+    "migration:show": "node ./node_modules/typeorm/cli.js migration:show -d dist/database/datasource.js",
+    "migration:run:dev": "npx typeorm-ts-node-commonjs migration:run -d src/database/datasource.ts",
+    "migration:revert:dev": "npx typeorm-ts-node-commonjs migration:revert -d src/database/datasource.ts",
+    "db:seed": "node dist/database/seed.js",
+    "db:seed:dev": "ts-node -r tsconfig-paths/register src/database/seed.ts"
   },
   "dependencies": {
     "@fixtura/domain": "workspace:*",

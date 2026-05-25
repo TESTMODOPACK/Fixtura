@@ -7,6 +7,8 @@
  *   pnpm --filter @fixtura/api run migration:run
  *   pnpm --filter @fixtura/api run migration:revert
  */
+import { join } from 'node:path';
+
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
 
@@ -23,17 +25,19 @@ const url =
 // IMPORTANTE: TypeORM CLI (v0.3.x) requiere que este archivo exporte UN
 // solo DataSource. No mezclar `export const` con `export default` — el
 // CLI lanza "Given data source file must contain only one export".
-//
-// El seed y otros scripts que necesiten esta instancia hacen
-// `import AppDataSource from './datasource'`.
+
+// Paths relativos a __dirname para que funcione tanto en:
+//   - dev local: __dirname = .../apps/api/src/database → busca *.entity.ts
+//   - producción container: __dirname = /app/apps/api/dist/database → busca *.entity.js
+// Glob `*.{ts,js}` cubre ambos casos.
 const AppDataSource = new DataSource({
   type: 'postgres',
   url,
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-  entities: ['src/**/*.entity.ts'],
-  migrations: ['src/database/migrations/*.ts'],
+  entities: [join(__dirname, '..', '**', '*.entity.{ts,js}')],
+  migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
   synchronize: false,
-  logging: true,
+  logging: process.env.NODE_ENV !== 'production',
 });
 
 export default AppDataSource;
