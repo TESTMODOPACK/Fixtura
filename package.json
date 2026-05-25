@@ -1,0 +1,31 @@
+{
+  "name": "fixtura",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fixtura — SaaS multi-tenant para gestión de ligas amateur",
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.10.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:ci": "turbo run test -- --ci --coverage --forceExit --maxWorkers=50%",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\" --ignore-path .gitignore",
+    "clean": "turbo run clean && rm -rf node_modules .turbo",
+    "db:migrate": "pnpm --filter @fixtura/api run migration:run",
+    "db:migrate:revert": "pnpm --filter @fixtura/api run migration:revert",
+    "db:seed": "pnpm --filter @fixtura/api run db:seed"
+  },
+  "devDependencies": {
+    "@fixtura/config": "workspace:*",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3"
+  }
+}

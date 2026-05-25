@@ -1,0 +1,69 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Turbo
+.turbo/
+
+# Coverage
+coverage/
+*.lcov
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Env (NUNCA commiteado)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Sentry source maps
+.sentryclirc
+
+# Material de producto (documentos, prototipos, screenshots)
+# Estos quedan en el repo solo durante la fase de planificación. Mover
+# a una carpeta separada o un repo de documentación cuando se consolide.
+DESING/
+_extracted/
+*.docx
+*.doc
+*.xlsx
+*.pdf
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+!apps/web/public/**
+
+# Backups locales
+*.dump
+*.sql.gz
+backups/
+
+# Certificados locales
+*.pem
+*.key
+*.crt

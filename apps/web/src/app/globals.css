@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: 241 236 226; /* paper */
+    --color-fg: 26 26 26; /* ink */
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-paper text-ink;
+  }
+
+  /* Selección de texto: tinta sobre lima */
+  ::selection {
+    background-color: theme('colors.green.lime');
+    color: theme('colors.green.deep');
+  }
+
+  /* Foco accesible sin azul genérico */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-offset-2 ring-accent ring-offset-paper;
+  }
+}
+
+@layer components {
+  /* Eyebrow: el "→ TÍTULO" en uppercase con tracking */
+  .eyebrow {
+    @apply text-eyebrow uppercase text-accent;
+  }
+  .eyebrow-mute {
+    @apply text-eyebrow uppercase text-ink-mute;
+  }
+  .eyebrow-lime {
+    @apply text-eyebrow uppercase text-green-lime;
+  }
+
+  /* Card base — fondo chalk con borde line, rounded-card */
+  .card {
+    @apply bg-chalk border border-line rounded-card shadow-card;
+  }
+  .card-dark {
+    @apply bg-green-deep text-chalk border-green-deep rounded-card;
+  }
+  .card-lime {
+    @apply bg-green-lime text-green-deep border-green-lime rounded-card;
+  }
+  .card-accent {
+    @apply bg-accent text-chalk border-accent rounded-card;
+  }
+  .card-paper {
+    @apply bg-paper-dark border-paper-dark rounded-card;
+  }
+
+  /* Botones */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 font-medium
+           border border-line bg-chalk text-ink
+           px-4 py-2 rounded-card text-sm
+           transition-colors hover:bg-paper-dark;
+  }
+  .btn-accent {
+    @apply border-accent bg-accent text-chalk hover:bg-[#d05f1a];
+  }
+  .btn-dark {
+    @apply border-green-deep bg-green-deep text-chalk hover:bg-green-mid;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent hover:bg-paper-dark;
+  }
+  .btn-sm {
+    @apply px-3 py-1 text-xs;
+  }
+  .btn:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  /* Input */
+  .input {
+    @apply w-full rounded-card border border-line bg-chalk px-3 py-2
+           text-sm text-ink placeholder:text-ink-mute
+           focus:border-green-bright focus:outline-none;
+  }
+  .label {
+    @apply block text-xs font-semibold uppercase tracking-wide text-ink-mute mb-1.5;
+  }
+
+  /* Display titulares */
+  .h-display {
+    @apply font-display tracking-display text-green-deep;
+  }
+}

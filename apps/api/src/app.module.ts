@@ -1,0 +1,58 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
+import { LoggerModule } from 'nestjs-pino';
+
+import { DatabaseModule } from './database/database.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
+import { TenantContextInterceptor } from './common/interceptors/tenant-context.interceptor';
+import { AuthModule } from './modules/auth/auth.module';
+import { HealthModule } from './modules/health/health.module';
+import { TenantsModule } from './modules/tenants/tenants.module';
+import { UsersModule } from './modules/users/users.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env', '../../.env'] }),
+
+    LoggerModule.forRoot({
+      pinoHttp: {
+        level: process.env.LOG_LEVEL ?? 'info',
+        transport:
+          process.env.NODE_ENV !== 'production'
+            ? { target: 'pino-pretty', options: { singleLine: true, colorize: true } }
+            : undefined,
+        autoLogging: { ignore: (req) => req.url === '/health/live' },
+        serializers: {
+          req: (req) => ({
+            id: req.id,
+            method: req.method,
+            url: req.url,
+          }),
+          res: (res) => ({ statusCode: res.statusCode }),
+        },
+        customProps: () => ({
+          // requestId, userId, tenantId se inyectan vía interceptor
+        }),
+      },
+    }),
+
+    EventEmitterModule.forRoot({ wildcard: true, maxListeners: 50 }),
+    ScheduleModule.forRoot(),
+
+    DatabaseModule,
+    HealthModule,
+    AuthModule,
+    TenantsModule,
+    UsersModule,
+  ],
+  providers: [
+    { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
+})
+export class AppModule {}

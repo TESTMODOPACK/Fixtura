@@ -1,0 +1,150 @@
+import { randomBytes, createHash } from 'node:crypto';
+
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
+import * as bcrypt from 'bcrypt';
+import { IsNull, MoreThan, Repository } from 'typeorm';
+
+import type { AuthTokens, UserContext } from '@fixtura/types';
+
+import { UsersService } from '../users/users.service';
+import { RefreshToken } from './entities/refresh-token.entity';
+
+const BCRYPT_COST = 12;
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly users: UsersService,
+    private readonly jwt: JwtService,
+    private readonly config: ConfigService,
+    @InjectRepository(RefreshToken) private readonly refreshRepo: Repository<RefreshToken>,
+  ) {}
+
+  async login(
+    email: string,
+    password: string,
+    meta: { userAgent?: string; ipAddress?: string } = {},
+  ): Promise<AuthTokens> {
+    const user = await this.users.findByEmail(email);
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+    if (!user.isActive) {
+      throw new UnauthorizedException('Usuario desactivado');
+    }
+
+    await this.users.updateLastLogin(user.id);
+
+    const roles = await this.users.getActiveRoles(user.id);
+    // Tenant default: si tiene un único rol TENANT, se elige ese.
+    // Caso multi-tenant: el frontend hará un switch explícito de tenant.
+    const tenantRoles = roles.filter((r) => r.scope === 'TENANT');
+    const defaultTenantId = tenantRoles.length === 1 ? (tenantRoles[0]!.scopeId ?? null) : null;
+
+    return this.issueTokens(
+      {
+        userId: user.id,
+        email: user.email,
+        tenantId: defaultTenantId,
+        roles,
+        impersonatorId: null,
+      },
+      meta,
+    );
+  }
+
+  async refresh(refreshToken: string): Promise<AuthTokens> {
+    const tokenHash = sha256(refreshToken);
+    const row = await this.refreshRepo.findOne({
+      where: {
+        tokenHash,
+        revokedAt: IsNull(),
+        expiresAt: MoreThan(new Date()),
+      },
+    });
+    if (!row) {
+      throw new UnauthorizedException('Refresh token inválido o expirado');
+    }
+    // Rotación: revocamos el viejo y emitimos uno nuevo.
+    await this.refreshRepo.update({ id: row.id }, { revokedAt: new Date() });
+    const user = await this.users.findByIdOrFail(row.userId);
+    const roles = await this.users.getActiveRoles(user.id);
+    return this.issueTokens({
+      userId: user.id,
+      email: user.email,
+      tenantId: null,
+      roles,
+      impersonatorId: null,
+    });
+  }
+
+  async logout(refreshToken: string): Promise<void> {
+    const tokenHash = sha256(refreshToken);
+    await this.refreshRepo.update({ tokenHash, revokedAt: IsNull() }, { revokedAt: new Date() });
+  }
+
+  private async issueTokens(
+    ctx: UserContext,
+    meta: { userAgent?: string; ipAddress?: string } = {},
+  ): Promise<AuthTokens> {
+    const accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m');
+    const refreshTtlDays = parseDaysFromTtl(this.config.get<string>('JWT_REFRESH_TTL', '7d'));
+
+    const accessToken = await this.jwt.signAsync(ctx, { expiresIn: accessTtl });
+
+    const refreshTokenPlain = randomBytes(48).toString('base64url');
+    const expiresAt = new Date(Date.now() + refreshTtlDays * 24 * 60 * 60 * 1000);
+    await this.refreshRepo.insert({
+      userId: ctx.userId,
+      tokenHash: sha256(refreshTokenPlain),
+      userAgent: meta.userAgent ?? null,
+      ipAddress: meta.ipAddress ?? null,
+      expiresAt,
+      revokedAt: null,
+    });
+
+    return {
+      accessToken,
+      refreshToken: refreshTokenPlain,
+      accessTokenExpiresIn: ttlToSeconds(accessTtl),
+    };
+  }
+
+  static async hashPassword(plain: string): Promise<string> {
+    return bcrypt.hash(plain, BCRYPT_COST);
+  }
+}
+
+function sha256(input: string): string {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+function parseDaysFromTtl(ttl: string): number {
+  const m = /^(\d+)d$/.exec(ttl);
+  return m ? Number(m[1]) : 7;
+}
+
+function ttlToSeconds(ttl: string): number {
+  const m = /^(\d+)([smhd])$/.exec(ttl);
+  if (!m) return 900;
+  const n = Number(m[1]);
+  switch (m[2]) {
+    case 's':
+      return n;
+    case 'm':
+      return n * 60;
+    case 'h':
+      return n * 3600;
+    case 'd':
+      return n * 86400;
+    default:
+      return 900;
+  }
+}

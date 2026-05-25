@@ -1,0 +1,2528 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="theme-color" content="#0F2A1F">
+<title>Fixtura · Flujo Personal · Prototipo v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Newsreader:ital,wght@0,400;0,500;0,600;1,400&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --green-deep: #0F2A1F;
+  --green-mid: #1B4332;
+  --green-bright: #2D6A4F;
+  --green-lime: #95D5B2;
+  --chalk: #FAFAF7;
+  --paper: #F1ECE2;
+  --paper-dark: #E5DCC5;
+  --ink: #1A1A1A;
+  --ink-soft: #4A4A4A;
+  --ink-mute: #888278;
+  --line: #D5CDB8;
+  --line-dark: #2C3E33;
+  --red-card: #C1272D;
+  --yellow-card: #E8A024;
+  --gold: #C9A14B;
+  --silbato: #E76F26;
+  --blue-accent: #1565C0;
+  --success: #2D6A4F;
+  --error: #C1272D;
+  --display: 'Anton', sans-serif;
+  --display-alt: 'Archivo Black', sans-serif;
+  --serif: 'Newsreader', serif;
+  --ui: 'Geist', system-ui, sans-serif;
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { font-family: var(--ui); color: var(--ink); background: var(--paper); line-height: 1.5; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+img { max-width: 100%; display: block; }
+input, textarea, select { font-family: inherit; }
+button { font-family: inherit; cursor: pointer; }
+a { color: var(--green-bright); text-decoration: none; }
+
+/* ============================================================
+   SHELL · selector flujo y plataforma
+   ============================================================ */
+.shell { position: sticky; top: 0; z-index: 100; background: var(--green-deep); color: var(--chalk); border-bottom: 3px solid var(--green-lime); }
+.shell-row { max-width: 1500px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+
+/* Brand Fixtura */
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark {
+  width: 40px; height: 40px; flex-shrink: 0;
+}
+.brand-text {
+  font-family: var(--display-alt);
+  font-size: 24px;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+.brand-text .x { color: var(--silbato); }
+.brand-sub {
+  font-size: 9px;
+  color: var(--green-lime);
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.platforms { display: flex; gap: 4px; background: rgba(0,0,0,0.25); padding: 4px; border-radius: 8px; }
+.plat-btn { padding: 7px 14px; font-size: 12px; font-weight: 500; color: var(--chalk); background: transparent; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.plat-btn:hover { background: rgba(255,255,255,0.08); }
+.plat-btn.active { background: var(--green-lime); color: var(--green-deep); font-weight: 600; }
+
+.tools { display: flex; gap: 10px; align-items: center; }
+.state-link { font-size: 11px; color: var(--green-lime); letter-spacing: 1px; text-transform: uppercase; cursor: pointer; opacity: 0.8; }
+.state-link:hover { opacity: 1; }
+
+.flow-bar { background: var(--green-mid); padding: 10px 24px; overflow-x: auto; }
+.flow-bar-inner { max-width: 1500px; margin: 0 auto; display: flex; gap: 4px; align-items: center; }
+.flow-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--green-lime); font-weight: 600; margin-right: 12px; opacity: 0.6; white-space: nowrap; }
+.flow-tab { padding: 8px 14px; font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.7); background: transparent; border: none; border-radius: 100px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.flow-tab:hover { color: var(--chalk); background: rgba(255,255,255,0.04); }
+.flow-tab.active { color: var(--green-deep); background: var(--green-lime); font-weight: 600; }
+.flow-tab .badge { font-size: 9px; background: rgba(0,0,0,0.2); padding: 1px 5px; border-radius: 100px; }
+.flow-tab.active .badge { background: rgba(15,42,31,0.2); }
+
+/* Floating debug */
+.debug-fab { position: fixed; bottom: 20px; right: 20px; width: 50px; height: 50px; background: var(--ink); color: var(--green-lime); border-radius: 50%; display: grid; place-items: center; font-size: 18px; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 99; border: 2px solid var(--green-lime); }
+.debug-badge { position: absolute; top: -4px; right: -4px; background: var(--silbato); color: white; border-radius: 100px; padding: 1px 6px; font-size: 10px; font-weight: 700; font-family: var(--ui); }
+
+/* State panel */
+.state-panel { position: fixed; top: 0; right: 0; width: 380px; height: 100vh; background: var(--ink); color: var(--chalk); z-index: 200; transform: translateX(100%); transition: transform 0.3s; overflow-y: auto; box-shadow: -20px 0 40px rgba(0,0,0,0.3); }
+.state-panel.open { transform: translateX(0); }
+.state-head { padding: 18px 24px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+.state-title { font-family: var(--display); font-size: 18px; letter-spacing: 1.5px; color: var(--green-lime); }
+.state-close { cursor: pointer; font-size: 22px; opacity: 0.6; }
+.state-body { padding: 16px 24px; font-family: 'Consolas', monospace; font-size: 11px; line-height: 1.6; }
+.state-section { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.state-section-title { color: var(--green-lime); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; font-family: var(--ui); font-weight: 600; }
+.state-empty { color: var(--ink-mute); font-style: italic; }
+.state-actions { padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.1); }
+.state-reset { width: 100%; padding: 10px; background: var(--red-card); color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; }
+
+/* ============================================================
+   FLOW + PLATFORM
+   ============================================================ */
+.flow-area { display: none; min-height: calc(100vh - 130px); }
+.flow-area.active { display: block; }
+.platform-view { display: none; }
+.platform-view.active { display: block; }
+.screen { display: none; }
+.screen.active { display: block; animation: fadeIn 0.3s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes scaleIn { from { transform: scale(0); } to { transform: scale(1); } }
+
+.web-container { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
+
+/* progress */
+.progress { background: var(--chalk); border-bottom: 1px solid var(--line); padding: 16px 0; }
+.progress-inner { max-width: 1100px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 8px; }
+.pstep { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--ink-mute); min-width: 0; }
+.pnum { width: 26px; height: 26px; border-radius: 50%; background: var(--paper); border: 1px solid var(--line); display: grid; place-items: center; font-family: var(--display); font-size: 13px; flex-shrink: 0; }
+.pstep.done .pnum { background: var(--green-lime); color: var(--green-deep); border-color: var(--green-lime); }
+.pstep.current .pnum { background: var(--green-deep); color: var(--chalk); border-color: var(--green-deep); }
+.pstep.current { color: var(--ink); font-weight: 500; }
+.pstep.done { color: var(--green-bright); }
+.pline { flex: 1; height: 2px; background: var(--line); border-radius: 2px; }
+.pline.done { background: var(--green-lime); }
+
+/* card */
+.card { background: var(--chalk); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 36px; margin-bottom: 16px; }
+.eyebrow { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--silbato); font-weight: 600; margin-bottom: 6px; }
+.title { font-family: var(--display); font-size: 38px; letter-spacing: 1px; color: var(--green-deep); line-height: 1; margin-bottom: 8px; }
+.sub { font-size: 14px; color: var(--ink-mute); font-family: var(--serif); margin-bottom: 28px; }
+
+/* form */
+.field { margin-bottom: 18px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+.field-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.flabel { display: block; font-size: 12px; font-weight: 500; color: var(--ink); margin-bottom: 6px; }
+.flabel .req { color: var(--error); margin-left: 2px; }
+.finput { width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--r-md); font-size: 14px; background: var(--paper); transition: all 0.15s; }
+.finput:focus { outline: none; border-color: var(--green-bright); background: var(--chalk); box-shadow: 0 0 0 3px rgba(45,106,79,0.1); }
+.finput.error { border-color: var(--error); background: #FFF5F5; }
+.finput.success { border-color: var(--success); }
+.fhint { font-size: 11px; color: var(--ink-mute); margin-top: 4px; }
+.ferror { font-size: 11px; color: var(--error); margin-top: 4px; display: none; }
+.ferror.show { display: block; }
+textarea.finput { resize: vertical; min-height: 80px; }
+select.finput { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23888278' d='M6 8L0 0h12z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+
+.checkbox-row { display: flex; align-items: start; gap: 10px; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
+.checkbox-row input { margin-top: 3px; accent-color: var(--green-bright); }
+
+/* buttons */
+.btn { padding: 11px 18px; font-size: 13px; font-weight: 500; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--chalk); color: var(--ink); display: inline-flex; align-items: center; gap: 8px; transition: all 0.15s; }
+.btn:hover { background: var(--paper); }
+.btn-primary { background: var(--green-deep); color: var(--chalk); border-color: var(--green-deep); }
+.btn-primary:hover { background: var(--green-mid); }
+.btn-accent { background: var(--green-lime); color: var(--green-deep); border-color: var(--green-lime); font-weight: 700; }
+.btn-accent:hover { background: #85c5a2; }
+.btn-silbato { background: var(--silbato); color: white; border-color: var(--silbato); font-weight: 600; }
+.btn-silbato:hover { background: #d05f15; }
+.btn-lg { padding: 14px 24px; font-size: 14px; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--ink-soft); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); }
+
+/* selector cards */
+.selectors { display: grid; gap: 12px; margin: 24px 0; }
+.selectors.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.selectors.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.selectors.cols-4 { grid-template-columns: repeat(4, 1fr); }
+.sel-card { border: 2px solid var(--line); background: var(--paper); border-radius: var(--r-lg); padding: 22px 20px; cursor: pointer; transition: all 0.15s; position: relative; }
+.sel-card:hover { border-color: var(--green-bright); transform: translateY(-1px); }
+.sel-card.selected { border-color: var(--green-deep); background: var(--chalk); }
+.sel-card.selected::after { content: '✓'; position: absolute; top: 12px; right: 12px; width: 22px; height: 22px; background: var(--green-deep); color: var(--chalk); border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.sel-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--green-deep); color: var(--green-lime); display: grid; place-items: center; font-size: 22px; margin-bottom: 12px; }
+.sel-name { font-family: var(--display); font-size: 18px; letter-spacing: 1px; color: var(--green-deep); margin-bottom: 4px; }
+.sel-desc { font-size: 12px; color: var(--ink-mute); margin-bottom: 10px; }
+.sel-meta { font-size: 11px; color: var(--green-bright); font-weight: 600; }
+
+/* shields */
+.shield { border-radius: 50%; display: grid; place-items: center; font-family: var(--display); color: white; flex-shrink: 0; }
+.shield-sm { width: 28px; height: 28px; font-size: 12px; }
+.shield-md { width: 36px; height: 36px; font-size: 14px; }
+.shield-lg { width: 56px; height: 56px; font-size: 22px; }
+
+/* chips */
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 100px; font-size: 11px; font-weight: 500; background: var(--paper); color: var(--ink-soft); border: 1px solid var(--line); }
+.chip-success { background: var(--green-lime); color: var(--green-deep); border-color: var(--green-lime); }
+.chip-warn { background: #FFF4E6; color: #8B4513; border-color: #FFD9A0; }
+.chip-info { background: #E3F2FD; color: var(--blue-accent); border-color: #B3D9F7; }
+.chip-danger { background: #FFEBEE; color: var(--error); border-color: #FFCDD2; }
+.chip-silbato { background: var(--silbato); color: white; border-color: var(--silbato); }
+
+/* hint boxes */
+.hint { background: var(--paper); border-left: 3px solid var(--green-bright); padding: 12px 16px; border-radius: 6px; font-size: 12px; color: var(--ink-soft); margin: 14px 0; }
+.hint.warn { border-left-color: var(--silbato); background: #FFF4E6; }
+.hint.info { border-left-color: var(--blue-accent); background: #E3F2FD; }
+.hint strong { color: var(--ink); }
+
+/* search results */
+.search-results { background: var(--chalk); border: 1px solid var(--line); border-radius: var(--r-md); margin-top: 4px; max-height: 240px; overflow-y: auto; display: none; }
+.search-results.show { display: block; }
+.search-item { padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; align-items: center; gap: 12px; }
+.search-item:last-child { border-bottom: 0; }
+.search-item:hover { background: var(--paper); }
+.search-icon { width: 36px; height: 36px; background: var(--green-deep); color: var(--green-lime); border-radius: 8px; display: grid; place-items: center; font-family: var(--display); font-size: 14px; flex-shrink: 0; }
+.search-info { flex: 1; }
+.search-name { font-weight: 500; font-size: 13px; }
+.search-meta { font-size: 11px; color: var(--ink-mute); }
+
+/* personal table (admin invita personal) */
+.personal-table { background: var(--chalk); border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line); }
+.ptr-row { display: grid; grid-template-columns: 40px 1fr 160px 130px 110px 110px 50px; gap: 10px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.ptr-row:last-child { border-bottom: 0; }
+.ptr-row.header { background: var(--paper); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600; color: var(--ink-mute); }
+.ptr-num { width: 28px; height: 28px; background: var(--green-deep); color: var(--green-lime); border-radius: 7px; display: grid; place-items: center; font-family: var(--display); font-size: 13px; }
+.ptr-status { font-size: 10px; padding: 3px 8px; border-radius: 100px; font-weight: 500; text-align: center; letter-spacing: 0.5px; text-transform: uppercase; }
+.ptr-status.invited { background: var(--paper-dark); color: var(--ink-mute); }
+.ptr-status.active { background: var(--green-lime); color: var(--green-deep); }
+.ptr-remove { text-align: center; color: var(--ink-mute); cursor: pointer; font-size: 16px; }
+.ptr-remove:hover { color: var(--error); }
+
+.tabs-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+.tab-btn { padding: 12px 18px; font-size: 13px; font-weight: 500; color: var(--ink-mute); background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; }
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active { color: var(--green-deep); border-bottom-color: var(--green-deep); }
+
+/* success */
+.success-box { text-align: center; padding: 32px 16px; }
+.success-icon { width: 82px; height: 82px; background: var(--green-lime); color: var(--green-deep); border-radius: 50%; display: grid; place-items: center; margin: 0 auto 22px; font-size: 40px; font-weight: 700; animation: scaleIn 0.5s cubic-bezier(.18,.89,.32,1.28); }
+.success-title { font-family: var(--display); font-size: 42px; letter-spacing: 1px; color: var(--green-deep); margin-bottom: 8px; line-height: 1; }
+.success-sub { font-family: var(--serif); font-size: 17px; color: var(--ink-mute); font-style: italic; margin-bottom: 28px; }
+
+.summary-box { background: var(--paper); border-radius: var(--r-md); padding: 18px 20px; text-align: left; max-width: 520px; margin: 0 auto 24px; }
+.summary-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; font-size: 13px; border-bottom: 1px solid var(--line); }
+.summary-item:last-child { border-bottom: 0; }
+.summary-check { width: 22px; height: 22px; border-radius: 50%; background: var(--green-lime); color: var(--green-deep); display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.summary-content strong { display: block; font-weight: 500; margin-bottom: 2px; }
+.summary-content span { font-size: 11px; color: var(--ink-mute); }
+
+/* ============================================================
+   MOBILE
+   ============================================================ */
+.mobile-frame { display: grid; place-items: center; padding: 32px 16px; min-height: calc(100vh - 130px); background: linear-gradient(135deg, var(--paper) 0%, var(--paper-dark) 100%); }
+.phone { width: 390px; max-width: 100%; background: var(--ink); border-radius: 44px; padding: 12px; box-shadow: 0 60px 120px rgba(0,0,0,0.25); }
+.phone-screen { background: var(--chalk); border-radius: 34px; overflow: hidden; height: 820px; display: flex; flex-direction: column; position: relative; }
+.phone-status { display: flex; justify-content: space-between; padding: 14px 28px 4px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.phone-status.dark { color: var(--chalk); }
+
+.mob-screen { display: none; flex-direction: column; flex: 1; }
+.mob-screen.active { display: flex; animation: fadeIn 0.3s; }
+
+.mob-top { padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.mob-back { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; color: var(--ink); cursor: pointer; }
+.mob-back:hover { background: var(--paper); }
+.mob-pills { display: flex; gap: 4px; }
+.mob-pill { width: 22px; height: 4px; background: var(--line); border-radius: 2px; }
+.mob-pill.active { background: var(--green-deep); }
+.mob-skip { font-size: 12px; color: var(--ink-mute); cursor: pointer; font-weight: 500; }
+
+.mob-body { flex: 1; padding: 24px 24px 16px; overflow-y: auto; display: flex; flex-direction: column; }
+.mob-footer { padding: 14px 24px 22px; border-top: 1px solid var(--line); background: var(--chalk); }
+.mob-btn { width: 100%; padding: 15px; background: var(--green-deep); color: var(--chalk); border: none; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.mob-btn:disabled { background: var(--line); color: var(--ink-mute); cursor: not-allowed; }
+.mob-btn-ghost { background: transparent; color: var(--ink-soft); margin-top: 6px; font-size: 13px; }
+.mob-btn-silbato { background: var(--silbato); color: white; }
+
+.mob-title { font-family: var(--display); font-size: 28px; letter-spacing: 1px; line-height: 1.05; color: var(--green-deep); margin-bottom: 6px; }
+.mob-sub { font-size: 13px; color: var(--ink-mute); margin-bottom: 22px; line-height: 1.4; }
+
+.mob-field { margin-bottom: 16px; }
+.mfl { display: block; font-size: 11px; font-weight: 600; color: var(--ink-soft); margin-bottom: 5px; letter-spacing: 0.5px; text-transform: uppercase; }
+.mfi { width: 100%; padding: 13px 15px; border: 1.5px solid var(--line); border-radius: 12px; font-size: 15px; background: var(--paper); }
+.mfi:focus { outline: none; border-color: var(--green-bright); background: var(--chalk); }
+
+.mob-hero { background: linear-gradient(135deg, var(--green-deep) 0%, var(--green-mid) 100%); color: var(--chalk); flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.mob-hero-content { flex: 1; padding: 40px 26px 20px; position: relative; z-index: 1; display: flex; flex-direction: column; }
+.mob-hero-brand { text-align: center; margin-bottom: 28px; }
+.mob-hero-brand-symbol { display: inline-block; margin-bottom: 12px; }
+.mob-hero-brand-name { font-family: var(--display-alt); font-size: 24px; letter-spacing: -0.5px; }
+.mob-hero-brand-name .x { color: var(--silbato); }
+.mob-hero-card { background: rgba(255,255,255,0.07); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 22px 20px; margin-bottom: 18px; }
+.mob-hero-label { font-size: 10px; letter-spacing: 2.5px; color: var(--green-lime); font-weight: 600; margin-bottom: 10px; text-transform: uppercase; }
+.mob-hero-text { font-family: var(--serif); font-size: 17px; line-height: 1.4; margin-bottom: 14px; }
+.mob-hero-text strong { font-weight: 600; color: var(--green-lime); }
+.mob-hero-actions { padding: 0 26px 30px; position: relative; z-index: 1; }
+.mob-hero-btn { width: 100%; padding: 17px; background: var(--green-lime); color: var(--green-deep); border: none; border-radius: 14px; font-size: 15px; font-weight: 700; cursor: pointer; }
+.mob-hero-decline { margin-top: 12px; text-align: center; font-size: 12px; color: rgba(255,255,255,0.6); cursor: pointer; }
+
+/* ============================================================
+   PANEL DEL PERSONAL (cuenta activa)
+   ============================================================ */
+.panel { background: var(--chalk); min-height: calc(100vh - 130px); }
+.panel-header { background: var(--green-deep); color: var(--chalk); padding: 24px 32px; }
+.panel-header-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.panel-greet { display: flex; align-items: center; gap: 16px; }
+.panel-avatar { width: 48px; height: 48px; border-radius: 50%; background: var(--green-lime); color: var(--green-deep); display: grid; place-items: center; font-family: var(--display); font-size: 18px; }
+.panel-greet h1 { font-family: var(--display); font-size: 22px; letter-spacing: 1px; }
+.panel-greet-sub { font-size: 11px; color: var(--green-lime); letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+.panel-stats { display: flex; gap: 20px; }
+.panel-stat { text-align: right; }
+.panel-stat-num { font-family: var(--display); font-size: 26px; letter-spacing: 1px; line-height: 1; }
+.panel-stat-num.silbato { color: var(--silbato); }
+.panel-stat-num.lime { color: var(--green-lime); }
+.panel-stat-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--green-lime); margin-top: 4px; opacity: 0.8; }
+
+.panel-tabs { background: var(--green-mid); padding: 0 32px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.panel-tabs-inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 0; }
+.panel-tab { padding: 14px 20px; font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.7); background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.panel-tab:hover { color: var(--chalk); }
+.panel-tab.active { color: var(--green-lime); border-bottom-color: var(--green-lime); font-weight: 600; }
+.panel-tab .pill { font-size: 9px; background: var(--silbato); color: white; padding: 1px 6px; border-radius: 100px; font-weight: 700; }
+
+.panel-body { max-width: 1200px; margin: 0 auto; padding: 32px; }
+
+/* Designación cards */
+.designation { background: var(--chalk); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 20px 24px; margin-bottom: 12px; display: grid; grid-template-columns: 80px 1fr 200px; gap: 24px; align-items: center; }
+.designation.pending { border-left: 4px solid var(--silbato); }
+.designation.confirmed { border-left: 4px solid var(--green-bright); }
+.des-date { text-align: center; padding: 8px; background: var(--green-deep); color: var(--chalk); border-radius: 10px; }
+.des-day { font-family: var(--display); font-size: 26px; letter-spacing: 1px; line-height: 1; }
+.des-month { font-size: 10px; letter-spacing: 2px; color: var(--green-lime); margin-top: 4px; text-transform: uppercase; }
+.des-time { font-family: var(--display); font-size: 16px; color: var(--silbato); margin-top: 8px; letter-spacing: 1px; }
+.des-info { }
+.des-match-status { display: flex; gap: 8px; margin-bottom: 8px; }
+.des-teams { font-family: var(--display); font-size: 22px; color: var(--green-deep); letter-spacing: 1px; line-height: 1; margin-bottom: 6px; }
+.des-meta { font-size: 12px; color: var(--ink-mute); display: flex; gap: 14px; flex-wrap: wrap; }
+.des-meta span { display: flex; align-items: center; gap: 4px; }
+.des-actions { display: flex; flex-direction: column; gap: 8px; }
+.des-amount { text-align: right; font-family: var(--display); font-size: 22px; color: var(--green-deep); letter-spacing: 1px; }
+.des-amount small { display: block; font-family: var(--ui); font-size: 10px; color: var(--ink-mute); letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600; margin-bottom: 2px; }
+
+/* Pagos */
+.payment-summary { background: linear-gradient(135deg, var(--green-deep), var(--green-mid)); color: var(--chalk); border-radius: var(--r-lg); padding: 28px; margin-bottom: 24px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 30px; }
+.pay-stat { }
+.pay-stat-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--green-lime); font-weight: 600; margin-bottom: 8px; opacity: 0.8; }
+.pay-stat-value { font-family: var(--display); font-size: 36px; letter-spacing: 1px; line-height: 1; }
+.pay-stat-value.silbato { color: var(--silbato); }
+.pay-stat-value.lime { color: var(--green-lime); }
+.pay-stat-sub { font-size: 11px; color: var(--green-lime); margin-top: 8px; opacity: 0.8; }
+
+.payments-table { background: var(--chalk); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.pay-row { display: grid; grid-template-columns: 110px 1fr 180px 130px 120px 100px; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); align-items: center; font-size: 13px; }
+.pay-row:last-child { border-bottom: 0; }
+.pay-row.header { background: var(--paper); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600; color: var(--ink-mute); }
+.pay-amount { font-family: var(--display); font-size: 16px; color: var(--green-deep); letter-spacing: 1px; text-align: right; }
+.pay-amount.minus { color: var(--ink-mute); }
+.pay-status { font-size: 10px; padding: 3px 8px; border-radius: 100px; font-weight: 500; text-align: center; letter-spacing: 0.5px; text-transform: uppercase; }
+.pay-status.paid { background: var(--green-lime); color: var(--green-deep); }
+.pay-status.pending { background: #FFF4E6; color: #8B4513; }
+.pay-action { text-align: center; cursor: pointer; color: var(--green-bright); font-size: 18px; }
+
+/* Comentarios */
+.comment-stats { display: grid; grid-template-columns: 200px 1fr; gap: 24px; background: var(--chalk); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 28px; margin-bottom: 20px; }
+.rating-big { text-align: center; padding-right: 24px; border-right: 1px solid var(--line); }
+.rating-num { font-family: var(--display); font-size: 64px; color: var(--green-deep); letter-spacing: 1px; line-height: 1; }
+.rating-stars { font-size: 22px; color: var(--silbato); margin: 4px 0; letter-spacing: 4px; }
+.rating-count { font-size: 11px; color: var(--ink-mute); letter-spacing: 1.5px; text-transform: uppercase; }
+.rating-bars { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+.rating-bar { display: grid; grid-template-columns: 60px 1fr 40px; gap: 12px; align-items: center; font-size: 12px; }
+.rating-bar-track { background: var(--paper); height: 8px; border-radius: 100px; overflow: hidden; }
+.rating-bar-fill { background: var(--green-lime); height: 100%; border-radius: 100px; }
+
+.comment-item { background: var(--chalk); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 20px 24px; margin-bottom: 10px; }
+.comment-head { display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px; }
+.comment-source { display: flex; align-items: center; gap: 10px; }
+.comment-source-name { font-weight: 600; font-size: 13px; }
+.comment-source-meta { font-size: 11px; color: var(--ink-mute); }
+.comment-rating { font-size: 14px; color: var(--silbato); letter-spacing: 2px; }
+.comment-text { font-family: var(--serif); font-size: 14px; line-height: 1.5; color: var(--ink-soft); font-style: italic; }
+
+/* Notificaciones */
+.notif-item { background: var(--chalk); border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px 18px; margin-bottom: 8px; display: flex; gap: 14px; align-items: start; }
+.notif-item.unread { border-left: 4px solid var(--silbato); background: #FFFCF5; }
+.notif-icon { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; flex-shrink: 0; }
+.notif-icon.designation { background: var(--green-deep); color: var(--green-lime); }
+.notif-icon.payment { background: var(--green-lime); color: var(--green-deep); }
+.notif-icon.review { background: var(--silbato); color: white; }
+.notif-content { flex: 1; }
+.notif-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.notif-body { font-size: 12px; color: var(--ink-mute); line-height: 1.4; }
+.notif-time { font-size: 11px; color: var(--ink-mute); white-space: nowrap; }
+
+@media (max-width: 768px) {
+  .field-row { grid-template-columns: 1fr; }
+  .selectors.cols-3, .selectors.cols-4 { grid-template-columns: 1fr 1fr; }
+  .card { padding: 24px 20px; }
+  .title { font-size: 28px; }
+  .designation { grid-template-columns: 1fr; gap: 12px; }
+  .payment-summary { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<!-- SHELL FIXTURA -->
+<header class="shell">
+  <div class="shell-row">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="60" cy="60" r="56" fill="#95D5B2"/>
+        <line x1="32" y1="32" x2="88" y2="88" stroke="#0F2A1F" stroke-width="14" stroke-linecap="round"/>
+        <line x1="88" y1="32" x2="32" y2="88" stroke="#0F2A1F" stroke-width="14" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div class="brand-text">FI<span class="x">X</span>TURA</div>
+        <div class="brand-sub">Prototipo · Flujo Personal v3</div>
+      </div>
+    </div>
+    <div class="platforms">
+      <button class="plat-btn active" data-platform="web">💻 Web</button>
+      <button class="plat-btn" data-platform="mobile">📱 Móvil</button>
+    </div>
+    <div class="tools">
+      <span class="state-link" onclick="toggleStatePanel()">Ver estado guardado →</span>
+    </div>
+  </div>
+  <div class="flow-bar">
+    <div class="flow-bar-inner">
+      <span class="flow-label">Flujo:</span>
+      <button class="flow-tab active" data-flow="admin-invite">
+        🏛 Admin invita personal
+        <span class="badge">desde panel liga</span>
+      </button>
+      <button class="flow-tab" data-flow="personal-activate">
+        ⚖ Personal activa cuenta
+        <span class="badge">por invitación</span>
+      </button>
+      <button class="flow-tab" data-flow="personal-panel">
+        👤 Panel del personal
+        <span class="badge">cuenta activa</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- State debug panel -->
+<aside class="state-panel" id="statePanel">
+  <div class="state-head">
+    <div>
+      <div class="state-title">ESTADO PERSISTENTE</div>
+      <div style="font-size:10px; color:var(--ink-mute); letter-spacing:1px; text-transform:uppercase; margin-top:4px;">localStorage de la demo</div>
+    </div>
+    <div class="state-close" onclick="toggleStatePanel()">✕</div>
+  </div>
+  <div class="state-body" id="statePanelBody"></div>
+  <div class="state-actions">
+    <button class="state-reset" onclick="resetDemo()">⚠ Reiniciar demo</button>
+  </div>
+</aside>
+
+<div class="debug-fab" onclick="toggleStatePanel()" title="Ver estado">
+  <span>⚙</span>
+  <span class="debug-badge" id="debugBadge">0</span>
+</div>
+<!-- ============================================================
+     FLUJO 1 · ADMIN DE LIGA INVITA PERSONAL
+     Contexto: el admin de la Liga Ñuñoa ya está autenticado y va a
+     agregar árbitros, planilleros, paramédicos a su roster.
+     ============================================================ -->
+<div class="flow-area active" data-flow="admin-invite">
+
+  <!-- WEB -->
+  <div class="platform-view active" data-platform="web">
+    <!-- Header simulando estar dentro del admin -->
+    <div style="background:var(--green-deep); color:var(--chalk); padding:14px 24px; border-bottom:1px solid rgba(255,255,255,0.1);">
+      <div style="max-width:1100px; margin:0 auto; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; font-size:13px;">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <span style="opacity:0.6;">Liga de Deportes Ñuñoa</span>
+          <span style="opacity:0.4;">›</span>
+          <span style="opacity:0.6;">Personal</span>
+          <span style="opacity:0.4;">›</span>
+          <span style="color:var(--green-lime); font-weight:600;">Roster</span>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <div style="width:28px; height:28px; border-radius:50%; background:var(--green-lime); color:var(--green-deep); display:grid; place-items:center; font-weight:700; font-size:12px;">RG</div>
+          <span style="font-size:12px;">Ricardo González</span>
+          <span style="font-size:10px; color:var(--green-lime); padding:2px 8px; background:rgba(149,213,178,0.15); border-radius:100px; letter-spacing:1px;">LIGA_ADMIN</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="web-container">
+
+      <!-- Header con tabs -->
+      <div style="margin-bottom:20px;">
+        <div class="eyebrow">→ Tu panel · Gestión de personal</div>
+        <h1 class="title">Roster de la liga</h1>
+        <p class="sub">Invita árbitros, planilleros y otro personal. Reciben WhatsApp para activar su cuenta y luego podrán confirmar designaciones.</p>
+      </div>
+
+      <div class="tabs-bar">
+        <button class="tab-btn active">Todos <span style="background:var(--paper-dark); padding:1px 8px; border-radius:100px; font-size:10px; margin-left:4px;" id="roster-count-all">0</span></button>
+        <button class="tab-btn">Árbitros <span style="background:var(--paper-dark); padding:1px 8px; border-radius:100px; font-size:10px; margin-left:4px;" id="roster-count-ref">0</span></button>
+        <button class="tab-btn">Planilleros</button>
+        <button class="tab-btn">Paramédicos</button>
+        <button class="tab-btn">Mantención</button>
+        <button class="tab-btn">Pendientes <span style="background:var(--silbato); color:white; padding:1px 8px; border-radius:100px; font-size:10px; margin-left:4px;" id="roster-count-pending">0</span></button>
+      </div>
+
+      <!-- Lista del personal -->
+      <div id="personalListContainer">
+        <div class="personal-table" id="personalTable">
+          <div class="ptr-row header">
+            <div></div>
+            <div>Nombre / Email</div>
+            <div>Rol</div>
+            <div>Tarifa base</div>
+            <div>Banco</div>
+            <div>Estado</div>
+            <div></div>
+          </div>
+          <!-- Personal aquí (generado JS) -->
+        </div>
+
+        <div id="personalEmpty" style="background:var(--chalk); border:1px dashed var(--line); border-radius:var(--r-lg); padding:48px 24px; text-align:center; margin-top:12px;">
+          <div style="font-size:42px; margin-bottom:12px;">👥</div>
+          <h3 style="font-family:var(--display); font-size:22px; letter-spacing:1px; color:var(--green-deep); margin-bottom:8px;">Sin personal en tu roster</h3>
+          <p style="font-size:13px; color:var(--ink-mute); margin-bottom:20px;">Agrega tu primer árbitro, planillero o staff para empezar a designar partidos.</p>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;">
+        <button class="btn btn-primary btn-lg" onclick="openInviteModal()">+ Invitar personal</button>
+        <button class="btn btn-lg" onclick="alert('Importador CSV: subes lista con nombre/email/WhatsApp/rol y se envían invitaciones masivas')" style="margin-left:8px;">📥 Importar desde CSV</button>
+      </div>
+
+      <div class="hint info" style="margin-top:24px;">
+        <strong>💡 Cómo funciona:</strong> Al invitar, el personal recibe WhatsApp con un link. Al activar su cuenta, configura su contraseña y datos bancarios. Una vez activo, puede recibir designaciones de partidos.
+      </div>
+
+    </div>
+
+    <!-- Modal de invitación -->
+    <div id="inviteModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:150; align-items:center; justify-content:center; padding:20px;">
+      <div style="background:var(--chalk); border-radius:var(--r-lg); max-width:640px; width:100%; max-height:90vh; overflow-y:auto;">
+        <div style="padding:24px 32px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div class="eyebrow">→ Agregar al roster</div>
+            <div style="font-family:var(--display); font-size:24px; letter-spacing:1px; color:var(--green-deep);">Invitar personal</div>
+          </div>
+          <div style="cursor:pointer; font-size:24px; color:var(--ink-mute);" onclick="closeInviteModal()">✕</div>
+        </div>
+
+        <div style="padding:28px 32px;">
+
+          <div class="field">
+            <label class="flabel">Rol <span class="req">*</span></label>
+            <div class="selectors cols-4" style="gap:8px; margin:8px 0 0;">
+              <div class="sel-card" data-invite-rol="ARBITRO" onclick="selectInviteRol('ARBITRO', this)" style="padding:14px 12px;">
+                <div style="font-size:24px;">⚖</div>
+                <div style="font-size:11px; font-weight:600; color:var(--green-deep); margin-top:4px;">Árbitro</div>
+              </div>
+              <div class="sel-card" data-invite-rol="PLANILLERO" onclick="selectInviteRol('PLANILLERO', this)" style="padding:14px 12px;">
+                <div style="font-size:24px;">📋</div>
+                <div style="font-size:11px; font-weight:600; color:var(--green-deep); margin-top:4px;">Planillero</div>
+              </div>
+              <div class="sel-card" data-invite-rol="PARAMEDICO" onclick="selectInviteRol('PARAMEDICO', this)" style="padding:14px 12px;">
+                <div style="font-size:24px;">⚕</div>
+                <div style="font-size:11px; font-weight:600; color:var(--green-deep); margin-top:4px;">Paramédico</div>
+              </div>
+              <div class="sel-card" data-invite-rol="MANTENIMIENTO" onclick="selectInviteRol('MANTENIMIENTO', this)" style="padding:14px 12px;">
+                <div style="font-size:24px;">🔧</div>
+                <div style="font-size:11px; font-weight:600; color:var(--green-deep); margin-top:4px;">Mantención</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label class="flabel">Nombre completo <span class="req">*</span></label>
+              <input type="text" class="finput" id="inviteName" placeholder="Ej: Juan Núñez Pérez">
+              <div class="fhint">Como aparece en su carnet de identidad</div>
+            </div>
+            <div class="field">
+              <label class="flabel">RUT <span class="req">*</span></label>
+              <input type="text" class="finput" id="inviteRut" placeholder="12.345.678-9" oninput="formatRut(this)">
+              <div class="ferror" id="inviteRutError">RUT inválido</div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label class="flabel">WhatsApp <span class="req">*</span></label>
+              <input type="tel" class="finput" id="invitePhone" placeholder="+56 9 1234 5678" oninput="formatPhone(this)">
+              <div class="fhint">Le llegará la invitación a este número</div>
+            </div>
+            <div class="field">
+              <label class="flabel">Email</label>
+              <input type="email" class="finput" id="inviteEmail" placeholder="opcional">
+              <div class="fhint">Opcional. WhatsApp es suficiente</div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label class="flabel">Tarifa base por partido <span class="req">*</span></label>
+              <div style="display:flex;">
+                <span style="padding:11px 13px; background:var(--paper-dark); border:1px solid var(--line); border-right:0; border-radius:var(--r-md) 0 0 var(--r-md); font-size:13px;">$</span>
+                <input type="number" class="finput" id="inviteTarifa" value="28000" style="border-radius:0 var(--r-md) var(--r-md) 0;">
+              </div>
+              <div class="fhint">Puede ajustarse por designación</div>
+            </div>
+            <div class="field" id="inviteCategoriaField">
+              <label class="flabel">Categoría / Especialidad</label>
+              <select class="finput" id="inviteCategoria">
+                <option>Cat. A · Senior Honor</option>
+                <option>Cat. B · Senior Ascenso</option>
+                <option>Cat. C · Súper Senior / Dorada</option>
+                <option>Asistente</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="hint">
+            <strong>📲 Se enviará por WhatsApp:</strong> mensaje pre-formateado con link único de invitación. Al hacer click, la persona configura su contraseña y datos bancarios. Validez del link: 7 días.
+          </div>
+        </div>
+
+        <div style="padding:20px 32px; background:var(--paper); border-top:1px solid var(--line); display:flex; justify-content:space-between; gap:12px;">
+          <button class="btn btn-ghost" onclick="closeInviteModal()">Cancelar</button>
+          <button class="btn btn-silbato btn-lg" onclick="sendInvite()">📲 Enviar invitación</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MÓVIL del admin (mismo flujo) -->
+  <div class="platform-view" data-platform="mobile">
+    <div class="mobile-frame">
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="phone-status">
+            <span>9:41</span>
+            <span>5G · ●●●●○</span>
+          </div>
+
+          <!-- Header móvil admin -->
+          <div style="background:var(--green-deep); color:var(--chalk); padding:14px 20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-size:10px; color:var(--green-lime); letter-spacing:1.5px; text-transform:uppercase;">Liga Ñuñoa · Admin</div>
+                <div style="font-family:var(--display); font-size:18px; letter-spacing:1px;">PERSONAL</div>
+              </div>
+              <div style="width:32px; height:32px; border-radius:50%; background:var(--green-lime); color:var(--green-deep); display:grid; place-items:center; font-weight:700; font-size:12px;">RG</div>
+            </div>
+          </div>
+
+          <div class="mob-screen active" data-step="0">
+            <div class="mob-body">
+              <!-- Tabs -->
+              <div style="display:flex; gap:6px; margin-bottom:18px; overflow-x:auto; padding-bottom:4px;">
+                <div style="padding:6px 12px; background:var(--green-deep); color:white; border-radius:100px; font-size:11px; font-weight:600; white-space:nowrap;">Todos</div>
+                <div style="padding:6px 12px; background:var(--paper); color:var(--ink-mute); border-radius:100px; font-size:11px; white-space:nowrap;">Árbitros</div>
+                <div style="padding:6px 12px; background:var(--paper); color:var(--ink-mute); border-radius:100px; font-size:11px; white-space:nowrap;">Planilleros</div>
+                <div style="padding:6px 12px; background:var(--silbato); color:white; border-radius:100px; font-size:11px; font-weight:600; white-space:nowrap;">Pendientes <span id="mobPendingBadge">0</span></div>
+              </div>
+
+              <!-- Lista compacta del personal en móvil -->
+              <div id="mobPersonalList">
+                <div id="mobPersonalEmpty" style="text-align:center; padding:40px 16px; color:var(--ink-mute);">
+                  <div style="font-size:36px; margin-bottom:8px;">👥</div>
+                  <div style="font-size:13px; margin-bottom:4px;">Sin personal aún</div>
+                  <div style="font-size:11px;">Agrega árbitros y staff</div>
+                </div>
+              </div>
+            </div>
+            <div class="mob-footer">
+              <button class="mob-btn mob-btn-silbato" onclick="openMobInvite()">+ Invitar personal</button>
+            </div>
+          </div>
+
+          <!-- Pantalla de invitación móvil -->
+          <div class="mob-screen" data-step="1">
+            <div class="mob-top">
+              <div class="mob-back" onclick="closeMobInvite()">‹</div>
+              <div style="font-family:var(--display); font-size:14px; letter-spacing:1px; color:var(--green-deep);">INVITAR PERSONAL</div>
+              <div style="width:36px;"></div>
+            </div>
+            <div class="mob-body">
+              <p class="mob-sub" style="margin-bottom:16px;">Le enviaremos un WhatsApp con link de activación</p>
+
+              <label class="mfl">ROL</label>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:18px;">
+                <div class="sel-card" data-mob-invite-rol="ARBITRO" onclick="selectMobInviteRol('ARBITRO', this)" style="padding:12px;">
+                  <div style="font-size:20px;">⚖</div>
+                  <div style="font-size:11px; font-weight:600; margin-top:4px;">Árbitro</div>
+                </div>
+                <div class="sel-card" data-mob-invite-rol="PLANILLERO" onclick="selectMobInviteRol('PLANILLERO', this)" style="padding:12px;">
+                  <div style="font-size:20px;">📋</div>
+                  <div style="font-size:11px; font-weight:600; margin-top:4px;">Planillero</div>
+                </div>
+                <div class="sel-card" data-mob-invite-rol="PARAMEDICO" onclick="selectMobInviteRol('PARAMEDICO', this)" style="padding:12px;">
+                  <div style="font-size:20px;">⚕</div>
+                  <div style="font-size:11px; font-weight:600; margin-top:4px;">Paramédico</div>
+                </div>
+                <div class="sel-card" data-mob-invite-rol="MANTENIMIENTO" onclick="selectMobInviteRol('MANTENIMIENTO', this)" style="padding:12px;">
+                  <div style="font-size:20px;">🔧</div>
+                  <div style="font-size:11px; font-weight:600; margin-top:4px;">Mantención</div>
+                </div>
+              </div>
+
+              <div class="mob-field">
+                <label class="mfl">NOMBRE COMPLETO</label>
+                <input type="text" class="mfi" id="mobInviteName" placeholder="Juan Núñez Pérez">
+              </div>
+
+              <div class="mob-field">
+                <label class="mfl">RUT</label>
+                <input type="text" class="mfi" id="mobInviteRut" placeholder="12.345.678-9" oninput="formatRut(this)">
+              </div>
+
+              <div class="mob-field">
+                <label class="mfl">WHATSAPP</label>
+                <input type="tel" class="mfi" id="mobInvitePhone" placeholder="+56 9 1234 5678" oninput="formatPhone(this)">
+                <div style="font-size:11px; color:var(--ink-mute); margin-top:4px;">Le llegará el link de activación aquí</div>
+              </div>
+
+              <div class="mob-field">
+                <label class="mfl">TARIFA POR PARTIDO</label>
+                <input type="number" class="mfi" id="mobInviteTarifa" value="28000" style="text-align:center; font-family:var(--display); font-size:20px;">
+              </div>
+
+              <div class="hint" style="font-size:11px;">
+                Link válido por 7 días. Si no activa, puedes reenviar.
+              </div>
+            </div>
+            <div class="mob-footer">
+              <button class="mob-btn mob-btn-silbato" onclick="sendMobInvite()">📲 Enviar invitación</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<!-- ============================================================
+     FLUJO 2 · PERSONAL ACTIVA CUENTA
+     Contexto: la persona recibe WhatsApp del admin, hace click,
+     verifica datos pre-cargados, define password y datos bancarios.
+     ============================================================ -->
+<div class="flow-area" data-flow="personal-activate">
+
+  <!-- WEB -->
+  <div class="platform-view active" data-platform="web">
+    <div class="progress" id="activate-progress"></div>
+
+    <div class="web-container">
+
+      <!-- Pantalla 1: Validar invitación -->
+      <section class="screen active" data-step="0">
+        <div class="card">
+          <div class="eyebrow">Paso 1 de 4 · Invitación</div>
+          <h1 class="title">Has sido invitado</h1>
+          <p class="sub">La <strong style="color:var(--green-deep);">Liga de Deportes Ñuñoa</strong> te invitó a unirte a su staff. Verifica que los datos son correctos antes de activar tu cuenta.</p>
+
+          <div style="background:linear-gradient(135deg, var(--green-deep), var(--green-mid)); color:var(--chalk); padding:32px; border-radius:var(--r-lg); margin:24px 0;">
+            <div style="font-size:10px; letter-spacing:3px; text-transform:uppercase; color:var(--green-lime); font-weight:600; margin-bottom:14px;">→ Datos de la invitación</div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:20px;">
+              <div>
+                <div style="font-size:10px; letter-spacing:1.5px; color:var(--green-lime); opacity:0.7; text-transform:uppercase; margin-bottom:4px;">Liga</div>
+                <div style="font-family:var(--display); font-size:18px; letter-spacing:1px;" id="actLigaName">LIGA DE DEPORTES ÑUÑOA</div>
+                <div style="font-size:11px; color:var(--green-lime); opacity:0.7; margin-top:2px;">liga-nunoa.fixtura.cl</div>
+              </div>
+              <div>
+                <div style="font-size:10px; letter-spacing:1.5px; color:var(--green-lime); opacity:0.7; text-transform:uppercase; margin-bottom:4px;">Invitado por</div>
+                <div style="font-family:var(--display); font-size:18px; letter-spacing:1px;">RICARDO GONZÁLEZ</div>
+                <div style="font-size:11px; color:var(--green-lime); opacity:0.7; margin-top:2px;">Coordinador de Personal</div>
+              </div>
+            </div>
+
+            <div style="padding-top:20px; border-top:1px solid rgba(255,255,255,0.15);">
+              <div style="font-size:10px; letter-spacing:1.5px; color:var(--green-lime); opacity:0.7; text-transform:uppercase; margin-bottom:8px;">Tus datos pre-cargados</div>
+              <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; font-size:13px;">
+                <div>
+                  <span style="opacity:0.6;">Nombre:</span><br>
+                  <strong style="color:var(--green-lime);" id="actInviteName">Juan Núñez Pérez</strong>
+                </div>
+                <div>
+                  <span style="opacity:0.6;">Rol asignado:</span><br>
+                  <strong style="color:var(--green-lime);" id="actInviteRol">ÁRBITRO</strong>
+                </div>
+                <div>
+                  <span style="opacity:0.6;">Tarifa base por partido:</span><br>
+                  <strong style="color:var(--green-lime);" id="actInviteTarifa">$28.000</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hint info">
+            <strong>🔗 Cómo llegaste aquí:</strong> El admin de la liga te agregó al roster e ingresó tus datos básicos. Solo necesitas activar tu cuenta para empezar a recibir designaciones.
+          </div>
+
+          <div class="actions">
+            <button class="btn btn-ghost" onclick="alert('Si los datos están mal, contacta al admin')">Estos datos no son míos</button>
+            <button class="btn btn-primary btn-lg" onclick="goActivateStep(1)">Activar mi cuenta →</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pantalla 2: Verificar identidad -->
+      <section class="screen" data-step="1">
+        <div class="card">
+          <div class="eyebrow">Paso 2 de 4 · Verificación</div>
+          <h1 class="title">Verifica tu WhatsApp</h1>
+          <p class="sub">Por seguridad necesitamos confirmar que este número es tuyo. Te enviamos un código de 4 dígitos.</p>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:20px 0 24px;">
+            <div>
+              <div class="eyebrow" style="color:var(--ink-mute);">→ Número registrado</div>
+              <div style="background:var(--paper); padding:16px 20px; border-radius:var(--r-md); font-family:var(--display); font-size:20px; letter-spacing:1px; color:var(--green-deep);" id="actPhone">+56 9 8765 4321</div>
+              <div style="font-size:11px; color:var(--ink-mute); margin-top:6px;">¿No es tu número? <a href="#" onclick="alert('Contacta al admin')">Reportar</a></div>
+            </div>
+            <div>
+              <div class="eyebrow" style="color:var(--ink-mute);">→ Código de 4 dígitos</div>
+              <div style="display:flex; gap:8px;">
+                <input type="text" maxlength="1" style="width:60px; height:64px; border:2px solid var(--line); border-radius:12px; text-align:center; font-family:var(--display); font-size:28px; color:var(--green-deep); background:var(--paper);" data-otp="0" oninput="handleActOtp(this, 0)">
+                <input type="text" maxlength="1" style="width:60px; height:64px; border:2px solid var(--line); border-radius:12px; text-align:center; font-family:var(--display); font-size:28px; color:var(--green-deep); background:var(--paper);" data-otp="1" oninput="handleActOtp(this, 1)">
+                <input type="text" maxlength="1" style="width:60px; height:64px; border:2px solid var(--line); border-radius:12px; text-align:center; font-family:var(--display); font-size:28px; color:var(--green-deep); background:var(--paper);" data-otp="2" oninput="handleActOtp(this, 2)">
+                <input type="text" maxlength="1" style="width:60px; height:64px; border:2px solid var(--line); border-radius:12px; text-align:center; font-family:var(--display); font-size:28px; color:var(--green-deep); background:var(--paper);" data-otp="3" oninput="handleActOtp(this, 3)">
+              </div>
+              <div style="font-size:11px; color:var(--ink-mute); margin-top:8px;">El código expira en <span id="actCounter" style="color:var(--silbato); font-weight:600;">00:42</span></div>
+            </div>
+          </div>
+
+          <div class="hint" style="font-size:11px;">
+            <strong>💡 Tip de prototipo:</strong> ingresa cualquier código de 4 dígitos para continuar
+          </div>
+
+          <div class="actions">
+            <button class="btn btn-ghost" onclick="goActivateStep(0)">← Volver</button>
+            <button class="btn btn-primary btn-lg" id="actOtpBtn" disabled onclick="goActivateStep(2)">Verificar y continuar →</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pantalla 3: Password + bancarios -->
+      <section class="screen" data-step="2">
+        <div class="card">
+          <div class="eyebrow">Paso 3 de 4 · Configura tu cuenta</div>
+          <h1 class="title">Tu cuenta y pagos</h1>
+          <p class="sub">Define tu contraseña y los datos bancarios donde recibirás las liquidaciones quincenales.</p>
+
+          <h3 style="font-family:var(--display); font-size:18px; letter-spacing:1px; color:var(--green-deep); margin-bottom:12px;">Contraseña</h3>
+
+          <div class="field-row">
+            <div class="field">
+              <label class="flabel">Contraseña <span class="req">*</span></label>
+              <input type="password" class="finput" id="actPwd" placeholder="Mínimo 8 caracteres" oninput="checkPwdStrength(this)">
+              <div style="display:flex; gap:4px; margin-top:6px;">
+                <div class="pwd-bar" style="flex:1; height:3px; border-radius:2px; background:var(--line);"></div>
+                <div class="pwd-bar" style="flex:1; height:3px; border-radius:2px; background:var(--line);"></div>
+                <div class="pwd-bar" style="flex:1; height:3px; border-radius:2px; background:var(--line);"></div>
+                <div class="pwd-bar" style="flex:1; height:3px; border-radius:2px; background:var(--line);"></div>
+              </div>
+            </div>
+            <div class="field">
+              <label class="flabel">Confirma contraseña <span class="req">*</span></label>
+              <input type="password" class="finput" id="actPwdConfirm" placeholder="Repite tu contraseña">
+            </div>
+          </div>
+
+          <h3 style="font-family:var(--display); font-size:18px; letter-spacing:1px; color:var(--green-deep); margin:24px 0 12px;">Datos bancarios</h3>
+          <p style="font-size:12px; color:var(--ink-mute); margin-bottom:14px;">Aquí recibirás los pagos de tus partidos dirigidos. Cifrado AES-256.</p>
+
+          <div class="field-row three">
+            <div class="field">
+              <label class="flabel">Banco <span class="req">*</span></label>
+              <select class="finput" id="actBanco">
+                <option>BancoEstado</option>
+                <option>Santander</option>
+                <option>BCI</option>
+                <option>Banco de Chile</option>
+                <option>Scotiabank</option>
+                <option>Itaú</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="flabel">Tipo cuenta <span class="req">*</span></label>
+              <select class="finput" id="actTipoCuenta">
+                <option>CuentaRUT</option>
+                <option>Cuenta vista</option>
+                <option>Cuenta corriente</option>
+                <option>Cuenta ahorro</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="flabel">Nº de cuenta <span class="req">*</span></label>
+              <input type="text" class="finput" id="actCuenta" placeholder="12345678">
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="checkbox-row">
+              <input type="checkbox" id="actBoleta" checked>
+              <span><strong>Emito boleta de honorarios</strong>. El sistema retiene automáticamente el 13,75% (vigente 2026) en cada liquidación.</span>
+            </label>
+          </div>
+
+          <div class="hint info">
+            🔒 <strong>Privacidad:</strong> Tus datos bancarios están encriptados y solo se usan para procesar tus pagos. Cumple Ley 19.628.
+          </div>
+
+          <div class="field" style="margin-top:20px;">
+            <label class="checkbox-row">
+              <input type="checkbox" checked id="actTerms">
+              <span>Acepto los <a href="#">Términos de Servicio</a> de Fixtura y la <a href="#">Política de Privacidad</a>.</span>
+            </label>
+          </div>
+
+          <div class="actions">
+            <button class="btn btn-ghost" onclick="goActivateStep(1)">← Volver</button>
+            <button class="btn btn-primary btn-lg" onclick="activateAccount()">Activar mi cuenta →</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pantalla 4: Éxito -->
+      <section class="screen" data-step="3">
+        <div class="card">
+          <div class="success-box">
+            <div class="success-icon">✓</div>
+            <h2 class="success-title">¡Cuenta activada!</h2>
+            <p class="success-sub">Ya eres parte del staff de la Liga Ñuñoa</p>
+
+            <div class="summary-box">
+              <div class="summary-item">
+                <div class="summary-check">✓</div>
+                <div class="summary-content">
+                  <strong id="actSuccessName">Tu cuenta</strong>
+                  <span id="actSuccessRol">Rol asignado</span>
+                </div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-check">✓</div>
+                <div class="summary-content">
+                  <strong>Liga asociada</strong>
+                  <span>Liga de Deportes Ñuñoa</span>
+                </div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-check">✓</div>
+                <div class="summary-content">
+                  <strong>Datos bancarios listos</strong>
+                  <span id="actSuccessBanco">Pagos automáticos quincenales</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="hint" style="text-align:left; max-width:520px; margin:20px auto;">
+              <strong>📲 Qué sigue:</strong>
+              <div style="margin-top:6px; font-size:12px;">
+                1. Cuando la liga te designe → recibes WhatsApp y notificación push<br>
+                2. Confirmas con un toque desde tu app<br>
+                3. Al terminar el partido, la liquidación se procesa automáticamente<br>
+                4. Pago directo a tu cuenta cada 15 días
+              </div>
+            </div>
+
+            <div style="margin-top:24px;">
+              <button class="btn btn-accent btn-lg" onclick="switchFlow('personal-panel')">Ver mi panel →</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- MÓVIL -->
+  <div class="platform-view" data-platform="mobile">
+    <div class="mobile-frame">
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="phone-status">
+            <span>9:41</span>
+            <span>5G · ●●●●○</span>
+          </div>
+
+          <!-- 0: invitación -->
+          <div class="mob-screen active" data-step="0">
+            <div class="mob-hero">
+              <div class="mob-hero-content">
+                <div class="mob-hero-brand">
+                  <svg class="mob-hero-brand-symbol" width="56" height="56" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="60" cy="60" r="56" fill="#95D5B2"/>
+                    <line x1="32" y1="32" x2="88" y2="88" stroke="#0F2A1F" stroke-width="14" stroke-linecap="round"/>
+                    <line x1="88" y1="32" x2="32" y2="88" stroke="#0F2A1F" stroke-width="14" stroke-linecap="round"/>
+                  </svg>
+                  <div class="mob-hero-brand-name">FI<span class="x">X</span>TURA</div>
+                </div>
+
+                <div class="mob-hero-card">
+                  <div class="mob-hero-label">→ Has sido invitado</div>
+                  <div class="mob-hero-text">
+                    La <strong>Liga de Deportes Ñuñoa</strong> te invitó a unirte como
+                  </div>
+                  <div style="display:flex; gap:10px; align-items:center; padding-top:14px; border-top:1px solid rgba(255,255,255,0.1);">
+                    <div style="width:40px; height:40px; background:var(--green-lime); color:var(--green-deep); border-radius:10px; display:grid; place-items:center; font-size:20px;">⚖</div>
+                    <div>
+                      <div style="font-family:var(--display); font-size:18px; letter-spacing:1px;">ÁRBITRO</div>
+                      <div style="font-size:11px; color:var(--green-lime); opacity:0.8;">Tarifa base: $28.000 por partido</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; font-size:12px; line-height:1.5;">
+                  <strong style="color:var(--green-lime); display:block; margin-bottom:6px; font-size:10px; letter-spacing:1.5px; text-transform:uppercase;">→ Tus datos</strong>
+                  Nombre: <strong style="color:white;" id="mobActName">Juan Núñez Pérez</strong><br>
+                  WhatsApp: <strong style="color:white;">+56 9 8765 4321</strong>
+                </div>
+              </div>
+              <div class="mob-hero-actions">
+                <button class="mob-hero-btn" onclick="goMobActStep(1)">Activar mi cuenta →</button>
+                <div class="mob-hero-decline" onclick="alert('Reportar al admin')">No soy yo</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 1: OTP -->
+          <div class="mob-screen" data-step="1">
+            <div class="mob-top">
+              <div class="mob-back" onclick="goMobActStep(0)">‹</div>
+              <div class="mob-pills">
+                <div class="mob-pill active"></div>
+                <div class="mob-pill"></div>
+                <div class="mob-pill"></div>
+              </div>
+              <div style="width:36px;"></div>
+            </div>
+            <div class="mob-body">
+              <h1 class="mob-title">Verifica tu<br>WhatsApp</h1>
+              <p class="mob-sub">Te enviamos un código al <strong style="color:var(--ink);">+56 9 8765 4321</strong></p>
+
+              <div style="display:flex; gap:8px; justify-content:center; margin:24px 0;">
+                <input type="text" maxlength="1" style="width:54px; height:62px; border:2px solid var(--line); border-radius:10px; text-align:center; font-family:var(--display); font-size:26px; color:var(--green-deep); background:var(--paper);" data-mob-otp="0" oninput="handleMobActOtp(this, 0)">
+                <input type="text" maxlength="1" style="width:54px; height:62px; border:2px solid var(--line); border-radius:10px; text-align:center; font-family:var(--display); font-size:26px; color:var(--green-deep); background:var(--paper);" data-mob-otp="1" oninput="handleMobActOtp(this, 1)">
+                <input type="text" maxlength="1" style="width:54px; height:62px; border:2px solid var(--line); border-radius:10px; text-align:center; font-family:var(--display); font-size:26px; color:var(--green-deep); background:var(--paper);" data-mob-otp="2" oninput="handleMobActOtp(this, 2)">
+                <input type="text" maxlength="1" style="width:54px; height:62px; border:2px solid var(--line); border-radius:10px; text-align:center; font-family:var(--display); font-size:26px; color:var(--green-deep); background:var(--paper);" data-mob-otp="3" oninput="handleMobActOtp(this, 3)">
+              </div>
+
+              <div style="text-align:center; font-family:var(--display); font-size:18px; color:var(--silbato); letter-spacing:2px;" id="mobActCounter">00:42</div>
+
+              <div class="hint" style="font-size:11px; margin-top:24px;">
+                <strong>Tip prototipo:</strong> ingresa cualquier código
+              </div>
+            </div>
+            <div class="mob-footer">
+              <button class="mob-btn" id="mobActOtpBtn" disabled onclick="goMobActStep(2)">Verificar</button>
+            </div>
+          </div>
+
+          <!-- 2: Password + bancarios -->
+          <div class="mob-screen" data-step="2">
+            <div class="mob-top">
+              <div class="mob-back" onclick="goMobActStep(1)">‹</div>
+              <div class="mob-pills">
+                <div class="mob-pill active"></div>
+                <div class="mob-pill active"></div>
+                <div class="mob-pill"></div>
+              </div>
+              <div style="width:36px;"></div>
+            </div>
+            <div class="mob-body">
+              <h1 class="mob-title">Tu cuenta<br>y pagos</h1>
+              <p class="mob-sub">Define contraseña y dónde recibir tus pagos</p>
+
+              <div class="mob-field">
+                <label class="mfl">CONTRASEÑA</label>
+                <input type="password" class="mfi" placeholder="Mínimo 8 caracteres" oninput="checkPwdStrength(this)">
+                <div style="display:flex; gap:4px; margin-top:6px;">
+                  <div class="pwd-bar" style="flex:1; height:3px; border-radius:2px; background:var(--line);"></div>
+                  <div class="pwd-bar" style="flex:1; height:3px; border-radius:2px; background:var(--line);"></div>
+                  <div class="pwd-bar" style="flex:1; height:3px; border-radius:2px; background:var(--line);"></div>
+                  <div class="pwd-bar" style="flex:1; height:3px; border-radius:2px; background:var(--line);"></div>
+                </div>
+              </div>
+
+              <h3 style="font-family:var(--display); font-size:16px; letter-spacing:1px; color:var(--green-deep); margin:18px 0 10px;">Datos bancarios</h3>
+
+              <div class="mob-field">
+                <label class="mfl">BANCO</label>
+                <select class="mfi">
+                  <option>BancoEstado</option>
+                  <option>Santander</option>
+                  <option>BCI</option>
+                  <option>Banco de Chile</option>
+                </select>
+              </div>
+
+              <div class="mob-field">
+                <label class="mfl">TIPO CUENTA</label>
+                <select class="mfi">
+                  <option>CuentaRUT</option>
+                  <option>Cuenta vista</option>
+                </select>
+              </div>
+
+              <div class="mob-field">
+                <label class="mfl">N° CUENTA</label>
+                <input type="text" class="mfi" placeholder="12345678">
+              </div>
+
+              <label class="checkbox-row" style="font-size:11px; margin-top:8px;">
+                <input type="checkbox" checked>
+                <span>Emito boleta de honorarios (retención 13,75%)</span>
+              </label>
+
+              <div class="hint info" style="font-size:11px; margin-top:14px;">
+                🔒 Datos cifrados · Ley 19.628
+              </div>
+            </div>
+            <div class="mob-footer">
+              <button class="mob-btn" onclick="activateMobAccount()">Activar cuenta</button>
+            </div>
+          </div>
+
+          <!-- 3: éxito -->
+          <div class="mob-screen" data-step="3">
+            <div class="mob-hero">
+              <div class="mob-hero-content">
+                <div style="text-align:center; padding:36px 0 16px;">
+                  <div style="width:80px; height:80px; background:var(--green-lime); color:var(--green-deep); border-radius:50%; display:inline-grid; place-items:center; font-size:38px; font-weight:700; animation:scaleIn 0.5s cubic-bezier(.18,.89,.32,1.28);">✓</div>
+                </div>
+                <h1 style="font-family:var(--display); font-size:30px; letter-spacing:1px; text-align:center; line-height:1; margin-bottom:6px;">¡Cuenta activa!</h1>
+                <p style="text-align:center; font-family:var(--serif); font-style:italic; opacity:0.8; font-size:13px; margin-bottom:24px;">Ya eres parte del staff de la liga</p>
+
+                <div class="mob-hero-card">
+                  <div class="mob-hero-label">→ Tu rol</div>
+                  <div style="font-family:var(--display); font-size:22px; letter-spacing:1px;" id="mobActSuccessRol">ÁRBITRO</div>
+                  <div style="font-size:11px; color:var(--green-lime); opacity:0.7; margin-top:4px;">Tarifa $28.000 por partido</div>
+                </div>
+
+                <div class="mob-hero-card">
+                  <div class="mob-hero-label">→ Próximos pasos</div>
+                  <div style="font-size:12px; line-height:1.6; opacity:0.9;">
+                    1. Recibe designaciones por WhatsApp<br>
+                    2. Confirma con un toque<br>
+                    3. Liquidación quincenal automática
+                  </div>
+                </div>
+              </div>
+              <div class="mob-hero-actions">
+                <button class="mob-hero-btn" onclick="switchFlow('personal-panel')">Ir a mi panel →</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<!-- ============================================================
+     FLUJO 3 · PANEL DEL PERSONAL (cuenta activa)
+     El árbitro/planillero/etc ya activó su cuenta y navega:
+     - Vista designaciones (próximas, históricas)
+     - Vista pagos (pendientes, liquidaciones)
+     - Vista comentarios/evaluaciones recibidas
+     - Notificaciones
+     ============================================================ -->
+<div class="flow-area" data-flow="personal-panel">
+
+  <!-- WEB -->
+  <div class="platform-view active" data-platform="web">
+    <div class="panel">
+
+      <!-- Header del panel personal -->
+      <div class="panel-header">
+        <div class="panel-header-inner">
+          <div class="panel-greet">
+            <div class="panel-avatar">JN</div>
+            <div>
+              <h1>Hola, Juan</h1>
+              <div class="panel-greet-sub">
+                <span class="chip chip-info" style="background:rgba(149,213,178,0.15); color:var(--green-lime); border-color:rgba(149,213,178,0.3);">⚖ ÁRBITRO</span>
+                · Liga de Deportes Ñuñoa · Categoría A
+              </div>
+            </div>
+          </div>
+          <div class="panel-stats">
+            <div class="panel-stat">
+              <div class="panel-stat-num silbato">3</div>
+              <div class="panel-stat-label">Por confirmar</div>
+            </div>
+            <div class="panel-stat">
+              <div class="panel-stat-num">12</div>
+              <div class="panel-stat-label">Próximas</div>
+            </div>
+            <div class="panel-stat">
+              <div class="panel-stat-num lime">$182.000</div>
+              <div class="panel-stat-label">Por pagar</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs del panel -->
+      <div class="panel-tabs">
+        <div class="panel-tabs-inner">
+          <button class="panel-tab active" onclick="switchPanelTab(this, 'designaciones')">
+            📅 Designaciones <span class="pill">3</span>
+          </button>
+          <button class="panel-tab" onclick="switchPanelTab(this, 'pagos')">
+            💰 Pagos
+          </button>
+          <button class="panel-tab" onclick="switchPanelTab(this, 'comentarios')">
+            ⭐ Calificaciones
+          </button>
+          <button class="panel-tab" onclick="switchPanelTab(this, 'notificaciones')">
+            🔔 Notificaciones <span class="pill">2</span>
+          </button>
+          <button class="panel-tab" onclick="switchPanelTab(this, 'perfil')">
+            👤 Mi perfil
+          </button>
+        </div>
+      </div>
+
+      <div class="panel-body">
+
+        <!-- TAB: DESIGNACIONES -->
+        <div class="panel-section active" data-tab="designaciones">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+            <div>
+              <div class="eyebrow">→ Vista designaciones</div>
+              <h2 style="font-family:var(--display); font-size:28px; letter-spacing:1px; color:var(--green-deep);">Tus partidos</h2>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button class="btn">Esta semana</button>
+              <button class="btn">Próximo mes</button>
+              <button class="btn">Histórico</button>
+            </div>
+          </div>
+
+          <!-- Designación 1: pendiente confirmar -->
+          <div class="designation pending">
+            <div class="des-date">
+              <div class="des-day">23</div>
+              <div class="des-month">MAY</div>
+              <div class="des-time">11:30</div>
+            </div>
+            <div class="des-info">
+              <div class="des-match-status">
+                <span class="chip chip-silbato">⏳ POR CONFIRMAR · Expira en 8h</span>
+                <span class="chip">Liga Ñuñoa</span>
+                <span class="chip">Fecha 8</span>
+              </div>
+              <div class="des-teams">DRAGONES F.C. <span style="color:var(--ink-mute); font-size:14px; font-family:var(--ui);">vs</span> KRAKEN</div>
+              <div class="des-meta">
+                <span>📍 Estadio Ñuñoa · Cancha 2</span>
+                <span>👥 Senior Honor</span>
+                <span>⚖ Árbitro central</span>
+              </div>
+            </div>
+            <div>
+              <div class="des-amount">
+                <small>Honorarios</small>
+                $28.000
+              </div>
+              <div style="display:flex; gap:6px; margin-top:10px;">
+                <button class="btn btn-accent" style="flex:1; padding:8px;" onclick="confirmDesignation(this)">✓ Acepto</button>
+                <button class="btn" style="padding:8px;" onclick="alert('Rechazar con justificación')">✕</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Designación 2: pendiente -->
+          <div class="designation pending">
+            <div class="des-date">
+              <div class="des-day">24</div>
+              <div class="des-month">MAY</div>
+              <div class="des-time">09:00</div>
+            </div>
+            <div class="des-info">
+              <div class="des-match-status">
+                <span class="chip chip-silbato">⏳ POR CONFIRMAR · Expira en 32h</span>
+                <span class="chip">Liga Ñuñoa</span>
+                <span class="chip">Fecha 8</span>
+              </div>
+              <div class="des-teams">REAL ESPAÑOL <span style="color:var(--ink-mute); font-size:14px; font-family:var(--ui);">vs</span> NACIONAL FC</div>
+              <div class="des-meta">
+                <span>📍 Cancha 1</span>
+                <span>👥 Senior Honor</span>
+                <span>⚖ Árbitro central</span>
+                <span style="color:var(--silbato);">⚠ Festivo +20%</span>
+              </div>
+            </div>
+            <div>
+              <div class="des-amount">
+                <small>Honorarios</small>
+                $33.600
+              </div>
+              <div style="display:flex; gap:6px; margin-top:10px;">
+                <button class="btn btn-accent" style="flex:1; padding:8px;" onclick="confirmDesignation(this)">✓ Acepto</button>
+                <button class="btn" style="padding:8px;" onclick="alert('Rechazar')">✕</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Designación 3: confirmada -->
+          <div class="designation confirmed">
+            <div class="des-date">
+              <div class="des-day">30</div>
+              <div class="des-month">MAY</div>
+              <div class="des-time">11:30</div>
+            </div>
+            <div class="des-info">
+              <div class="des-match-status">
+                <span class="chip chip-success">✓ CONFIRMADO</span>
+                <span class="chip">Liga Ñuñoa</span>
+                <span class="chip">Fecha 9</span>
+              </div>
+              <div class="des-teams">LOS LEONES <span style="color:var(--ink-mute); font-size:14px; font-family:var(--ui);">vs</span> ATLAS</div>
+              <div class="des-meta">
+                <span>📍 Cancha 2</span>
+                <span>👥 Senior Ascenso</span>
+                <span>⚖ Árbitro central</span>
+              </div>
+            </div>
+            <div>
+              <div class="des-amount">
+                <small>Honorarios</small>
+                $28.000
+              </div>
+              <div style="font-size:11px; color:var(--ink-mute); margin-top:8px; text-align:right;">
+                Recordatorio 24h antes
+              </div>
+            </div>
+          </div>
+
+          <!-- Designación 4: confirmada -->
+          <div class="designation confirmed">
+            <div class="des-date">
+              <div class="des-day">06</div>
+              <div class="des-month">JUN</div>
+              <div class="des-time">10:00</div>
+            </div>
+            <div class="des-info">
+              <div class="des-match-status">
+                <span class="chip chip-success">✓ CONFIRMADO</span>
+                <span class="chip">Liga Ñuñoa</span>
+                <span class="chip">Fecha 10</span>
+              </div>
+              <div class="des-teams">DRAGONES F.C. <span style="color:var(--ink-mute); font-size:14px; font-family:var(--ui);">vs</span> CÓNDOR</div>
+              <div class="des-meta">
+                <span>📍 Cancha 1</span>
+                <span>👥 Senior Honor</span>
+                <span>⚖ Árbitro asistente 1</span>
+              </div>
+            </div>
+            <div>
+              <div class="des-amount">
+                <small>Honorarios</small>
+                $14.000
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align:center; margin-top:24px;">
+            <button class="btn btn-ghost">Ver designaciones pasadas (24) →</button>
+          </div>
+        </div>
+
+        <!-- TAB: PAGOS (oculto inicialmente) -->
+        <div class="panel-section" data-tab="pagos" style="display:none;">
+          <div class="eyebrow">→ Tus pagos</div>
+          <h2 style="font-family:var(--display); font-size:28px; letter-spacing:1px; color:var(--green-deep); margin-bottom:18px;">Liquidaciones y honorarios</h2>
+
+          <!-- Resumen financiero -->
+          <div class="payment-summary">
+            <div class="pay-stat">
+              <div class="pay-stat-label">Devengado este mes</div>
+              <div class="pay-stat-value lime">$182.000</div>
+              <div class="pay-stat-sub">6 partidos dirigidos · 1 por liquidar</div>
+            </div>
+            <div class="pay-stat">
+              <div class="pay-stat-label">Próxima liquidación</div>
+              <div class="pay-stat-value">31 MAY</div>
+              <div class="pay-stat-sub">BancoEstado · CuentaRUT ****4321</div>
+            </div>
+            <div class="pay-stat">
+              <div class="pay-stat-label">Pagado año (2026)</div>
+              <div class="pay-stat-value">$1.247.500</div>
+              <div class="pay-stat-sub">42 partidos · retención 13,75% aplicada</div>
+            </div>
+          </div>
+
+          <!-- Tabla de pagos -->
+          <div class="payments-table">
+            <div class="pay-row header">
+              <div>Fecha</div>
+              <div>Concepto</div>
+              <div>Partidos incluidos</div>
+              <div style="text-align:right;">Bruto</div>
+              <div style="text-align:right;">Líquido</div>
+              <div style="text-align:center;">Estado</div>
+            </div>
+
+            <div class="pay-row">
+              <div style="font-family:var(--display); color:var(--green-deep);">15 MAY</div>
+              <div>
+                <div style="font-weight:500;">Liquidación quincena 1</div>
+                <div style="font-size:11px; color:var(--ink-mute);">Período 1 · 15 mayo</div>
+              </div>
+              <div style="font-size:12px; color:var(--ink-mute);">3 partidos · Fecha 7</div>
+              <div class="pay-amount">$84.000</div>
+              <div class="pay-amount">$72.450</div>
+              <div><span class="pay-status paid">✓ Pagado</span></div>
+            </div>
+
+            <div class="pay-row">
+              <div style="font-family:var(--display); color:var(--green-deep);">30 ABR</div>
+              <div>
+                <div style="font-weight:500;">Liquidación quincena 2</div>
+                <div style="font-size:11px; color:var(--ink-mute);">Período 16 · 30 abril</div>
+              </div>
+              <div style="font-size:12px; color:var(--ink-mute);">4 partidos · Fechas 5-6</div>
+              <div class="pay-amount">$112.000</div>
+              <div class="pay-amount">$96.600</div>
+              <div><span class="pay-status paid">✓ Pagado</span></div>
+            </div>
+
+            <div class="pay-row">
+              <div style="font-family:var(--display); color:var(--green-deep);">15 ABR</div>
+              <div>
+                <div style="font-weight:500;">Liquidación quincena 1</div>
+                <div style="font-size:11px; color:var(--ink-mute);">Período 1 · 15 abril</div>
+              </div>
+              <div style="font-size:12px; color:var(--ink-mute);">5 partidos · Fechas 3-4</div>
+              <div class="pay-amount">$140.000</div>
+              <div class="pay-amount">$120.750</div>
+              <div><span class="pay-status paid">✓ Pagado</span></div>
+            </div>
+
+            <div class="pay-row" style="background:#FFFCF5;">
+              <div style="font-family:var(--display); color:var(--silbato);">31 MAY</div>
+              <div>
+                <div style="font-weight:500;">Liquidación en curso</div>
+                <div style="font-size:11px; color:var(--silbato);">Período 16 · 31 mayo · Pendiente</div>
+              </div>
+              <div style="font-size:12px; color:var(--ink-mute);">4 partidos (1 sin liquidar)</div>
+              <div class="pay-amount">$103.600</div>
+              <div class="pay-amount minus">~$89.350</div>
+              <div><span class="pay-status pending">Procesando</span></div>
+            </div>
+          </div>
+
+          <div style="background:var(--paper); padding:20px 24px; border-radius:var(--r-md); margin-top:18px; display:flex; gap:14px; align-items:center;">
+            <div style="font-size:24px;">📄</div>
+            <div style="flex:1;">
+              <div style="font-weight:600; font-size:13px;">Certificado de pagos 2026</div>
+              <div style="font-size:11px; color:var(--ink-mute); margin-top:2px;">Útil para tu declaración de impuestos. Disponible desde enero 2027.</div>
+            </div>
+            <button class="btn">Descargar</button>
+          </div>
+        </div>
+
+        <!-- TAB: COMENTARIOS -->
+        <div class="panel-section" data-tab="comentarios" style="display:none;">
+          <div class="eyebrow">→ Calificaciones que has recibido</div>
+          <h2 style="font-family:var(--display); font-size:28px; letter-spacing:1px; color:var(--green-deep); margin-bottom:18px;">Tu reputación</h2>
+
+          <!-- Resumen de rating -->
+          <div class="comment-stats">
+            <div class="rating-big">
+              <div class="rating-num">4.7</div>
+              <div class="rating-stars">★ ★ ★ ★ ★</div>
+              <div class="rating-count">42 evaluaciones</div>
+            </div>
+            <div class="rating-bars">
+              <div class="rating-bar">
+                <span>★★★★★</span>
+                <div class="rating-bar-track"><div class="rating-bar-fill" style="width:78%;"></div></div>
+                <span style="text-align:right; color:var(--ink-mute);">33</span>
+              </div>
+              <div class="rating-bar">
+                <span>★★★★</span>
+                <div class="rating-bar-track"><div class="rating-bar-fill" style="width:17%;"></div></div>
+                <span style="text-align:right; color:var(--ink-mute);">7</span>
+              </div>
+              <div class="rating-bar">
+                <span>★★★</span>
+                <div class="rating-bar-track"><div class="rating-bar-fill" style="width:3%;"></div></div>
+                <span style="text-align:right; color:var(--ink-mute);">1</span>
+              </div>
+              <div class="rating-bar">
+                <span>★★</span>
+                <div class="rating-bar-track"><div class="rating-bar-fill" style="width:2%;"></div></div>
+                <span style="text-align:right; color:var(--ink-mute);">1</span>
+              </div>
+              <div class="rating-bar">
+                <span>★</span>
+                <div class="rating-bar-track"><div class="rating-bar-fill" style="width:0%;"></div></div>
+                <span style="text-align:right; color:var(--ink-mute);">0</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="hint info" style="margin-bottom:20px;">
+            <strong>💡 Las calificaciones</strong> las dejan los delegados de los equipos después de cada partido. La liga ve tu rating promedio para asignarte partidos importantes.
+          </div>
+
+          <!-- Comentarios individuales -->
+          <div class="comment-item">
+            <div class="comment-head">
+              <div class="comment-source">
+                <div class="shield shield-sm" style="background:#C1272D;">D</div>
+                <div>
+                  <div class="comment-source-name">Carlos Mendoza · Dragones F.C.</div>
+                  <div class="comment-source-meta">15 mayo · Fecha 7 vs Cóndor</div>
+                </div>
+              </div>
+              <div class="comment-rating">★ ★ ★ ★ ★</div>
+            </div>
+            <div class="comment-text">"Excelente arbitraje, mantuvo el control del partido en todo momento. Cobró parejo para ambos lados. Recomendado."</div>
+          </div>
+
+          <div class="comment-item">
+            <div class="comment-head">
+              <div class="comment-source">
+                <div class="shield shield-sm" style="background:#1565C0;">K</div>
+                <div>
+                  <div class="comment-source-name">Roberto Silva · Kraken</div>
+                  <div class="comment-source-meta">8 mayo · Fecha 6 vs Real Español</div>
+                </div>
+              </div>
+              <div class="comment-rating">★ ★ ★ ★ ★</div>
+            </div>
+            <div class="comment-text">"Buen criterio, partido difícil que supo conducir. Bien manejada la disciplina."</div>
+          </div>
+
+          <div class="comment-item">
+            <div class="comment-head">
+              <div class="comment-source">
+                <div class="shield shield-sm" style="background:#1B4332;">N</div>
+                <div>
+                  <div class="comment-source-name">María Torres · Nacional FC</div>
+                  <div class="comment-source-meta">1 mayo · Fecha 5 vs Los Leones</div>
+                </div>
+              </div>
+              <div class="comment-rating">★ ★ ★ ☆ ☆</div>
+            </div>
+            <div class="comment-text">"Faltó cobrar un par de jugadas. En general bien, pero pudo ser mejor."</div>
+          </div>
+
+          <div class="comment-item">
+            <div class="comment-head">
+              <div class="comment-source">
+                <div class="shield shield-sm" style="background:#E76F26;">A</div>
+                <div>
+                  <div class="comment-source-name">Pedro Vargas · Atlas</div>
+                  <div class="comment-source-meta">24 abr · Fecha 4 vs Cóndor</div>
+                </div>
+              </div>
+              <div class="comment-rating">★ ★ ★ ★ ★</div>
+            </div>
+            <div class="comment-text">"Puntual, comunicativo, tomó decisiones difíciles bien argumentadas. 10/10."</div>
+          </div>
+
+          <div style="text-align:center; margin-top:20px;">
+            <button class="btn btn-ghost">Ver todas las evaluaciones (42) →</button>
+          </div>
+        </div>
+
+        <!-- TAB: NOTIFICACIONES -->
+        <div class="panel-section" data-tab="notificaciones" style="display:none;">
+          <div class="eyebrow">→ Centro de notificaciones</div>
+          <h2 style="font-family:var(--display); font-size:28px; letter-spacing:1px; color:var(--green-deep); margin-bottom:18px;">Tus notificaciones</h2>
+
+          <div class="notif-item unread">
+            <div class="notif-icon designation">📅</div>
+            <div class="notif-content">
+              <div class="notif-title">Nueva designación · Sábado 23 mayo</div>
+              <div class="notif-body">La Liga Ñuñoa te designó para arbitrar <strong>Dragones F.C. vs Kraken</strong> a las 11:30 en Cancha 2. <strong>Confirma antes de que expire</strong> (en 8 horas).</div>
+            </div>
+            <div class="notif-time">Hace 2h</div>
+          </div>
+
+          <div class="notif-item unread">
+            <div class="notif-icon review">⭐</div>
+            <div class="notif-content">
+              <div class="notif-title">Nueva calificación recibida</div>
+              <div class="notif-body">Carlos Mendoza (Dragones F.C.) te calificó con <strong>5 estrellas</strong> tras el partido vs Cóndor del 15 mayo.</div>
+            </div>
+            <div class="notif-time">Ayer</div>
+          </div>
+
+          <div class="notif-item">
+            <div class="notif-icon payment">💰</div>
+            <div class="notif-content">
+              <div class="notif-title">Pago procesado · $72.450</div>
+              <div class="notif-body">Tu liquidación quincenal fue transferida a tu CuentaRUT ****4321 (BancoEstado). Comprobante PDF disponible en la sección Pagos.</div>
+            </div>
+            <div class="notif-time">15 may</div>
+          </div>
+
+          <div class="notif-item">
+            <div class="notif-icon designation">📅</div>
+            <div class="notif-content">
+              <div class="notif-title">Recordatorio · Mañana arbitras a las 11:30</div>
+              <div class="notif-body">No olvides tu partido <strong>Dragones F.C. vs Cóndor</strong> mañana en Cancha 1. Te esperamos 30 min antes.</div>
+            </div>
+            <div class="notif-time">14 may</div>
+          </div>
+
+          <div class="notif-item">
+            <div class="notif-icon review">⭐</div>
+            <div class="notif-content">
+              <div class="notif-title">3 nuevas evaluaciones esta semana</div>
+              <div class="notif-body">Roberto Silva, María Torres y Pedro Vargas dejaron sus calificaciones tras los partidos de las últimas fechas.</div>
+            </div>
+            <div class="notif-time">12 may</div>
+          </div>
+        </div>
+
+        <!-- TAB: PERFIL -->
+        <div class="panel-section" data-tab="perfil" style="display:none;">
+          <div class="eyebrow">→ Tu información</div>
+          <h2 style="font-family:var(--display); font-size:28px; letter-spacing:1px; color:var(--green-deep); margin-bottom:18px;">Mi perfil</h2>
+
+          <div style="display:grid; grid-template-columns:280px 1fr; gap:32px;">
+            <!-- Foto/avatar -->
+            <div>
+              <div style="width:240px; height:240px; border-radius:50%; background:linear-gradient(135deg, var(--green-bright), var(--green-mid)); color:var(--green-lime); display:grid; place-items:center; font-family:var(--display); font-size:80px; letter-spacing:2px; margin:0 auto 16px;">JN</div>
+              <button class="btn" style="width:100%;">Cambiar foto</button>
+            </div>
+            <!-- Datos -->
+            <div>
+              <div class="card" style="margin:0 0 16px; padding:24px;">
+                <div class="eyebrow">→ Datos personales</div>
+                <div style="font-family:var(--display); font-size:22px; letter-spacing:1px; color:var(--green-deep); margin-bottom:14px;">Juan Núñez Pérez</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; font-size:13px;">
+                  <div>
+                    <div style="font-size:11px; color:var(--ink-mute); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">RUT</div>
+                    12.345.678-9
+                  </div>
+                  <div>
+                    <div style="font-size:11px; color:var(--ink-mute); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">WhatsApp</div>
+                    +56 9 8765 4321
+                  </div>
+                  <div>
+                    <div style="font-size:11px; color:var(--ink-mute); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">Email</div>
+                    juan.nunez@email.cl
+                  </div>
+                  <div>
+                    <div style="font-size:11px; color:var(--ink-mute); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">Liga asociada</div>
+                    Liga Ñuñoa
+                  </div>
+                </div>
+              </div>
+
+              <div class="card" style="margin:0 0 16px; padding:24px;">
+                <div class="eyebrow">→ Rol y tarifas</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; font-size:13px; margin-top:8px;">
+                  <div>
+                    <div style="font-size:11px; color:var(--ink-mute); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">Rol</div>
+                    <strong>ÁRBITRO</strong>
+                  </div>
+                  <div>
+                    <div style="font-size:11px; color:var(--ink-mute); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">Categoría</div>
+                    <strong>A · Senior Honor</strong>
+                  </div>
+                  <div>
+                    <div style="font-size:11px; color:var(--ink-mute); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">Tarifa base</div>
+                    <strong>$28.000</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card" style="margin:0; padding:24px;">
+                <div class="eyebrow">→ Datos bancarios</div>
+                <div style="font-size:13px; margin-top:8px;">
+                  <div style="margin-bottom:6px;">
+                    <strong>BancoEstado · CuentaRUT</strong>
+                  </div>
+                  <div style="font-family:Consolas, monospace; color:var(--ink-mute);">N° ********4321</div>
+                  <div style="font-size:11px; color:var(--green-bright); margin-top:8px;">✓ Emite boleta de honorarios · Retención 13,75%</div>
+                </div>
+                <button class="btn" style="margin-top:14px;">Actualizar datos bancarios</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- MÓVIL -->
+  <div class="platform-view" data-platform="mobile">
+    <div class="mobile-frame">
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="phone-status">
+            <span>9:41</span>
+            <span>5G · ●●●●○</span>
+          </div>
+
+          <!-- Header móvil panel -->
+          <div style="background:var(--green-deep); color:var(--chalk); padding:18px 20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:40px; height:40px; border-radius:50%; background:var(--green-lime); color:var(--green-deep); display:grid; place-items:center; font-family:var(--display); font-size:16px;">JN</div>
+                <div>
+                  <div style="font-size:14px; font-weight:600;">Hola, Juan</div>
+                  <div style="font-size:10px; color:var(--green-lime); letter-spacing:1.5px; text-transform:uppercase;">⚖ ÁRBITRO · CAT. A</div>
+                </div>
+              </div>
+              <div style="position:relative;">
+                <div style="font-size:20px;">🔔</div>
+                <div style="position:absolute; top:-2px; right:-4px; background:var(--silbato); color:white; border-radius:100px; padding:0 5px; font-size:9px; font-weight:700;">2</div>
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div style="background:rgba(255,255,255,0.08); padding:10px 12px; border-radius:8px;">
+                <div style="font-size:9px; color:var(--green-lime); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:2px;">Por confirmar</div>
+                <div style="font-family:var(--display); font-size:22px; color:var(--silbato); letter-spacing:1px;">3</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.08); padding:10px 12px; border-radius:8px;">
+                <div style="font-size:9px; color:var(--green-lime); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:2px;">Por pagar</div>
+                <div style="font-family:var(--display); font-size:18px; color:var(--green-lime); letter-spacing:1px;">$182k</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabs móvil -->
+          <div style="background:var(--green-mid); padding:0 16px; display:flex; gap:0; overflow-x:auto;">
+            <div class="mob-panel-tab active" onclick="switchMobPanelTab(this, 'm-design')" style="padding:12px 14px; color:var(--green-lime); border-bottom:2px solid var(--green-lime); font-weight:600; font-size:12px; white-space:nowrap; cursor:pointer;">📅 Partidos</div>
+            <div class="mob-panel-tab" onclick="switchMobPanelTab(this, 'm-pagos')" style="padding:12px 14px; color:rgba(255,255,255,0.6); border-bottom:2px solid transparent; font-size:12px; white-space:nowrap; cursor:pointer;">💰 Pagos</div>
+            <div class="mob-panel-tab" onclick="switchMobPanelTab(this, 'm-coments')" style="padding:12px 14px; color:rgba(255,255,255,0.6); border-bottom:2px solid transparent; font-size:12px; white-space:nowrap; cursor:pointer;">⭐ Calif.</div>
+            <div class="mob-panel-tab" onclick="switchMobPanelTab(this, 'm-perfil')" style="padding:12px 14px; color:rgba(255,255,255,0.6); border-bottom:2px solid transparent; font-size:12px; white-space:nowrap; cursor:pointer;">👤 Perfil</div>
+          </div>
+
+          <!-- Contenido móvil -->
+          <div style="flex:1; overflow-y:auto; padding:16px;" id="mobPanelBody">
+
+            <!-- TAB Partidos -->
+            <div class="mob-panel-section" data-mob-tab="m-design">
+              <div style="margin-bottom:12px;">
+                <h3 style="font-family:var(--display); font-size:18px; letter-spacing:1px; color:var(--green-deep);">Por confirmar (3)</h3>
+              </div>
+
+              <!-- Card de designación móvil -->
+              <div style="background:var(--chalk); border:1px solid var(--line); border-left:4px solid var(--silbato); border-radius:12px; padding:14px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:10px;">
+                  <div>
+                    <span class="chip chip-silbato" style="font-size:9px;">⏳ EXPIRA EN 8H</span>
+                  </div>
+                  <div style="text-align:center; background:var(--green-deep); color:white; padding:6px 10px; border-radius:8px;">
+                    <div style="font-family:var(--display); font-size:18px; line-height:1;">23</div>
+                    <div style="font-size:9px; color:var(--green-lime); letter-spacing:1.5px;">MAY</div>
+                  </div>
+                </div>
+                <div style="font-family:var(--display); font-size:16px; letter-spacing:0.5px; color:var(--green-deep); margin-bottom:4px;">DRAGONES vs KRAKEN</div>
+                <div style="font-size:11px; color:var(--ink-mute); margin-bottom:10px;">⚖ Árbitro central · 11:30 · Cancha 2</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding-top:10px; border-top:1px solid var(--line);">
+                  <div>
+                    <div style="font-size:10px; color:var(--ink-mute); letter-spacing:1px; text-transform:uppercase;">Honorarios</div>
+                    <div style="font-family:var(--display); font-size:18px; color:var(--green-deep);">$28.000</div>
+                  </div>
+                  <div style="display:flex; gap:6px;">
+                    <button style="background:var(--paper); color:var(--ink-mute); border:none; padding:8px 10px; border-radius:6px; font-size:14px;">✕</button>
+                    <button style="background:var(--green-lime); color:var(--green-deep); border:none; padding:8px 14px; border-radius:6px; font-size:12px; font-weight:600;">✓ Acepto</button>
+                  </div>
+                </div>
+              </div>
+
+              <div style="background:var(--chalk); border:1px solid var(--line); border-left:4px solid var(--silbato); border-radius:12px; padding:14px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:10px;">
+                  <div>
+                    <span class="chip chip-silbato" style="font-size:9px;">⏳ FESTIVO +20%</span>
+                  </div>
+                  <div style="text-align:center; background:var(--green-deep); color:white; padding:6px 10px; border-radius:8px;">
+                    <div style="font-family:var(--display); font-size:18px; line-height:1;">24</div>
+                    <div style="font-size:9px; color:var(--green-lime); letter-spacing:1.5px;">MAY</div>
+                  </div>
+                </div>
+                <div style="font-family:var(--display); font-size:16px; letter-spacing:0.5px; color:var(--green-deep); margin-bottom:4px;">REAL ESPAÑOL vs NACIONAL</div>
+                <div style="font-size:11px; color:var(--ink-mute); margin-bottom:10px;">⚖ Árbitro central · 09:00 · Cancha 1</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding-top:10px; border-top:1px solid var(--line);">
+                  <div>
+                    <div style="font-size:10px; color:var(--ink-mute); letter-spacing:1px; text-transform:uppercase;">Honorarios</div>
+                    <div style="font-family:var(--display); font-size:18px; color:var(--green-deep);">$33.600</div>
+                  </div>
+                  <div style="display:flex; gap:6px;">
+                    <button style="background:var(--paper); color:var(--ink-mute); border:none; padding:8px 10px; border-radius:6px; font-size:14px;">✕</button>
+                    <button style="background:var(--green-lime); color:var(--green-deep); border:none; padding:8px 14px; border-radius:6px; font-size:12px; font-weight:600;">✓ Acepto</button>
+                  </div>
+                </div>
+              </div>
+
+              <h3 style="font-family:var(--display); font-size:18px; letter-spacing:1px; color:var(--green-deep); margin:20px 0 12px;">Confirmadas (2)</h3>
+
+              <div style="background:var(--chalk); border:1px solid var(--line); border-left:4px solid var(--green-bright); border-radius:12px; padding:14px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:10px;">
+                  <span class="chip chip-success" style="font-size:9px;">✓ CONFIRMADO</span>
+                  <div style="text-align:center; background:var(--green-deep); color:white; padding:6px 10px; border-radius:8px;">
+                    <div style="font-family:var(--display); font-size:18px; line-height:1;">30</div>
+                    <div style="font-size:9px; color:var(--green-lime); letter-spacing:1.5px;">MAY</div>
+                  </div>
+                </div>
+                <div style="font-family:var(--display); font-size:16px; letter-spacing:0.5px; color:var(--green-deep); margin-bottom:4px;">LOS LEONES vs ATLAS</div>
+                <div style="font-size:11px; color:var(--ink-mute);">⚖ Árbitro central · 11:30 · Cancha 2 · $28.000</div>
+              </div>
+            </div>
+
+            <!-- TAB Pagos -->
+            <div class="mob-panel-section" data-mob-tab="m-pagos" style="display:none;">
+              <div style="background:linear-gradient(135deg, var(--green-deep), var(--green-mid)); color:var(--chalk); padding:18px; border-radius:14px; margin-bottom:14px;">
+                <div style="font-size:10px; color:var(--green-lime); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:6px;">Devengado este mes</div>
+                <div style="font-family:var(--display); font-size:32px; color:var(--green-lime); letter-spacing:1px;">$182.000</div>
+                <div style="font-size:11px; color:var(--green-lime); opacity:0.7; margin-top:4px;">6 partidos · Próximo pago 31 MAY</div>
+              </div>
+
+              <h3 style="font-family:var(--display); font-size:16px; letter-spacing:1px; color:var(--green-deep); margin-bottom:10px;">Historial</h3>
+
+              <div style="background:var(--chalk); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-weight:600; font-size:13px;">Quincena 1 MAY</div>
+                  <div style="font-size:11px; color:var(--ink-mute);">3 partidos · Fecha 7</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-family:var(--display); font-size:16px; color:var(--green-deep);">$72.450</div>
+                  <span class="chip chip-success" style="font-size:9px;">✓ Pagado</span>
+                </div>
+              </div>
+
+              <div style="background:var(--chalk); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-weight:600; font-size:13px;">Quincena 2 ABR</div>
+                  <div style="font-size:11px; color:var(--ink-mute);">4 partidos</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-family:var(--display); font-size:16px; color:var(--green-deep);">$96.600</div>
+                  <span class="chip chip-success" style="font-size:9px;">✓ Pagado</span>
+                </div>
+              </div>
+
+              <div style="background:#FFFCF5; border:1px solid var(--silbato); border-radius:10px; padding:14px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-weight:600; font-size:13px;">Quincena 2 MAY</div>
+                  <div style="font-size:11px; color:var(--silbato);">4 partidos · Procesando</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-family:var(--display); font-size:16px; color:var(--silbato);">~$89.350</div>
+                  <span class="chip chip-warn" style="font-size:9px;">Procesando</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB Comentarios -->
+            <div class="mob-panel-section" data-mob-tab="m-coments" style="display:none;">
+              <div style="background:var(--chalk); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:14px; text-align:center;">
+                <div style="font-family:var(--display); font-size:48px; color:var(--green-deep); letter-spacing:1px; line-height:1;">4.7</div>
+                <div style="color:var(--silbato); font-size:18px; letter-spacing:3px; margin:4px 0;">★ ★ ★ ★ ★</div>
+                <div style="font-size:10px; color:var(--ink-mute); letter-spacing:1.5px; text-transform:uppercase;">42 evaluaciones</div>
+              </div>
+
+              <div style="background:var(--chalk); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:8px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <div class="shield shield-sm" style="background:#C1272D;">D</div>
+                    <div>
+                      <div style="font-weight:600; font-size:12px;">Carlos Mendoza</div>
+                      <div style="font-size:10px; color:var(--ink-mute);">Dragones FC · 15 may</div>
+                    </div>
+                  </div>
+                  <div style="color:var(--silbato); font-size:11px;">★★★★★</div>
+                </div>
+                <div style="font-family:var(--serif); font-style:italic; font-size:12px; color:var(--ink-soft);">"Excelente arbitraje, mantuvo el control..."</div>
+              </div>
+
+              <div style="background:var(--chalk); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:8px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <div class="shield shield-sm" style="background:#1565C0;">K</div>
+                    <div>
+                      <div style="font-weight:600; font-size:12px;">Roberto Silva</div>
+                      <div style="font-size:10px; color:var(--ink-mute);">Kraken · 8 may</div>
+                    </div>
+                  </div>
+                  <div style="color:var(--silbato); font-size:11px;">★★★★★</div>
+                </div>
+                <div style="font-family:var(--serif); font-style:italic; font-size:12px; color:var(--ink-soft);">"Buen criterio, partido difícil..."</div>
+              </div>
+
+              <div style="background:var(--chalk); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:8px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <div class="shield shield-sm" style="background:#1B4332;">N</div>
+                    <div>
+                      <div style="font-weight:600; font-size:12px;">María Torres</div>
+                      <div style="font-size:10px; color:var(--ink-mute);">Nacional FC · 1 may</div>
+                    </div>
+                  </div>
+                  <div style="color:var(--silbato); font-size:11px;">★★★☆☆</div>
+                </div>
+                <div style="font-family:var(--serif); font-style:italic; font-size:12px; color:var(--ink-soft);">"Faltó cobrar un par de jugadas..."</div>
+              </div>
+            </div>
+
+            <!-- TAB Perfil -->
+            <div class="mob-panel-section" data-mob-tab="m-perfil" style="display:none;">
+              <div style="text-align:center; padding:20px 0;">
+                <div style="width:120px; height:120px; border-radius:50%; background:linear-gradient(135deg, var(--green-bright), var(--green-mid)); color:var(--green-lime); display:inline-grid; place-items:center; font-family:var(--display); font-size:48px; letter-spacing:2px; margin-bottom:10px;">JN</div>
+                <h2 style="font-family:var(--display); font-size:22px; letter-spacing:1px; color:var(--green-deep);">Juan Núñez Pérez</h2>
+                <div style="font-size:11px; color:var(--ink-mute); margin-top:2px;">RUT 12.345.678-9</div>
+              </div>
+
+              <div style="background:var(--chalk); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:10px;">
+                <div style="font-size:10px; color:var(--silbato); letter-spacing:1.5px; text-transform:uppercase; font-weight:600; margin-bottom:6px;">→ Rol</div>
+                <div style="font-family:var(--display); font-size:16px; color:var(--green-deep);">ÁRBITRO · Categoría A</div>
+                <div style="font-size:11px; color:var(--ink-mute); margin-top:2px;">Tarifa base $28.000 por partido</div>
+              </div>
+
+              <div style="background:var(--chalk); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:10px;">
+                <div style="font-size:10px; color:var(--silbato); letter-spacing:1.5px; text-transform:uppercase; font-weight:600; margin-bottom:6px;">→ Liga</div>
+                <div style="font-weight:600; font-size:13px;">Liga de Deportes Ñuñoa</div>
+              </div>
+
+              <div style="background:var(--chalk); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:10px;">
+                <div style="font-size:10px; color:var(--silbato); letter-spacing:1.5px; text-transform:uppercase; font-weight:600; margin-bottom:6px;">→ Datos bancarios</div>
+                <div style="font-weight:600; font-size:13px;">BancoEstado · CuentaRUT</div>
+                <div style="font-family:Consolas, monospace; font-size:12px; color:var(--ink-mute); margin-top:2px;">N° ********4321</div>
+              </div>
+
+              <div style="background:var(--chalk); border:1px solid var(--line); border-radius:10px; padding:14px;">
+                <div style="font-size:10px; color:var(--silbato); letter-spacing:1.5px; text-transform:uppercase; font-weight:600; margin-bottom:6px;">→ Contacto</div>
+                <div style="font-size:13px;">📱 +56 9 8765 4321</div>
+                <div style="font-size:13px; margin-top:2px;">✉ juan.nunez@email.cl</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script>
+// ============================================================
+// STATE MANAGER · localStorage
+// ============================================================
+const STORAGE_KEY = 'fixtura_proto_v3';
+
+const defaultState = {
+  // Liga única ya configurada (admin authenticated)
+  liga: { id: 'liga-nunoa', nombre: 'Liga de Deportes Ñuñoa', slug: 'liga-nunoa', adminName: 'Ricardo González' },
+  // Personal invitado por el admin (3 ya pre-cargados para demo)
+  personal: [
+    { id: 'per-1', nombre: 'Pedro Soto', rut: '11.222.333-4', rol: 'PLANILLERO', tarifa: 15000, banco: 'BCI', phone: '+56 9 1111 1111', status: 'active', preloaded: true },
+    { id: 'per-2', nombre: 'María Gómez', rut: '12.333.444-5', rol: 'PARAMEDICO', tarifa: 25000, banco: 'BancoEstado', phone: '+56 9 2222 2222', status: 'invited', preloaded: true },
+    { id: 'per-3', nombre: 'Luis Vargas', rut: '13.444.555-6', rol: 'MANTENIMIENTO', tarifa: 12000, banco: 'BancoEstado', phone: '+56 9 3333 3333', status: 'active', preloaded: true }
+  ],
+  // Personal en proceso de invitar (datos del modal)
+  inviteCurrent: { rol: null },
+  // Personal en proceso de activación (cuenta entrante)
+  activate: { invitedId: 'per-2' } // El paramédico del demo (en estado invited)
+};
+
+let state = loadState();
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return JSON.parse(JSON.stringify(defaultState));
+    return JSON.parse(raw);
+  } catch (e) { return JSON.parse(JSON.stringify(defaultState)); }
+}
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+  updateStatePanel();
+  renderPersonalTable();
+  renderMobPersonalList();
+}
+function resetDemo() {
+  if (!confirm('¿Reiniciar la demo? Se borra todo el personal agregado.')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  state = JSON.parse(JSON.stringify(defaultState));
+  saveState();
+  location.reload();
+}
+
+// ============================================================
+// STATE PANEL
+// ============================================================
+function toggleStatePanel() {
+  document.getElementById('statePanel').classList.toggle('open');
+  updateStatePanel();
+}
+function updateStatePanel() {
+  const body = document.getElementById('statePanelBody');
+  const badge = document.getElementById('debugBadge');
+  if (!body) return;
+  badge.textContent = state.personal.length;
+
+  let html = '';
+  html += `<div class="state-section"><div class="state-section-title">Liga activa</div>`;
+  html += `<div>• ${state.liga.nombre}<br><span style="color:var(--ink-mute); padding-left:10px;">Admin: ${state.liga.adminName}</span></div></div>`;
+
+  html += `<div class="state-section"><div class="state-section-title">Personal (${state.personal.length})</div>`;
+  if (state.personal.length === 0) {
+    html += `<div class="state-empty">Sin personal aún</div>`;
+  } else {
+    state.personal.forEach(p => {
+      const tag = p.status === 'active' ? '<span style="color:var(--green-lime);">[activo]</span>' : '<span style="color:var(--silbato);">[invitado]</span>';
+      const demo = p.preloaded ? ' <span style="color:var(--ink-mute);">[demo]</span>' : '';
+      html += `<div style="margin-bottom:6px;">• ${p.nombre} ${tag}${demo}<br><span style="color:var(--ink-mute); padding-left:10px;">${p.rol} · $${(p.tarifa || 0).toLocaleString('es-CL')}</span></div>`;
+    });
+  }
+  html += `</div>`;
+
+  html += `<div class="state-section"><div class="state-section-title">Estado de cuentas</div>`;
+  const active = state.personal.filter(p => p.status === 'active').length;
+  const invited = state.personal.filter(p => p.status === 'invited').length;
+  html += `<div>• ${active} cuentas activadas</div>`;
+  html += `<div>• ${invited} invitaciones pendientes</div></div>`;
+  body.innerHTML = html;
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+let currentFlow = 'admin-invite';
+let currentPlatform = 'web';
+
+document.querySelectorAll('.plat-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.plat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPlatform = btn.dataset.platform;
+    updatePlatformView();
+  });
+});
+
+document.querySelectorAll('.flow-tab').forEach(tab => {
+  tab.addEventListener('click', () => switchFlow(tab.dataset.flow));
+});
+
+function switchFlow(flow) {
+  currentFlow = flow;
+  document.querySelectorAll('.flow-tab').forEach(t => t.classList.remove('active'));
+  const tab = document.querySelector(`.flow-tab[data-flow="${flow}"]`);
+  if (tab) tab.classList.add('active');
+  document.querySelectorAll('.flow-area').forEach(f => f.classList.remove('active'));
+  document.querySelector(`.flow-area[data-flow="${flow}"]`).classList.add('active');
+  updatePlatformView();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (flow === 'personal-activate') {
+    renderActivateData();
+  }
+}
+
+function updatePlatformView() {
+  const flowArea = document.querySelector(`.flow-area[data-flow="${currentFlow}"]`);
+  if (!flowArea) return;
+  flowArea.querySelectorAll('.platform-view').forEach(v => v.classList.remove('active'));
+  const view = flowArea.querySelector(`.platform-view[data-platform="${currentPlatform}"]`);
+  if (view) view.classList.add('active');
+  renderActivateProgress();
+}
+
+function showStep(flow, platform, step) {
+  const flowArea = document.querySelector(`.flow-area[data-flow="${flow}"]`);
+  const platformView = flowArea.querySelector(`.platform-view[data-platform="${platform}"]`);
+  platformView.querySelectorAll('.screen, .mob-screen').forEach(s => s.classList.remove('active'));
+  const target = platformView.querySelector(`[data-step="${step}"]`);
+  if (target) target.classList.add('active');
+  if (platform === 'web') window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ============================================================
+// VALIDATIONS
+// ============================================================
+function validateRut(rut) {
+  rut = String(rut).replace(/[\.\-]/g, '').toUpperCase();
+  if (rut.length < 7 || rut.length > 9) return false;
+  const body = rut.slice(0, -1);
+  const dv = rut.slice(-1);
+  if (!/^\d+$/.test(body)) return false;
+  let sum = 0, mul = 2;
+  for (let i = body.length - 1; i >= 0; i--) {
+    sum += parseInt(body[i]) * mul;
+    mul = mul === 7 ? 2 : mul + 1;
+  }
+  const r = 11 - (sum % 11);
+  const expected = r === 11 ? '0' : r === 10 ? 'K' : r.toString();
+  return dv === expected;
+}
+
+function formatRut(input) {
+  let v = input.value.replace(/[^\dkK]/g, '').toUpperCase();
+  if (v.length === 0) { input.value = ''; return; }
+  if (v.length > 1) {
+    const body = v.slice(0, -1);
+    const dv = v.slice(-1);
+    input.value = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
+  }
+  if (v.length >= 8) {
+    if (validateRut(v)) {
+      input.classList.remove('error');
+      input.classList.add('success');
+    } else {
+      input.classList.remove('success');
+      input.classList.add('error');
+    }
+  }
+}
+
+function formatPhone(input) {
+  let v = input.value.replace(/[^\d]/g, '');
+  if (v.startsWith('56')) v = v.slice(2);
+  if (v.length === 0) { input.value = ''; return; }
+  let formatted = '+56 ';
+  if (v.length >= 1) formatted += v.slice(0, 1);
+  if (v.length >= 2) formatted += ' ' + v.slice(1, 5);
+  if (v.length >= 6) formatted += ' ' + v.slice(5, 9);
+  input.value = formatted;
+}
+
+function checkPwdStrength(input) {
+  const v = input.value;
+  let score = 0;
+  if (v.length >= 8) score++;
+  if (/[A-Z]/.test(v)) score++;
+  if (/[0-9]/.test(v)) score++;
+  if (/[!@#$%^&*(),.?":{}|<>]/.test(v)) score++;
+  // Buscar las pwd-bar más cercanas (en el contenedor padre)
+  const container = input.closest('.field, .mob-field');
+  if (!container) return;
+  const bars = container.querySelectorAll('.pwd-bar');
+  const colors = ['var(--line)', '#C1272D', '#E8A024', '#95D5B2', '#2D6A4F'];
+  bars.forEach((bar, i) => {
+    bar.style.background = i < score ? colors[score] : 'var(--line)';
+  });
+}
+
+// ============================================================
+// FLOW 1 · ADMIN INVITA PERSONAL
+// ============================================================
+function renderPersonalTable() {
+  const table = document.getElementById('personalTable');
+  const empty = document.getElementById('personalEmpty');
+  if (!table) return;
+  // Limpiar todo menos el header
+  const rows = table.querySelectorAll('.ptr-row:not(.header)');
+  rows.forEach(r => r.remove());
+
+  if (state.personal.length === 0) {
+    if (empty) empty.style.display = 'block';
+    table.style.display = 'none';
+  } else {
+    if (empty) empty.style.display = 'none';
+    table.style.display = 'block';
+    const rolIcons = { ARBITRO: '⚖', PLANILLERO: '📋', PARAMEDICO: '⚕', MANTENIMIENTO: '🔧' };
+    state.personal.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.className = 'ptr-row';
+      const statusClass = p.status === 'active' ? 'active' : 'invited';
+      const statusText = p.status === 'active' ? '✓ Activo' : 'Invitado';
+      row.innerHTML = `
+        <div class="ptr-num">${i + 1}</div>
+        <div>
+          <div style="font-weight:500;">${p.nombre}</div>
+          <div style="font-size:11px; color:var(--ink-mute);">${p.phone || '-'}</div>
+        </div>
+        <div style="font-size:12px;">${rolIcons[p.rol] || ''} ${p.rol}</div>
+        <div style="font-family:var(--display); font-size:14px;">$${(p.tarifa || 0).toLocaleString('es-CL')}</div>
+        <div style="font-size:11px; color:var(--ink-mute);">${p.banco || '—'}</div>
+        <div><span class="ptr-status ${statusClass}">${statusText}</span></div>
+        <div class="ptr-remove" onclick="removePersonal('${p.id}')">✕</div>
+      `;
+      table.appendChild(row);
+    });
+  }
+
+  // Counters
+  const allCount = document.getElementById('roster-count-all');
+  const refCount = document.getElementById('roster-count-ref');
+  const pendCount = document.getElementById('roster-count-pending');
+  const mobPend = document.getElementById('mobPendingBadge');
+  if (allCount) allCount.textContent = state.personal.length;
+  if (refCount) refCount.textContent = state.personal.filter(p => p.rol === 'ARBITRO').length;
+  const pending = state.personal.filter(p => p.status === 'invited').length;
+  if (pendCount) pendCount.textContent = pending;
+  if (mobPend) mobPend.textContent = pending;
+}
+
+function renderMobPersonalList() {
+  const list = document.getElementById('mobPersonalList');
+  const empty = document.getElementById('mobPersonalEmpty');
+  if (!list) return;
+  // Limpiar excepto empty
+  Array.from(list.children).forEach(c => { if (c.id !== 'mobPersonalEmpty') c.remove(); });
+
+  if (state.personal.length === 0) {
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  const rolIcons = { ARBITRO: '⚖', PLANILLERO: '📋', PARAMEDICO: '⚕', MANTENIMIENTO: '🔧' };
+  state.personal.forEach(p => {
+    const item = document.createElement('div');
+    const isPending = p.status === 'invited';
+    item.style.cssText = `background:var(--chalk); border:1px solid var(--line); ${isPending ? 'border-left:4px solid var(--silbato);' : ''} border-radius:10px; padding:12px 14px; margin-bottom:8px; display:flex; align-items:center; gap:10px;`;
+    item.innerHTML = `
+      <div style="width:36px; height:36px; background:var(--green-deep); color:var(--green-lime); border-radius:8px; display:grid; place-items:center; font-size:16px;">${rolIcons[p.rol] || '👤'}</div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.nombre}</div>
+        <div style="font-size:10px; color:var(--ink-mute); letter-spacing:0.5px; text-transform:uppercase;">${p.rol} · $${(p.tarifa || 0).toLocaleString('es-CL')}</div>
+      </div>
+      <div style="font-size:9px; padding:3px 7px; border-radius:100px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; ${isPending ? 'background:#FFF4E6; color:#8B4513;' : 'background:var(--green-lime); color:var(--green-deep);'}">${isPending ? 'Invitado' : '✓ Activo'}</div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function removePersonal(id) {
+  if (!confirm('¿Eliminar del roster?')) return;
+  state.personal = state.personal.filter(p => p.id !== id);
+  saveState();
+}
+
+function openInviteModal() {
+  document.getElementById('inviteModal').style.display = 'flex';
+  state.inviteCurrent = { rol: null };
+}
+function closeInviteModal() {
+  document.getElementById('inviteModal').style.display = 'none';
+}
+function selectInviteRol(rol, el) {
+  document.querySelectorAll('[data-invite-rol]').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+  state.inviteCurrent.rol = rol;
+  // Ocultar categoría si no es árbitro
+  const catField = document.getElementById('inviteCategoriaField');
+  if (catField) catField.style.display = rol === 'ARBITRO' ? 'block' : 'none';
+  // Cambiar tarifa sugerida
+  const tarifaInput = document.getElementById('inviteTarifa');
+  if (tarifaInput) {
+    const defaults = { ARBITRO: 28000, PLANILLERO: 15000, PARAMEDICO: 25000, MANTENIMIENTO: 12000 };
+    tarifaInput.value = defaults[rol] || 20000;
+  }
+}
+
+function sendInvite() {
+  if (!state.inviteCurrent.rol) { alert('Selecciona un rol'); return; }
+  const nombre = document.getElementById('inviteName').value.trim();
+  const rut = document.getElementById('inviteRut').value.trim();
+  const phone = document.getElementById('invitePhone').value.trim();
+  const tarifa = parseInt(document.getElementById('inviteTarifa').value) || 0;
+  if (!nombre || !rut || !phone) {
+    alert('Completa nombre, RUT y WhatsApp');
+    return;
+  }
+  const newPersonal = {
+    id: 'per-' + Date.now(),
+    nombre, rut, phone,
+    rol: state.inviteCurrent.rol,
+    tarifa,
+    banco: '—',
+    email: document.getElementById('inviteEmail').value.trim() || '',
+    status: 'invited'
+  };
+  state.personal.push(newPersonal);
+  saveState();
+  closeInviteModal();
+  // Limpiar form
+  document.getElementById('inviteName').value = '';
+  document.getElementById('inviteRut').value = '';
+  document.getElementById('invitePhone').value = '';
+  document.getElementById('inviteEmail').value = '';
+  document.querySelectorAll('[data-invite-rol]').forEach(e => e.classList.remove('selected'));
+  alert(`✓ Invitación enviada a ${nombre} por WhatsApp.\n\nCambia al flujo "Personal activa cuenta" para simular cómo recibe la invitación.`);
+}
+
+// Móvil - mismo flujo
+function openMobInvite() { showStep('admin-invite', 'mobile', 1); }
+function closeMobInvite() { showStep('admin-invite', 'mobile', 0); }
+function selectMobInviteRol(rol, el) {
+  document.querySelectorAll('[data-mob-invite-rol]').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+  state.inviteCurrent.rol = rol;
+  const defaults = { ARBITRO: 28000, PLANILLERO: 15000, PARAMEDICO: 25000, MANTENIMIENTO: 12000 };
+  const tarifa = document.getElementById('mobInviteTarifa');
+  if (tarifa) tarifa.value = defaults[rol] || 20000;
+}
+function sendMobInvite() {
+  if (!state.inviteCurrent.rol) { alert('Selecciona un rol'); return; }
+  const nombre = document.getElementById('mobInviteName').value.trim();
+  const rut = document.getElementById('mobInviteRut').value.trim();
+  const phone = document.getElementById('mobInvitePhone').value.trim();
+  const tarifa = parseInt(document.getElementById('mobInviteTarifa').value) || 0;
+  if (!nombre || !rut || !phone) {
+    alert('Completa nombre, RUT y WhatsApp');
+    return;
+  }
+  state.personal.push({
+    id: 'per-' + Date.now(),
+    nombre, rut, phone,
+    rol: state.inviteCurrent.rol,
+    tarifa, banco: '—',
+    status: 'invited'
+  });
+  saveState();
+  document.getElementById('mobInviteName').value = '';
+  document.getElementById('mobInviteRut').value = '';
+  document.getElementById('mobInvitePhone').value = '';
+  document.querySelectorAll('[data-mob-invite-rol]').forEach(e => e.classList.remove('selected'));
+  alert('✓ Invitación enviada');
+  closeMobInvite();
+}
+
+// ============================================================
+// FLOW 2 · PERSONAL ACTIVA CUENTA
+// ============================================================
+function renderActivateProgress() {
+  if (currentFlow !== 'personal-activate' || currentPlatform !== 'web') return;
+  const bar = document.getElementById('activate-progress');
+  if (!bar) return;
+  const screens = document.querySelectorAll('.flow-area[data-flow="personal-activate"] .platform-view[data-platform="web"] .screen');
+  let current = 0;
+  screens.forEach((s, i) => { if (s.classList.contains('active')) current = i; });
+  const names = ['Invitación', 'Verificar', 'Configurar', 'Listo'];
+  let html = '<div class="progress-inner">';
+  names.forEach((n, i) => {
+    let cls = 'pstep';
+    if (i < current) cls += ' done';
+    else if (i === current) cls += ' current';
+    html += `<div class="${cls}"><div class="pnum">${i + 1}</div><div>${n}</div></div>`;
+    if (i < names.length - 1) html += `<div class="pline${i < current ? ' done' : ''}"></div>`;
+  });
+  html += '</div>';
+  bar.innerHTML = html;
+}
+
+function renderActivateData() {
+  // Buscar el primer personal en estado invited
+  const invited = state.personal.find(p => p.status === 'invited');
+  if (!invited) return;
+  state.activate.invitedId = invited.id;
+  const rolNames = { ARBITRO: 'ÁRBITRO', PLANILLERO: 'PLANILLERO', PARAMEDICO: 'PARAMÉDICO', MANTENIMIENTO: 'MANTENCIÓN' };
+
+  const nameEl = document.getElementById('actInviteName');
+  const rolEl = document.getElementById('actInviteRol');
+  const tarifaEl = document.getElementById('actInviteTarifa');
+  const phoneEl = document.getElementById('actPhone');
+  if (nameEl) nameEl.textContent = invited.nombre;
+  if (rolEl) rolEl.textContent = rolNames[invited.rol] || invited.rol;
+  if (tarifaEl) tarifaEl.textContent = '$' + (invited.tarifa || 0).toLocaleString('es-CL');
+  if (phoneEl) phoneEl.textContent = invited.phone || '+56 9 0000 0000';
+
+  const mobNameEl = document.getElementById('mobActName');
+  if (mobNameEl) mobNameEl.textContent = invited.nombre;
+}
+
+function goActivateStep(n) {
+  showStep('personal-activate', 'web', n);
+  renderActivateProgress();
+  if (n === 1) startActCounter();
+}
+function goMobActStep(n) {
+  showStep('personal-activate', 'mobile', n);
+  if (n === 1) startMobActCounter();
+}
+
+let actCounterInt;
+function startActCounter() {
+  clearInterval(actCounterInt);
+  let s = 42;
+  const el = document.getElementById('actCounter');
+  if (!el) return;
+  actCounterInt = setInterval(() => {
+    s--;
+    if (s <= 0) {
+      clearInterval(actCounterInt);
+      el.textContent = '00:00';
+      return;
+    }
+    el.textContent = '00:' + String(s).padStart(2, '0');
+  }, 1000);
+}
+
+let mobActCounterInt;
+function startMobActCounter() {
+  clearInterval(mobActCounterInt);
+  let s = 42;
+  const el = document.getElementById('mobActCounter');
+  if (!el) return;
+  mobActCounterInt = setInterval(() => {
+    s--;
+    if (s <= 0) {
+      clearInterval(mobActCounterInt);
+      el.textContent = '00:00';
+      return;
+    }
+    el.textContent = '00:' + String(s).padStart(2, '0');
+  }, 1000);
+}
+
+function handleActOtp(input, idx) {
+  const digits = document.querySelectorAll('[data-otp]');
+  if (input.value.length === 1 && idx < 3) digits[idx + 1].focus();
+  const all = Array.from(digits).every(d => d.value.length === 1);
+  const btn = document.getElementById('actOtpBtn');
+  if (btn) btn.disabled = !all;
+}
+function handleMobActOtp(input, idx) {
+  const digits = document.querySelectorAll('[data-mob-otp]');
+  if (input.value.length === 1 && idx < 3) digits[idx + 1].focus();
+  const all = Array.from(digits).every(d => d.value.length === 1);
+  const btn = document.getElementById('mobActOtpBtn');
+  if (btn) btn.disabled = !all;
+}
+
+function activateAccount() {
+  const pwd = document.getElementById('actPwd').value;
+  const pwdConf = document.getElementById('actPwdConfirm').value;
+  const cuenta = document.getElementById('actCuenta').value.trim();
+  if (!pwd || pwd.length < 8) { alert('Contraseña mínimo 8 caracteres'); return; }
+  if (pwd !== pwdConf) { alert('Las contraseñas no coinciden'); return; }
+  if (!cuenta) { alert('Completa los datos bancarios'); return; }
+
+  // Activar el personal invitado
+  const invited = state.personal.find(p => p.id === state.activate.invitedId);
+  if (invited) {
+    invited.status = 'active';
+    invited.banco = document.getElementById('actBanco').value;
+    invited.tipoCuenta = document.getElementById('actTipoCuenta').value;
+    invited.cuenta = cuenta;
+    saveState();
+
+    // Llenar pantalla de éxito
+    document.getElementById('actSuccessName').textContent = invited.nombre;
+    const rolNames = { ARBITRO: 'Rol: ÁRBITRO · Categoría A', PLANILLERO: 'Rol: PLANILLERO', PARAMEDICO: 'Rol: PARAMÉDICO', MANTENIMIENTO: 'Rol: MANTENCIÓN' };
+    document.getElementById('actSuccessRol').textContent = rolNames[invited.rol] || invited.rol;
+    document.getElementById('actSuccessBanco').textContent = `${invited.banco} · ${invited.tipoCuenta} ****${cuenta.slice(-4)}`;
+  }
+
+  goActivateStep(3);
+}
+
+function activateMobAccount() {
+  const invited = state.personal.find(p => p.id === state.activate.invitedId);
+  if (invited) {
+    invited.status = 'active';
+    saveState();
+    const rolNames = { ARBITRO: 'ÁRBITRO', PLANILLERO: 'PLANILLERO', PARAMEDICO: 'PARAMÉDICO', MANTENIMIENTO: 'MANTENCIÓN' };
+    const el = document.getElementById('mobActSuccessRol');
+    if (el) el.textContent = rolNames[invited.rol] || invited.rol;
+  }
+  goMobActStep(3);
+}
+
+// ============================================================
+// FLOW 3 · PANEL DEL PERSONAL
+// ============================================================
+function switchPanelTab(btn, tab) {
+  document.querySelectorAll('.panel-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.panel-section').forEach(s => s.style.display = 'none');
+  const target = document.querySelector(`.panel-section[data-tab="${tab}"]`);
+  if (target) target.style.display = 'block';
+}
+
+function switchMobPanelTab(btn, tab) {
+  document.querySelectorAll('.mob-panel-tab').forEach(b => {
+    b.style.color = 'rgba(255,255,255,0.6)';
+    b.style.borderBottom = '2px solid transparent';
+    b.style.fontWeight = '';
+  });
+  btn.style.color = 'var(--green-lime)';
+  btn.style.borderBottom = '2px solid var(--green-lime)';
+  btn.style.fontWeight = '600';
+  document.querySelectorAll('.mob-panel-section').forEach(s => s.style.display = 'none');
+  const target = document.querySelector(`.mob-panel-section[data-mob-tab="${tab}"]`);
+  if (target) target.style.display = 'block';
+}
+
+function confirmDesignation(btn) {
+  const card = btn.closest('.designation');
+  card.classList.remove('pending');
+  card.classList.add('confirmed');
+  const chip = card.querySelector('.chip-silbato');
+  if (chip) {
+    chip.className = 'chip chip-success';
+    chip.textContent = '✓ CONFIRMADO';
+  }
+  // Reemplazar botones
+  const actions = btn.parentElement;
+  actions.innerHTML = '<div style="text-align:right; font-size:11px; color:var(--ink-mute);">✓ Confirmado<br>Recordatorio 24h antes</div>';
+  // Actualizar contador
+  const stats = document.querySelector('.panel-stat .panel-stat-num.silbato');
+  if (stats) {
+    const n = parseInt(stats.textContent) - 1;
+    stats.textContent = Math.max(0, n);
+  }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+  renderPersonalTable();
+  renderMobPersonalList();
+  updateStatePanel();
+  renderActivateProgress();
+});
+</script>
+
+</body>
+</html>

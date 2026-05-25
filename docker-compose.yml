@@ -1,0 +1,114 @@
+# ══════════════════════════════════════════════════════════════════════
+# Fixtura — Docker Compose para DESARROLLO LOCAL
+# ══════════════════════════════════════════════════════════════════════
+#
+# Uso:
+#   1. cp .env.example .env  (y completar lo mínimo: DB_PASSWORD, JWT_SECRET)
+#   2. docker compose up -d db redis
+#   3. pnpm install
+#   4. pnpm --filter @fixtura/api db:migrate
+#   5. pnpm --filter @fixtura/api db:seed
+#   6. pnpm dev   (corre api en :3000 y web en :3001)
+#
+# Si querés correr TODO en Docker (api + web + db + redis):
+#   docker compose up -d
+#   docker compose exec api node dist/database/cleanup-orphans.js
+#   docker compose exec api pnpm migration:run
+#   docker compose exec api pnpm db:seed
+#
+# Para producción ver docker-compose.prod.yml.
+# ══════════════════════════════════════════════════════════════════════
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fixtura_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-fixtura}
+      POSTGRES_USER: ${DB_USER:-fixtura}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-fixtura}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-fixtura}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  redis:
+    image: redis:7-alpine
+    container_name: fixtura_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # API y web están comentados en dev porque normalmente se corren con
+  # `pnpm dev` para tener HMR. Descomentar para probar el build de Docker.
+  #
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: apps/api/Dockerfile
+  #     args:
+  #       GIT_SHA: ${GIT_SHA:-local}
+  #   container_name: fixtura_api
+  #   restart: unless-stopped
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   environment:
+  #     NODE_ENV: development
+  #     DATABASE_URL: postgres://${DB_USER:-fixtura}:${DB_PASSWORD:-fixtura}@db:5432/${DB_NAME:-fixtura}
+  #     REDIS_URL: redis://redis:6379
+  #     JWT_SECRET: ${JWT_SECRET:?Debe definir JWT_SECRET}
+  #     SSO_STATE_SECRET: ${SSO_STATE_SECRET:?Debe definir SSO_STATE_SECRET}
+  #     FRONTEND_URL: ${APP_URL:-http://localhost:3001}
+  #     LOG_LEVEL: ${LOG_LEVEL:-debug}
+  #   ports:
+  #     - "127.0.0.1:3000:3000"
+  #
+  # web:
+  #   build:
+  #     context: .
+  #     dockerfile: apps/web/Dockerfile
+  #     args:
+  #       NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:3000}
+  #       GIT_SHA: ${GIT_SHA:-local}
+  #   container_name: fixtura_web
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - api
+  #   environment:
+  #     NODE_ENV: development
+  #     NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:3000}
+  #   ports:
+  #     - "127.0.0.1:3001:3001"
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

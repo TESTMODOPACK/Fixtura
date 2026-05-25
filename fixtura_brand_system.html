@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Fixtura · Sistema de Identidad Visual</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Newsreader:ital,wght@0,400;1,400&family=Geist:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+<style>
+:root {
+  --green-deep: #0F2A1F;
+  --green-mid: #1B4332;
+  --green-bright: #2D6A4F;
+  --green-lime: #95D5B2;
+  --chalk: #FAFAF7;
+  --paper: #F1ECE2;
+  --paper-dark: #E5DCC5;
+  --ink: #1A1A1A;
+  --ink-mute: #888278;
+  --line: #D5CDB8;
+  --orange-accent: #E76F26;
+  --display: 'Anton', sans-serif;
+  --display-alt: 'Archivo Black', sans-serif;
+  --serif: 'Newsreader', serif;
+  --ui: 'Geist', system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--ui);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 40px 24px 80px;
+}
+.container { max-width: 1200px; margin: 0 auto; }
+.h1 {
+  font-family: var(--display);
+  font-size: 56px;
+  letter-spacing: 1px;
+  color: var(--green-deep);
+  margin-bottom: 8px;
+}
+.h2 {
+  font-family: var(--display);
+  font-size: 28px;
+  letter-spacing: 1.5px;
+  color: var(--green-deep);
+  margin: 60px 0 24px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--green-deep);
+}
+.subtitle {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-style: italic;
+  color: var(--ink-mute);
+  margin-bottom: 40px;
+}
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--orange-accent);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.grid { display: grid; gap: 20px; }
+.cols-2 { grid-template-columns: 1fr 1fr; }
+.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.cols-4 { grid-template-columns: repeat(4, 1fr); }
+.card {
+  background: var(--chalk);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 36px;
+  position: relative;
+}
+.card-dark {
+  background: var(--green-deep);
+  color: var(--chalk);
+  border-color: var(--green-deep);
+}
+.card-lime {
+  background: var(--green-lime);
+  color: var(--green-deep);
+  border-color: var(--green-lime);
+}
+.card-paper {
+  background: var(--paper-dark);
+  border-color: var(--paper-dark);
+}
+.card-orange {
+  background: var(--orange-accent);
+  color: white;
+  border-color: var(--orange-accent);
+}
+.card-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 600;
+  opacity: 0.6;
+  margin-bottom: 14px;
+}
+.note {
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-top: 14px;
+  line-height: 1.5;
+}
+
+/* Tipografía display */
+.logo-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  padding: 24px;
+}
+
+/* Variantes de logo */
+.logo-wordmark {
+  font-family: var(--display-alt);
+  font-size: 72px;
+  letter-spacing: -2px;
+  line-height: 1;
+  color: var(--green-deep);
+}
+.logo-wordmark .x {
+  color: var(--orange-accent);
+  display: inline-block;
+  transform: rotate(0deg);
+}
+.card-dark .logo-wordmark { color: var(--chalk); }
+.card-lime .logo-wordmark { color: var(--green-deep); }
+.card-orange .logo-wordmark { color: white; }
+.card-orange .logo-wordmark .x { color: var(--green-deep); }
+
+/* Logo con símbolo */
+.logo-with-mark {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Mark variants */
+.mark-svg {
+  flex-shrink: 0;
+}
+
+/* Compact wordmark variants */
+.logo-compact {
+  font-family: var(--display);
+  letter-spacing: 3px;
+  font-size: 36px;
+  color: var(--green-deep);
+}
+.logo-tag {
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-weight: 600;
+  margin-top: 6px;
+}
+.card-dark .logo-compact { color: var(--chalk); }
+.card-dark .logo-tag { color: var(--green-lime); }
+
+/* Aplicaciones */
+.app-mockup {
+  background: var(--ink);
+  border-radius: 24px;
+  padding: 8px;
+  width: 240px;
+  margin: 0 auto;
+}
+.app-mockup-screen {
+  background: var(--paper);
+  border-radius: 18px;
+  padding: 20px;
+  aspect-ratio: 9/19.5;
+  display: flex;
+  flex-direction: column;
+}
+.app-mockup-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: var(--ink);
+  margin-bottom: 32px;
+}
+
+/* Browser */
+.browser-mockup {
+  background: var(--chalk);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.browser-bar {
+  background: var(--paper);
+  padding: 8px 12px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+.browser-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--line);
+}
+.browser-url {
+  flex: 1;
+  background: var(--chalk);
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--ink-mute);
+  margin-left: 8px;
+}
+.browser-content {
+  padding: 24px;
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Color palette */
+.color-strip {
+  height: 100px;
+  border-radius: 14px;
+  display: flex;
+  align-items: end;
+  padding: 16px;
+  color: var(--chalk);
+  font-family: monospace;
+  font-size: 12px;
+  position: relative;
+}
+.color-strip .color-name {
+  font-family: var(--ui);
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 2px;
+  display: block;
+}
+.color-strip.light { color: var(--ink); }
+
+/* Tipo specs */
+.type-spec {
+  padding: 24px;
+  background: var(--chalk);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.type-name {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.type-sample {
+  margin-bottom: 8px;
+  color: var(--green-deep);
+}
+.type-anton { font-family: var(--display); font-size: 42px; letter-spacing: 1px; }
+.type-archivo { font-family: var(--display-alt); font-size: 38px; letter-spacing: -1px; }
+.type-geist { font-family: var(--ui); }
+.type-newsreader { font-family: var(--serif); }
+
+/* Don'ts */
+.dont {
+  position: relative;
+}
+.dont::after {
+  content: '✕';
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 24px; height: 24px;
+  background: #C1272D;
+  color: white;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+.do::after {
+  content: '✓';
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 24px; height: 24px;
+  background: var(--green-bright);
+  color: white;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Concept reasoning */
+.concept-card {
+  background: var(--chalk);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 28px;
+}
+.concept-card .num {
+  font-family: var(--display);
+  font-size: 32px;
+  color: var(--orange-accent);
+  letter-spacing: 1px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.concept-card h4 {
+  font-family: var(--ui);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--green-deep);
+  margin-bottom: 8px;
+}
+.concept-card p {
+  font-size: 13px;
+  color: var(--ink-mute);
+  line-height: 1.6;
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="eyebrow">→ Sistema de identidad visual</div>
+<h1 class="h1">FIXTURA</h1>
+<p class="subtitle">El SaaS para ligas amateur de fútbol · Una marca, tres expresiones, infinitas aplicaciones</p>
+
+<!-- =================================================== -->
+<!-- CONCEPTO -->
+<!-- =================================================== -->
+<h2 class="h2">El concepto</h2>
+
+<div class="grid cols-3">
+  <div class="concept-card">
+    <div class="num">01</div>
+    <h4>La X es el centro</h4>
+    <p>Dos elementos cruzados: dos partidos en el fixture, dos equipos enfrentándose, las hojas del calendario tachadas. La X es donde el deporte ocurre.</p>
+  </div>
+  <div class="concept-card">
+    <div class="num">02</div>
+    <h4>Tipografía bloque deportivo</h4>
+    <p>Archivo Black para el logotipo: peso editorial-deportivo (Panenka, El Gráfico) que se diferencia del SaaS-genérico tipo Inter/Helvetica.</p>
+  </div>
+  <div class="concept-card">
+    <div class="num">03</div>
+    <h4>Color como afirmación</h4>
+    <p>Verde cancha profundo + naranja silbato del árbitro. Sin pasteles, sin gradientes innecesarios. Un sistema confiado.</p>
+  </div>
+</div>
+
+<!-- =================================================== -->
+<!-- LOGO PRIMARIO -->
+<!-- =================================================== -->
+<h2 class="h2">Logo primario</h2>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="card-label">→ Wordmark · versión principal</div>
+    <div class="logo-display">
+      <div class="logo-wordmark">FI<span class="x">X</span>TURA</div>
+    </div>
+    <div class="note">La X en naranja como punto focal. Uso recomendado en fondos claros (chalk, paper).</div>
+  </div>
+
+  <div class="card card-dark">
+    <div class="card-label">→ Wordmark · versión inversa</div>
+    <div class="logo-display">
+      <div class="logo-wordmark">FI<span class="x">X</span>TURA</div>
+    </div>
+    <div class="note">Para fondos oscuros (header verde profundo, footer, splash móvil).</div>
+  </div>
+</div>
+
+<!-- =================================================== -->
+<!-- LOGO CON SÍMBOLO -->
+<!-- =================================================== -->
+<h2 class="h2">Logo con símbolo</h2>
+<p style="margin-bottom:24px; font-size:14px; color:var(--ink-mute);">El isotipo combina la X central con un círculo (estilo escudo de fútbol). Funciona aislado para favicons, app icons, redes sociales.</p>
+
+<div class="grid cols-4">
+  <div class="card">
+    <div class="card-label">→ Símbolo · principal</div>
+    <div class="logo-display">
+      <svg class="mark-svg" width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="60" cy="60" r="56" fill="#0F2A1F"/>
+        <line x1="32" y1="32" x2="88" y2="88" stroke="#E76F26" stroke-width="14" stroke-linecap="round"/>
+        <line x1="88" y1="32" x2="32" y2="88" stroke="#95D5B2" stroke-width="14" stroke-linecap="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="card card-lime">
+    <div class="card-label">→ Símbolo · variante lime</div>
+    <div class="logo-display">
+      <svg class="mark-svg" width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="60" cy="60" r="56" fill="#0F2A1F"/>
+        <line x1="32" y1="32" x2="88" y2="88" stroke="#95D5B2" stroke-width="14" stroke-linecap="round"/>
+        <line x1="88" y1="32" x2="32" y2="88" stroke="#95D5B2" stroke-width="14" stroke-linecap="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="card card-orange">
+    <div class="card-label">→ Símbolo · monocromo</div>
+    <div class="logo-display">
+      <svg class="mark-svg" width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="60" cy="60" r="56" fill="#FFFFFF"/>
+        <line x1="32" y1="32" x2="88" y2="88" stroke="#E76F26" stroke-width="14" stroke-linecap="round"/>
+        <line x1="88" y1="32" x2="32" y2="88" stroke="#E76F26" stroke-width="14" stroke-linecap="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="card card-dark">
+    <div class="card-label">→ Símbolo · monocromo lime</div>
+    <div class="logo-display">
+      <svg class="mark-svg" width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="60" cy="60" r="56" fill="none" stroke="#95D5B2" stroke-width="4"/>
+        <line x1="32" y1="32" x2="88" y2="88" stroke="#95D5B2" stroke-width="14" stroke-linecap="round"/>
+        <line x1="88" y1="32" x2="32" y2="88" stroke="#95D5B2" stroke-width="14" stroke-linecap="round"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- =================================================== -->
+<!-- LOCKUP HORIZONTAL -->
+<!-- =================================================== -->
+<h2 class="h2">Lockup horizontal</h2>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="card-label">→ Símbolo + wordmark</div>
+    <div class="logo-display">
+      <div class="logo-with-mark">
+        <svg width="60" height="60" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="60" cy="60" r="56" fill="#0F2A1F"/>
+          <line x1="32" y1="32" x2="88" y2="88" stroke="#E76F26" stroke-width="14" stroke-linecap="round"/>
+          <line x1="88" y1="32" x2="32" y2="88" stroke="#95D5B2" stroke-width="14" stroke-linecap="round"/>
+        </svg>
+        <div>
+          <div class="logo-compact">FIXTURA</div>
+          <div class="logo-tag">Para ligas amateur · Chile</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">Uso en headers, firmas de email, pie de página corporativo.</div>
+  </div>
+
+  <div class="card card-dark">
+    <div class="card-label">→ Versión oscura</div>
+    <div class="logo-display">
+      <div class="logo-with-mark">
+        <svg width="60" height="60" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="60" cy="60" r="56" fill="#95D5B2"/>
+          <line x1="32" y1="32" x2="88" y2="88" stroke="#0F2A1F" stroke-width="14" stroke-linecap="round"/>
+          <line x1="88" y1="32" x2="32" y2="88" stroke="#0F2A1F" stroke-width="14" stroke-linecap="round"/>
+        </svg>
+        <div>
+          <div class="logo-compact">FIXTURA</div>
+          <div class="logo-tag">Para ligas amateur · Chile</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">Para fondos oscuros: el símbolo invierte y la X queda en verde profundo.</div>
+  </div>
+</div>
+
+<!-- =================================================== -->
+<!-- APLICACIONES -->
+<!-- =================================================== -->
+<h2 class="h2">Aplicaciones</h2>
+
+<div class="grid cols-3">
+
+  <!-- App icon -->
+  <div class="card">
+    <div class="card-label">→ App icon iOS / Android</div>
+    <div style="display:flex; justify-content:center; padding:32px 0;">
+      <div style="width:120px; height:120px; border-radius:28px; background:#0F2A1F; box-shadow:0 12px 30px rgba(0,0,0,0.2); display:grid; place-items:center;">
+        <svg width="80" height="80" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+          <line x1="22" y1="22" x2="98" y2="98" stroke="#E76F26" stroke-width="18" stroke-linecap="round"/>
+          <line x1="98" y1="22" x2="22" y2="98" stroke="#95D5B2" stroke-width="18" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
+    <div class="note">Sin marco circular: la X funciona aislada dentro del squircle del SO.</div>
+  </div>
+
+  <!-- Browser tab -->
+  <div class="card">
+    <div class="card-label">→ Browser favicon</div>
+    <div style="padding:20px 0;">
+      <div class="browser-mockup">
+        <div class="browser-bar">
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-url" style="display:flex; align-items:center; gap:6px;">
+            <svg width="14" height="14" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="60" cy="60" r="56" fill="#0F2A1F"/>
+              <line x1="32" y1="32" x2="88" y2="88" stroke="#E76F26" stroke-width="14" stroke-linecap="round"/>
+              <line x1="88" y1="32" x2="32" y2="88" stroke="#95D5B2" stroke-width="14" stroke-linecap="round"/>
+            </svg>
+            fixtura.cl
+          </div>
+        </div>
+        <div class="browser-content">
+          <div style="text-align:center;">
+            <div style="font-family:var(--display-alt); font-size:32px; color:var(--green-deep); letter-spacing:-1px;">FI<span style="color:var(--orange-accent);">X</span>TURA</div>
+            <div style="font-size:11px; color:var(--ink-mute); margin-top:4px; letter-spacing:2px;">EL SISTEMA OPERATIVO</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Splash móvil -->
+  <div class="card">
+    <div class="card-label">→ Splash screen móvil</div>
+    <div style="display:flex; justify-content:center; padding:0;">
+      <div class="app-mockup">
+        <div class="app-mockup-screen" style="background:#0F2A1F; align-items:center; justify-content:center;">
+          <svg width="70" height="70" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:18px;">
+            <circle cx="60" cy="60" r="56" fill="#95D5B2"/>
+            <line x1="32" y1="32" x2="88" y2="88" stroke="#0F2A1F" stroke-width="14" stroke-linecap="round"/>
+            <line x1="88" y1="32" x2="32" y2="88" stroke="#0F2A1F" stroke-width="14" stroke-linecap="round"/>
+          </svg>
+          <div style="font-family:var(--display-alt); font-size:28px; color:#FAFAF7; letter-spacing:-1px;">FI<span style="color:#E76F26;">X</span>TURA</div>
+          <div style="font-size:9px; color:#95D5B2; margin-top:8px; letter-spacing:3px;">PARA LIGAS AMATEUR</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- =================================================== -->
+<!-- TIPOGRAFÍA -->
+<!-- =================================================== -->
+<h2 class="h2">Sistema tipográfico</h2>
+
+<div class="grid cols-3">
+  <div class="type-spec">
+    <div class="type-name">→ Display · Logo</div>
+    <div class="type-sample type-archivo">Fixtura</div>
+    <div style="font-size:12px; color:var(--ink-mute);"><strong>Archivo Black</strong> · Solo para el wordmark del logo y casos muy puntuales de display gigante.</div>
+  </div>
+
+  <div class="type-spec">
+    <div class="type-name">→ Display · Editorial</div>
+    <div class="type-sample type-anton">FECHA 8</div>
+    <div style="font-size:12px; color:var(--ink-mute);"><strong>Anton</strong> · Para títulos, números grandes, headers de partido. Voz editorial-deportiva.</div>
+  </div>
+
+  <div class="type-spec">
+    <div class="type-name">→ UI · cuerpo</div>
+    <div class="type-sample type-geist" style="font-size:24px; font-weight:600;">Dragones FC</div>
+    <div class="type-sample type-geist" style="font-size:14px;">Senior Honor · Liga Ñuñoa</div>
+    <div style="font-size:12px; color:var(--ink-mute);"><strong>Geist</strong> · Toda la UI, formularios, navegación, botones, métricas.</div>
+  </div>
+
+  <div class="type-spec">
+    <div class="type-name">→ Quote · Narrativa</div>
+    <div class="type-sample type-newsreader" style="font-size:24px; font-style:italic;">"El sistema operativo de tu liga amateur"</div>
+    <div style="font-size:12px; color:var(--ink-mute);"><strong>Newsreader</strong> · Citas, tagline, subtítulos editoriales.</div>
+  </div>
+
+  <div class="type-spec">
+    <div class="type-name">→ Mono · Datos</div>
+    <div class="type-sample" style="font-family:'Consolas',monospace; font-size:20px;">$28.000</div>
+    <div class="type-sample" style="font-family:'Consolas',monospace; font-size:14px;">10:00 · CANCHA 1</div>
+    <div style="font-size:12px; color:var(--ink-mute);"><strong>Consolas / Geist Mono</strong> · Tarifas, horarios, código, datos tabulares.</div>
+  </div>
+
+  <div class="type-spec" style="background:var(--green-deep); color:var(--chalk); border-color:var(--green-deep);">
+    <div class="type-name" style="color:var(--green-lime);">→ Reglas</div>
+    <div style="font-size:13px; line-height:1.7;">
+      • Nunca usar Inter, Roboto, Helvetica<br>
+      • Anton para todo lo que sea número/título<br>
+      • Geist para todo el resto<br>
+      • Newsreader solo en citas / hero<br>
+      • Archivo Black SOLO en logo
+    </div>
+  </div>
+</div>
+
+<!-- =================================================== -->
+<!-- PALETA -->
+<!-- =================================================== -->
+<h2 class="h2">Paleta de color</h2>
+
+<div class="grid cols-4">
+  <div class="color-strip" style="background:#0F2A1F;">
+    <div>
+      <span class="color-name">Cancha Profundo</span>
+      #0F2A1F
+    </div>
+  </div>
+  <div class="color-strip" style="background:#2D6A4F;">
+    <div>
+      <span class="color-name">Cancha Vivo</span>
+      #2D6A4F
+    </div>
+  </div>
+  <div class="color-strip light" style="background:#95D5B2;">
+    <div>
+      <span class="color-name">Lime</span>
+      #95D5B2
+    </div>
+  </div>
+  <div class="color-strip" style="background:#E76F26;">
+    <div>
+      <span class="color-name">Silbato</span>
+      #E76F26
+    </div>
+  </div>
+  <div class="color-strip light" style="background:#F1ECE2; color:#1A1A1A;">
+    <div>
+      <span class="color-name">Paper</span>
+      #F1ECE2
+    </div>
+  </div>
+  <div class="color-strip light" style="background:#FAFAF7; color:#1A1A1A; border:1px solid var(--line);">
+    <div>
+      <span class="color-name">Chalk</span>
+      #FAFAF7
+    </div>
+  </div>
+  <div class="color-strip" style="background:#C1272D;">
+    <div>
+      <span class="color-name">Tarjeta Roja</span>
+      #C1272D
+    </div>
+  </div>
+  <div class="color-strip light" style="background:#E8A024;">
+    <div>
+      <span class="color-name">Tarjeta Amarilla</span>
+      #E8A024
+    </div>
+  </div>
+</div>
+
+<div style="background:var(--green-deep); color:var(--chalk); padding:24px; border-radius:14px; margin-top:24px; font-size:13px; line-height:1.7;">
+  <strong style="color:var(--green-lime); display:block; margin-bottom:8px; letter-spacing:1.5px; font-size:11px; text-transform:uppercase;">→ Reglas de aplicación</strong>
+  El <strong style="color:var(--green-lime);">Cancha Profundo</strong> es el color identitario (header, footer, brand mark). El <strong style="color:var(--green-lime);">Lime</strong> es el color de acento positivo (estados de éxito, CTAs secundarios, badges). El <strong style="color:var(--orange-accent);">Silbato</strong> es para acciones primarias y alertas que requieren atención. <strong>Nunca</strong> usar gradientes en logos, badges o íconos. Sí permitidos en hero sections grandes.
+</div>
+
+<!-- =================================================== -->
+<!-- DOs and DONTs -->
+<!-- =================================================== -->
+<h2 class="h2">Do's & Don'ts</h2>
+
+<div class="grid cols-4">
+  <div class="card do">
+    <div class="card-label">→ Sí · X resaltada</div>
+    <div class="logo-display">
+      <div class="logo-wordmark" style="font-size:48px;">FI<span class="x">X</span>TURA</div>
+    </div>
+  </div>
+  <div class="card dont">
+    <div class="card-label">→ No · X plana</div>
+    <div class="logo-display">
+      <div class="logo-wordmark" style="font-size:48px; color:var(--green-deep);">FIXTURA</div>
+    </div>
+  </div>
+  <div class="card do">
+    <div class="card-label">→ Sí · alto contraste</div>
+    <div class="logo-display" style="background:var(--paper); border-radius:8px;">
+      <div class="logo-wordmark" style="font-size:48px;">FI<span class="x">X</span>TURA</div>
+    </div>
+  </div>
+  <div class="card dont">
+    <div class="card-label">→ No · bajo contraste</div>
+    <div class="logo-display" style="background:var(--green-bright); border-radius:8px;">
+      <div class="logo-wordmark" style="font-size:48px; color:var(--green-mid);">FI<span style="color:var(--green-deep);">X</span>TURA</div>
+    </div>
+  </div>
+</div>
+
+<!-- =================================================== -->
+<!-- FOOTER -->
+<!-- =================================================== -->
+<div style="margin-top:80px; padding:32px; background:var(--green-deep); color:var(--chalk); border-radius:14px; text-align:center;">
+  <svg width="48" height="48" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:14px;">
+    <circle cx="60" cy="60" r="56" fill="#95D5B2"/>
+    <line x1="32" y1="32" x2="88" y2="88" stroke="#0F2A1F" stroke-width="14" stroke-linecap="round"/>
+    <line x1="88" y1="32" x2="32" y2="88" stroke="#0F2A1F" stroke-width="14" stroke-linecap="round"/>
+  </svg>
+  <div style="font-family:var(--display-alt); font-size:32px; letter-spacing:-1px; margin-bottom:6px;">FI<span style="color:var(--orange-accent);">X</span>TURA</div>
+  <div style="font-size:11px; letter-spacing:3px; color:var(--green-lime); text-transform:uppercase;">Sistema de identidad · v1.0 · Mayo 2026</div>
+</div>
+
+</div>
+</body>
+</html>
