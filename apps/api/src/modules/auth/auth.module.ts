@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -8,6 +8,13 @@ import { AuthService } from './auth.service';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { UsersModule } from '../users/users.module';
 
+/**
+ * `@Global()` y `exports: [JwtModule]` son necesarios porque el
+ * JwtAuthGuard se registra como guard global desde AppModule (via
+ * APP_GUARD). Sin esto, Nest no puede inyectar JwtService en el guard
+ * y crashea al bootstrap con UnknownDependenciesException.
+ */
+@Global()
 @Module({
   imports: [
     TypeOrmModule.forFeature([RefreshToken]),
@@ -27,6 +34,6 @@ import { UsersModule } from '../users/users.module';
   ],
   providers: [AuthService],
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}
