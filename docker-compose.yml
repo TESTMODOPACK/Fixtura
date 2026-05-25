@@ -119,6 +119,13 @@ services:
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
       METRICS_USER: ${METRICS_USER:-}
       METRICS_PASSWORD: ${METRICS_PASSWORD:-}
+      # En dev local con Postgres nativo (DB_APP_USER == DB_USER) seteamos
+      # esto en true para que cleanup-orphans no intente crear un rol app
+      # separado. En prod con role separation, false.
+      SKIP_CLEANUP_ORPHANS: ${SKIP_CLEANUP_ORPHANS:-}
+      # TTLs JWT — el código los lee directamente de process.env
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
     # No exponemos 3000 al host — nginx hace el proxy desde 80/443.
     # ports:
     #   - "127.0.0.1:3000:3000"
