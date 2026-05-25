@@ -103,7 +103,7 @@ fixtura/
 ├── nginx/                   # Reverse proxy para prod
 ├── .github/workflows/       # CI
 ├── docker-compose.yml       # Dev local (solo db + redis por default)
-├── docker-compose.prod.yml  # Prod con todos los servicios
+├── docker-compose.yml  # Prod con todos los servicios
 ├── turbo.json
 ├── pnpm-workspace.yaml
 └── CLAUDE.md                # Contrato técnico

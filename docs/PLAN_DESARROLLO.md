@@ -182,7 +182,7 @@ fixtura/
 │   ├── nginx.conf
 │   └── certbot/
 ├── docker-compose.yml
-├── docker-compose.prod.yml
+├── docker-compose.yml
 ├── turbo.json
 ├── pnpm-workspace.yaml
 └── package.json
@@ -483,7 +483,7 @@ Ver [§12 Backlog](#12-backlog-de-rfs-faltantes) — incluye walkovers, cuotas m
 - CI/CD GitHub Actions: lint + test + build en cada PR
 - `.env.example` completo y comentado
 - `README.md` con quickstart de 5 minutos (clonar → docker compose up → seed → login admin)
-- `docker-compose.prod.yml` con mem_limit, healthchecks, log rotation
+- `docker-compose.yml` con mem_limit, healthchecks, log rotation
 - Backup script `pg_dump` rotativo
 - ADRs 0001 (ORM), 0002 (mobile), 0003 (roles)
 

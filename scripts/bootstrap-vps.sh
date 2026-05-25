@@ -217,10 +217,10 @@ echo "     echo 'NGINX_CONF=nginx.bootstrap.conf' >> .env"
 echo
 echo "  5. Levantar la app:"
 echo "     export GIT_SHA=\$(git rev-parse --short HEAD)"
-echo "     docker compose -f docker-compose.prod.yml up -d --build"
+echo "     docker compose up -d --build"
 echo
 echo "  6. Primera vez: correr migrations + seed"
-echo "     docker compose -f docker-compose.prod.yml exec api \\"
+echo "     docker compose exec api \\"
 echo "       sh -c 'pnpm migration:run && pnpm db:seed'"
 echo
 echo "  7. Verificar:"

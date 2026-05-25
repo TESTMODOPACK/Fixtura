@@ -22,7 +22,7 @@ DATE=$(date +%Y%m%d-%H%M%S)
 DEST=/var/backups/fixtura
 mkdir -p "$DEST"
 
-docker compose -f /home/fixtura/docker-compose.prod.yml exec -T db \
+docker compose -f /home/fixtura/docker-compose.yml exec -T db \
   pg_dump -U fixtura -Fc fixtura | \
   gpg --batch --yes --encrypt --recipient backup@fixtura.cl > "$DEST/$DATE.dump.gpg"
 
@@ -43,7 +43,7 @@ Cron del host:
 
 ```bash
 gpg --decrypt 20260601-030000.dump.gpg > restore.dump
-docker compose -f docker-compose.prod.yml exec -T db \
+docker compose exec -T db \
   pg_restore -U fixtura -d fixtura_staging --clean --if-exists < restore.dump
 ```
 

@@ -212,24 +212,24 @@ cd ~/fixtura
 export GIT_SHA=$(git rev-parse --short HEAD)
 
 # Build de imágenes (~5-8 min la primera vez)
-docker compose -f docker-compose.prod.yml build api web
+docker compose build api web
 
 # Levantar DB + Redis primero
-docker compose -f docker-compose.prod.yml up -d db redis
+docker compose up -d db redis
 
 # Esperar a que la DB pase healthcheck
 sleep 15
-docker compose -f docker-compose.prod.yml ps
+docker compose ps
 
 # Migrations
-docker compose -f docker-compose.prod.yml run --rm api \
+docker compose run --rm api \
   sh -c "node dist/database/cleanup-orphans.js && pnpm migration:run"
 
 # Seed (crea tenant demo + admin)
-docker compose -f docker-compose.prod.yml run --rm api pnpm db:seed
+docker compose run --rm api pnpm db:seed
 
 # Levantar el resto
-docker compose -f docker-compose.prod.yml up -d
+docker compose up -d
 ```
 
 ### Verificar
@@ -328,7 +328,7 @@ En <https://github.com/TESTMODOPACK/Fixtura/actions> debería arrancar el workfl
    ```bash
    cd ~/fixtura
    # Detener nginx temporalmente para liberar puerto 80
-   docker compose -f docker-compose.prod.yml stop nginx
+   docker compose stop nginx
 
    # Generar cert via standalone
    docker run --rm -p 80:80 \
@@ -349,13 +349,13 @@ En <https://github.com/TESTMODOPACK/Fixtura/actions> debería arrancar el workfl
    sed -i 's|FRONTEND_URL=.*|FRONTEND_URL=https://fixtura.cl|' .env
 
    # Recrear nginx y web (NEXT_PUBLIC_API_URL se inyecta en build time)
-   docker compose -f docker-compose.prod.yml up -d --build nginx web
+   docker compose up -d --build nginx web
    ```
 5. Configurar renovación automática (cron del host):
    ```bash
    sudo crontab -e
    # Agregar:
-   0 3 * * * cd /home/fixtura/fixtura && docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v $(pwd)/nginx/certbot/www:/var/www/certbot certbot/certbot renew --quiet && docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+   0 3 * * * cd /home/fixtura/fixtura && docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v $(pwd)/nginx/certbot/www:/var/www/certbot certbot/certbot renew --quiet && docker compose exec nginx nginx -s reload
    ```
 
 ---
@@ -367,26 +367,26 @@ En <https://github.com/TESTMODOPACK/Fixtura/actions> debería arrancar el workfl
 ```bash
 ssh fixtura@<IP-VPS>
 cd ~/fixtura
-docker compose -f docker-compose.prod.yml logs -f api
-docker compose -f docker-compose.prod.yml logs --tail=100 web
+docker compose logs -f api
+docker compose logs --tail=100 web
 ```
 
 ### Conectarse a la DB
 
 ```bash
-docker compose -f docker-compose.prod.yml exec db psql -U fixtura -d fixtura
+docker compose exec db psql -U fixtura -d fixtura
 ```
 
 ### Ejecutar migraciones manualmente
 
 ```bash
-docker compose -f docker-compose.prod.yml exec api pnpm migration:run
+docker compose exec api pnpm migration:run
 ```
 
 ### Restart de un servicio
 
 ```bash
-docker compose -f docker-compose.prod.yml restart api
+docker compose restart api
 ```
 
 ### Ver recursos
@@ -410,8 +410,8 @@ free -h
 ### "Container api: unhealthy"
 
 ```bash
-docker compose -f docker-compose.prod.yml logs --tail=100 api
-docker compose -f docker-compose.prod.yml exec api curl http://localhost:3000/health/ready
+docker compose logs --tail=100 api
+docker compose exec api curl http://localhost:3000/health/ready
 ```
 
 Causas típicas:

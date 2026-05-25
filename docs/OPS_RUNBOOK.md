@@ -26,8 +26,8 @@ ssh prod
 cd ~/fixtura
 git fetch && git reset --hard origin/main
 export GIT_SHA=$(git rev-parse --short HEAD)
-docker compose -f docker-compose.prod.yml build --no-cache api web
-docker compose -f docker-compose.prod.yml up -d
+docker compose build --no-cache api web
+docker compose up -d
 docker image prune -f
 ```
 
@@ -38,13 +38,13 @@ no críticas. Para cambios que tocan pagos o webhooks usar deploy rolling.
 
 ```bash
 export GIT_SHA=$(git rev-parse --short HEAD)
-docker compose -f docker-compose.prod.yml build --no-cache api
-docker compose -f docker-compose.prod.yml up -d --no-deps api
+docker compose build --no-cache api
+docker compose up -d --no-deps api
 
 # Esperar a que el nuevo container pase healthcheck
 timeout 120 bash -c 'until docker inspect fixtura_api --format "{{.State.Health.Status}}" | grep -q healthy; do sleep 5; done'
 
-docker compose -f docker-compose.prod.yml logs --tail=20 api | grep -iE 'running|error'
+docker compose logs --tail=20 api | grep -iE 'running|error'
 docker image prune -f
 ```
 
@@ -67,14 +67,14 @@ curl -s https://fixtura.cl/api/health/version
 git log --oneline -10  # encontrar SHA anterior estable
 git reset --hard <sha-previo>
 export GIT_SHA=$(git rev-parse --short HEAD)
-docker compose -f docker-compose.prod.yml build --no-cache api web
-docker compose -f docker-compose.prod.yml up -d --no-deps api web
+docker compose build --no-cache api web
+docker compose up -d --no-deps api web
 ```
 
 Si una migración rompió algo, primero revertirla:
 
 ```bash
-docker compose -f docker-compose.prod.yml exec api pnpm migration:revert
+docker compose exec api pnpm migration:revert
 ```
 
 Luego rollback del código.
@@ -82,8 +82,8 @@ Luego rollback del código.
 ## Migraciones en prod
 
 ```bash
-docker compose -f docker-compose.prod.yml exec api pnpm migration:show
-docker compose -f docker-compose.prod.yml exec api pnpm migration:run
+docker compose exec api pnpm migration:show
+docker compose exec api pnpm migration:run
 ```
 
 `cleanup-orphans.ts` corre automáticamente en cada arranque del container API.
@@ -94,13 +94,13 @@ Cada servicio loguea a stdout. Docker rota a 50m × 5 archivos por servicio.
 
 ```bash
 # Logs de un servicio en vivo
-docker compose -f docker-compose.prod.yml logs -f api
+docker compose logs -f api
 
 # Últimas 200 líneas filtradas por error
-docker compose -f docker-compose.prod.yml logs --tail=200 api | grep -iE 'error|warn'
+docker compose logs --tail=200 api | grep -iE 'error|warn'
 
 # Logs estructurados Pino — filtrar por requestId
-docker compose -f docker-compose.prod.yml logs --tail=1000 api | grep '"requestId":"abc-123"'
+docker compose logs --tail=1000 api | grep '"requestId":"abc-123"'
 ```
 
 Para errores complejos: revisar Sentry (configurado en `SENTRY_DSN`).
@@ -154,7 +154,7 @@ Mínimo recomendado:
 ### "Container no llega a healthy"
 
 ```bash
-docker compose -f docker-compose.prod.yml logs --tail=100 api
+docker compose logs --tail=100 api
 docker inspect fixtura_api --format '{{json .State.Health}}' | jq
 ```
 

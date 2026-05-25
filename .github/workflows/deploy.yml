@@ -56,21 +56,21 @@ jobs:
             echo "GIT_SHA=$GIT_SHA"
 
             echo "==> Build de imágenes (api + web)"
-            docker compose -f docker-compose.prod.yml build --no-cache api web
+            docker compose build --no-cache api web
 
             echo "==> Levantar DB y Redis (si no están)"
-            docker compose -f docker-compose.prod.yml up -d db redis
+            docker compose up -d db redis
 
             # Esperar que la DB esté lista antes de migrar
             echo "==> Esperando DB healthy"
             timeout 60 bash -c 'until docker inspect fixtura_db --format "{{.State.Health.Status}}" 2>/dev/null | grep -q healthy; do sleep 3; done'
 
             echo "==> Migraciones (idempotente)"
-            docker compose -f docker-compose.prod.yml run --rm api \
+            docker compose run --rm api \
               sh -c "node dist/database/cleanup-orphans.js && pnpm migration:run"
 
             echo "==> Deploy rolling de api y web"
-            docker compose -f docker-compose.prod.yml up -d --no-deps api web nginx
+            docker compose up -d --no-deps api web nginx
 
             echo "==> Esperar healthy"
             timeout 120 bash -c 'until docker inspect fixtura_api --format "{{.State.Health.Status}}" 2>/dev/null | grep -q healthy; do echo "esperando api healthy..."; sleep 5; done'
