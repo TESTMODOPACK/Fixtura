@@ -1,30 +1,23 @@
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 
 /**
- * Middleware mínimo de Fase 0.
+ * Middleware de Fase 0 — NO bloquea rutas.
  *
  * El access token JWT vive en localStorage (Zustand persist), no en cookie,
- * así que aquí solo redirigimos /dashboard → /login si NO hay marca de
- * sesión persistida. La validación real del token la hace cada llamada al
- * API (que devuelve 401 si está vencido).
+ * así que el middleware del servidor no tiene forma de leerlo. El guard de
+ * auth se hace client-side en `app/dashboard/layout.tsx` (verifica el store
+ * con `useAuthStore` y redirige a /login si no hay token). La validación
+ * real del token la hace cada call al API, que devuelve 401 si expiró.
  *
- * Para auth basada en cookie (necesaria en SSR estricto) se ampliará en
- * un sprint posterior.
+ * Cuando movamos a auth basada en cookie HttpOnly (más seguro contra XSS y
+ * habilita SSR autenticado), este middleware vuelve a validar la cookie.
  */
-export function middleware(req: NextRequest): NextResponse {
-  const isDashboard = req.nextUrl.pathname.startsWith('/dashboard');
-  if (!isDashboard) return NextResponse.next();
-
-  const persisted = req.cookies.get('fixtura-auth');
-  if (!persisted) {
-    const url = req.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
-  }
+export function middleware(): NextResponse {
   return NextResponse.next();
 }
 
+// matcher vacío → el middleware no corre para ninguna ruta. Cuando volvamos
+// a auth por cookie, agregamos los paths que queremos proteger.
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  matcher: [],
 };

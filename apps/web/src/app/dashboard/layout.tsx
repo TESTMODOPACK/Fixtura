@@ -16,10 +16,12 @@ import {
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 import { FixturaLockup } from '@/components/ui/logo';
 import { cn } from '@/lib/cn';
+import { useAuthStore } from '@/store/auth-store';
 
 interface NavItem {
   href: string;
@@ -75,8 +77,23 @@ export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
-}): React.ReactElement {
+}): React.ReactElement | null {
   const pathname = usePathname();
+  const router = useRouter();
+  const accessToken = useAuthStore((s) => s.accessToken);
+
+  // Guard client-side: si no hay token al hidratarse el store, redirigir
+  // a /login. (En SSR esto no corre y los componentes se renderean igual,
+  // pero el useEffect dispara apenas el cliente arranca.)
+  useEffect(() => {
+    if (!accessToken) {
+      router.replace('/login');
+    }
+  }, [accessToken, router]);
+
+  if (!accessToken) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-paper flex">
