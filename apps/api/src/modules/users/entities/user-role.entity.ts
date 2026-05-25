@@ -3,6 +3,7 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
   Unique,
@@ -23,13 +24,17 @@ export class UserRole {
   @Column({ name: 'tenant_id', type: 'uuid', nullable: true })
   tenantId!: string | null;
 
+  // @JoinColumn explícito → TypeORM usa la columna existente 'tenant_id'
+  // en vez de crear una FK implícita 'tenantId' (camelCase) que no existe.
   @ManyToOne(() => Tenant, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'tenant_id' })
   tenant?: Tenant | null;
 
   @Column({ name: 'user_id', type: 'uuid' })
   userId!: string;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
   user?: User;
 
   @Column({ type: 'varchar', length: 50 })
