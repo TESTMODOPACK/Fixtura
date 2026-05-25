@@ -45,7 +45,7 @@ const config: Config = {
         // Newsreader italic — subtítulos editoriales
         serif: ['var(--font-newsreader)', 'Newsreader', 'serif'],
         // Geist — UI body, formularios, tablas
-        sans: ['var(--font-geist)', 'Geist', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-geist-sans)', 'Geist', 'system-ui', 'sans-serif'],
         // Space Grotesk — números, monospaced-ish
         mono: ['var(--font-space-grotesk)', '"Space Grotesk"', 'monospace'],
       },

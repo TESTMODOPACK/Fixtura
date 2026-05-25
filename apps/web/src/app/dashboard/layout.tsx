@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Gavel,
   LayoutDashboard,
+  type LucideIcon,
   Megaphone,
   PiggyBank,
   Settings,
@@ -23,7 +24,7 @@ import { cn } from '@/lib/cn';
 interface NavItem {
   href: string;
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: LucideIcon;
   badge?: string;
 }
 

@@ -16,7 +16,12 @@ import { UsersModule } from '../users/users.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.getOrThrow<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<string>('JWT_ACCESS_TTL', '15m') },
+        // expiresIn es `StringValue` (template literal de `ms`), pero
+        // viene de env var como string crudo. Validamos formato en
+        // .env.example. Cast pragmático para evitar fricción de tipos.
+        signOptions: {
+          expiresIn: config.get<string>('JWT_ACCESS_TTL', '15m') as `${number}m`,
+        },
       }),
     }),
   ],

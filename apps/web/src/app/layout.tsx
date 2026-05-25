@@ -1,5 +1,6 @@
+import { GeistSans } from 'geist/font/sans';
 import type { Metadata, Viewport } from 'next';
-import { Anton, Archivo_Black, Geist, Newsreader, Space_Grotesk } from 'next/font/google';
+import { Anton, Archivo_Black, Newsreader, Space_Grotesk } from 'next/font/google';
 
 import { Providers } from '@/providers/providers';
 
@@ -24,13 +25,6 @@ const newsreader = Newsreader({
   weight: ['400'],
   style: ['italic', 'normal'],
   variable: '--font-newsreader',
-  display: 'swap',
-});
-
-const geist = Geist({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-  variable: '--font-geist',
   display: 'swap',
 });
 
@@ -63,7 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
   return (
     <html
       lang="es"
-      className={`${anton.variable} ${archivoBlack.variable} ${newsreader.variable} ${geist.variable} ${spaceGrotesk.variable}`}
+      className={`${anton.variable} ${archivoBlack.variable} ${newsreader.variable} ${GeistSans.variable} ${spaceGrotesk.variable}`}
     >
       <body className="font-sans antialiased">
         <Providers>{children}</Providers>

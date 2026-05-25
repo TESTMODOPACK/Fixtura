@@ -97,7 +97,11 @@ export class AuthService {
     const accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m');
     const refreshTtlDays = parseDaysFromTtl(this.config.get<string>('JWT_REFRESH_TTL', '7d'));
 
-    const accessToken = await this.jwt.signAsync(ctx, { expiresIn: accessTtl });
+    // expiresIn es `StringValue` template literal de `ms` — viene de env
+    // como string crudo, cast pragmático (validación de formato en .env).
+    const accessToken = await this.jwt.signAsync(ctx, {
+      expiresIn: accessTtl as `${number}m`,
+    });
 
     const refreshTokenPlain = randomBytes(48).toString('base64url');
     const expiresAt = new Date(Date.now() + refreshTtlDays * 24 * 60 * 60 * 1000);
