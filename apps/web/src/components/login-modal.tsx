@@ -26,10 +26,9 @@ type LoginForm = z.infer<typeof LoginSchema>;
 interface LoginModalProps {
   open: boolean;
   onClose: () => void;
-  ligaSlug: string;
 }
 
-export function LoginModal({ open, onClose, ligaSlug }: LoginModalProps): React.ReactElement | null {
+export function LoginModal({ open, onClose }: LoginModalProps): React.ReactElement | null {
   const router = useRouter();
   const setTokens = useAuthStore((s) => s.setTokens);
 
@@ -38,12 +37,10 @@ export function LoginModal({ open, onClose, ligaSlug }: LoginModalProps): React.
     defaultValues: { email: '', password: '' },
   });
 
-  // Reset al cerrar
   useEffect(() => {
     if (!open) form.reset();
   }, [open, form]);
 
-  // Cerrar con tecla Escape
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent): void => {
@@ -60,7 +57,6 @@ export function LoginModal({ open, onClose, ligaSlug }: LoginModalProps): React.
         body: vals,
         skipAuth: true,
       });
-      // Leer al usuario para decidir landing por rol
       const me = await apiFetch<UserContext>('/auth/me', {
         method: 'POST',
         headers: { Authorization: `Bearer ${tokens.accessToken}` },
@@ -71,7 +67,7 @@ export function LoginModal({ open, onClose, ligaSlug }: LoginModalProps): React.
     onSuccess: ({ tokens, me }) => {
       setTokens(tokens);
       onClose();
-      router.push(resolveLandingByRole(me, ligaSlug));
+      router.push(resolveLandingByRole(me));
     },
   });
 

@@ -10,23 +10,17 @@ import { Card, CardLabel } from '@/components/ui/card';
 import { useResumenLiga } from '@/hooks/use-portal';
 import { cn } from '@/lib/cn';
 
-export default function LigaHomePage({
-  params,
-}: {
-  params: { ligaSlug: string };
-}): React.ReactElement {
-  const { ligaSlug } = params;
-  const { data, isLoading, error } = useResumenLiga(ligaSlug);
+export function TenantHome(): React.ReactElement {
+  const { data, isLoading, error } = useResumenLiga();
 
-  if (isLoading) return <PageLoading slug={ligaSlug} />;
-  if (error || !data) return <PageError slug={ligaSlug} message={String(error)} />;
+  if (isLoading) return <PageLoading />;
+  if (error || !data) return <PageError message={String(error)} />;
 
   return (
     <>
-      <PublicHeader ligaSlug={ligaSlug} ligaNombre={data.liga.nombre} active="home" />
+      <PublicHeader ligaNombre={data.liga.nombre} active="home" />
 
       <main className="max-w-7xl mx-auto px-6 py-10">
-        {/* Hero del torneo */}
         <section className="mb-8">
           <div className="eyebrow mb-2">→ Torneo en curso</div>
           <h1 className="font-display_alt text-5xl md:text-6xl text-green-deep tracking-tight leading-none">
@@ -40,7 +34,6 @@ export default function LigaHomePage({
           )}
         </section>
 
-        {/* Próxima fecha */}
         {data.proximaFecha && (
           <section className="mb-10">
             <Card variant="dark" padding="roomy">
@@ -56,9 +49,8 @@ export default function LigaHomePage({
           </section>
         )}
 
-        {/* Quick links + top goleadores */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-10">
-          <Link href={`/${ligaSlug}/tabla`} className="contents">
+          <Link href="/tabla" className="contents">
             <Card className="hover:bg-paper transition-colors cursor-pointer">
               <CardLabel>Posiciones</CardLabel>
               <div className="flex items-center gap-3">
@@ -73,7 +65,7 @@ export default function LigaHomePage({
             </Card>
           </Link>
 
-          <Link href={`/${ligaSlug}/fixture`} className="contents">
+          <Link href="/fixture" className="contents">
             <Card className="hover:bg-paper transition-colors cursor-pointer">
               <CardLabel>Calendario</CardLabel>
               <div className="flex items-center gap-3">
@@ -88,7 +80,7 @@ export default function LigaHomePage({
             </Card>
           </Link>
 
-          <Link href={`/${ligaSlug}/goleadores`} className="contents">
+          <Link href="/goleadores" className="contents">
             <Card variant="lime" className="cursor-pointer hover:bg-green-lime/80 transition-colors">
               <CardLabel tone="mute">Top scorers</CardLabel>
               <div className="flex items-center gap-3">
@@ -104,7 +96,6 @@ export default function LigaHomePage({
           </Link>
         </section>
 
-        {/* Resultados recientes + mini-goleadores */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2">
             <div className="eyebrow mb-3">→ Resultados de la fecha pasada</div>
@@ -124,10 +115,7 @@ export default function LigaHomePage({
             <div className="eyebrow mb-3">→ Top 5 goleadores</div>
             <Card padding="none" className="overflow-hidden divide-y divide-line">
               {data.topGoleadores.map((g) => (
-                <div
-                  key={g.jugadorId}
-                  className="px-4 py-3 flex items-center gap-3"
-                >
+                <div key={g.jugadorId} className="px-4 py-3 flex items-center gap-3">
                   <Trophy
                     size={16}
                     className={cn(
@@ -158,10 +146,7 @@ export default function LigaHomePage({
             <span className="font-display tracking-[0.18em] text-green-deep">
               {data.liga.nombre.toUpperCase()}
             </span>{' '}
-            · Powered by{' '}
-            <Link href="/" className="text-accent hover:underline">
-              Fixtura
-            </Link>
+            · Powered by <span className="text-accent">Fixtura</span>
           </div>
           <div className="font-serif italic">la cancha, organizada.</div>
         </div>
@@ -213,10 +198,10 @@ function PartidoRowResultado({ partido }: { partido: PartidoPublico }): React.Re
   );
 }
 
-function PageLoading({ slug }: { slug: string }): React.ReactElement {
+function PageLoading(): React.ReactElement {
   return (
     <>
-      <PublicHeader ligaSlug={slug} ligaNombre={slug} />
+      <PublicHeader ligaNombre="Cargando…" />
       <main className="max-w-7xl mx-auto px-6 py-20 text-center font-serif italic text-ink-mute">
         Cargando datos de la liga...
       </main>
@@ -224,10 +209,10 @@ function PageLoading({ slug }: { slug: string }): React.ReactElement {
   );
 }
 
-function PageError({ slug, message }: { slug: string; message: string }): React.ReactElement {
+function PageError({ message }: { message: string }): React.ReactElement {
   return (
     <>
-      <PublicHeader ligaSlug={slug} ligaNombre={slug} />
+      <PublicHeader ligaNombre="Error" />
       <main className="max-w-3xl mx-auto px-6 py-20">
         <Card variant="paper" padding="roomy">
           <CardLabel tone="mute">Error</CardLabel>

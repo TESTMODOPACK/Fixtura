@@ -1,30 +1,23 @@
 'use client';
 
 import { PublicHeader } from '@/components/public-header';
-import { Card, CardLabel } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { useTabla } from '@/hooks/use-portal';
 import { cn } from '@/lib/cn';
 
-export default function TablaPage({
-  params,
-}: {
-  params: { ligaSlug: string };
-}): React.ReactElement {
-  const { ligaSlug } = params;
-  const { data, isLoading } = useTabla(ligaSlug);
+export default function TablaPage(): React.ReactElement {
+  const { data, isLoading } = useTabla();
 
   return (
     <>
-      <PublicHeader ligaSlug={ligaSlug} ligaNombre={data?.torneo.nombre ?? 'Cargando…'} active="tabla" />
+      <PublicHeader ligaNombre={data?.torneo.nombre ?? 'Cargando…'} active="tabla" />
       <main className="max-w-5xl mx-auto px-6 py-10">
         <div className="eyebrow mb-2">→ {data?.torneo.nombre ?? '...'}</div>
         <h1 className="font-display text-4xl text-green-deep tracking-display mb-6">
           TABLA DE POSICIONES
         </h1>
 
-        {isLoading && (
-          <div className="font-serif italic text-ink-mute">Cargando tabla...</div>
-        )}
+        {isLoading && <div className="font-serif italic text-ink-mute">Cargando tabla...</div>}
 
         {data && (
           <Card padding="none" className="overflow-hidden">
@@ -54,9 +47,7 @@ export default function TablaPage({
                       )}>
                         {fila.posicion}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-ink truncate max-w-xs">
-                        {fila.equipoNombre}
-                      </td>
+                      <td className="px-4 py-3 font-semibold text-ink truncate max-w-xs">{fila.equipoNombre}</td>
                       <td className="text-center px-2 py-3 text-ink-mute">{fila.pj}</td>
                       <td className="text-center px-2 py-3 text-ink-mute">{fila.pg}</td>
                       <td className="text-center px-2 py-3 text-ink-mute">{fila.pe}</td>
@@ -64,8 +55,7 @@ export default function TablaPage({
                       <td className="text-center px-2 py-3 text-ink-mute">{fila.gf}</td>
                       <td className="text-center px-2 py-3 text-ink-mute">{fila.gc}</td>
                       <td className={cn('text-center px-2 py-3', fila.dg > 0 ? 'text-green-bright' : fila.dg < 0 ? 'text-danger' : 'text-ink-mute')}>
-                        {fila.dg > 0 ? '+' : ''}
-                        {fila.dg}
+                        {fila.dg > 0 ? '+' : ''}{fila.dg}
                       </td>
                       <td className="text-center px-2 py-3 bg-green-lime/20 font-display text-lg text-green-deep tracking-display">
                         {fila.pts}

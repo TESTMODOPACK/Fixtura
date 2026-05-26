@@ -3,17 +3,18 @@ import type { Role, UserContext } from '@fixtura/types';
 /**
  * Decide a qué ruta debe ir un usuario después del login, según sus roles.
  *
- * Reglas (prioridad de mayor a menor):
- *   1. SUPER_ADMIN → /super-admin
- *   2. Cualquier rol de gestión de liga → /[ligaSlug]/admin
- *   3. TRIBUNAL_DISCIPLINA → /[ligaSlug]/admin/tribunal
- *   4. DELEGADO_EQUIPO → /[ligaSlug]/club
- *   5. ARBITRO, PLANILLERO, PARAMEDICO, SEGURIDAD, MANTENIMIENTO → /[ligaSlug]/personal
- *   6. JUGADOR → /[ligaSlug]/jugador
- *   7. HINCHA → /[ligaSlug]/ (portal público enriquecido)
- *   8. Sin roles aplicables → /[ligaSlug]/
+ * Como ahora cada tenant tiene su propio dominio, las rutas son FLAT
+ * (no incluyen ligaSlug). El path retornado se resuelve sobre el
+ * mismo hostname desde donde se hizo login.
  *
- * Si el usuario no tiene tenantId resoluble, cae al portal genérico /.
+ * Reglas (prioridad de mayor a menor):
+ *   1. SUPER_ADMIN → /super-admin (visible solo desde fixtura.cl)
+ *   2. Roles de gestión de liga → /admin
+ *   3. TRIBUNAL_DISCIPLINA → /admin/tribunal
+ *   4. DELEGADO_EQUIPO → /club
+ *   5. ARBITRO, PLANILLERO, PARAMEDICO, SEGURIDAD, MANTENIMIENTO → /personal
+ *   6. JUGADOR → /jugador
+ *   7. HINCHA / sin roles aplicables → / (portal público)
  */
 
 const ADMIN_ROLES: Role[] = [
@@ -26,19 +27,15 @@ const ADMIN_ROLES: Role[] = [
 ];
 const PERSONAL_ROLES: Role[] = ['ARBITRO', 'PLANILLERO', 'PARAMEDICO', 'SEGURIDAD', 'MANTENIMIENTO'];
 
-export function resolveLandingByRole(user: UserContext, ligaSlug: string): string {
+export function resolveLandingByRole(user: UserContext): string {
   const roles = new Set(user.roles.map((r) => r.role));
 
   if (roles.has('SUPER_ADMIN')) return '/super-admin';
+  if (ADMIN_ROLES.some((r) => roles.has(r))) return '/admin';
+  if (roles.has('TRIBUNAL_DISCIPLINA')) return '/admin/tribunal';
+  if (roles.has('DELEGADO_EQUIPO')) return '/club';
+  if (PERSONAL_ROLES.some((r) => roles.has(r))) return '/personal';
+  if (roles.has('JUGADOR')) return '/jugador';
 
-  const tenantPrefix = `/${ligaSlug}`;
-
-  if (ADMIN_ROLES.some((r) => roles.has(r))) return `${tenantPrefix}/admin`;
-  if (roles.has('TRIBUNAL_DISCIPLINA')) return `${tenantPrefix}/admin/tribunal`;
-  if (roles.has('DELEGADO_EQUIPO')) return `${tenantPrefix}/club`;
-  if (PERSONAL_ROLES.some((r) => roles.has(r))) return `${tenantPrefix}/personal`;
-  if (roles.has('JUGADOR')) return `${tenantPrefix}/jugador`;
-
-  // HINCHA o sin rol relevante → al portal público
-  return tenantPrefix;
+  return '/'; // HINCHA o sin rol relevante → portal público
 }

@@ -7,26 +7,19 @@ import { Card, CardLabel } from '@/components/ui/card';
 import { useFixture } from '@/hooks/use-portal';
 import { cn } from '@/lib/cn';
 
-export default function FixturePage({
-  params,
-}: {
-  params: { ligaSlug: string };
-}): React.ReactElement {
-  const { ligaSlug } = params;
-  const { data, isLoading } = useFixture(ligaSlug);
+export default function FixturePage(): React.ReactElement {
+  const { data, isLoading } = useFixture();
 
   return (
     <>
-      <PublicHeader ligaSlug={ligaSlug} ligaNombre={data?.torneo.nombre ?? 'Cargando…'} active="fixture" />
+      <PublicHeader ligaNombre={data?.torneo.nombre ?? 'Cargando…'} active="fixture" />
       <main className="max-w-5xl mx-auto px-6 py-10">
         <div className="eyebrow mb-2">→ {data?.torneo.nombre ?? '...'}</div>
         <h1 className="font-display text-4xl text-green-deep tracking-display mb-6">
           FIXTURE COMPLETO
         </h1>
 
-        {isLoading && (
-          <div className="font-serif italic text-ink-mute">Cargando fixture...</div>
-        )}
+        {isLoading && <div className="font-serif italic text-ink-mute">Cargando fixture...</div>}
 
         {data && (
           <div className="space-y-6">
@@ -63,11 +56,7 @@ function FechaEstadoBadge({ partidos }: { partidos: PartidoPublico[] }): React.R
     <div
       className={cn(
         'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
-        allDone
-          ? 'bg-green-bright/10 text-green-bright'
-          : finalizados > 0
-            ? 'bg-accent/10 text-accent'
-            : 'bg-ink-mute/10 text-ink-mute',
+        allDone ? 'bg-green-bright/10 text-green-bright' : finalizados > 0 ? 'bg-accent/10 text-accent' : 'bg-ink-mute/10 text-ink-mute',
       )}
     >
       {allDone ? 'Finalizada' : `${finalizados}/${total} jugados`}
@@ -86,9 +75,7 @@ function PartidoRow({ partido }: { partido: PartidoPublico }): React.ReactElemen
         <div>{dia}</div>
         <div className="font-semibold text-ink">{hora}</div>
       </div>
-
       <div className="text-right font-semibold truncate">{partido.local.nombre}</div>
-
       <div className="flex items-center gap-2 font-display tracking-display text-xl text-green-deep min-w-[60px] justify-center">
         {partido.estado === 'FINALIZADO' ? (
           <>
@@ -100,9 +87,7 @@ function PartidoRow({ partido }: { partido: PartidoPublico }): React.ReactElemen
           <span className="text-ink-mute font-serif italic text-xs">vs</span>
         )}
       </div>
-
       <div className="font-semibold truncate">{partido.visita.nombre}</div>
-
       <div className="text-[10px] text-ink-mute uppercase tracking-wider hidden md:block">
         {partido.canchaNombre}
       </div>

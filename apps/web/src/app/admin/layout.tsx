@@ -24,7 +24,7 @@ import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth-store';
 
 interface NavItem {
-  slug: string;
+  href: string;
   label: string;
   icon: LucideIcon;
   badge?: string;
@@ -38,73 +38,61 @@ interface NavSection {
 const NAV: NavSection[] = [
   {
     title: 'General',
-    items: [{ slug: '', label: 'Panel principal', icon: LayoutDashboard }],
+    items: [{ href: '/admin', label: 'Panel principal', icon: LayoutDashboard }],
   },
   {
     title: 'Competición',
     items: [
-      { slug: 'torneos', label: 'Torneos & fixture', icon: Trophy },
-      { slug: 'designaciones', label: 'Designaciones', icon: Activity, badge: '3' },
-      { slug: 'actas', label: 'Actas & resultados', icon: ClipboardList },
-      { slug: 'tribunal', label: 'Tribunal', icon: Gavel },
+      { href: '/admin/torneos', label: 'Torneos & fixture', icon: Trophy },
+      { href: '/admin/designaciones', label: 'Designaciones', icon: Activity, badge: '3' },
+      { href: '/admin/actas', label: 'Actas & resultados', icon: ClipboardList },
+      { href: '/admin/tribunal', label: 'Tribunal', icon: Gavel },
     ],
   },
   {
     title: 'Operaciones',
     items: [
-      { slug: 'finanzas', label: 'Finanzas & cobros', icon: PiggyBank },
-      { slug: 'canchas', label: 'Ocupación canchas', icon: Calendar },
-      { slug: 'analytics', label: 'Analytics & NPS', icon: BarChart3 },
+      { href: '/admin/finanzas', label: 'Finanzas & cobros', icon: PiggyBank },
+      { href: '/admin/canchas', label: 'Ocupación canchas', icon: Calendar },
+      { href: '/admin/analytics', label: 'Analytics & NPS', icon: BarChart3 },
     ],
   },
   {
     title: 'Comunidad',
     items: [
-      { slug: 'jugadores', label: 'Jugadores & ranking', icon: Users },
-      { slug: 'sponsors', label: 'Sponsors & banners', icon: Megaphone },
+      { href: '/admin/jugadores', label: 'Jugadores & ranking', icon: Users },
+      { href: '/admin/sponsors', label: 'Sponsors & banners', icon: Megaphone },
     ],
   },
   {
     title: 'Configuración',
     items: [
-      { slug: 'personal', label: 'Personal & roles', icon: UserCog },
-      { slug: 'ajustes', label: 'Ajustes', icon: Settings },
+      { href: '/admin/personal', label: 'Personal & roles', icon: UserCog },
+      { href: '/admin/ajustes', label: 'Ajustes', icon: Settings },
     ],
   },
 ];
 
-export default function AdminLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: { ligaSlug: string };
-}): React.ReactElement | null {
-  const { ligaSlug } = params;
+export default function AdminLayout({ children }: { children: React.ReactNode }): React.ReactElement | null {
   const pathname = usePathname();
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
 
-  // Guard client-side: si no hay token, volver al portal público de la liga
-  // (donde puede abrir el modal de login).
   useEffect(() => {
     if (!accessToken) {
-      router.replace(`/${ligaSlug}`);
+      router.replace('/');
     }
-  }, [accessToken, router, ligaSlug]);
+  }, [accessToken, router]);
 
   if (!accessToken) {
     return null;
   }
 
-  const base = `/${ligaSlug}/admin`;
-  const hrefFor = (slug: string): string => (slug ? `${base}/${slug}` : base);
-
   return (
     <div className="min-h-screen bg-paper flex">
       <aside className="hidden md:flex w-64 flex-col bg-green-deep text-chalk">
         <div className="px-5 py-6 border-b border-green-mid">
-          <Link href={`/${ligaSlug}`}>
+          <Link href="/">
             <FixturaLockup inverse showTag={false} />
           </Link>
         </div>
@@ -116,13 +104,14 @@ export default function AdminLayout({
               </div>
               <ul className="space-y-0.5">
                 {section.items.map((item) => {
-                  const href = hrefFor(item.slug);
-                  const active = href === pathname || (item.slug && pathname.startsWith(`${href}/`));
+                  const active =
+                    pathname === item.href ||
+                    (item.href !== '/admin' && pathname.startsWith(`${item.href}/`));
                   const Icon = item.icon;
                   return (
-                    <li key={item.slug || 'home'}>
+                    <li key={item.href}>
                       <Link
-                        href={href}
+                        href={item.href}
                         className={cn(
                           'flex items-center gap-3 px-2 py-2 rounded-card text-sm transition-colors',
                           active
@@ -147,7 +136,7 @@ export default function AdminLayout({
         </nav>
         <div className="px-5 py-4 border-t border-green-mid">
           <Link
-            href={`/${ligaSlug}`}
+            href="/"
             className="text-[10px] text-green-lime uppercase tracking-widest hover:text-chalk"
           >
             ← Portal público

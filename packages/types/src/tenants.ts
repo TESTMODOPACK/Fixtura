@@ -29,6 +29,7 @@ export const TenantSchema = z.object({
   nombre: z.string().min(2).max(200),
   tipo: TenantTypeSchema,
   plan: PlanSchema,
+  customDomain: z.string().nullable(),
   brandingJson: z.record(z.string(), z.unknown()).default({}),
   isActive: z.boolean(),
   createdAt: z.iso.datetime(),

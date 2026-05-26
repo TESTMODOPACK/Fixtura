@@ -14,6 +14,14 @@ export class Tenant {
   @Column({ type: 'varchar', length: 200 })
   nombre!: string;
 
+  /**
+   * Dominio propio del cliente (ej. "liganunoa.cl"). El backend mapea
+   * `req.headers.host` → tenant via este campo. Nullable porque en dev
+   * y al provisionar un tenant aún no tiene dominio configurado.
+   */
+  @Column({ name: 'custom_domain', type: 'varchar', length: 255, nullable: true, unique: true })
+  customDomain!: string | null;
+
   @Column({ type: 'varchar', length: 20 })
   tipo!: TenantType;
 

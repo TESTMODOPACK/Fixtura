@@ -167,33 +167,65 @@ async function bootstrap(): Promise<void> {
     },
   );
 
-  // ─── CORS con whitelist obligatoria en producción ────────────────────
+  // ─── CORS dinámico basado en tenants.custom_domain + FRONTEND_URL ───
+  // En multi-tenant por hostname, la whitelist no se puede hardcodear:
+  // cada cliente tiene su propio dominio. Cargamos al bootstrap los
+  // custom_domain registrados en DB y combinamos con FRONTEND_URL (que
+  // cubre fixtura.cl y otros que querramos forzar siempre).
+  //
+  // Cuando se agrega un cliente nuevo: actualizar tenants.custom_domain
+  // + restart del container API (~15s). El script de provisioning lo
+  // automatiza.
   const frontendUrl = process.env.FRONTEND_URL;
-  const allowedOrigins = frontendUrl
+  const baseOrigins = frontendUrl
     ? frontendUrl
         .split(',')
         .map((u) => u.trim())
         .filter((u) => u.length > 0)
-    : null;
+    : [];
 
-  if (isProduction && (!allowedOrigins || allowedOrigins.length === 0)) {
+  if (isProduction && baseOrigins.length === 0) {
     throw new Error(
-      'FRONTEND_URL is required in production. Set it to the exact frontend origin(s) (comma-separated if multiple). Reflect-all-origins mode is disabled in production.',
+      'FRONTEND_URL is required in production. Mínimo: la URL del sitio de marketing (ej. https://fixtura.cl). Los dominios de cada tenant se agregan dinámicamente desde tenants.custom_domain.',
     );
   }
 
-  trace('5/8 about to configure CORS, allowedOrigins=' + (allowedOrigins?.join(',') ?? 'reflect'));
+  // Cargar custom_domain de tenants activos.
+  const { DataSource } = await import('typeorm');
+  void DataSource; // import implícito vía Nest; uso app.get para datasource real
+  const dataSource = app.get<import('typeorm').DataSource>(
+    (await import('@nestjs/typeorm')).getDataSourceToken() as never,
+  );
+
+  let tenantOrigins: string[] = [];
+  try {
+    const rows = (await dataSource.query(
+      `SELECT custom_domain FROM tenants WHERE is_active = true AND custom_domain IS NOT NULL`,
+    )) as Array<{ custom_domain: string }>;
+    tenantOrigins = rows.flatMap((r) => [
+      `https://${r.custom_domain}`,
+      `http://${r.custom_domain}`,
+    ]);
+  } catch (err) {
+    logger.warn(`Cargando tenant origins: ${(err as Error).message}`);
+  }
+
+  const allowedOrigins = Array.from(new Set([...baseOrigins, ...tenantOrigins]));
+
+  trace(`5/8 about to configure CORS, ${allowedOrigins.length} origins`);
 
   app.enableCors({
     origin: (
       origin: string | undefined,
       callback: (err: Error | null, allow?: string | boolean) => void,
     ) => {
+      // Requests sin Origin (curl, mobile apps, server-to-server) → permitir.
       if (!origin) return callback(null, true);
-      if (allowedOrigins && allowedOrigins.length > 0) {
-        return callback(null, allowedOrigins.includes(origin));
+      // En dev sin FRONTEND_URL ni custom domains: reflect (modo conveniencia).
+      if (!isProduction && allowedOrigins.length === 0) {
+        return callback(null, origin);
       }
-      return callback(null, origin);
+      return callback(null, allowedOrigins.includes(origin));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

@@ -1,42 +1,71 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Req } from '@nestjs/common';
+import type { Request } from 'express';
 
 import type { FixturePublico, Ranking, ResumenLiga, TablaPosiciones } from '@fixtura/types';
 
 import { Public } from '../../common/decorators/public.decorator';
+import { TenantsService } from '../tenants/tenants.service';
 import { PublicService } from './public.service';
 
-@Controller('public/:ligaSlug')
+/**
+ * Endpoints públicos del portal de una liga.
+ *
+ * El tenant se identifica por el header `Host` (multi-tenant por dominio):
+ *   - liganunoa.cl       → tenant cuyo custom_domain = 'liganunoa.cl'
+ *   - en dev sin dominio → fallback al tenant DEV_DEFAULT_TENANT_SLUG
+ *
+ * El slug ya NO aparece en la URL — el routing puro mira el host.
+ */
+@Controller('public')
 @Public()
 export class PublicController {
-  constructor(private readonly svc: PublicService) {}
+  constructor(
+    private readonly svc: PublicService,
+    private readonly tenants: TenantsService,
+  ) {}
+
+  private async resolveSlug(req: Request): Promise<string> {
+    const host = (req.headers['x-forwarded-host'] as string) ?? req.headers.host ?? '';
+    const tenant = await this.tenants.findByHost(host);
+    if (!tenant) {
+      throw new NotFoundException(`No hay liga asociada al dominio "${host}"`);
+    }
+    return tenant.slug;
+  }
 
   @Get()
-  resumen(@Param('ligaSlug') slug: string): Promise<ResumenLiga> {
+  async resumen(@Req() req: Request): Promise<ResumenLiga> {
+    const slug = await this.resolveSlug(req);
     return this.svc.getResumen(slug);
   }
 
   @Get('tabla')
-  tabla(@Param('ligaSlug') slug: string): Promise<TablaPosiciones> {
+  async tabla(@Req() req: Request): Promise<TablaPosiciones> {
+    const slug = await this.resolveSlug(req);
     return this.svc.getTabla(slug);
   }
 
   @Get('fixture')
-  fixture(@Param('ligaSlug') slug: string): Promise<FixturePublico> {
+  async fixture(@Req() req: Request): Promise<FixturePublico> {
+    const slug = await this.resolveSlug(req);
     return this.svc.getFixture(slug);
   }
 
   @Get('goleadores')
-  goleadores(@Param('ligaSlug') slug: string): Promise<Ranking> {
+  async goleadores(@Req() req: Request): Promise<Ranking> {
+    const slug = await this.resolveSlug(req);
     return this.svc.getRanking(slug, 'GOLEADORES');
   }
 
   @Get('asistencias')
-  asistencias(@Param('ligaSlug') slug: string): Promise<Ranking> {
+  async asistencias(@Req() req: Request): Promise<Ranking> {
+    const slug = await this.resolveSlug(req);
     return this.svc.getRanking(slug, 'ASISTENCIAS');
   }
 
   @Get('mvp')
-  mvp(@Param('ligaSlug') slug: string): Promise<Ranking> {
+  async mvp(@Req() req: Request): Promise<Ranking> {
+    const slug = await this.resolveSlug(req);
     return this.svc.getRanking(slug, 'MVP');
   }
 }

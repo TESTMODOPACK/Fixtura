@@ -123,6 +123,11 @@ services:
       # esto en true para que cleanup-orphans no intente crear un rol app
       # separado. En prod con role separation, false.
       SKIP_CLEANUP_ORPHANS: ${SKIP_CLEANUP_ORPHANS:-}
+      # Fallback de tenant para hosts sin custom_domain configurado.
+      # En el VPS sin dominio, setear a 'liga-demo' permite ver el portal
+      # accediendo por IP. Cuando el cliente configura su custom_domain,
+      # esta variable se puede dejar vacía.
+      FALLBACK_TENANT_SLUG: ${FALLBACK_TENANT_SLUG:-}
       # TTLs JWT — el código los lee directamente de process.env
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
