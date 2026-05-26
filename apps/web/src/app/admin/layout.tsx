@@ -28,6 +28,7 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
   badge?: string;
+  comingSoon?: boolean;
 }
 
 interface NavSection {
@@ -35,6 +36,8 @@ interface NavSection {
   items: NavItem[];
 }
 
+// Los items con `comingSoon: true` se muestran como deshabilitados.
+// Cuando se construya la página, basta con quitar la flag.
 const NAV: NavSection[] = [
   {
     title: 'General',
@@ -44,31 +47,31 @@ const NAV: NavSection[] = [
     title: 'Competición',
     items: [
       { href: '/admin/torneos', label: 'Torneos & fixture', icon: Trophy },
-      { href: '/admin/designaciones', label: 'Designaciones', icon: Activity, badge: '3' },
-      { href: '/admin/actas', label: 'Actas & resultados', icon: ClipboardList },
+      { href: '/admin/designaciones', label: 'Designaciones', icon: Activity },
+      { href: '/admin/actas', label: 'Actas & resultados', icon: ClipboardList, comingSoon: true },
       { href: '/admin/tribunal', label: 'Tribunal', icon: Gavel },
     ],
   },
   {
     title: 'Operaciones',
     items: [
-      { href: '/admin/finanzas', label: 'Finanzas & cobros', icon: PiggyBank },
-      { href: '/admin/canchas', label: 'Ocupación canchas', icon: Calendar },
-      { href: '/admin/analytics', label: 'Analytics & NPS', icon: BarChart3 },
+      { href: '/admin/finanzas', label: 'Finanzas & cobros', icon: PiggyBank, comingSoon: true },
+      { href: '/admin/canchas', label: 'Ocupación canchas', icon: Calendar, comingSoon: true },
+      { href: '/admin/analytics', label: 'Analytics & NPS', icon: BarChart3, comingSoon: true },
     ],
   },
   {
     title: 'Comunidad',
     items: [
-      { href: '/admin/jugadores', label: 'Jugadores & ranking', icon: Users },
-      { href: '/admin/sponsors', label: 'Sponsors & banners', icon: Megaphone },
+      { href: '/admin/jugadores', label: 'Jugadores & ranking', icon: Users, comingSoon: true },
+      { href: '/admin/sponsors', label: 'Sponsors & banners', icon: Megaphone, comingSoon: true },
     ],
   },
   {
     title: 'Configuración',
     items: [
       { href: '/admin/personal', label: 'Personal & roles', icon: UserCog },
-      { href: '/admin/ajustes', label: 'Ajustes', icon: Settings },
+      { href: '/admin/ajustes', label: 'Ajustes', icon: Settings, comingSoon: true },
     ],
   },
 ];
@@ -105,9 +108,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <ul className="space-y-0.5">
                 {section.items.map((item) => {
                   const active =
-                    pathname === item.href ||
-                    (item.href !== '/admin' && pathname.startsWith(`${item.href}/`));
+                    !item.comingSoon &&
+                    (pathname === item.href ||
+                      (item.href !== '/admin' && pathname.startsWith(`${item.href}/`)));
                   const Icon = item.icon;
+                  if (item.comingSoon) {
+                    return (
+                      <li key={item.href}>
+                        <div
+                          aria-disabled="true"
+                          title="Disponible en próximos sprints"
+                          className="flex items-center gap-3 px-2 py-2 rounded-card text-sm text-chalk/40 cursor-not-allowed"
+                        >
+                          <Icon size={16} className="flex-shrink-0" />
+                          <span className="flex-1">{item.label}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-chalk/10 text-chalk/60">
+                            pronto
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  }
                   return (
                     <li key={item.href}>
                       <Link

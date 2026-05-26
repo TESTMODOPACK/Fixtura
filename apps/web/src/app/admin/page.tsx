@@ -2,23 +2,39 @@
 
 import { ArrowRight, Plus, Trophy, Users } from 'lucide-react';
 import Link from 'next/link';
+import { useMemo } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { PageHead } from '@/components/ui/page-head';
-import { useTorneos } from '@/hooks/use-admin';
+import { usePersonal, useTorneos } from '@/hooks/use-admin';
 
 export default function AdminDashboardPage(): React.ReactElement {
   const { data: torneos, isLoading } = useTorneos();
+  const { data: personal } = usePersonal(true);
   const activos = torneos?.filter((t) => t.estado === 'ACTIVO') ?? [];
   const draft = torneos?.filter((t) => t.estado === 'DRAFT') ?? [];
   const totalEquipos = torneos?.reduce((acc, t) => acc + t.equiposCount, 0) ?? 0;
 
+  // Árbitros activos con carnet vigente — KPI real
+  const arbitrosOk = useMemo(() => {
+    if (!personal) return null;
+    const arbitros = personal.filter(
+      (p) => p.rol === 'ARBITRO_PRINCIPAL' || p.rol === 'ARBITRO_ASISTENTE',
+    );
+    const ok = arbitros.filter((p) => {
+      if (!p.carnetAnfaVence) return false;
+      const v = new Date(p.carnetAnfaVence).getTime();
+      return !Number.isNaN(v) && v > Date.now();
+    });
+    return { total: arbitros.length, ok: ok.length };
+  }, [personal]);
+
   return (
     <>
       <PageHead
-        eyebrow="Panel principal · Sprint 2B"
+        eyebrow="Panel principal"
         title="Buenas, Admin"
         sub="Configurá tus torneos y empezá a operar tu liga."
       >
@@ -40,8 +56,17 @@ export default function AdminDashboardPage(): React.ReactElement {
           value={isLoading ? '…' : totalEquipos}
           sub="En todos los torneos"
         />
-        <KpiCard label="Próx. fecha cubierta" value="—" sub="Esperando designaciones" />
-        <KpiCard label="Casos en tribunal" value={0} sub="Sin casos abiertos" variant="dark" />
+        <KpiCard
+          label="Árbitros con carnet"
+          value={arbitrosOk ? `${arbitrosOk.ok}/${arbitrosOk.total}` : '…'}
+          sub="Vigentes vs. plantilla"
+        />
+        <KpiCard
+          label="Personal activo"
+          value={personal ? personal.length : '…'}
+          sub="Disponibles para designar"
+          variant="dark"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
