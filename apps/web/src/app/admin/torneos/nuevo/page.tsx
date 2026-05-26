@@ -16,11 +16,13 @@ import { useCreateTemporada, useCreateTorneo, useTemporadas } from '@/hooks/use-
 import { ApiError } from '@/lib/api';
 
 const TorneoFormSchema = z.object({
-  temporadaId: z.uuid('Elegí o creá una temporada'),
+  // temporadaId puede venir vacío: si no hay temporadas todavía, el
+  // submit la crea automáticamente vía ensureTemporadaActual().
+  temporadaId: z.union([z.literal(''), z.uuid('Elegí una temporada válida')]),
   nombre: z.string().min(2, 'Mínimo 2 caracteres').max(200),
   slug: z
     .string()
-    .min(3)
+    .min(3, 'Mínimo 3 caracteres')
     .max(100)
     .regex(/^[a-z0-9-]+$/, 'Solo minúsculas, números y guiones'),
   tipoFormato: z.enum(['ROUND_ROBIN', 'PLAYOFFS', 'GROUPS', 'MIXTO']),
@@ -35,6 +37,8 @@ function slugify(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFD')
+    // Borra los combining diacritical marks (acentos/tildes) usando
+    // escape unicode explícito para que no se rompa por encoding.
     .replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
@@ -107,7 +111,25 @@ export default function NuevoTorneoPage(): React.ReactElement {
     router.push(`/admin/torneos/${torneo.id}`);
   };
 
+  // Si el form falla validación zod, mostramos el primer error como
+  // banner global. Sin esto, los campos ocultos (como el select de
+  // temporada cuando aún no hay temporadas) hacían que el submit no
+  // hiciera nada visible.
+  const onError = (errors: Record<string, { message?: string } | undefined>): void => {
+    // eslint-disable-next-line no-console
+    console.warn('[nuevo-torneo] validación falló:', errors);
+  };
+
   const apiError = (createTorneo.error ?? createTemporada.error) as ApiError | undefined;
+  const formErrors = form.formState.errors;
+  const primerErrorMensaje =
+    formErrors.nombre?.message ??
+    formErrors.slug?.message ??
+    formErrors.temporadaId?.message ??
+    formErrors.puntosVictoria?.message ??
+    formErrors.puntosEmpate?.message ??
+    formErrors.puntosDerrota?.message ??
+    null;
 
   return (
     <>
@@ -123,7 +145,10 @@ export default function NuevoTorneoPage(): React.ReactElement {
         </Link>
       </PageHead>
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <form
+        onSubmit={form.handleSubmit(onSubmit, onError)}
+        className="grid grid-cols-1 lg:grid-cols-3 gap-5"
+      >
         <Card padding="roomy" className="lg:col-span-2">
           <CardLabel>Datos principales</CardLabel>
 
@@ -230,6 +255,11 @@ export default function NuevoTorneoPage(): React.ReactElement {
         </Card>
 
         <div className="lg:col-span-3">
+          {primerErrorMensaje && !apiError && (
+            <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mb-3">
+              No se pudo crear el torneo: {primerErrorMensaje}
+            </div>
+          )}
           {apiError && (
             <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mb-3">
               {apiError.message}
