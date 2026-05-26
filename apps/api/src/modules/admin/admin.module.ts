@@ -7,6 +7,8 @@ import { DashboardAdminController } from './dashboard/dashboard-admin.controller
 import { DashboardAdminService } from './dashboard/dashboard-admin.service';
 import { DesignacionesAdminController } from './designaciones/designaciones-admin.controller';
 import { DesignacionesAdminService } from './designaciones/designaciones-admin.service';
+import { DesignacionesEmailService } from './designaciones/designaciones-email.service';
+import { DesignacionesRespuestaController } from './designaciones/designaciones-respuesta.controller';
 import { EquiposAdminController } from './equipos/equipos-admin.controller';
 import { EquiposAdminService } from './equipos/equipos-admin.service';
 import { FixtureAdminController } from './fixture/fixture-admin.controller';
@@ -52,6 +54,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     TribunalAdminController,
     PersonalAdminController,
     DesignacionesAdminController,
+    DesignacionesRespuestaController,
     ActasAdminController,
     DashboardAdminController,
   ],
@@ -66,6 +69,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     TribunalAdminService,
     PersonalAdminService,
     DesignacionesAdminService,
+    DesignacionesEmailService,
     ActasAdminService,
     DashboardAdminService,
   ],

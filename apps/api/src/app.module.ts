@@ -12,6 +12,7 @@ import { TenantContextInterceptor } from './common/interceptors/tenant-context.i
 import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CompetitionModule } from './modules/competition/competition.module';
+import { EmailModule } from './modules/email/email.module';
 import { HealthModule } from './modules/health/health.module';
 import { PublicModule } from './modules/public/public.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
@@ -47,6 +48,7 @@ import { UsersModule } from './modules/users/users.module';
     ScheduleModule.forRoot(),
 
     DatabaseModule,
+    EmailModule,
     HealthModule,
     AuthModule,
     TenantsModule,

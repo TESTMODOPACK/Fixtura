@@ -4,8 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import type {
   DesignacionAdmin,
@@ -19,6 +19,7 @@ import { Fecha } from '../../competition/entities/fecha.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Personal } from '../../competition/entities/personal.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { DesignacionesEmailService } from './designaciones-email.service';
 import type {
   AsignarDesignacionDto,
   UpdateDesignacionEstadoDto,
@@ -44,6 +45,8 @@ export class DesignacionesAdminService {
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
+    private readonly emailSvc: DesignacionesEmailService,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -246,7 +249,90 @@ export class DesignacionesAdminService {
       }),
     );
 
+    // Notificar por email — best-effort. No await crítico: si falla,
+    // el caller no se entera (la designación queda persistida igual).
+    // Cargamos relaciones necesarias para armar el contenido.
+    void this.notificarAsignacionPorEmail(created.id, tenantId);
+
     return this.findOne(created.id, tenantId);
+  }
+
+  /**
+   * Carga los datos asociados a una designación recién creada y
+   * dispara el email al personal designado. Se ejecuta en background
+   * (no se espera) para no demorar la respuesta del endpoint.
+   */
+  private async notificarAsignacionPorEmail(
+    designacionId: string,
+    tenantId: string,
+  ): Promise<void> {
+    try {
+      const d = await this.repo.findOne({
+        where: { id: designacionId, tenantId },
+        relations: {
+          personal: true,
+          partido: { equipoLocal: true, equipoVisita: true, fecha: { torneo: true } },
+        },
+      });
+      if (!d || !d.personal || !d.partido) return;
+      if (!d.personal.email) return; // sin email no se envía
+
+      await this.emailSvc.notificarAsignacion({
+        designacion: d,
+        personalNombre: d.personal.nombre,
+        personalApellido: d.personal.apellido,
+        personalEmail: d.personal.email,
+        equipoLocalNombre: d.partido.equipoLocal?.nombre ?? '',
+        equipoVisitaNombre: d.partido.equipoVisita?.nombre ?? '',
+        fechaHora: d.partido.fechaHora,
+        canchaNombre: d.partido.canchaNombre,
+        torneoNombre: d.partido.fecha?.torneo?.nombre ?? '',
+      });
+    } catch (err) {
+      // log y siguiente — nunca propagar
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[designaciones-email] No se pudo enviar email para ${designacionId}:`,
+        (err as Error).message,
+      );
+    }
+  }
+
+  /**
+   * Cambio de estado público — usado por el endpoint sin auth cuando
+   * el árbitro hace click en el link del email. No requiere JWT del
+   * usuario porque el token de la URL ya valida la acción.
+   */
+  async aplicarRespuestaPorToken(
+    designacionId: string,
+    tenantId: string,
+    accion: 'CONFIRMAR' | 'RECHAZAR',
+  ): Promise<{ ok: boolean; estado: string }> {
+    // Endpoint público: el TenantContextInterceptor setea tenant_id=''
+    // (bypass RLS). Re-seteamos al tenant del token firmado antes de
+    // operar — defensa en profundidad para evitar lectura/escritura
+    // cross-tenant si en el futuro se agregan filtros sólo por RLS.
+    await this.dataSource.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [
+      tenantId,
+    ]);
+
+    const d = await this.repo.findOne({ where: { id: designacionId, tenantId } });
+    if (!d) return { ok: false, estado: 'NO_ENCONTRADA' };
+
+    // Si ya estaba CONFIRMADA/RECHAZADA/ASISTIO, devolvemos idempotente OK
+    // para que el usuario no se confunda si recarga el link.
+    if (accion === 'CONFIRMAR') {
+      if (d.estado === 'CONFIRMADA' || d.estado === 'ASISTIO') {
+        return { ok: true, estado: d.estado };
+      }
+      d.estado = 'CONFIRMADA';
+      d.confirmadoAt = new Date();
+    } else {
+      if (d.estado === 'RECHAZADA') return { ok: true, estado: 'RECHAZADA' };
+      d.estado = 'RECHAZADA';
+    }
+    await this.repo.save(d);
+    return { ok: true, estado: d.estado };
   }
 
   async findOne(id: string, tenantId: string): Promise<DesignacionAdmin> {
