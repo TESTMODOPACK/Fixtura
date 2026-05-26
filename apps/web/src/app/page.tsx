@@ -4,22 +4,29 @@ import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { FixturaLockup, FixturaMark } from '@/components/ui/logo';
 
-export default function HomePage(): React.ReactElement {
+const DEMO_SLUG = 'liga-demo';
+
+export default function FixturaMarketingHome(): React.ReactElement {
   return (
     <main className="min-h-screen bg-paper">
-      {/* Header */}
       <header className="border-b border-line bg-chalk">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <FixturaLockup showTag={false} />
-          <Link href="/login">
-            <Button variant="accent" size="sm">
-              Iniciar sesión
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href={`/${DEMO_SLUG}`}>
+              <Button variant="default" size="sm">
+                Ver demo de liga
+              </Button>
+            </Link>
+            <Link href={`/${DEMO_SLUG}`}>
+              <Button variant="accent" size="sm">
+                Iniciar sesión
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
-      {/* Hero */}
       <section className="max-w-6xl mx-auto px-6 py-20 md:py-28 grid md:grid-cols-2 gap-12 items-center">
         <div>
           <div className="eyebrow mb-3">→ Para ligas amateur · Chile</div>
@@ -34,10 +41,12 @@ export default function HomePage(): React.ReactElement {
             Una sola plataforma. Cero planillas Excel.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/login">
-              <Button variant="accent">Empezar →</Button>
+            <Link href={`/${DEMO_SLUG}`}>
+              <Button variant="accent">Ver demo →</Button>
             </Link>
-            <Button variant="default">Ver demo</Button>
+            <a href="mailto:hola@fixtura.cl">
+              <Button variant="default">Contactar ventas</Button>
+            </a>
           </div>
         </div>
 
@@ -55,7 +64,6 @@ export default function HomePage(): React.ReactElement {
         </div>
       </section>
 
-      {/* Tres bloques */}
       <section className="bg-chalk border-y border-line">
         <div className="max-w-6xl mx-auto px-6 py-16 grid md:grid-cols-3 gap-6">
           <Card>
@@ -91,7 +99,20 @@ export default function HomePage(): React.ReactElement {
         </div>
       </section>
 
-      {/* Footer */}
+      <section className="max-w-6xl mx-auto px-6 py-20 text-center">
+        <div className="eyebrow mb-3 justify-center">→ Probá una liga real</div>
+        <h2 className="font-display text-4xl md:text-5xl text-green-deep tracking-display mb-3">
+          DEMO DE PORTAL PÚBLICO
+        </h2>
+        <p className="font-serif italic text-ink-mute mb-8 max-w-2xl mx-auto">
+          Sin loguearte. Ve cómo verían tus hinchas el fixture, la tabla, los goleadores y los
+          resultados de tu liga.
+        </p>
+        <Link href={`/${DEMO_SLUG}`}>
+          <Button variant="dark">Entrar al portal de Liga Demo →</Button>
+        </Link>
+      </section>
+
       <footer className="bg-green-deep text-chalk">
         <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col md:flex-row items-center justify-between gap-4">
           <FixturaLockup inverse />

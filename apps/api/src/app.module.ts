@@ -11,6 +11,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { TenantContextInterceptor } from './common/interceptors/tenant-context.interceptor';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { PublicModule } from './modules/public/public.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -48,6 +49,7 @@ import { UsersModule } from './modules/users/users.module';
     AuthModule,
     TenantsModule,
     UsersModule,
+    PublicModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
