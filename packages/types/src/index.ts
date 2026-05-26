@@ -9,3 +9,5 @@ export * from './partidos-admin';
 export * from './sanciones';
 export * from './personal';
 export * from './designaciones';
+export * from './actas-global';
+export * from './jugadores-global';

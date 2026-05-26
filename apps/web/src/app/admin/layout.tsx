@@ -48,7 +48,7 @@ const NAV: NavSection[] = [
     items: [
       { href: '/admin/torneos', label: 'Torneos & fixture', icon: Trophy },
       { href: '/admin/designaciones', label: 'Designaciones', icon: Activity },
-      { href: '/admin/actas', label: 'Actas & resultados', icon: ClipboardList, comingSoon: true },
+      { href: '/admin/actas', label: 'Actas & resultados', icon: ClipboardList },
       { href: '/admin/tribunal', label: 'Tribunal', icon: Gavel },
     ],
   },
@@ -63,7 +63,7 @@ const NAV: NavSection[] = [
   {
     title: 'Comunidad',
     items: [
-      { href: '/admin/jugadores', label: 'Jugadores & ranking', icon: Users, comingSoon: true },
+      { href: '/admin/jugadores', label: 'Jugadores & ranking', icon: Users },
       { href: '/admin/sponsors', label: 'Sponsors & banners', icon: Megaphone, comingSoon: true },
     ],
   },

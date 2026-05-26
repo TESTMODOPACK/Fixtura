@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
+  ActaResumen,
   AsignarDesignacionRequest,
   BulkCreateJugadoresRequest,
   CerrarActaRequest,
+  JugadorGlobal,
   CreateEquipoRequest,
   CreateIncidenciaRequest,
   CreateJugadorRequest,
@@ -438,5 +440,47 @@ export function useRemoveDesignacion(invalidate: { torneoId?: string; fechaId?: 
         qc.invalidateQueries({ queryKey: ['admin', 'partidos', invalidate.partidoId, 'designaciones'] });
       }
     },
+  });
+}
+
+// ─── Actas global (cross-torneo) ──────────────────────────────────────
+export function useActasGlobal(filters: {
+  torneoId?: string;
+  fechaId?: string;
+  estado?: string;
+  filtro?: 'todas' | 'pendientes' | 'cerradas';
+}) {
+  const qs = new URLSearchParams();
+  if (filters.torneoId) qs.set('torneoId', filters.torneoId);
+  if (filters.fechaId) qs.set('fechaId', filters.fechaId);
+  if (filters.estado) qs.set('estado', filters.estado);
+  if (filters.filtro) qs.set('filtro', filters.filtro);
+  const query = qs.toString();
+
+  return useQuery({
+    queryKey: ['admin', 'actas-global', filters],
+    queryFn: () =>
+      apiFetch<ActaResumen[]>(`/admin/actas${query ? `?${query}` : ''}`),
+  });
+}
+
+// ─── Jugadores global (cross-torneo) ──────────────────────────────────
+export function useJugadoresGlobal(filters: {
+  search?: string;
+  torneoId?: string;
+  equipoId?: string;
+  estado?: 'activos' | 'todos';
+}) {
+  const qs = new URLSearchParams();
+  if (filters.search) qs.set('search', filters.search);
+  if (filters.torneoId) qs.set('torneoId', filters.torneoId);
+  if (filters.equipoId) qs.set('equipoId', filters.equipoId);
+  if (filters.estado) qs.set('estado', filters.estado);
+  const query = qs.toString();
+
+  return useQuery({
+    queryKey: ['admin', 'jugadores-global', filters],
+    queryFn: () =>
+      apiFetch<JugadorGlobal[]>(`/admin/jugadores${query ? `?${query}` : ''}`),
   });
 }
