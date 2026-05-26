@@ -4,3 +4,4 @@ export * from './tenants';
 export * from './users';
 export * from './pagination';
 export * from './public';
+export * from './admin';

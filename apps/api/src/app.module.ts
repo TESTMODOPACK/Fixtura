@@ -9,6 +9,7 @@ import { DatabaseModule } from './database/database.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TenantContextInterceptor } from './common/interceptors/tenant-context.interceptor';
+import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CompetitionModule } from './modules/competition/competition.module';
 import { HealthModule } from './modules/health/health.module';
@@ -52,6 +53,7 @@ import { UsersModule } from './modules/users/users.module';
     UsersModule,
     CompetitionModule,
     PublicModule,
+    AdminModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
