@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 
 import type {
+  FilaTabla,
   FixturePublico,
-  LigaPublica,
   PartidoPublico,
   Ranking,
   RankingItem,
@@ -11,262 +13,347 @@ import type {
   TorneoPublico,
 } from '@fixtura/types';
 
+import { Equipo } from '../competition/entities/equipo.entity';
+import { Fecha } from '../competition/entities/fecha.entity';
+import { IncidenciaPartido } from '../competition/entities/incidencia-partido.entity';
+import { Partido } from '../competition/entities/partido.entity';
+import { Torneo } from '../competition/entities/torneo.entity';
+
 /**
- * Servicio MOCK del portal público.
+ * Servicio del portal público. Lee directamente de la DB — sin mocks.
  *
- * Devuelve data plausible para una liga "Liga Demo" con un torneo
- * "Apertura 2026" (8 equipos, fechas 1–4 jugadas, fecha 5 próxima).
- * Esto permite construir y deployar el portal antes de tener las
- * tablas de torneos/partidos en la DB.
- *
- * Cuando lleguen las migraciones del Sprint 2 (torneos, equipos,
- * partidos, incidencias), reemplazamos cada método por queries reales
- * y mantenemos los contratos (DTOs) intactos.
+ * El tenant context ya viene seteado por TenantContextInterceptor cuando
+ * el request llega. RLS filtra los resultados al tenant correcto
+ * automáticamente.
  */
 @Injectable()
 export class PublicService {
-  private readonly LIGA_DEMO: LigaPublica = {
-    id: '00000000-0000-0000-0000-000000000001',
-    slug: 'liga-demo',
-    nombre: 'Liga Demo',
-    brandingJson: {},
-  };
+  constructor(
+    @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
+    @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
+    @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
+    @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
+    @InjectRepository(IncidenciaPartido)
+    private readonly incidenciaRepo: Repository<IncidenciaPartido>,
+  ) {}
 
-  private readonly TORNEO: TorneoPublico = {
-    id: '00000000-0000-0000-0000-000000000002',
-    nombre: 'Apertura 2026',
-    temporada: '2026',
-    estado: 'ACTIVO',
-    fechaActual: 4,
-    fechasTotales: 14,
-  };
-
-  private readonly EQUIPOS = [
-    { id: 'e1', nombre: 'Halcones FC', slug: 'halcones-fc' },
-    { id: 'e2', nombre: 'Pumas Unidos', slug: 'pumas-unidos' },
-    { id: 'e3', nombre: 'Zorros del Valle', slug: 'zorros-del-valle' },
-    { id: 'e4', nombre: 'Cóndores Sur', slug: 'condores-sur' },
-    { id: 'e5', nombre: 'Estrella Polar', slug: 'estrella-polar' },
-    { id: 'e6', nombre: 'Rayo Andino', slug: 'rayo-andino' },
-    { id: 'e7', nombre: 'Trueno FC', slug: 'trueno-fc' },
-    { id: 'e8', nombre: 'Lobos Negros', slug: 'lobos-negros' },
-  ];
-
-  private getLigaOrFail(slug: string): LigaPublica {
-    if (slug !== this.LIGA_DEMO.slug) {
-      throw new NotFoundException(`Liga "${slug}" no encontrada`);
-    }
-    return this.LIGA_DEMO;
-  }
-
-  // ─── Resumen (home pública) ────────────────────────────────────────
+  // ─── Resumen home pública ────────────────────────────────────────
   async getResumen(slug: string): Promise<ResumenLiga> {
-    const liga = this.getLigaOrFail(slug);
+    const torneo = await this.findTorneoActivo(slug);
+    const liga = torneo.tenant!;
+
+    if (!torneo) {
+      return {
+        liga: this.toLigaPublica(liga),
+        torneoActivo: null,
+        proximaFecha: null,
+        resultadosRecientes: [],
+        topGoleadores: [],
+      };
+    }
+
+    const torneoDto = await this.buildTorneoPublico(torneo);
+    const proximaFechaData = await this.getProximaFecha(torneo.id);
+    const resultadosRecientes = await this.getResultadosRecientes(torneo.id, 4);
+    const topGoleadores = (await this.computeRanking(torneo.id, 'GOLEADORES')).slice(0, 5);
+
     return {
-      liga,
-      torneoActivo: this.TORNEO,
-      proximaFecha: {
-        numero: 5,
-        etiqueta: 'Fecha 5 · Sábado 30 y Domingo 31 de mayo',
-        partidos: this.mkPartidos(5, 'PROGRAMADO'),
-      },
-      resultadosRecientes: this.mkPartidos(4, 'FINALIZADO').slice(0, 4),
-      topGoleadores: this.mkRankingItems('GOLEADORES').slice(0, 5),
+      liga: this.toLigaPublica(liga),
+      torneoActivo: torneoDto,
+      proximaFecha: proximaFechaData,
+      resultadosRecientes,
+      topGoleadores,
     };
   }
 
   // ─── Tabla de posiciones ──────────────────────────────────────────
   async getTabla(slug: string): Promise<TablaPosiciones> {
-    this.getLigaOrFail(slug);
-    // Datos plausibles, ordenados por pts desc, dg desc, gf desc
-    const datos = [
-      { i: 0, pj: 4, pg: 3, pe: 1, pp: 0, gf: 9, gc: 3 },
-      { i: 1, pj: 4, pg: 3, pe: 0, pp: 1, gf: 8, gc: 4 },
-      { i: 2, pj: 4, pg: 2, pe: 2, pp: 0, gf: 7, gc: 4 },
-      { i: 3, pj: 4, pg: 2, pe: 1, pp: 1, gf: 6, gc: 5 },
-      { i: 4, pj: 4, pg: 1, pe: 2, pp: 1, gf: 5, gc: 5 },
-      { i: 5, pj: 4, pg: 1, pe: 1, pp: 2, gf: 4, gc: 7 },
-      { i: 6, pj: 4, pg: 0, pe: 2, pp: 2, gf: 3, gc: 7 },
-      { i: 7, pj: 4, pg: 0, pe: 1, pp: 3, gf: 2, gc: 9 },
-    ];
+    const torneo = await this.findTorneoActivo(slug);
+    const torneoDto = await this.buildTorneoPublico(torneo);
 
-    const filas = datos.map((d, idx) => {
-      const eq = this.EQUIPOS[d.i]!;
+    const equipos = await this.equipoRepo.find({ where: { torneoId: torneo.id } });
+    const partidos = await this.partidoRepo
+      .createQueryBuilder('p')
+      .innerJoin('p.fecha', 'f')
+      .where('f.torneo_id = :torneoId', { torneoId: torneo.id })
+      .andWhere('p.estado = :estado', { estado: 'FINALIZADO' })
+      .getMany();
+
+    // Calcular stats por equipo en JS — simple y suficiente para volúmenes
+    // de torneo amateur (8-20 equipos × 14-28 partidos). Para escala mayor
+    // se mueve a una vista materializada.
+    const stats = new Map<string, { pj: number; pg: number; pe: number; pp: number; gf: number; gc: number }>();
+    for (const eq of equipos) {
+      stats.set(eq.id, { pj: 0, pg: 0, pe: 0, pp: 0, gf: 0, gc: 0 });
+    }
+
+    for (const p of partidos) {
+      const gl = p.golesLocal ?? 0;
+      const gv = p.golesVisita ?? 0;
+      const sL = stats.get(p.equipoLocalId);
+      const sV = stats.get(p.equipoVisitaId);
+      if (!sL || !sV) continue;
+      sL.pj++;
+      sV.pj++;
+      sL.gf += gl;
+      sL.gc += gv;
+      sV.gf += gv;
+      sV.gc += gl;
+      if (gl > gv) {
+        sL.pg++;
+        sV.pp++;
+      } else if (gl < gv) {
+        sV.pg++;
+        sL.pp++;
+      } else {
+        sL.pe++;
+        sV.pe++;
+      }
+    }
+
+    const filasSinOrdenar: FilaTabla[] = equipos.map((eq) => {
+      const s = stats.get(eq.id)!;
       return {
-        posicion: idx + 1,
+        posicion: 0,
         equipoId: eq.id,
         equipoNombre: eq.nombre,
         equipoSlug: eq.slug,
-        escudoUrl: null,
-        pj: d.pj,
-        pg: d.pg,
-        pe: d.pe,
-        pp: d.pp,
-        gf: d.gf,
-        gc: d.gc,
-        dg: d.gf - d.gc,
-        pts: d.pg * 3 + d.pe,
+        escudoUrl: eq.escudoUrl,
+        pj: s.pj,
+        pg: s.pg,
+        pe: s.pe,
+        pp: s.pp,
+        gf: s.gf,
+        gc: s.gc,
+        dg: s.gf - s.gc,
+        pts: s.pg * torneo.puntosVictoria + s.pe * torneo.puntosEmpate + s.pp * torneo.puntosDerrota,
       };
     });
 
+    filasSinOrdenar.sort((a, b) => {
+      if (b.pts !== a.pts) return b.pts - a.pts;
+      if (b.dg !== a.dg) return b.dg - a.dg;
+      if (b.gf !== a.gf) return b.gf - a.gf;
+      return a.equipoNombre.localeCompare(b.equipoNombre);
+    });
+
+    const filas = filasSinOrdenar.map((f, idx) => ({ ...f, posicion: idx + 1 }));
+
     return {
-      torneo: this.TORNEO,
+      torneo: torneoDto,
       filas,
       actualizadaAt: new Date().toISOString(),
     };
   }
 
-  // ─── Fixture completo ─────────────────────────────────────────────
+  // ─── Fixture ──────────────────────────────────────────────────────
   async getFixture(slug: string): Promise<FixturePublico> {
-    this.getLigaOrFail(slug);
-    const fechas = [];
-    for (let n = 1; n <= 7; n++) {
-      const estado: PartidoPublico['estado'] = n <= 4 ? 'FINALIZADO' : 'PROGRAMADO';
-      fechas.push({
-        numero: n,
-        etiqueta: `Fecha ${n}`,
-        partidos: this.mkPartidos(n, estado),
-      });
+    const torneo = await this.findTorneoActivo(slug);
+    const torneoDto = await this.buildTorneoPublico(torneo);
+
+    const fechas = await this.fechaRepo.find({
+      where: { torneoId: torneo.id },
+      order: { numero: 'ASC' },
+    });
+
+    const fechaIds = fechas.map((f) => f.id);
+    const partidos = fechaIds.length
+      ? await this.partidoRepo.find({
+          where: fechaIds.map((id) => ({ fechaId: id })),
+          relations: { equipoLocal: true, equipoVisita: true, fecha: true },
+          order: { fechaHora: 'ASC' },
+        })
+      : [];
+
+    const partidosPorFecha = new Map<string, Partido[]>();
+    for (const p of partidos) {
+      const arr = partidosPorFecha.get(p.fechaId) ?? [];
+      arr.push(p);
+      partidosPorFecha.set(p.fechaId, arr);
     }
-    return { torneo: this.TORNEO, fechas };
+
+    return {
+      torneo: torneoDto,
+      fechas: fechas.map((f) => ({
+        numero: f.numero,
+        etiqueta: f.etiqueta ?? `Fecha ${f.numero}`,
+        partidos: (partidosPorFecha.get(f.id) ?? []).map((p) => this.toPartidoPublico(p, f.numero)),
+      })),
+    };
   }
 
   // ─── Rankings ─────────────────────────────────────────────────────
   async getRanking(slug: string, tipo: Ranking['tipo']): Promise<Ranking> {
-    this.getLigaOrFail(slug);
-    return {
-      torneo: this.TORNEO,
-      tipo,
-      items: this.mkRankingItems(tipo),
+    const torneo = await this.findTorneoActivo(slug);
+    const torneoDto = await this.buildTorneoPublico(torneo);
+    const items = await this.computeRanking(torneo.id, tipo);
+    return { torneo: torneoDto, tipo, items };
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Busca el torneo "activo" más reciente del tenant. Si no hay torneo
+   * con estado ACTIVO, devuelve el último creado (incluso DRAFT).
+   * Esto permite que el portal muestre algo siempre que haya al menos
+   * un torneo en la DB.
+   */
+  private async findTorneoActivo(slug: string): Promise<Torneo & { tenant: { id: string; slug: string; nombre: string; brandingJson: Record<string, unknown> } }> {
+    // Buscar tenant primero
+    const torneo = await this.torneoRepo
+      .createQueryBuilder('t')
+      .innerJoinAndSelect('t.tenant', 'tenant')
+      .where('tenant.slug = :slug', { slug })
+      .orderBy(`CASE WHEN t.estado = 'ACTIVO' THEN 0 WHEN t.estado = 'DRAFT' THEN 1 ELSE 2 END`)
+      .addOrderBy('t.created_at', 'DESC')
+      .getOne();
+
+    if (!torneo) {
+      throw new NotFoundException(`Liga "${slug}" no tiene torneos creados aún`);
+    }
+    return torneo as Torneo & {
+      tenant: { id: string; slug: string; nombre: string; brandingJson: Record<string, unknown> };
     };
   }
 
-  // ─── Helpers de mock ──────────────────────────────────────────────
-  private mkPartidos(fechaNumero: number, estado: PartidoPublico['estado']): PartidoPublico[] {
-    // Round Robin: en cada fecha N, equipo 0 vs N, después rotación.
-    // Como esto es solo demo, generamos 4 partidos por fecha con pairs fijos por fecha.
-    const pairings: Array<[number, number]>[] = [
-      // fecha 1
-      [
-        [0, 7],
-        [1, 6],
-        [2, 5],
-        [3, 4],
-      ],
-      // fecha 2
-      [
-        [0, 6],
-        [7, 5],
-        [1, 4],
-        [2, 3],
-      ],
-      // fecha 3
-      [
-        [0, 5],
-        [6, 4],
-        [7, 3],
-        [1, 2],
-      ],
-      // fecha 4
-      [
-        [0, 4],
-        [5, 3],
-        [6, 2],
-        [7, 1],
-      ],
-      // fecha 5
-      [
-        [0, 3],
-        [4, 2],
-        [5, 1],
-        [6, 7],
-      ],
-      // fecha 6
-      [
-        [0, 2],
-        [3, 1],
-        [4, 7],
-        [5, 6],
-      ],
-      // fecha 7
-      [
-        [0, 1],
-        [2, 7],
-        [3, 6],
-        [4, 5],
-      ],
-    ];
-    const pairs = pairings[fechaNumero - 1] ?? pairings[0]!;
+  private async buildTorneoPublico(torneo: Torneo): Promise<TorneoPublico> {
+    const fechas = await this.fechaRepo.find({ where: { torneoId: torneo.id } });
+    const fechasFinalizadas = fechas.filter((f) => f.estado === 'FINALIZADA').length;
 
-    // Hora plausible
-    const baseDate = new Date(2026, 4, 9 + (fechaNumero - 1) * 7); // mayo
-    const horarios = ['10:00', '12:00', '14:00', '16:00'];
-
-    return pairs.map(([localIdx, visitaIdx], i) => {
-      const local = this.EQUIPOS[localIdx]!;
-      const visita = this.EQUIPOS[visitaIdx]!;
-      const fechaHora = new Date(baseDate);
-      const [h, m] = horarios[i]!.split(':').map(Number);
-      fechaHora.setHours(h!, m!, 0, 0);
-
-      const golesLocal = estado === 'FINALIZADO' ? ((localIdx + i) % 4) : null;
-      const golesVisita = estado === 'FINALIZADO' ? ((visitaIdx + i + 1) % 3) : null;
-
-      return {
-        id: `partido-${fechaNumero}-${i}`,
-        fechaNumero,
-        fechaHora: fechaHora.toISOString(),
-        estado,
-        local: {
-          equipoId: local.id,
-          nombre: local.nombre,
-          slug: local.slug,
-          escudoUrl: null,
-          goles: golesLocal,
-        },
-        visita: {
-          equipoId: visita.id,
-          nombre: visita.nombre,
-          slug: visita.slug,
-          escudoUrl: null,
-          goles: golesVisita,
-        },
-        canchaNombre: `Cancha ${i + 1}`,
-      };
-    });
+    return {
+      id: torneo.id,
+      nombre: torneo.nombre,
+      temporada: String(new Date(torneo.createdAt).getFullYear()),
+      estado: torneo.estado,
+      fechaActual: fechasFinalizadas,
+      fechasTotales: fechas.length,
+    };
   }
 
-  private mkRankingItems(tipo: Ranking['tipo']): RankingItem[] {
-    const jugadores = [
-      { nombre: 'Carlos Pérez', club: 0, valores: { GOLEADORES: 7, ASISTENCIAS: 3, MVP: 2, FAIR_PLAY: 12 } },
-      { nombre: 'Diego López', club: 1, valores: { GOLEADORES: 6, ASISTENCIAS: 5, MVP: 3, FAIR_PLAY: 11 } },
-      { nombre: 'Matías Soto', club: 2, valores: { GOLEADORES: 5, ASISTENCIAS: 2, MVP: 1, FAIR_PLAY: 10 } },
-      { nombre: 'Juan Méndez', club: 3, valores: { GOLEADORES: 5, ASISTENCIAS: 4, MVP: 2, FAIR_PLAY: 9 } },
-      { nombre: 'Pablo Rojas', club: 4, valores: { GOLEADORES: 4, ASISTENCIAS: 6, MVP: 0, FAIR_PLAY: 8 } },
-      { nombre: 'Andrés Vega', club: 5, valores: { GOLEADORES: 4, ASISTENCIAS: 3, MVP: 1, FAIR_PLAY: 7 } },
-      { nombre: 'Felipe Castro', club: 6, valores: { GOLEADORES: 3, ASISTENCIAS: 2, MVP: 0, FAIR_PLAY: 6 } },
-      { nombre: 'Sebastián Núñez', club: 7, valores: { GOLEADORES: 3, ASISTENCIAS: 4, MVP: 2, FAIR_PLAY: 5 } },
-    ];
+  private async getProximaFecha(
+    torneoId: string,
+  ): Promise<ResumenLiga['proximaFecha']> {
+    const fecha = await this.fechaRepo
+      .createQueryBuilder('f')
+      .where('f.torneo_id = :torneoId', { torneoId })
+      .andWhere(`f.estado IN ('PROGRAMADA', 'EN_CURSO')`)
+      .orderBy('f.numero', 'ASC')
+      .getOne();
 
-    return jugadores
-      .map((j, idx) => ({
-        jugadorIdx: idx,
-        jugador: j,
-        valor: j.valores[tipo],
-      }))
-      .sort((a, b) => b.valor - a.valor)
-      .map((it, posicion) => {
-        const eq = this.EQUIPOS[it.jugador.club]!;
-        return {
-          posicion: posicion + 1,
-          jugadorId: `jugador-${it.jugadorIdx}`,
-          jugadorNombre: it.jugador.nombre,
-          jugadorSlug: it.jugador.nombre.toLowerCase().replace(/\s+/g, '-'),
-          fotoUrl: null,
-          equipoNombre: eq.nombre,
-          equipoSlug: eq.slug,
-          valor: it.valor,
-        };
-      });
+    if (!fecha) return null;
+
+    const partidos = await this.partidoRepo.find({
+      where: { fechaId: fecha.id },
+      relations: { equipoLocal: true, equipoVisita: true },
+      order: { fechaHora: 'ASC' },
+    });
+
+    return {
+      numero: fecha.numero,
+      etiqueta: fecha.etiqueta ?? `Fecha ${fecha.numero}`,
+      partidos: partidos.map((p) => this.toPartidoPublico(p, fecha.numero)),
+    };
+  }
+
+  private async getResultadosRecientes(torneoId: string, limit: number): Promise<PartidoPublico[]> {
+    const partidos = await this.partidoRepo
+      .createQueryBuilder('p')
+      .innerJoinAndSelect('p.fecha', 'f')
+      .innerJoinAndSelect('p.equipoLocal', 'eL')
+      .innerJoinAndSelect('p.equipoVisita', 'eV')
+      .where('f.torneo_id = :torneoId', { torneoId })
+      .andWhere('p.estado = :estado', { estado: 'FINALIZADO' })
+      .orderBy('p.fecha_hora', 'DESC')
+      .limit(limit)
+      .getMany();
+
+    return partidos.map((p) => this.toPartidoPublico(p, p.fecha!.numero));
+  }
+
+  private toPartidoPublico(p: Partido, fechaNumero: number): PartidoPublico {
+    return {
+      id: p.id,
+      fechaNumero,
+      fechaHora: (p.fechaHora ?? new Date()).toISOString(),
+      estado: p.estado,
+      local: {
+        equipoId: p.equipoLocalId,
+        nombre: p.equipoLocal?.nombre ?? '',
+        slug: p.equipoLocal?.slug ?? '',
+        escudoUrl: p.equipoLocal?.escudoUrl ?? null,
+        goles: p.golesLocal,
+      },
+      visita: {
+        equipoId: p.equipoVisitaId,
+        nombre: p.equipoVisita?.nombre ?? '',
+        slug: p.equipoVisita?.slug ?? '',
+        escudoUrl: p.equipoVisita?.escudoUrl ?? null,
+        goles: p.golesVisita,
+      },
+      canchaNombre: p.canchaNombre,
+    };
+  }
+
+  private toLigaPublica(t: {
+    id: string;
+    slug: string;
+    nombre: string;
+    brandingJson: Record<string, unknown>;
+  }): ResumenLiga['liga'] {
+    return {
+      id: t.id,
+      slug: t.slug,
+      nombre: t.nombre,
+      brandingJson: t.brandingJson ?? {},
+    };
+  }
+
+  /**
+   * Computa ranking de jugadores por tipo. Hace SQL crudo porque la
+   * agrupación con joins múltiples es más eficiente que el query builder.
+   */
+  private async computeRanking(torneoId: string, tipo: Ranking['tipo']): Promise<RankingItem[]> {
+    const tipoIncidencia = tipo === 'MVP' ? 'MVP' : tipo === 'ASISTENCIAS' ? 'ASISTENCIA' : 'GOL';
+
+    // Para FAIR_PLAY más adelante: contar AMARILLA + ROJA × 3 invertido.
+    // Para ahora solo soportamos GOLEADORES / ASISTENCIAS / MVP.
+    const rows = (await this.incidenciaRepo
+      .createQueryBuilder('i')
+      .select('i.jugador_inscrito_id', 'jugadorId')
+      .addSelect('j.nombre', 'nombre')
+      .addSelect('j.apellido', 'apellido')
+      .addSelect('e.nombre', 'equipoNombre')
+      .addSelect('e.slug', 'equipoSlug')
+      .addSelect('COUNT(*)::int', 'valor')
+      .innerJoin('jugadores_inscritos', 'j', 'j.id = i.jugador_inscrito_id')
+      .innerJoin('equipos', 'e', 'e.id = j.equipo_id')
+      .innerJoin('partidos', 'p', 'p.id = i.partido_id')
+      .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
+      .where('f.torneo_id = :torneoId', { torneoId })
+      .andWhere('i.tipo = :tipo', { tipo: tipoIncidencia })
+      .andWhere('i.jugador_inscrito_id IS NOT NULL')
+      .groupBy('i.jugador_inscrito_id, j.nombre, j.apellido, e.nombre, e.slug')
+      .orderBy('valor', 'DESC')
+      .addOrderBy('j.apellido', 'ASC')
+      .limit(50)
+      .getRawMany()) as Array<{
+      jugadorId: string;
+      nombre: string;
+      apellido: string;
+      equipoNombre: string;
+      equipoSlug: string;
+      valor: number;
+    }>;
+
+    return rows.map((r, idx) => ({
+      posicion: idx + 1,
+      jugadorId: r.jugadorId,
+      jugadorNombre: `${r.nombre} ${r.apellido}`,
+      jugadorSlug: `${r.nombre}-${r.apellido}`.toLowerCase().replace(/\s+/g, '-'),
+      fotoUrl: null,
+      equipoNombre: r.equipoNombre,
+      equipoSlug: r.equipoSlug,
+      valor: r.valor,
+    }));
   }
 }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { CompetitionModule } from '../competition/competition.module';
 import { TenantsModule } from '../tenants/tenants.module';
 import { PublicController } from './public.controller';
 import { PublicService } from './public.service';
@@ -14,7 +15,7 @@ import { PublicService } from './public.service';
  * mocks por queries reales.
  */
 @Module({
-  imports: [TenantsModule],
+  imports: [TenantsModule, CompetitionModule],
   controllers: [PublicController],
   providers: [PublicService],
 })

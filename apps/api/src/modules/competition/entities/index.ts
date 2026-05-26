@@ -1,0 +1,16 @@
+export { Equipo } from './equipo.entity';
+export type { EstadoEquipo } from './equipo.entity';
+export { Fecha } from './fecha.entity';
+export type { EstadoFecha } from './fecha.entity';
+export { IncidenciaPartido } from './incidencia-partido.entity';
+export type { TipoIncidencia } from './incidencia-partido.entity';
+export { JugadorInscrito } from './jugador-inscrito.entity';
+export type { PieHabil } from './jugador-inscrito.entity';
+export { Partido } from './partido.entity';
+export type { EstadoPartido } from './partido.entity';
+export { SancionActiva } from './sancion-activa.entity';
+export type { MotivoSancion } from './sancion-activa.entity';
+export { Serie } from './serie.entity';
+export { Temporada } from './temporada.entity';
+export { Torneo } from './torneo.entity';
+export type { EstadoTorneo, TipoFormato } from './torneo.entity';

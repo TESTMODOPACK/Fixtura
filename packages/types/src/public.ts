@@ -48,7 +48,14 @@ export const TablaPosicionesSchema = z.object({
 });
 export type TablaPosiciones = z.infer<typeof TablaPosicionesSchema>;
 
-export const ESTADO_PARTIDO = ['PROGRAMADO', 'EN_CURSO', 'FINALIZADO', 'SUSPENDIDO', 'WALKOVER'] as const;
+export const ESTADO_PARTIDO = [
+  'PROGRAMADO',
+  'EN_CURSO',
+  'FINALIZADO',
+  'SUSPENDIDO_FUERZA_MAYOR',
+  'REPROGRAMADO',
+  'WALKOVER',
+] as const;
 export type EstadoPartido = (typeof ESTADO_PARTIDO)[number];
 
 export const PartidoPublicoSchema = z.object({
