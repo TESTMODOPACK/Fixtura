@@ -1,0 +1,514 @@
+'use client';
+
+import { zodResolver } from '@hookform/resolvers/zod';
+import {
+  ArrowLeft,
+  Calendar,
+  Flag,
+  Lock,
+  MapPin,
+  Save,
+  Trash2,
+  Unlock,
+} from 'lucide-react';
+import Link from 'next/link';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+
+import type { TipoIncidencia } from '@fixtura/types';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardLabel } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { PageHead } from '@/components/ui/page-head';
+import {
+  useAddIncidencia,
+  useCerrarActa,
+  useJugadores,
+  usePartido,
+  useReabrirActa,
+  useRemoveIncidencia,
+  useUpdatePartido,
+} from '@/hooks/use-admin';
+import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
+
+export default function PartidoDetallePage({
+  params,
+}: {
+  params: { id: string; partidoId: string };
+}): React.ReactElement {
+  const { id: torneoId, partidoId } = params;
+  const { data: partido, isLoading } = usePartido(partidoId);
+
+  if (isLoading) return <div className="font-serif italic text-ink-mute">Cargando...</div>;
+  if (!partido) {
+    return (
+      <Card padding="roomy">
+        <div className="font-display text-2xl text-green-deep tracking-display mb-2">
+          PARTIDO NO ENCONTRADO
+        </div>
+        <Link href={`/admin/torneos/${torneoId}/fixture`}>
+          <Button variant="default" size="sm">
+            <ArrowLeft size={14} /> Volver al fixture
+          </Button>
+        </Link>
+      </Card>
+    );
+  }
+
+  const cerrada = !!partido.actaCerradaAt;
+
+  return (
+    <>
+      <PageHead
+        eyebrow={`Fecha ${partido.fechaNumero}`}
+        title={`${partido.equipoLocalNombre}  vs  ${partido.equipoVisitaNombre}`}
+        sub={partido.fechaEtiqueta ?? `Fecha ${partido.fechaNumero}`}
+      >
+        <Link href={`/admin/torneos/${torneoId}/fixture`}>
+          <Button variant="default" size="sm">
+            <ArrowLeft size={14} /> Fixture
+          </Button>
+        </Link>
+      </PageHead>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+        <Card padding="comfortable" className="lg:col-span-2">
+          <CardLabel>Marcador</CardLabel>
+          <div className="grid grid-cols-3 gap-4 items-center text-center mt-4">
+            <div>
+              <div className="font-serif italic text-ink-mute text-sm mb-1">Local</div>
+              <div className="font-semibold text-lg truncate">{partido.equipoLocalNombre}</div>
+              <div className="font-display text-6xl text-green-deep tracking-display mt-2">
+                {partido.golesLocal ?? '—'}
+              </div>
+            </div>
+            <div className="font-display text-3xl text-ink-mute tracking-display">VS</div>
+            <div>
+              <div className="font-serif italic text-ink-mute text-sm mb-1">Visita</div>
+              <div className="font-semibold text-lg truncate">{partido.equipoVisitaNombre}</div>
+              <div className="font-display text-6xl text-green-deep tracking-display mt-2">
+                {partido.golesVisita ?? '—'}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 mt-6 text-sm">
+            <div className="flex items-center gap-2 text-ink-mute">
+              <Calendar size={14} />
+              {partido.fechaHora
+                ? new Date(partido.fechaHora).toLocaleString('es-CL', {
+                    day: '2-digit',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : 'Sin horario'}
+            </div>
+            <div className="flex items-center gap-2 text-ink-mute">
+              <MapPin size={14} />
+              {partido.canchaNombre ?? 'Sin cancha'}
+            </div>
+            <div className="flex items-center gap-2 text-ink-mute">
+              {cerrada ? (
+                <>
+                  <Lock size={14} className="text-green-bright" /> Acta cerrada
+                </>
+              ) : (
+                <>
+                  <Unlock size={14} /> {partido.estado.replace('_', ' ').toLowerCase()}
+                </>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        <ActaSection partido={partido} torneoId={torneoId} />
+      </div>
+
+      <EditarPartidoCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
+
+      {!cerrada && <IncidenciasSection partido={partido} />}
+
+      <IncidenciasList partido={partido} cerrada={cerrada} />
+    </>
+  );
+}
+
+// ─── Acta (cerrar / reabrir) ────────────────────────────────────────
+function ActaSection({
+  partido,
+  torneoId,
+}: {
+  partido: { id: string; golesLocal: number | null; golesVisita: number | null; actaCerradaAt: string | null };
+  torneoId: string;
+}): React.ReactElement {
+  const cerrarActa = useCerrarActa(partido.id, torneoId);
+  const reabrirActa = useReabrirActa(partido.id, torneoId);
+
+  const ActaSchema = z.object({
+    golesLocal: z.coerce.number().int().min(0).max(99),
+    golesVisita: z.coerce.number().int().min(0).max(99),
+  });
+  type ActaForm = z.infer<typeof ActaSchema>;
+
+  const form = useForm<ActaForm>({
+    resolver: zodResolver(ActaSchema),
+    defaultValues: { golesLocal: partido.golesLocal ?? 0, golesVisita: partido.golesVisita ?? 0 },
+  });
+
+  const cerrada = !!partido.actaCerradaAt;
+  const error = (cerrarActa.error ?? reabrirActa.error) as ApiError | undefined;
+
+  if (cerrada) {
+    return (
+      <Card variant="lime" padding="comfortable">
+        <CardLabel tone="mute">Acta</CardLabel>
+        <div className="font-display text-2xl text-green-deep tracking-display mb-2">CERRADA</div>
+        <p className="text-sm text-green-deep/85 font-serif italic mb-4">
+          Cerrada el{' '}
+          {new Date(partido.actaCerradaAt!).toLocaleString('es-CL', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+          . La tabla y los rankings ya reflejan este resultado.
+        </p>
+        <Button
+          variant="default"
+          size="sm"
+          onClick={() => reabrirActa.mutate()}
+          loading={reabrirActa.isPending}
+        >
+          <Unlock size={14} /> Reabrir
+        </Button>
+        {error && <p className="text-sm text-danger mt-2">{error.message}</p>}
+      </Card>
+    );
+  }
+
+  return (
+    <Card padding="comfortable">
+      <CardLabel>Cerrar acta</CardLabel>
+      <form
+        onSubmit={form.handleSubmit((vals) => cerrarActa.mutate(vals))}
+        className="space-y-3 mt-3"
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <Input
+            label="Goles local"
+            type="number"
+            min={0}
+            max={99}
+            {...form.register('golesLocal', { valueAsNumber: true })}
+            error={form.formState.errors.golesLocal?.message}
+          />
+          <Input
+            label="Goles visita"
+            type="number"
+            min={0}
+            max={99}
+            {...form.register('golesVisita', { valueAsNumber: true })}
+            error={form.formState.errors.golesVisita?.message}
+          />
+        </div>
+        <Button type="submit" variant="accent" loading={cerrarActa.isPending} className="w-full">
+          <Lock size={14} /> Cerrar acta
+        </Button>
+        {error && (
+          <p className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">{error.message}</p>
+        )}
+      </form>
+    </Card>
+  );
+}
+
+// ─── Editar partido (cancha, horario, estado, walkover) ─────────────
+function EditarPartidoCard({
+  partido,
+  torneoId,
+  cerrada,
+}: {
+  partido: { id: string; canchaNombre: string | null; fechaHora: string | null; estado: string };
+  torneoId: string;
+  cerrada: boolean;
+}): React.ReactElement {
+  const mutation = useUpdatePartido(partido.id, torneoId);
+
+  const Schema = z.object({
+    canchaNombre: z.string().max(100).nullable(),
+    fechaHora: z.string().min(1, 'Requerida').nullable(),
+    estado: z.enum([
+      'PROGRAMADO',
+      'EN_CURSO',
+      'FINALIZADO',
+      'SUSPENDIDO_FUERZA_MAYOR',
+      'REPROGRAMADO',
+      'WALKOVER',
+    ]),
+  });
+  type Form = z.infer<typeof Schema>;
+
+  const form = useForm<Form>({
+    resolver: zodResolver(Schema),
+    defaultValues: {
+      canchaNombre: partido.canchaNombre,
+      fechaHora: partido.fechaHora ? partido.fechaHora.slice(0, 16) : '',
+      estado: partido.estado as Form['estado'],
+    },
+  });
+
+  const error = mutation.error as ApiError | undefined;
+
+  return (
+    <Card padding="comfortable" className="mb-5">
+      <CardLabel>Detalles del partido</CardLabel>
+      <form
+        onSubmit={form.handleSubmit((vals) =>
+          mutation.mutate({
+            canchaNombre: vals.canchaNombre,
+            fechaHora: vals.fechaHora ? new Date(vals.fechaHora).toISOString() : null,
+            estado: vals.estado,
+          }),
+        )}
+        className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3"
+      >
+        <Input
+          label="Cancha"
+          placeholder="Cancha 1"
+          {...form.register('canchaNombre')}
+          disabled={cerrada}
+        />
+        <Input
+          label="Fecha y hora"
+          type="datetime-local"
+          {...form.register('fechaHora')}
+          disabled={cerrada}
+        />
+        <div>
+          <label className="label">Estado</label>
+          <select className="input" {...form.register('estado')} disabled={cerrada}>
+            <option value="PROGRAMADO">Programado</option>
+            <option value="EN_CURSO">En curso</option>
+            <option value="FINALIZADO">Finalizado</option>
+            <option value="SUSPENDIDO_FUERZA_MAYOR">Suspendido (fuerza mayor)</option>
+            <option value="REPROGRAMADO">Reprogramado</option>
+            <option value="WALKOVER">Walkover (3-0)</option>
+          </select>
+        </div>
+
+        <div className="md:col-span-3 flex items-center gap-2">
+          <Button type="submit" variant="accent" size="sm" loading={mutation.isPending} disabled={cerrada}>
+            <Save size={14} /> Guardar
+          </Button>
+          {cerrada && <span className="text-xs text-ink-mute">Reabrí el acta para editar.</span>}
+          {error && <span className="text-xs text-danger">{error.message}</span>}
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+// ─── Cargar incidencias (goles, tarjetas, MVP) ──────────────────────
+function IncidenciasSection({
+  partido,
+}: {
+  partido: {
+    id: string;
+    equipoLocalId: string;
+    equipoLocalNombre: string;
+    equipoVisitaId: string;
+    equipoVisitaNombre: string;
+  };
+}): React.ReactElement {
+  const [equipoSeleccionado, setEquipoSeleccionado] = useState<string>(partido.equipoLocalId);
+  const jugadoresQuery = useJugadores(equipoSeleccionado);
+  const addIncidencia = useAddIncidencia(partido.id);
+  const error = addIncidencia.error as ApiError | undefined;
+
+  const Schema = z.object({
+    jugadorInscritoId: z.string().min(1, 'Elegí un jugador'),
+    tipo: z.enum(['GOL', 'AUTOGOL', 'AMARILLA', 'ROJA', 'AMARILLA_ROJA', 'ASISTENCIA', 'MVP']),
+    minuto: z.coerce.number().int().min(0).max(150).optional(),
+  });
+  type Form = z.infer<typeof Schema>;
+
+  const form = useForm<Form>({
+    resolver: zodResolver(Schema),
+    defaultValues: { jugadorInscritoId: '', tipo: 'GOL', minuto: undefined },
+  });
+
+  const onSubmit = async (vals: Form): Promise<void> => {
+    await addIncidencia.mutateAsync({
+      equipoId: equipoSeleccionado,
+      jugadorInscritoId: vals.jugadorInscritoId,
+      tipo: vals.tipo as TipoIncidencia,
+      minuto: vals.minuto ?? null,
+    });
+    form.reset({ jugadorInscritoId: '', tipo: 'GOL', minuto: undefined });
+  };
+
+  return (
+    <Card padding="comfortable" className="mb-5">
+      <CardLabel>Cargar incidencia</CardLabel>
+
+      <div className="flex gap-2 mt-3 mb-4">
+        <button
+          type="button"
+          onClick={() => setEquipoSeleccionado(partido.equipoLocalId)}
+          className={cn(
+            'flex-1 px-4 py-2 text-sm font-semibold rounded-card border transition-colors',
+            equipoSeleccionado === partido.equipoLocalId
+              ? 'bg-green-deep text-chalk border-green-deep'
+              : 'bg-chalk text-ink-mute border-line hover:border-green-deep',
+          )}
+        >
+          {partido.equipoLocalNombre}
+        </button>
+        <button
+          type="button"
+          onClick={() => setEquipoSeleccionado(partido.equipoVisitaId)}
+          className={cn(
+            'flex-1 px-4 py-2 text-sm font-semibold rounded-card border transition-colors',
+            equipoSeleccionado === partido.equipoVisitaId
+              ? 'bg-green-deep text-chalk border-green-deep'
+              : 'bg-chalk text-ink-mute border-line hover:border-green-deep',
+          )}
+        >
+          {partido.equipoVisitaNombre}
+        </button>
+      </div>
+
+      <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+        <div className="md:col-span-2">
+          <label className="label">Jugador</label>
+          <select className="input" {...form.register('jugadorInscritoId')}>
+            <option value="">— elegí jugador —</option>
+            {jugadoresQuery.data?.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.numeroCamiseta ? `#${j.numeroCamiseta} ` : ''}
+                {j.nombre} {j.apellido}
+                {j.capitan ? ' (C)' : ''}
+              </option>
+            ))}
+          </select>
+          {form.formState.errors.jugadorInscritoId && (
+            <p className="text-xs text-danger mt-1">{form.formState.errors.jugadorInscritoId.message}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="label">Tipo</label>
+          <select className="input" {...form.register('tipo')}>
+            <option value="GOL">⚽ Gol</option>
+            <option value="AUTOGOL">🥲 Autogol</option>
+            <option value="ASISTENCIA">🅰️ Asistencia</option>
+            <option value="AMARILLA">🟨 Amarilla</option>
+            <option value="ROJA">🟥 Roja directa</option>
+            <option value="AMARILLA_ROJA">🟨🟥 Doble amarilla</option>
+            <option value="MVP">🏆 MVP del partido</option>
+          </select>
+        </div>
+
+        <Input
+          label="Minuto"
+          type="number"
+          min={0}
+          max={150}
+          placeholder="Ej. 35"
+          {...form.register('minuto', { valueAsNumber: true })}
+        />
+
+        <div className="md:col-span-4 flex items-center gap-2">
+          <Button type="submit" variant="accent" size="sm" loading={addIncidencia.isPending}>
+            <Flag size={14} /> Agregar
+          </Button>
+          {error && <span className="text-xs text-danger">{error.message}</span>}
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+// ─── Listado de incidencias del partido ─────────────────────────────
+function IncidenciasList({
+  partido,
+  cerrada,
+}: {
+  partido: {
+    id: string;
+    incidencias: Array<{
+      id: string;
+      tipo: string;
+      minuto: number | null;
+      jugadorNombre: string | null;
+      equipoNombre: string;
+    }>;
+  };
+  cerrada: boolean;
+}): React.ReactElement {
+  const remove = useRemoveIncidencia(partido.id);
+
+  const ICONS: Record<string, string> = {
+    GOL: '⚽',
+    AUTOGOL: '🥲',
+    ASISTENCIA: '🅰️',
+    AMARILLA: '🟨',
+    ROJA: '🟥',
+    AMARILLA_ROJA: '🟨🟥',
+    MVP: '🏆',
+    CAMBIO: '🔄',
+    LESION: '🚑',
+  };
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="px-5 py-3 bg-paper-dark border-b border-line">
+        <CardLabel tone="mute">Incidencias del partido</CardLabel>
+        <div className="font-display text-lg text-green-deep tracking-display">
+          {partido.incidencias.length} EVENTOS
+        </div>
+      </div>
+
+      {partido.incidencias.length === 0 && (
+        <div className="p-8 text-center text-sm text-ink-mute font-serif italic">
+          Todavía no hay incidencias cargadas en este partido.
+        </div>
+      )}
+
+      {partido.incidencias.length > 0 && (
+        <div className="divide-y divide-line">
+          {partido.incidencias.map((i) => (
+            <div key={i.id} className="px-5 py-3 flex items-center gap-3">
+              <span className="text-xl w-8 text-center">{ICONS[i.tipo] ?? '•'}</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm truncate">
+                  {i.jugadorNombre ?? 'Sin jugador'}
+                </div>
+                <div className="text-xs text-ink-mute truncate">
+                  {i.tipo.replace('_', ' ')} · {i.equipoNombre}
+                </div>
+              </div>
+              <div className="text-xs font-mono text-ink-mute w-12 text-right">
+                {i.minuto != null ? `${i.minuto}'` : '—'}
+              </div>
+              {!cerrada && (
+                <button
+                  type="button"
+                  onClick={() => remove.mutate(i.id)}
+                  className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
+                  aria-label="Borrar"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}

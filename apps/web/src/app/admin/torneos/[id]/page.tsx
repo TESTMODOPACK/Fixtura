@@ -2,7 +2,9 @@
 
 import {
   ArrowLeft,
+  ArrowRight,
   CalendarRange,
+  Check,
   type LucideIcon,
   Plus,
   Trophy,
@@ -14,7 +16,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
-import { useEquipos, useTorneo } from '@/hooks/use-admin';
+import { ApiError } from '@/lib/api';
+import { useEquipos, useTorneo, useUpdateTorneo } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
 
 import { GenerarFixtureForm } from './_generar-fixture-form';
@@ -90,8 +93,16 @@ export default function TorneoDetailPage({
       </div>
 
       {tab === 'equipos' && <EquiposTab torneoId={id} />}
-      {tab === 'fixture' && <FixtureTab torneoId={id} hasFechas={torneo.fechasCount > 0} hasEquipos={(equipos?.length ?? 0) >= 2} />}
-      {tab === 'configuracion' && <ConfiguracionTab torneoId={id} />}
+      {tab === 'fixture' && (
+        <FixtureTab
+          torneoId={id}
+          hasFechas={torneo.fechasCount > 0}
+          hasEquipos={(equipos?.length ?? 0) >= 2}
+        />
+      )}
+      {tab === 'configuracion' && (
+        <ConfiguracionTab torneoId={id} estado={torneo.estado} fechasCount={torneo.fechasCount} />
+      )}
     </>
   );
 }
@@ -235,20 +246,22 @@ function FixtureTab({
   if (hasFechas) {
     return (
       <Card padding="roomy">
-        <CardLabel>Fixture ya generado</CardLabel>
-        <div className="font-display text-2xl text-green-deep tracking-display mb-2">
-          FIXTURE ACTIVO
-        </div>
-        <p className="font-serif italic text-ink-mute mb-4">
-          El fixture ya está generado. La vista de detalle del fixture (partidos, drag&drop)
-          llega en Sprint 2B.2.
-        </p>
-        <p className="text-sm text-ink-mute">
-          Mientras tanto, podés verlo público en{' '}
-          <Link href="/fixture" className="text-accent hover:underline">
-            /fixture
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <CardLabel>Fixture generado</CardLabel>
+            <div className="font-display text-2xl text-green-deep tracking-display">
+              FIXTURE ACTIVO
+            </div>
+          </div>
+          <Link href={`/admin/torneos/${torneoId}/fixture`}>
+            <Button variant="accent" size="sm">
+              Ver detalle <ArrowRight size={14} />
+            </Button>
           </Link>
-          .
+        </div>
+        <p className="font-serif italic text-ink-mute">
+          El fixture está generado. Entrá al detalle para editar partidos, cargar actas y ver
+          incidencias por fecha.
         </p>
       </Card>
     );
@@ -284,13 +297,86 @@ function FixtureTab({
   );
 }
 
-function ConfiguracionTab({ torneoId: _ }: { torneoId: string }): React.ReactElement {
+function ConfiguracionTab({
+  torneoId,
+  estado,
+  fechasCount,
+}: {
+  torneoId: string;
+  estado: string;
+  fechasCount: number;
+}): React.ReactElement {
+  const mutation = useUpdateTorneo(torneoId);
+  const error = mutation.error as ApiError | undefined;
+
+  const transitions: Record<string, { label: string; next: 'DRAFT' | 'ACTIVO' | 'CERRADO'; disabled?: string }> = {
+    DRAFT: {
+      label: 'Activar torneo',
+      next: 'ACTIVO',
+      disabled:
+        fechasCount === 0
+          ? 'Primero generá el fixture (mínimo 1 fecha)'
+          : undefined,
+    },
+    ACTIVO: { label: 'Cerrar torneo', next: 'CERRADO' },
+    CERRADO: { label: 'Reabrir como ACTIVO', next: 'ACTIVO' },
+  };
+
+  const transition = transitions[estado];
+
   return (
-    <Card padding="roomy">
-      <CardLabel>Configuración</CardLabel>
-      <p className="font-serif italic text-ink-mute">
-        Edición de parámetros del torneo, cambio de estado, archivo, etc. — Sprint 2B.2.
-      </p>
-    </Card>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <Card padding="roomy">
+        <CardLabel>Estado del torneo</CardLabel>
+        <div className="font-display text-3xl text-green-deep tracking-display my-2">{estado}</div>
+        <p className="font-serif italic text-ink-mute text-sm mb-6">
+          {estado === 'DRAFT' &&
+            'En borrador. Solo visible desde el panel admin. Activá el torneo para que aparezca en el portal público.'}
+          {estado === 'ACTIVO' &&
+            'Torneo activo. Visible en el portal público. Los hinchas pueden ver tabla, fixture y rankings.'}
+          {estado === 'CERRADO' &&
+            'Torneo cerrado. No se aceptan nuevas actas. Sigue visible como histórico en el portal.'}
+        </p>
+
+        {transition && (
+          <div className="space-y-2">
+            <Button
+              variant="accent"
+              onClick={() => mutation.mutate({ estado: transition.next })}
+              loading={mutation.isPending}
+              disabled={!!transition.disabled}
+            >
+              <Check size={14} /> {transition.label}
+            </Button>
+            {transition.disabled && (
+              <p className="text-xs text-ink-mute font-serif italic">{transition.disabled}</p>
+            )}
+            {error && (
+              <p className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">{error.message}</p>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <Card variant="lime" padding="roomy">
+        <CardLabel tone="mute">Flujo de estados</CardLabel>
+        <div className="space-y-3 mt-3 text-sm text-green-deep/90">
+          <div className="flex items-start gap-3">
+            <span className="font-display text-lg text-green-deep tracking-display">DRAFT</span>
+            <span className="font-serif italic">Configuración inicial: equipos, plantillas, fixture.</span>
+          </div>
+          <div className="ml-12 text-green-deep">↓</div>
+          <div className="flex items-start gap-3">
+            <span className="font-display text-lg text-green-deep tracking-display">ACTIVO</span>
+            <span className="font-serif italic">El torneo se juega: actas, designaciones, portal público.</span>
+          </div>
+          <div className="ml-12 text-green-deep">↓</div>
+          <div className="flex items-start gap-3">
+            <span className="font-display text-lg text-green-deep tracking-display">CERRADO</span>
+            <span className="font-serif italic">Histórico. Datos congelados para consulta.</span>
+          </div>
+        </div>
+      </Card>
+    </div>
   );
 }

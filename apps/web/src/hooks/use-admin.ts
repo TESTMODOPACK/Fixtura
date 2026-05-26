@@ -1,16 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
+  CerrarActaRequest,
   CreateEquipoRequest,
+  CreateIncidenciaRequest,
   CreateJugadorRequest,
   CreateTemporadaRequest,
   CreateTorneoRequest,
   EquipoAdmin,
+  FixtureAdminFull,
   FixtureGenerationResult,
   GenerarFixtureRequest,
+  IncidenciaAdmin,
   JugadorAdmin,
+  PartidoAdmin,
+  PartidoDetalle,
   Temporada,
   TorneoAdmin,
+  UpdatePartidoRequest,
   UpdateTorneoRequest,
 } from '@fixtura/types';
 
@@ -139,6 +146,91 @@ export function useResetFixture(torneoId: string) {
       apiFetch<{ deleted: number }>(`/admin/torneos/${torneoId}/fixture`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
+      qc.invalidateQueries({ queryKey: ['public'] });
+    },
+  });
+}
+
+export function useFixtureDetail(torneoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'],
+    queryFn: () => apiFetch<FixtureAdminFull>(`/admin/torneos/${torneoId}/fixture-detail`),
+    enabled: !!torneoId,
+  });
+}
+
+// ─── Partidos ────────────────────────────────────────────────────────
+export function usePartido(partidoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'partidos', partidoId],
+    queryFn: () => apiFetch<PartidoDetalle>(`/admin/partidos/${partidoId}`),
+    enabled: !!partidoId,
+  });
+}
+
+export function useUpdatePartido(partidoId: string, torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdatePartidoRequest) =>
+      apiFetch<PartidoAdmin>(`/admin/partidos/${partidoId}`, { method: 'PATCH', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'] });
+      qc.invalidateQueries({ queryKey: ['public'] });
+    },
+  });
+}
+
+export function useAddIncidencia(partidoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateIncidenciaRequest) =>
+      apiFetch<IncidenciaAdmin>(`/admin/partidos/${partidoId}/incidencias`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
+    },
+  });
+}
+
+export function useRemoveIncidencia(partidoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (incidenciaId: string) =>
+      apiFetch<void>(`/admin/partidos/incidencias/${incidenciaId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
+    },
+  });
+}
+
+export function useCerrarActa(partidoId: string, torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CerrarActaRequest) =>
+      apiFetch<PartidoAdmin>(`/admin/partidos/${partidoId}/cerrar-acta`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
+      qc.invalidateQueries({ queryKey: ['public'] });
+    },
+  });
+}
+
+export function useReabrirActa(partidoId: string, torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<PartidoAdmin>(`/admin/partidos/${partidoId}/reabrir-acta`, { method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'] });
       qc.invalidateQueries({ queryKey: ['public'] });
     },
   });
