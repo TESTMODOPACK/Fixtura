@@ -1,15 +1,13 @@
 'use client';
 
-import { use } from 'react';
-
 import { RankingPage } from '@/components/ranking-page';
 
 export default function AsistenciasPage({
   params,
 }: {
-  params: Promise<{ ligaSlug: string }>;
+  params: { ligaSlug: string };
 }): React.ReactElement {
-  const { ligaSlug } = use(params);
+  const { ligaSlug } = params;
   return (
     <RankingPage
       ligaSlug={ligaSlug}

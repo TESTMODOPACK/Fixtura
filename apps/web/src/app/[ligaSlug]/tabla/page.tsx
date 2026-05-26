@@ -1,7 +1,5 @@
 'use client';
 
-import { use } from 'react';
-
 import { PublicHeader } from '@/components/public-header';
 import { Card, CardLabel } from '@/components/ui/card';
 import { useTabla } from '@/hooks/use-portal';
@@ -10,9 +8,9 @@ import { cn } from '@/lib/cn';
 export default function TablaPage({
   params,
 }: {
-  params: Promise<{ ligaSlug: string }>;
+  params: { ligaSlug: string };
 }): React.ReactElement {
-  const { ligaSlug } = use(params);
+  const { ligaSlug } = params;
   const { data, isLoading } = useTabla(ligaSlug);
 
   return (

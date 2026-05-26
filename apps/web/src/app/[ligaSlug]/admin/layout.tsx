@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { use, useEffect } from 'react';
+import { useEffect } from 'react';
 
 import { FixturaLockup } from '@/components/ui/logo';
 import { cn } from '@/lib/cn';
@@ -78,9 +78,9 @@ export default function AdminLayout({
   params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ ligaSlug: string }>;
+  params: { ligaSlug: string };
 }): React.ReactElement | null {
-  const { ligaSlug } = use(params);
+  const { ligaSlug } = params;
   const pathname = usePathname();
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);

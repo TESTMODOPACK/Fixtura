@@ -1,7 +1,5 @@
 'use client';
 
-import { use } from 'react';
-
 import type { PartidoPublico } from '@fixtura/types';
 
 import { PublicHeader } from '@/components/public-header';
@@ -12,9 +10,9 @@ import { cn } from '@/lib/cn';
 export default function FixturePage({
   params,
 }: {
-  params: Promise<{ ligaSlug: string }>;
+  params: { ligaSlug: string };
 }): React.ReactElement {
-  const { ligaSlug } = use(params);
+  const { ligaSlug } = params;
   const { data, isLoading } = useFixture(ligaSlug);
 
   return (

@@ -2,7 +2,6 @@
 
 import { Calendar, Flame, TableProperties, Trophy } from 'lucide-react';
 import Link from 'next/link';
-import { use } from 'react';
 
 import type { PartidoPublico } from '@fixtura/types';
 
@@ -14,9 +13,9 @@ import { cn } from '@/lib/cn';
 export default function LigaHomePage({
   params,
 }: {
-  params: Promise<{ ligaSlug: string }>;
+  params: { ligaSlug: string };
 }): React.ReactElement {
-  const { ligaSlug } = use(params);
+  const { ligaSlug } = params;
   const { data, isLoading, error } = useResumenLiga(ligaSlug);
 
   if (isLoading) return <PageLoading slug={ligaSlug} />;
