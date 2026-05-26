@@ -90,8 +90,14 @@ export default function TorneoDetailPage({
             Configuración
           </TabButton>
           <Link
-            href={`/admin/torneos/${id}/tribunal`}
+            href={`/admin/torneos/${id}/designaciones`}
             className="px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold transition-colors border-b-2 -mb-px border-transparent text-ink-mute hover:text-ink ml-auto"
+          >
+            Designaciones →
+          </Link>
+          <Link
+            href={`/admin/torneos/${id}/tribunal`}
+            className="px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold transition-colors border-b-2 -mb-px border-transparent text-ink-mute hover:text-ink"
           >
             Tribunal →
           </Link>

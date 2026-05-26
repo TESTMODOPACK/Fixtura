@@ -25,6 +25,7 @@ import { PageHead } from '@/components/ui/page-head';
 import {
   useAddIncidencia,
   useCerrarActa,
+  useDesignacionesPorPartido,
   useJugadores,
   useJugadoresBloqueados,
   usePartido,
@@ -131,6 +132,8 @@ export default function PartidoDetallePage({
 
       <EditarPartidoCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
 
+      <DesignacionesSection partidoId={partido.id} torneoId={torneoId} />
+
       {!cerrada && (
         <IncidenciasSection
           partido={partido}
@@ -229,6 +232,78 @@ function ActaSection({
           <p className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">{error.message}</p>
         )}
       </form>
+    </Card>
+  );
+}
+
+// ─── Designaciones (árbitros / personal asignado) ───────────────────
+function DesignacionesSection({
+  partidoId,
+  torneoId,
+}: {
+  partidoId: string;
+  torneoId: string;
+}): React.ReactElement {
+  const { data: designaciones, isLoading } = useDesignacionesPorPartido(partidoId);
+
+  return (
+    <Card padding="comfortable" className="mb-5">
+      <div className="flex items-center justify-between mb-3">
+        <CardLabel>Personal designado</CardLabel>
+        <Link
+          href={`/admin/torneos/${torneoId}/designaciones`}
+          className="text-xs uppercase tracking-[0.18em] font-semibold text-accent hover:underline"
+        >
+          Gestionar →
+        </Link>
+      </div>
+      {isLoading && (
+        <div className="font-serif italic text-ink-mute text-sm">Cargando…</div>
+      )}
+      {!isLoading && (!designaciones || designaciones.length === 0) && (
+        <div className="font-serif italic text-ink-mute text-sm">
+          Sin personal designado en este partido todavía.
+        </div>
+      )}
+      {designaciones && designaciones.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {designaciones.map((d) => {
+            const rolAbrev =
+              d.rolAsignado === 'ARBITRO_PRINCIPAL'
+                ? 'Principal'
+                : d.rolAsignado === 'ARBITRO_ASISTENTE'
+                ? 'Asistente'
+                : d.rolAsignado === 'PLANILLERO'
+                ? 'Planilla'
+                : d.rolAsignado === 'PARAMEDICO'
+                ? 'Paramédico'
+                : 'Otro';
+            const warning =
+              d.conflictoDobleBooking ||
+              d.carnetAnfaWarning === 'VENCIDO' ||
+              d.carnetAnfaWarning === 'POR_VENCER';
+            return (
+              <div
+                key={d.id}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-card text-sm border',
+                  warning ? 'border-danger/40 bg-danger/5' : 'border-line bg-paper',
+                )}
+              >
+                <span className="text-[10px] uppercase tracking-[0.15em] font-semibold text-ink-mute">
+                  {rolAbrev}
+                </span>
+                <span className="font-semibold">
+                  {d.personalNombre} {d.personalApellido}
+                </span>
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-mute">
+                  · {d.estado.toLowerCase()}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }

@@ -1,3 +1,5 @@
+export { Designacion } from './designacion.entity';
+export type { EstadoDesignacion } from './designacion.entity';
 export { Equipo } from './equipo.entity';
 export type { EstadoEquipo } from './equipo.entity';
 export { Fecha } from './fecha.entity';
@@ -8,6 +10,8 @@ export { JugadorInscrito } from './jugador-inscrito.entity';
 export type { PieHabil } from './jugador-inscrito.entity';
 export { Partido } from './partido.entity';
 export type { EstadoPartido } from './partido.entity';
+export { Personal } from './personal.entity';
+export type { RolPersonal } from './personal.entity';
 export { SancionActiva } from './sancion-activa.entity';
 export type { MotivoSancion } from './sancion-activa.entity';
 export { Serie } from './serie.entity';

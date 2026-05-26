@@ -102,11 +102,133 @@ async function main(): Promise<void> {
     // ─── Hooks para cambios aditivos futuros ─────────────────────────────
     // Cuando agreguemos tablas y columnas en sprints posteriores, este es
     // el lugar para ADD COLUMN IF NOT EXISTS, CREATE INDEX IF NOT EXISTS,
-    // ALTER TYPE ... ADD VALUE IF NOT EXISTS, etc. Por ahora vacío.
+    // ALTER TYPE ... ADD VALUE IF NOT EXISTS, etc.
+
+    // Sprint 2E: backfill seguro de tablas de operaciones por si el entorno
+    // no aplicó la migration formal todavía. Idempotente: usa IF NOT EXISTS
+    // tanto en tablas como en índices y triggers.
+    await ensurePersonalDesignacionesTables(client, log);
 
     log('Done.');
   } finally {
     await client.end();
+  }
+}
+
+async function ensurePersonalDesignacionesTables(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  // Si la migration formal ya creó las tablas, los IF NOT EXISTS son no-op.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS personal (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      user_id             UUID REFERENCES users(id) ON DELETE SET NULL,
+      nombre              VARCHAR(100) NOT NULL,
+      apellido            VARCHAR(100) NOT NULL,
+      rut                 VARCHAR(20),
+      rol                 VARCHAR(30) NOT NULL
+                            CHECK (rol IN (
+                              'ARBITRO_PRINCIPAL','ARBITRO_ASISTENTE',
+                              'PLANILLERO','PARAMEDICO','OTRO'
+                            )),
+      telefono            VARCHAR(30),
+      email               VARCHAR(150),
+      tarifa_base         INTEGER,
+      carnet_anfa_numero  VARCHAR(50),
+      carnet_anfa_vence   DATE,
+      activo              BOOLEAN NOT NULL DEFAULT TRUE,
+      notas               TEXT,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await ensureRls(client, 'personal');
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_personal_tenant ON personal(tenant_id)`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_personal_rol ON personal(rol)`);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_personal_activo ON personal(activo) WHERE activo = TRUE`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_personal_rut ON personal(rut) WHERE rut IS NOT NULL`,
+  );
+  await ensureTrigger(client, 'personal');
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS designaciones (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      partido_id          UUID NOT NULL REFERENCES partidos(id) ON DELETE CASCADE,
+      personal_id         UUID NOT NULL REFERENCES personal(id) ON DELETE CASCADE,
+      rol_asignado        VARCHAR(30) NOT NULL
+                            CHECK (rol_asignado IN (
+                              'ARBITRO_PRINCIPAL','ARBITRO_ASISTENTE',
+                              'PLANILLERO','PARAMEDICO','OTRO'
+                            )),
+      estado              VARCHAR(20) NOT NULL DEFAULT 'PROPUESTA'
+                            CHECK (estado IN (
+                              'PROPUESTA','CONFIRMADA','RECHAZADA',
+                              'ASISTIO','AUSENTE'
+                            )),
+      monto_pago          INTEGER,
+      confirmado_at       TIMESTAMPTZ,
+      notas               TEXT,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (partido_id, personal_id, rol_asignado)
+    )
+  `);
+  await ensureRls(client, 'designaciones');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_designaciones_tenant ON designaciones(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_designaciones_partido ON designaciones(partido_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_designaciones_personal ON designaciones(personal_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_designaciones_estado ON designaciones(estado)`,
+  );
+  await ensureTrigger(client, 'designaciones');
+
+  log('Personal + designaciones aseguradas (idempotente).');
+}
+
+async function ensureRls(client: Client, table: string): Promise<void> {
+  await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+  await client.query(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`);
+  const exists = await client.query(
+    `SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename=$1 AND policyname='tenant_isolation'`,
+    [table],
+  );
+  if (exists.rowCount === 0) {
+    await client.query(`
+      CREATE POLICY tenant_isolation ON ${table}
+        USING (
+          tenant_id::text = current_setting('app.current_tenant_id', true)
+          OR current_setting('app.current_tenant_id', true) = ''
+        )
+        WITH CHECK (
+          tenant_id::text = current_setting('app.current_tenant_id', true)
+          OR current_setting('app.current_tenant_id', true) = ''
+        )
+    `);
+  }
+}
+
+async function ensureTrigger(client: Client, table: string): Promise<void> {
+  const name = `trg_${table}_updated_at`;
+  const exists = await client.query(
+    `SELECT 1 FROM pg_trigger WHERE tgname = $1 AND NOT tgisinternal`,
+    [name],
+  );
+  if (exists.rowCount === 0) {
+    await client.query(
+      `CREATE TRIGGER ${name} BEFORE UPDATE ON ${table} FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+    );
   }
 }
 

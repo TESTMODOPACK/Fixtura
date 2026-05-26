@@ -2,11 +2,13 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import {
+  Designacion,
   Equipo,
   Fecha,
   IncidenciaPartido,
   JugadorInscrito,
   Partido,
+  Personal,
   SancionActiva,
   Serie,
   Temporada,
@@ -34,6 +36,8 @@ import {
       Partido,
       IncidenciaPartido,
       SancionActiva,
+      Personal,
+      Designacion,
     ]),
   ],
   exports: [TypeOrmModule],

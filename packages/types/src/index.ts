@@ -7,3 +7,5 @@ export * from './public';
 export * from './admin';
 export * from './partidos-admin';
 export * from './sanciones';
+export * from './personal';
+export * from './designaciones';

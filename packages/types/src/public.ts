@@ -78,6 +78,23 @@ export const PartidoPublicoSchema = z.object({
     goles: z.number().int().min(0).nullable(),
   }),
   canchaNombre: z.string().nullable(),
+  // Solo se muestra nombre + rol de personal confirmado o asistente. La info
+  // sensible (carnet, tarifa, contacto) queda en admin.
+  arbitros: z
+    .array(
+      z.object({
+        nombre: z.string(),
+        apellido: z.string(),
+        rol: z.enum([
+          'ARBITRO_PRINCIPAL',
+          'ARBITRO_ASISTENTE',
+          'PLANILLERO',
+          'PARAMEDICO',
+          'OTRO',
+        ]),
+      }),
+    )
+    .default([]),
 });
 export type PartidoPublico = z.infer<typeof PartidoPublicoSchema>;
 

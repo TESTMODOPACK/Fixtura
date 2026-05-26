@@ -13,6 +13,7 @@ import type {
   TorneoPublico,
 } from '@fixtura/types';
 
+import { Designacion } from '../competition/entities/designacion.entity';
 import { Equipo } from '../competition/entities/equipo.entity';
 import { Fecha } from '../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../competition/entities/incidencia-partido.entity';
@@ -35,6 +36,8 @@ export class PublicService {
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
     @InjectRepository(IncidenciaPartido)
     private readonly incidenciaRepo: Repository<IncidenciaPartido>,
+    @InjectRepository(Designacion)
+    private readonly designacionRepo: Repository<Designacion>,
   ) {}
 
   // ─── Resumen home pública ────────────────────────────────────────
@@ -172,14 +175,63 @@ export class PublicService {
       partidosPorFecha.set(p.fechaId, arr);
     }
 
+    // Cargar designaciones confirmadas / asistidas para los partidos del
+    // fixture en una sola query, agrupadas por partido_id.
+    const arbitrosPorPartido = await this.cargarArbitrosPublicos(
+      partidos.map((p) => p.id),
+    );
+
     return {
       torneo: torneoDto,
       fechas: fechas.map((f) => ({
         numero: f.numero,
         etiqueta: f.etiqueta ?? `Fecha ${f.numero}`,
-        partidos: (partidosPorFecha.get(f.id) ?? []).map((p) => this.toPartidoPublico(p, f.numero)),
+        partidos: (partidosPorFecha.get(f.id) ?? []).map((p) => ({
+          ...this.toPartidoPublico(p, f.numero),
+          arbitros: arbitrosPorPartido.get(p.id) ?? [],
+        })),
       })),
     };
+  }
+
+  /**
+   * Carga los árbitros visibles públicamente para una lista de partidos.
+   * Sólo expone nombre + apellido + rol de designaciones CONFIRMADAS,
+   * ASISTIO o PROPUESTA (para no esperar a la confirmación). NO expone
+   * carnet, tarifa, contacto — eso queda en admin.
+   */
+  private async cargarArbitrosPublicos(
+    partidoIds: string[],
+  ): Promise<Map<string, PartidoPublico['arbitros']>> {
+    const out = new Map<string, PartidoPublico['arbitros']>();
+    if (partidoIds.length === 0) return out;
+
+    const rows = await this.designacionRepo
+      .createQueryBuilder('d')
+      .leftJoin('d.personal', 'personal')
+      .select([
+        'd.partido_id AS "partidoId"',
+        'd.rol_asignado AS "rol"',
+        'd.estado AS "estado"',
+        'personal.nombre AS "nombre"',
+        'personal.apellido AS "apellido"',
+      ])
+      .where('d.partido_id IN (:...partidoIds)', { partidoIds })
+      .andWhere(`d.estado IN ('PROPUESTA','CONFIRMADA','ASISTIO')`)
+      .getRawMany<{
+        partidoId: string;
+        rol: PartidoPublico['arbitros'][number]['rol'];
+        estado: string;
+        nombre: string;
+        apellido: string;
+      }>();
+
+    for (const r of rows) {
+      const arr = out.get(r.partidoId) ?? [];
+      arr.push({ nombre: r.nombre, apellido: r.apellido, rol: r.rol });
+      out.set(r.partidoId, arr);
+    }
+    return out;
   }
 
   // ─── Rankings ─────────────────────────────────────────────────────
@@ -291,6 +343,10 @@ export class PublicService {
         goles: p.golesVisita,
       },
       canchaNombre: p.canchaNombre,
+      // Las designaciones se enriquecen sólo en endpoints que lo necesiten
+      // (ver getFixture). Aquí dejamos default vacío para no cargar
+      // designaciones en queries que no las muestran (resumen, recientes).
+      arbitros: [],
     };
   }
 

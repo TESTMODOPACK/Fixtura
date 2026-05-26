@@ -1,14 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
+  AsignarDesignacionRequest,
   CerrarActaRequest,
   CreateEquipoRequest,
   CreateIncidenciaRequest,
   CreateJugadorRequest,
+  CreatePersonalRequest,
   CreateSancionTribunalRequest,
   CreateTemporadaRequest,
   CreateTorneoRequest,
+  DesignacionAdmin,
+  DesignacionesPorFecha,
   EquipoAdmin,
+  EstadoDesignacion,
   FixtureAdminFull,
   FixtureGenerationResult,
   GenerarFixtureRequest,
@@ -16,10 +21,12 @@ import type {
   JugadorAdmin,
   PartidoAdmin,
   PartidoDetalle,
+  PersonalAdmin,
   SancionAdmin,
   Temporada,
   TorneoAdmin,
   UpdatePartidoRequest,
+  UpdatePersonalRequest,
   UpdateTorneoRequest,
 } from '@fixtura/types';
 
@@ -282,6 +289,139 @@ export function useRevokeSancion(torneoId: string) {
       apiFetch<void>(`/admin/torneos/${torneoId}/sanciones/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'sanciones'] });
+    },
+  });
+}
+
+// ─── Personal ─────────────────────────────────────────────────────────
+export function usePersonal(soloActivos = false) {
+  return useQuery({
+    queryKey: ['admin', 'personal', { soloActivos }],
+    queryFn: () =>
+      apiFetch<PersonalAdmin[]>(
+        soloActivos ? '/admin/personal?activos=true' : '/admin/personal',
+      ),
+  });
+}
+
+export function usePersona(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'personal', id],
+    queryFn: () => apiFetch<PersonalAdmin>(`/admin/personal/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreatePersonal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreatePersonalRequest) =>
+      apiFetch<PersonalAdmin>('/admin/personal', { method: 'POST', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'personal'] });
+    },
+  });
+}
+
+export function useUpdatePersonal(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdatePersonalRequest) =>
+      apiFetch<PersonalAdmin>(`/admin/personal/${id}`, { method: 'PATCH', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'personal'] });
+    },
+  });
+}
+
+export function useDeactivatePersonal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/personal/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'personal'] });
+    },
+  });
+}
+
+// ─── Designaciones ────────────────────────────────────────────────────
+export function useDesignacionesPorFecha(
+  torneoId: string | null | undefined,
+  fechaId: string | null | undefined,
+) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'fechas', fechaId, 'designaciones'],
+    queryFn: () =>
+      apiFetch<DesignacionesPorFecha>(
+        `/admin/torneos/${torneoId}/fechas/${fechaId}/designaciones`,
+      ),
+    enabled: !!torneoId && !!fechaId,
+  });
+}
+
+export function useDesignacionesPorPartido(partidoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'partidos', partidoId, 'designaciones'],
+    queryFn: () =>
+      apiFetch<DesignacionAdmin[]>(`/admin/partidos/${partidoId}/designaciones`),
+    enabled: !!partidoId,
+  });
+}
+
+export function useAsignarDesignacion(invalidate: { torneoId?: string; fechaId?: string; partidoId?: string }) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AsignarDesignacionRequest) =>
+      apiFetch<DesignacionAdmin>('/admin/designaciones', { method: 'POST', body: input }),
+    onSuccess: () => {
+      if (invalidate.torneoId && invalidate.fechaId) {
+        qc.invalidateQueries({
+          queryKey: ['admin', 'torneos', invalidate.torneoId, 'fechas', invalidate.fechaId, 'designaciones'],
+        });
+      }
+      if (invalidate.partidoId) {
+        qc.invalidateQueries({ queryKey: ['admin', 'partidos', invalidate.partidoId, 'designaciones'] });
+      }
+    },
+  });
+}
+
+export function useUpdateDesignacionEstado(invalidate: { torneoId?: string; fechaId?: string; partidoId?: string }) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, estado }: { id: string; estado: EstadoDesignacion }) =>
+      apiFetch<DesignacionAdmin>(`/admin/designaciones/${id}/estado`, {
+        method: 'PATCH',
+        body: { estado },
+      }),
+    onSuccess: () => {
+      if (invalidate.torneoId && invalidate.fechaId) {
+        qc.invalidateQueries({
+          queryKey: ['admin', 'torneos', invalidate.torneoId, 'fechas', invalidate.fechaId, 'designaciones'],
+        });
+      }
+      if (invalidate.partidoId) {
+        qc.invalidateQueries({ queryKey: ['admin', 'partidos', invalidate.partidoId, 'designaciones'] });
+      }
+    },
+  });
+}
+
+export function useRemoveDesignacion(invalidate: { torneoId?: string; fechaId?: string; partidoId?: string }) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/designaciones/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      if (invalidate.torneoId && invalidate.fechaId) {
+        qc.invalidateQueries({
+          queryKey: ['admin', 'torneos', invalidate.torneoId, 'fechas', invalidate.fechaId, 'designaciones'],
+        });
+      }
+      if (invalidate.partidoId) {
+        qc.invalidateQueries({ queryKey: ['admin', 'partidos', invalidate.partidoId, 'designaciones'] });
+      }
     },
   });
 }
