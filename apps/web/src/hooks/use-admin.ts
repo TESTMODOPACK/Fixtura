@@ -5,6 +5,7 @@ import type {
   CreateEquipoRequest,
   CreateIncidenciaRequest,
   CreateJugadorRequest,
+  CreateSancionTribunalRequest,
   CreateTemporadaRequest,
   CreateTorneoRequest,
   EquipoAdmin,
@@ -15,6 +16,7 @@ import type {
   JugadorAdmin,
   PartidoAdmin,
   PartidoDetalle,
+  SancionAdmin,
   Temporada,
   TorneoAdmin,
   UpdatePartidoRequest,
@@ -232,6 +234,54 @@ export function useReabrirActa(partidoId: string, torneoId: string) {
       qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
       qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'] });
       qc.invalidateQueries({ queryKey: ['public'] });
+    },
+  });
+}
+
+// ─── Sanciones / Tribunal ────────────────────────────────────────────
+export function useSanciones(torneoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'sanciones'],
+    queryFn: () => apiFetch<SancionAdmin[]>(`/admin/torneos/${torneoId}/sanciones`),
+    enabled: !!torneoId,
+  });
+}
+
+export function useJugadoresBloqueados(
+  torneoId: string | null | undefined,
+  fechaNumero: number | null | undefined,
+) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'sanciones', 'bloqueados', fechaNumero],
+    queryFn: () =>
+      apiFetch<Array<{ jugadorInscritoId: string; rut: string | null; motivo: string }>>(
+        `/admin/torneos/${torneoId}/sanciones/bloqueados?fechaNumero=${fechaNumero}`,
+      ),
+    enabled: !!torneoId && !!fechaNumero,
+  });
+}
+
+export function useCreateSancionTribunal(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateSancionTribunalRequest) =>
+      apiFetch<SancionAdmin>(`/admin/torneos/${torneoId}/sanciones`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'sanciones'] });
+    },
+  });
+}
+
+export function useRevokeSancion(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/torneos/${torneoId}/sanciones/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'sanciones'] });
     },
   });
 }

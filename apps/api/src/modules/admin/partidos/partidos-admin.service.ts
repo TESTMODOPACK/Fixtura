@@ -8,6 +8,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
+import {
+  calcularSancionesPostPartido,
+  type IncidenciaJugador,
+  type SancionPropuesta,
+} from '@fixtura/domain';
 import type {
   CerrarActaRequest,
   CreateIncidenciaRequest,
@@ -23,6 +28,7 @@ import { Fecha } from '../../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
 import { Partido } from '../../competition/entities/partido.entity';
+import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 
 @Injectable()
@@ -36,6 +42,8 @@ export class PartidosAdminService {
     private readonly incidenciaRepo: Repository<IncidenciaPartido>,
     @InjectRepository(JugadorInscrito)
     private readonly jugadorRepo: Repository<JugadorInscrito>,
+    @InjectRepository(SancionActiva)
+    private readonly sancionRepo: Repository<SancionActiva>,
   ) {}
 
   // ─── Fixture completo de un torneo (admin) ─────────────────────────
@@ -206,25 +214,224 @@ export class PartidosAdminService {
 
     await this.repo.save(partido);
 
-    // Si todos los partidos de la fecha están finalizados, marcar la fecha
-    // como FINALIZADA. Idempotente.
+    // ─── CASCADA POST-ACTA ───────────────────────────────────────────
+    // 1. Detectar sanciones automáticas por las incidencias de este
+    //    partido (rojas, dobles amarillas, acumulación de amarillas).
+    //    Persistir en sanciones_activas.
+    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    await this.aplicarSancionesAutomaticas(partido, fecha.numero, tenantId);
+
+    // 2. Si todos los partidos de la fecha están FINALIZADO/WALKOVER,
+    //    marcar la fecha como FINALIZADA + decrementar sanciones
+    //    pendientes (regla "el jugador cumple su fecha de suspensión
+    //    cuando la fecha completa termina").
     const partidosDeFecha = await this.repo.find({ where: { fechaId: partido.fechaId } });
     const todosFinalizados = partidosDeFecha.every(
       (p) => p.estado === 'FINALIZADO' || p.estado === 'WALKOVER',
     );
     if (todosFinalizados) {
       await this.fechaRepo.update({ id: partido.fechaId }, { estado: 'FINALIZADA' });
+      await this.decrementarSancionesPendientes(partido.tenantId, fecha.numero);
     }
 
-    // TODO Sprint 2C+: disparar BullMQ event acta.cerrada para:
-    //   - Recalcular sanciones (por acumulación de amarillas, rojas)
-    //   - Notificar pospartido (FCM)
-    //   - Enviar NPS (delay 30 min)
-    // Por ahora la tabla, ranking de goles, etc. se recalculan al vuelo
-    // en cada GET /api/v1/public/* — no necesitamos cache invalidation.
-
-    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     return this.toDto(partido, fecha.numero, fecha.etiqueta);
+  }
+
+  /**
+   * Recorre las incidencias del partido recién cerrado, agrupa por
+   * jugador (vía RUT o jugadorInscritoId si no hay RUT), trae el
+   * historial previo del jugador en el torneo, calcula sanciones nuevas
+   * con `calcularSancionesPostPartido` (motor en packages/domain) y las
+   * persiste en `sanciones_activas`.
+   *
+   * REGLA CRÍTICA (anexo correcciones): la sanción se busca/aplica por
+   * RUT × torneo, no por equipo. Un jugador que se cambia de club dentro
+   * del mismo torneo no elude la sanción.
+   */
+  private async aplicarSancionesAutomaticas(
+    partido: Partido,
+    fechaNumero: number,
+    tenantId: string,
+  ): Promise<void> {
+    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    const torneoId = fecha.torneoId;
+
+    // Traer incidencias del partido con info del jugador
+    const incidencias = await this.incidenciaRepo.find({
+      where: { partidoId: partido.id },
+      relations: { jugadorInscrito: true },
+    });
+
+    // Agrupar incidencias por jugador (sólo las relevantes para sanción)
+    const porJugador = new Map<
+      string,
+      {
+        jugadorInscritoId: string;
+        rut: string | null;
+        incidencias: IncidenciaJugador[];
+      }
+    >();
+
+    for (const inc of incidencias) {
+      if (!inc.jugadorInscritoId) continue;
+      if (
+        inc.tipo !== 'AMARILLA' &&
+        inc.tipo !== 'ROJA' &&
+        inc.tipo !== 'AMARILLA_ROJA'
+      )
+        continue;
+
+      const key = inc.jugadorInscritoId;
+      const bucket = porJugador.get(key) ?? {
+        jugadorInscritoId: inc.jugadorInscritoId,
+        rut: inc.jugadorInscrito?.rut ?? null,
+        incidencias: [],
+      };
+      bucket.incidencias.push({
+        tipo: inc.tipo,
+        partidoId: partido.id,
+        fechaNumero,
+      });
+      porJugador.set(key, bucket);
+    }
+
+    // Para cada jugador, calcular sanciones contra historial
+    for (const bucket of porJugador.values()) {
+      const previas = await this.getIncidenciasPreviasEnTorneo(
+        bucket.jugadorInscritoId,
+        bucket.rut,
+        torneoId,
+        partido.id,
+      );
+
+      const propuestas = calcularSancionesPostPartido(previas, bucket.incidencias);
+      await this.persistirPropuestas(
+        propuestas,
+        tenantId,
+        torneoId,
+        bucket.jugadorInscritoId,
+        bucket.rut,
+      );
+    }
+  }
+
+  /**
+   * Trae todas las incidencias previas del jugador en el torneo,
+   * matcheando por jugador_inscrito_id O por RUT (para soportar el caso
+   * de un jugador que se cambia de club).
+   */
+  private async getIncidenciasPreviasEnTorneo(
+    jugadorInscritoId: string,
+    rut: string | null,
+    torneoId: string,
+    partidoActualId: string,
+  ): Promise<IncidenciaJugador[]> {
+    const qb = this.incidenciaRepo
+      .createQueryBuilder('i')
+      .innerJoin('i.partido', 'p')
+      .innerJoin('p.fecha', 'f')
+      .innerJoin('i.jugadorInscrito', 'j')
+      .leftJoin('j.equipo', 'e')
+      .where('f.torneo_id = :torneoId', { torneoId })
+      .andWhere('i.partido_id <> :partidoActualId', { partidoActualId })
+      .andWhere(`i.tipo IN ('AMARILLA','ROJA','AMARILLA_ROJA')`);
+
+    if (rut) {
+      qb.andWhere('(j.id = :jId OR j.rut = :rut)', { jId: jugadorInscritoId, rut });
+    } else {
+      qb.andWhere('j.id = :jId', { jId: jugadorInscritoId });
+    }
+
+    const rows = await qb
+      .select(['i.tipo AS tipo', 'i.partido_id AS "partidoId"', 'f.numero AS "fechaNumero"'])
+      .orderBy('f.numero', 'ASC')
+      .getRawMany<{
+        tipo: 'AMARILLA' | 'ROJA' | 'AMARILLA_ROJA';
+        partidoId: string;
+        fechaNumero: number;
+      }>();
+
+    return rows;
+  }
+
+  private async persistirPropuestas(
+    propuestas: SancionPropuesta[],
+    tenantId: string,
+    torneoId: string,
+    jugadorInscritoId: string,
+    rut: string | null,
+  ): Promise<void> {
+    for (const p of propuestas) {
+      // Idempotencia: si ya existe una sanción del mismo motivo originada
+      // por la misma incidencia, no duplicar.
+      const dup = await this.sancionRepo.findOne({
+        where: {
+          tenantId,
+          torneoId,
+          jugadorInscritoId,
+          motivo: p.motivo,
+          origenIncidenciaPartidoId: p.origenIncidenciaPartidoId,
+        },
+      });
+      if (dup) continue;
+
+      await this.sancionRepo.save(
+        this.sancionRepo.create({
+          tenantId,
+          torneoId,
+          rut,
+          jugadorInscritoId,
+          motivo: p.motivo,
+          fechasPendientes: p.fechasSuspension,
+          desdeFechaNumero: p.desdeFechaNumero,
+          origenIncidenciaPartidoId: p.origenIncidenciaPartidoId,
+          descripcion: this.descripcionAuto(p.motivo),
+          cumplida: false,
+        }),
+      );
+    }
+  }
+
+  private descripcionAuto(motivo: SancionPropuesta['motivo']): string {
+    switch (motivo) {
+      case 'ROJA_DIRECTA':
+        return 'Sanción automática por roja directa.';
+      case 'DOBLE_AMARILLA':
+        return 'Sanción automática por doble amarilla en el partido.';
+      case 'ACUMULACION_AMARILLAS':
+        return 'Sanción automática por acumulación de 5 amarillas en el torneo.';
+    }
+  }
+
+  /**
+   * Decrementa en 1 el contador `fechas_pendientes` de todas las
+   * sanciones del torneo cuya fecha de inicio sea ≤ a la fecha
+   * recién finalizada. Marca como cumplida cuando llega a 0.
+   */
+  private async decrementarSancionesPendientes(
+    tenantId: string,
+    fechaNumeroFinalizada: number,
+  ): Promise<void> {
+    // -1 a las que tengan pendientes > 0 y desde_fecha_numero ≤ esta fecha
+    await this.sancionRepo
+      .createQueryBuilder()
+      .update()
+      .set({ fechasPendientes: () => 'fechas_pendientes - 1' })
+      .where('tenant_id = :tenantId', { tenantId })
+      .andWhere('cumplida = false')
+      .andWhere('fechas_pendientes > 0')
+      .andWhere('desde_fecha_numero <= :fechaNumero', { fechaNumero: fechaNumeroFinalizada })
+      .execute();
+
+    // Marcar cumplida las que llegaron a 0
+    await this.sancionRepo
+      .createQueryBuilder()
+      .update()
+      .set({ cumplida: true })
+      .where('tenant_id = :tenantId', { tenantId })
+      .andWhere('cumplida = false')
+      .andWhere('fechas_pendientes <= 0')
+      .execute();
   }
 
   /** Reabrir acta (sólo para corrección manual, requiere LIGA_ADMIN). */

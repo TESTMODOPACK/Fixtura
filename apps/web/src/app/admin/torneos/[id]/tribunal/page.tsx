@@ -1,0 +1,356 @@
+'use client';
+
+import { zodResolver } from '@hookform/resolvers/zod';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Ban,
+  CheckCircle2,
+  Gavel,
+  Trash2,
+} from 'lucide-react';
+import Link from 'next/link';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+
+import type { SancionAdmin } from '@fixtura/types';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardLabel } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { PageHead } from '@/components/ui/page-head';
+import {
+  useCreateSancionTribunal,
+  useEquipos,
+  useJugadores,
+  useRevokeSancion,
+  useSanciones,
+  useTorneo,
+} from '@/hooks/use-admin';
+import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
+
+const MOTIVO_LABEL: Record<string, string> = {
+  ACUMULACION_AMARILLAS: '5 amarillas acumuladas',
+  ROJA_DIRECTA: 'Roja directa',
+  DOBLE_AMARILLA: 'Doble amarilla',
+  TRIBUNAL: 'Tribunal',
+};
+
+const MOTIVO_BADGE: Record<string, string> = {
+  ACUMULACION_AMARILLAS: 'bg-yellow-400/20 text-yellow-700',
+  ROJA_DIRECTA: 'bg-danger/15 text-danger',
+  DOBLE_AMARILLA: 'bg-orange-700/15 text-orange-700',
+  TRIBUNAL: 'bg-green-deep/10 text-green-deep',
+};
+
+export default function TribunalPage({
+  params,
+}: {
+  params: { id: string };
+}): React.ReactElement {
+  const torneoId = params.id;
+  const { data: torneo } = useTorneo(torneoId);
+  const { data: sanciones, isLoading } = useSanciones(torneoId);
+  const [adding, setAdding] = useState(false);
+
+  const activas = sanciones?.filter((s) => !s.cumplida && s.fechasPendientes > 0) ?? [];
+  const cumplidas = sanciones?.filter((s) => s.cumplida || s.fechasPendientes === 0) ?? [];
+
+  return (
+    <>
+      <PageHead
+        eyebrow={torneo ? `Torneo · ${torneo.nombre}` : 'Tribunal'}
+        title="Tribunal de disciplina"
+        sub="Sanciones automáticas por tarjetas + sanciones manuales del tribunal. La regla es por RUT × torneo: cambiar de club no evade la sanción."
+      >
+        <Link href={`/admin/torneos/${torneoId}`}>
+          <Button variant="default" size="sm">
+            <ArrowLeft size={14} /> Torneo
+          </Button>
+        </Link>
+        <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
+          <Gavel size={14} /> {adding ? 'Cancelar' : 'Sanción manual'}
+        </Button>
+      </PageHead>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
+        <Card padding="comfortable">
+          <CardLabel>Activas</CardLabel>
+          <div className="font-display text-3xl text-green-deep tracking-display">
+            {isLoading ? '…' : activas.length}
+          </div>
+          <div className="text-xs text-ink-mute font-serif italic mt-1">Jugadores bloqueados</div>
+        </Card>
+        <Card padding="comfortable">
+          <CardLabel>Cumplidas</CardLabel>
+          <div className="font-display text-3xl text-green-bright tracking-display">
+            {isLoading ? '…' : cumplidas.length}
+          </div>
+          <div className="text-xs text-ink-mute font-serif italic mt-1">Historial</div>
+        </Card>
+        <Card padding="comfortable">
+          <CardLabel>Automáticas</CardLabel>
+          <div className="font-display text-3xl text-green-deep tracking-display">
+            {isLoading ? '…' : sanciones?.filter((s) => s.motivo !== 'TRIBUNAL').length ?? 0}
+          </div>
+          <div className="text-xs text-ink-mute font-serif italic mt-1">Por tarjetas</div>
+        </Card>
+        <Card padding="comfortable" variant="lime">
+          <CardLabel tone="mute">Tribunal</CardLabel>
+          <div className="font-display text-3xl text-green-deep tracking-display">
+            {isLoading ? '…' : sanciones?.filter((s) => s.motivo === 'TRIBUNAL').length ?? 0}
+          </div>
+          <div className="text-xs text-green-deep/70 font-serif italic mt-1">Resoluciones manuales</div>
+        </Card>
+      </div>
+
+      {adding && (
+        <Card padding="comfortable" className="mb-5">
+          <NuevaSancionTribunalForm
+            torneoId={torneoId}
+            onDone={() => setAdding(false)}
+          />
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <SancionesSection
+          titulo="Sanciones activas"
+          icon={Ban}
+          sanciones={activas}
+          torneoId={torneoId}
+          emptyMsg="No hay jugadores con sanciones activas. Buen comportamiento general 👏"
+        />
+        <SancionesSection
+          titulo="Sanciones cumplidas"
+          icon={CheckCircle2}
+          sanciones={cumplidas}
+          torneoId={torneoId}
+          emptyMsg="Aún no hay sanciones cumplidas."
+          historico
+        />
+      </div>
+    </>
+  );
+}
+
+function SancionesSection({
+  titulo,
+  icon: Icon,
+  sanciones,
+  torneoId,
+  emptyMsg,
+  historico,
+}: {
+  titulo: string;
+  icon: typeof Ban;
+  sanciones: SancionAdmin[];
+  torneoId: string;
+  emptyMsg: string;
+  historico?: boolean;
+}): React.ReactElement {
+  const revoke = useRevokeSancion(torneoId);
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="px-5 py-3 bg-paper-dark border-b border-line flex items-center gap-2">
+        <Icon size={16} className={historico ? 'text-green-bright' : 'text-accent'} />
+        <CardLabel tone="mute">{titulo}</CardLabel>
+      </div>
+
+      {sanciones.length === 0 && (
+        <div className="p-8 text-center text-sm text-ink-mute font-serif italic">{emptyMsg}</div>
+      )}
+
+      {sanciones.length > 0 && (
+        <div className="divide-y divide-line">
+          {sanciones.map((s) => (
+            <div key={s.id} className="px-5 py-4">
+              <div className="flex items-start gap-3 mb-2">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-ink truncate">
+                    {s.jugadorNombre && s.jugadorApellido
+                      ? `${s.jugadorNombre} ${s.jugadorApellido}`
+                      : 'Sin jugador identificado'}
+                  </div>
+                  <div className="text-xs text-ink-mute truncate">
+                    {s.equipoNombre} {s.rut && <span className="font-mono">· {s.rut}</span>}
+                  </div>
+                </div>
+                <span
+                  className={cn(
+                    'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
+                    MOTIVO_BADGE[s.motivo] ?? 'bg-ink-mute/10 text-ink-mute',
+                  )}
+                >
+                  {MOTIVO_LABEL[s.motivo] ?? s.motivo}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-4 text-xs text-ink-mute">
+                <span>
+                  Desde fecha <span className="font-mono font-semibold text-ink">{s.desdeFechaNumero}</span>
+                </span>
+                <span>
+                  Pendientes{' '}
+                  <span
+                    className={cn(
+                      'font-mono font-semibold',
+                      s.fechasPendientes > 0 ? 'text-danger' : 'text-green-bright',
+                    )}
+                  >
+                    {s.fechasPendientes}
+                  </span>
+                </span>
+                {s.descripcion && (
+                  <span className="font-serif italic truncate flex-1">{s.descripcion.split('\n')[0]}</span>
+                )}
+                {!historico && (
+                  <button
+                    type="button"
+                    onClick={() => revoke.mutate(s.id)}
+                    className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
+                    title="Revocar"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function NuevaSancionTribunalForm({
+  torneoId,
+  onDone,
+}: {
+  torneoId: string;
+  onDone: () => void;
+}): React.ReactElement {
+  const equiposQ = useEquipos(torneoId);
+  const [equipoSeleccionado, setEquipoSeleccionado] = useState<string>('');
+  const jugadoresQ = useJugadores(equipoSeleccionado || null);
+  const mutation = useCreateSancionTribunal(torneoId);
+
+  const Schema = z.object({
+    jugadorInscritoId: z.string().min(1, 'Elegí un jugador'),
+    fechasSuspension: z.coerce.number().int().min(1).max(20),
+    descripcion: z.string().min(3).max(1000),
+    desdeFechaNumero: z.coerce.number().int().min(1).optional(),
+  });
+  type Form = z.infer<typeof Schema>;
+
+  const form = useForm<Form>({
+    resolver: zodResolver(Schema),
+    defaultValues: { jugadorInscritoId: '', fechasSuspension: 1, descripcion: '' },
+  });
+
+  const onSubmit = async (vals: Form): Promise<void> => {
+    await mutation.mutateAsync({
+      jugadorInscritoId: vals.jugadorInscritoId,
+      fechasSuspension: vals.fechasSuspension,
+      descripcion: vals.descripcion,
+      desdeFechaNumero: vals.desdeFechaNumero,
+    });
+    form.reset();
+    setEquipoSeleccionado('');
+    onDone();
+  };
+
+  const error = mutation.error as ApiError | undefined;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <AlertTriangle size={18} className="text-accent" />
+        <CardLabel>Nueva sanción del tribunal</CardLabel>
+      </div>
+
+      <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="label">Equipo</label>
+          <select
+            className="input"
+            value={equipoSeleccionado}
+            onChange={(e) => {
+              setEquipoSeleccionado(e.target.value);
+              form.setValue('jugadorInscritoId', '');
+            }}
+          >
+            <option value="">— elegí equipo —</option>
+            {equiposQ.data?.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="label">Jugador</label>
+          <select className="input" {...form.register('jugadorInscritoId')} disabled={!equipoSeleccionado}>
+            <option value="">— elegí jugador —</option>
+            {jugadoresQ.data?.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.numeroCamiseta ? `#${j.numeroCamiseta} ` : ''}
+                {j.nombre} {j.apellido}
+              </option>
+            ))}
+          </select>
+          {form.formState.errors.jugadorInscritoId && (
+            <p className="text-xs text-danger mt-1">{form.formState.errors.jugadorInscritoId.message}</p>
+          )}
+        </div>
+
+        <Input
+          label="Fechas de suspensión"
+          type="number"
+          min={1}
+          max={20}
+          {...form.register('fechasSuspension', { valueAsNumber: true })}
+          error={form.formState.errors.fechasSuspension?.message}
+        />
+        <Input
+          label="Desde fecha número (opcional)"
+          type="number"
+          min={1}
+          placeholder="Próxima programada"
+          {...form.register('desdeFechaNumero', { valueAsNumber: true })}
+        />
+
+        <div className="md:col-span-2">
+          <label className="label">Descripción / fundamento</label>
+          <textarea
+            className="input min-h-[80px]"
+            placeholder="Ej. Agresión física a árbitro tras gol del rival, expulsión + 5 fechas. Fallo Tribunal 12/05/2026."
+            {...form.register('descripcion')}
+          />
+          {form.formState.errors.descripcion && (
+            <p className="text-xs text-danger mt-1">{form.formState.errors.descripcion.message}</p>
+          )}
+        </div>
+
+        {error && (
+          <div className="md:col-span-2 text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
+            {error.message}
+          </div>
+        )}
+
+        <div className="md:col-span-2 flex gap-2">
+          <Button type="submit" variant="accent" loading={mutation.isPending}>
+            <Gavel size={14} /> Imponer sanción
+          </Button>
+          <Button type="button" variant="ghost" onClick={onDone}>
+            Cancelar
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}

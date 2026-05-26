@@ -16,6 +16,8 @@ import { TemporadasAdminController } from './temporadas/temporadas-admin.control
 import { TemporadasAdminService } from './temporadas/temporadas-admin.service';
 import { TorneosAdminController } from './torneos/torneos-admin.controller';
 import { TorneosAdminService } from './torneos/torneos-admin.service';
+import { TribunalAdminController } from './tribunal/tribunal-admin.controller';
+import { TribunalAdminService } from './tribunal/tribunal-admin.service';
 
 /**
  * Módulo admin — endpoints autenticados bajo /api/v1/admin/*.
@@ -36,6 +38,7 @@ import { TorneosAdminService } from './torneos/torneos-admin.service';
     FixtureAdminController,
     FixtureDetailController,
     PartidosAdminController,
+    TribunalAdminController,
   ],
   providers: [
     TemporadasAdminService,
@@ -44,6 +47,7 @@ import { TorneosAdminService } from './torneos/torneos-admin.service';
     JugadoresAdminService,
     FixtureAdminService,
     PartidosAdminService,
+    TribunalAdminService,
   ],
 })
 export class AdminModule {}

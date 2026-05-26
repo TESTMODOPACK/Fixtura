@@ -26,6 +26,7 @@ import {
   useAddIncidencia,
   useCerrarActa,
   useJugadores,
+  useJugadoresBloqueados,
   usePartido,
   useReabrirActa,
   useRemoveIncidencia,
@@ -130,7 +131,13 @@ export default function PartidoDetallePage({
 
       <EditarPartidoCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
 
-      {!cerrada && <IncidenciasSection partido={partido} />}
+      {!cerrada && (
+        <IncidenciasSection
+          partido={partido}
+          torneoId={torneoId}
+          fechaNumero={partido.fechaNumero}
+        />
+      )}
 
       <IncidenciasList partido={partido} cerrada={cerrada} />
     </>
@@ -315,6 +322,8 @@ function EditarPartidoCard({
 // ─── Cargar incidencias (goles, tarjetas, MVP) ──────────────────────
 function IncidenciasSection({
   partido,
+  torneoId,
+  fechaNumero,
 }: {
   partido: {
     id: string;
@@ -323,9 +332,15 @@ function IncidenciasSection({
     equipoVisitaId: string;
     equipoVisitaNombre: string;
   };
+  torneoId: string;
+  fechaNumero: number;
 }): React.ReactElement {
   const [equipoSeleccionado, setEquipoSeleccionado] = useState<string>(partido.equipoLocalId);
   const jugadoresQuery = useJugadores(equipoSeleccionado);
+  const bloqueadosQuery = useJugadoresBloqueados(torneoId, fechaNumero);
+  const bloqueadosSet = new Set(
+    (bloqueadosQuery.data ?? []).map((b) => b.jugadorInscritoId),
+  );
   const addIncidencia = useAddIncidencia(partido.id);
   const error = addIncidencia.error as ApiError | undefined;
 
@@ -387,16 +402,26 @@ function IncidenciasSection({
           <label className="label">Jugador</label>
           <select className="input" {...form.register('jugadorInscritoId')}>
             <option value="">— elegí jugador —</option>
-            {jugadoresQuery.data?.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.numeroCamiseta ? `#${j.numeroCamiseta} ` : ''}
-                {j.nombre} {j.apellido}
-                {j.capitan ? ' (C)' : ''}
-              </option>
-            ))}
+            {jugadoresQuery.data?.map((j) => {
+              const sancionado = bloqueadosSet.has(j.id);
+              return (
+                <option key={j.id} value={j.id}>
+                  {sancionado ? '🚫 ' : ''}
+                  {j.numeroCamiseta ? `#${j.numeroCamiseta} ` : ''}
+                  {j.nombre} {j.apellido}
+                  {j.capitan ? ' (C)' : ''}
+                  {sancionado ? ' — SANCIONADO' : ''}
+                </option>
+              );
+            })}
           </select>
           {form.formState.errors.jugadorInscritoId && (
             <p className="text-xs text-danger mt-1">{form.formState.errors.jugadorInscritoId.message}</p>
+          )}
+          {bloqueadosSet.size > 0 && (
+            <p className="text-xs text-accent mt-1 font-serif italic">
+              ⚠ {bloqueadosSet.size} jugador(es) sancionado(s) no debería(n) estar en cancha esta fecha.
+            </p>
           )}
         </div>
 

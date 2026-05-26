@@ -89,6 +89,12 @@ export default function TorneoDetailPage({
           <TabButton active={tab === 'configuracion'} onClick={() => setTab('configuracion')}>
             Configuración
           </TabButton>
+          <Link
+            href={`/admin/torneos/${id}/tribunal`}
+            className="px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold transition-colors border-b-2 -mb-px border-transparent text-ink-mute hover:text-ink ml-auto"
+          >
+            Tribunal →
+          </Link>
         </nav>
       </div>
 
