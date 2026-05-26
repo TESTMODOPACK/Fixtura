@@ -231,7 +231,11 @@ export class PartidosAdminService {
     );
     if (todosFinalizados) {
       await this.fechaRepo.update({ id: partido.fechaId }, { estado: 'FINALIZADA' });
-      await this.decrementarSancionesPendientes(partido.tenantId, fecha.numero);
+      // Pasamos torneoId para que el decremento NO afecte sanciones de
+      // OTROS torneos del mismo tenant. Si un tenant tiene dos torneos
+      // activos en paralelo, no queremos que cerrar fecha 3 del torneo A
+      // decremente sanciones del torneo B.
+      await this.decrementarSancionesPendientes(partido.tenantId, fecha.torneoId, fecha.numero);
     }
 
     return this.toDto(partido, fecha.numero, fecha.etiqueta);
@@ -404,37 +408,50 @@ export class PartidosAdminService {
   }
 
   /**
-   * Decrementa en 1 el contador `fechas_pendientes` de todas las
-   * sanciones del torneo cuya fecha de inicio sea ≤ a la fecha
-   * recién finalizada. Marca como cumplida cuando llega a 0.
+   * Decrementa en 1 el contador `fechas_pendientes` de las sanciones
+   * DEL TORNEO ESPECÍFICO cuya fecha de inicio sea ≤ a la fecha recién
+   * finalizada. Marca como cumplida cuando llega a 0.
+   *
+   * IMPORTANTE: filtrar por torneo_id evita que cerrar una fecha de un
+   * torneo decremente sanciones de otros torneos paralelos del mismo
+   * tenant.
    */
   private async decrementarSancionesPendientes(
     tenantId: string,
+    torneoId: string,
     fechaNumeroFinalizada: number,
   ): Promise<void> {
-    // -1 a las que tengan pendientes > 0 y desde_fecha_numero ≤ esta fecha
     await this.sancionRepo
       .createQueryBuilder()
       .update()
       .set({ fechasPendientes: () => 'fechas_pendientes - 1' })
       .where('tenant_id = :tenantId', { tenantId })
+      .andWhere('torneo_id = :torneoId', { torneoId })
       .andWhere('cumplida = false')
       .andWhere('fechas_pendientes > 0')
       .andWhere('desde_fecha_numero <= :fechaNumero', { fechaNumero: fechaNumeroFinalizada })
       .execute();
 
-    // Marcar cumplida las que llegaron a 0
+    // Marcar cumplida las que llegaron a 0 (de este torneo)
     await this.sancionRepo
       .createQueryBuilder()
       .update()
       .set({ cumplida: true })
       .where('tenant_id = :tenantId', { tenantId })
+      .andWhere('torneo_id = :torneoId', { torneoId })
       .andWhere('cumplida = false')
       .andWhere('fechas_pendientes <= 0')
       .execute();
   }
 
-  /** Reabrir acta (sólo para corrección manual, requiere LIGA_ADMIN). */
+  /**
+   * Reabrir acta (sólo para corrección manual, requiere LIGA_ADMIN).
+   *
+   * Si la fecha estaba FINALIZADA (todos los partidos cerrados), se
+   * revierte a EN_CURSO. No tocamos las sanciones decrementadas — eso
+   * sería complejo de revertir limpiamente. El operador puede ajustarlas
+   * manualmente desde Tribunal si es necesario.
+   */
   async reabrirActa(partidoId: string, tenantId: string): Promise<PartidoAdmin> {
     const partido = await this.findPartido(partidoId, tenantId);
     if (!partido.actaCerradaAt) {
@@ -445,10 +462,14 @@ export class PartidosAdminService {
     partido.estado = 'EN_CURSO';
     await this.repo.save(partido);
 
-    // Re-abrir también la fecha si estaba FINALIZADA
-    await this.fechaRepo.update({ id: partido.fechaId }, { estado: 'EN_CURSO' });
-
+    // Solo cambiar fecha a EN_CURSO si estaba FINALIZADA. Si estaba
+    // PROGRAMADA / EN_CURSO, dejarla como estaba.
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    if (fecha.estado === 'FINALIZADA') {
+      await this.fechaRepo.update({ id: partido.fechaId }, { estado: 'EN_CURSO' });
+      fecha.estado = 'EN_CURSO';
+    }
+
     return this.toDto(partido, fecha.numero, fecha.etiqueta);
   }
 
