@@ -440,6 +440,69 @@ async function seedDeportivo(tenantId: string): Promise<void> {
   log(
     `Incidencias creadas: ${golesCount} goles, ${asistenciasCount} asistencias, ${amarillasCount} amarillas, ${mvpsCount} MVPs`,
   );
+
+  // ─── Personal operativo (árbitros / planilleros / paramédicos) ────
+  await seedPersonal(tenantId);
+}
+
+/**
+ * Cataloga 8 personas operativas: 4 árbitros principales, 2 asistentes,
+ * 1 planillero, 1 paramédico. Mezcla de carnets ANFA vigentes / por
+ * vencer / vencidos para que el panel muestre datos significativos.
+ */
+async function seedPersonal(tenantId: string): Promise<void> {
+  const hoy = new Date();
+  const isoMasDias = (dias: number): string => {
+    const d = new Date(hoy);
+    d.setDate(d.getDate() + dias);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const personal: Array<{
+    nombre: string;
+    apellido: string;
+    rut: string;
+    rol: string;
+    telefono: string;
+    tarifaBase: number;
+    carnetAnfaNumero: string | null;
+    carnetAnfaVence: string | null;
+  }> = [
+    // Árbitros principales — carnet vigente
+    { nombre: 'Cristián', apellido: 'Garay', rut: '15.234.567-8', rol: 'ARBITRO_PRINCIPAL', telefono: '+56 9 8123 4567', tarifaBase: 45000, carnetAnfaNumero: 'A-1023', carnetAnfaVence: isoMasDias(420) },
+    { nombre: 'Patricio', apellido: 'Ñaupas', rut: '12.456.789-K', rol: 'ARBITRO_PRINCIPAL', telefono: '+56 9 7654 3210', tarifaBase: 45000, carnetAnfaNumero: 'A-0987', carnetAnfaVence: isoMasDias(180) },
+    // Árbitro con carnet por vencer (warning naranja)
+    { nombre: 'Roberto', apellido: 'Mardones', rut: '14.876.123-2', rol: 'ARBITRO_PRINCIPAL', telefono: '+56 9 5544 3322', tarifaBase: 45000, carnetAnfaNumero: 'A-1100', carnetAnfaVence: isoMasDias(22) },
+    // Árbitro con carnet vencido (warning rojo)
+    { nombre: 'Diego', apellido: 'Salas', rut: '13.555.221-7', rol: 'ARBITRO_PRINCIPAL', telefono: '+56 9 9988 7766', tarifaBase: 45000, carnetAnfaNumero: 'A-0876', carnetAnfaVence: isoMasDias(-45) },
+    // Asistentes
+    { nombre: 'Felipe', apellido: 'Quintana', rut: '16.123.456-9', rol: 'ARBITRO_ASISTENTE', telefono: '+56 9 4433 2211', tarifaBase: 28000, carnetAnfaNumero: 'B-2034', carnetAnfaVence: isoMasDias(310) },
+    { nombre: 'Marcelo', apellido: 'Vergara', rut: '17.234.567-0', rol: 'ARBITRO_ASISTENTE', telefono: '+56 9 6677 8899', tarifaBase: 28000, carnetAnfaNumero: 'B-2102', carnetAnfaVence: isoMasDias(95) },
+    // Planillero
+    { nombre: 'Camila', apellido: 'Rojas', rut: '18.345.678-1', rol: 'PLANILLERO', telefono: '+56 9 1122 3344', tarifaBase: 22000, carnetAnfaNumero: null, carnetAnfaVence: null },
+    // Paramédico
+    { nombre: 'Javiera', apellido: 'Hernández', rut: '17.987.654-3', rol: 'PARAMEDICO', telefono: '+56 9 5566 7788', tarifaBase: 35000, carnetAnfaNumero: null, carnetAnfaVence: null },
+  ];
+
+  for (const p of personal) {
+    await AppDataSource.query(
+      `INSERT INTO personal
+         (tenant_id, nombre, apellido, rut, rol, telefono, tarifa_base, carnet_anfa_numero, carnet_anfa_vence, activo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)`,
+      [
+        tenantId,
+        p.nombre,
+        p.apellido,
+        p.rut,
+        p.rol,
+        p.telefono,
+        p.tarifaBase,
+        p.carnetAnfaNumero,
+        p.carnetAnfaVence,
+      ],
+    );
+  }
+  log(`Personal cargado: ${personal.length} personas (árbitros, asistentes, planillero, paramédico)`);
 }
 
 main().catch((err) => {

@@ -190,7 +190,13 @@ function ActaSection({
         <Button
           variant="default"
           size="sm"
-          onClick={() => reabrirActa.mutate()}
+          onClick={() => {
+            const ok = window.confirm(
+              'Vas a reabrir el acta de este partido. Esto deshace el cierre pero NO revierte automáticamente las sanciones disciplinarias que ya se contaron ' +
+                '(ej. fechas pendientes decrementadas, sanciones nuevas generadas). Si lo necesitás, ajustá esas sanciones manualmente desde el Tribunal. ¿Continuar?',
+            );
+            if (ok) reabrirActa.mutate();
+          }}
           loading={reabrirActa.isPending}
         >
           <Unlock size={14} /> Reabrir

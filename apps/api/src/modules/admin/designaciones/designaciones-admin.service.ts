@@ -88,14 +88,38 @@ export class DesignacionesAdminService {
       .andWhere('d.tenant_id = :tenantId', { tenantId })
       .getMany();
 
-    // Index para detectar doble booking: por personal_id → lista de partidos
+    // Index para detectar doble booking. Antes solo cruzábamos partidos
+    // de ESTA fecha; ahora cargamos también las designaciones de los
+    // mismos personal en OTROS partidos del tenant para detectar
+    // solapamientos cross-fecha (ej. un árbitro asignado a fecha 3 a
+    // las 18:00 y a un partido de la fecha 4 también a las 18:00 del
+    // mismo día calendario).
+    const personalIdsInvolucrados = Array.from(new Set(designaciones.map((d) => d.personalId)));
     const porPersonal = new Map<string, Array<{ partidoId: string; fechaHora: Date | null }>>();
-    for (const d of designaciones) {
-      const partido = partidos.find((p) => p.id === d.partidoId);
-      if (!partido) continue;
-      const arr = porPersonal.get(d.personalId) ?? [];
-      arr.push({ partidoId: partido.id, fechaHora: partido.fechaHora });
-      porPersonal.set(d.personalId, arr);
+
+    if (personalIdsInvolucrados.length > 0) {
+      const cruceRaw = await this.repo
+        .createQueryBuilder('d2')
+        .leftJoin('d2.partido', 'partido')
+        .where('d2.personal_id IN (:...personalIds)', {
+          personalIds: personalIdsInvolucrados,
+        })
+        .andWhere('d2.tenant_id = :tenantId', { tenantId })
+        .select([
+          'd2.personal_id AS "personalId"',
+          'd2.partido_id AS "partidoId"',
+          'partido.fecha_hora AS "fechaHora"',
+        ])
+        .getRawMany<{ personalId: string; partidoId: string; fechaHora: string | null }>();
+
+      for (const row of cruceRaw) {
+        const arr = porPersonal.get(row.personalId) ?? [];
+        arr.push({
+          partidoId: row.partidoId,
+          fechaHora: row.fechaHora ? new Date(row.fechaHora) : null,
+        });
+        porPersonal.set(row.personalId, arr);
+      }
     }
 
     const hoy = new Date();

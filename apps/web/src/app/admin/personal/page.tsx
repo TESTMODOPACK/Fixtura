@@ -7,10 +7,13 @@ import {
   ArrowLeft,
   CheckCircle2,
   IdCard,
+  Pencil,
   Phone,
   Plus,
+  RotateCcw,
   Trash2,
   UserCog,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
@@ -27,6 +30,7 @@ import {
   useCreatePersonal,
   useDeactivatePersonal,
   usePersonal,
+  useUpdatePersonal,
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -204,8 +208,27 @@ function FiltroChip({
 
 function PersonaRow({ persona }: { persona: PersonalAdmin }): React.ReactElement {
   const deactivate = useDeactivatePersonal();
+  const update = useUpdatePersonal(persona.id);
+  const [editing, setEditing] = useState(false);
   const status = carnetStatus(persona);
   const aplicaCarnet = ROLES_ARBITRAJE.includes(persona.rol);
+
+  if (editing) {
+    return (
+      <div className="px-5 py-4 bg-paper-dark">
+        <EditarPersonalForm
+          persona={persona}
+          onCancel={() => setEditing(false)}
+          onSubmit={async (vals) => {
+            await update.mutateAsync(vals);
+            setEditing(false);
+          }}
+          pending={update.isPending}
+          error={update.error as ApiError | undefined}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="px-5 py-4 flex items-start gap-3">
@@ -265,17 +288,193 @@ function PersonaRow({ persona }: { persona: PersonalAdmin }): React.ReactElement
           )}
         </div>
       </div>
-      {persona.activo && (
+      <div className="flex items-center gap-1">
         <button
           type="button"
-          onClick={() => deactivate.mutate(persona.id)}
-          className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
-          title="Desactivar"
+          onClick={() => setEditing(true)}
+          className="p-1 rounded text-ink-mute hover:text-accent hover:bg-accent/10"
+          title="Editar"
         >
-          <Trash2 size={14} />
+          <Pencil size={14} />
         </button>
-      )}
+        {persona.activo ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                window.confirm(
+                  `¿Desactivar a ${persona.nombre} ${persona.apellido}? Quedará oculta para nuevas designaciones pero el historial se conserva.`,
+                )
+              ) {
+                deactivate.mutate(persona.id);
+              }
+            }}
+            className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
+            title="Desactivar"
+          >
+            <Trash2 size={14} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => update.mutate({ activo: true })}
+            className="p-1 rounded text-ink-mute hover:text-green-bright hover:bg-green-bright/10"
+            title="Reactivar"
+          >
+            <RotateCcw size={14} />
+          </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+function EditarPersonalForm({
+  persona,
+  onCancel,
+  onSubmit,
+  pending,
+  error,
+}: {
+  persona: PersonalAdmin;
+  onCancel: () => void;
+  onSubmit: (vals: {
+    nombre: string;
+    apellido: string;
+    rol: RolPersonal;
+    rut: string | null;
+    telefono: string | null;
+    email: string | null;
+    tarifaBase: number | null;
+    carnetAnfaNumero: string | null;
+    carnetAnfaVence: string | null;
+    notas: string | null;
+  }) => Promise<void>;
+  pending?: boolean;
+  error?: ApiError;
+}): React.ReactElement {
+  const Schema = z.object({
+    nombre: z.string().min(2).max(100),
+    apellido: z.string().min(2).max(100),
+    rol: z.enum(ROL_PERSONAL),
+    rut: z.string().optional(),
+    telefono: z.string().optional(),
+    email: z.union([z.literal(''), z.string().email('Email inválido')]).optional(),
+    tarifaBase: z.coerce.number().int().min(0).optional(),
+    carnetAnfaNumero: z.string().optional(),
+    carnetAnfaVence: z.string().optional(),
+    notas: z.string().max(2000).optional(),
+  });
+  type Form = z.infer<typeof Schema>;
+
+  const form = useForm<Form>({
+    resolver: zodResolver(Schema),
+    defaultValues: {
+      nombre: persona.nombre,
+      apellido: persona.apellido,
+      rol: persona.rol,
+      rut: persona.rut ?? '',
+      telefono: persona.telefono ?? '',
+      email: persona.email ?? '',
+      tarifaBase: persona.tarifaBase ?? undefined,
+      carnetAnfaNumero: persona.carnetAnfaNumero ?? '',
+      carnetAnfaVence: persona.carnetAnfaVence ?? '',
+      notas: persona.notas ?? '',
+    },
+  });
+  const rol = form.watch('rol');
+  const aplicaCarnet = ROLES_ARBITRAJE.includes(rol);
+
+  const handle = async (vals: Form): Promise<void> => {
+    await onSubmit({
+      nombre: vals.nombre,
+      apellido: vals.apellido,
+      rol: vals.rol,
+      rut: vals.rut || null,
+      telefono: vals.telefono || null,
+      email: vals.email || null,
+      tarifaBase: vals.tarifaBase ?? null,
+      carnetAnfaNumero: vals.carnetAnfaNumero || null,
+      carnetAnfaVence: vals.carnetAnfaVence || null,
+      notas: vals.notas || null,
+    });
+  };
+
+  return (
+    <form
+      onSubmit={form.handleSubmit(handle)}
+      className="grid grid-cols-1 md:grid-cols-2 gap-3"
+    >
+      <div className="md:col-span-2 flex items-center gap-2">
+        <Pencil size={16} className="text-accent" />
+        <CardLabel>Editando · {persona.nombre} {persona.apellido}</CardLabel>
+      </div>
+      <Input
+        label="Nombre"
+        {...form.register('nombre')}
+        error={form.formState.errors.nombre?.message}
+      />
+      <Input
+        label="Apellido"
+        {...form.register('apellido')}
+        error={form.formState.errors.apellido?.message}
+      />
+      <div>
+        <label className="label">Rol</label>
+        <select className="input" {...form.register('rol')}>
+          {ROL_PERSONAL.map((r) => (
+            <option key={r} value={r}>
+              {ROL_LABEL[r]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Input label="RUT" {...form.register('rut')} />
+      <Input label="Teléfono" {...form.register('telefono')} />
+      <Input
+        label="Email"
+        type="email"
+        {...form.register('email')}
+        error={form.formState.errors.email?.message}
+      />
+      <Input
+        label="Tarifa base (CLP)"
+        type="number"
+        min={0}
+        step={1000}
+        {...form.register('tarifaBase', { valueAsNumber: true })}
+      />
+      {aplicaCarnet && (
+        <>
+          <Input label="N° Carnet ANFA" {...form.register('carnetAnfaNumero')} />
+          <Input
+            label="Vence"
+            type="date"
+            {...form.register('carnetAnfaVence')}
+          />
+        </>
+      )}
+      <div className="md:col-span-2">
+        <label className="label">Notas</label>
+        <textarea
+          className="input min-h-[60px]"
+          {...form.register('notas')}
+        />
+      </div>
+      {error && (
+        <div className="md:col-span-2 text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
+          {error.message}
+        </div>
+      )}
+      <div className="md:col-span-2 flex gap-2">
+        <Button type="submit" variant="accent" loading={pending}>
+          Guardar cambios
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          <X size={14} /> Cancelar
+        </Button>
+      </div>
+    </form>
   );
 }
 
