@@ -3,6 +3,8 @@ import { Module } from '@nestjs/common';
 import { CompetitionModule } from '../competition/competition.module';
 import { ActasAdminController } from './actas/actas-admin.controller';
 import { ActasAdminService } from './actas/actas-admin.service';
+import { DashboardAdminController } from './dashboard/dashboard-admin.controller';
+import { DashboardAdminService } from './dashboard/dashboard-admin.service';
 import { DesignacionesAdminController } from './designaciones/designaciones-admin.controller';
 import { DesignacionesAdminService } from './designaciones/designaciones-admin.service';
 import { EquiposAdminController } from './equipos/equipos-admin.controller';
@@ -51,6 +53,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     PersonalAdminController,
     DesignacionesAdminController,
     ActasAdminController,
+    DashboardAdminController,
   ],
   providers: [
     TemporadasAdminService,
@@ -64,6 +67,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     PersonalAdminService,
     DesignacionesAdminService,
     ActasAdminService,
+    DashboardAdminService,
   ],
 })
 export class AdminModule {}

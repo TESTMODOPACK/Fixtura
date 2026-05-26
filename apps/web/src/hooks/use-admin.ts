@@ -5,6 +5,7 @@ import type {
   AsignarDesignacionRequest,
   BulkCreateJugadoresRequest,
   CerrarActaRequest,
+  DashboardAdmin,
   JugadorGlobal,
   CreateEquipoRequest,
   CreateIncidenciaRequest,
@@ -482,5 +483,15 @@ export function useJugadoresGlobal(filters: {
     queryKey: ['admin', 'jugadores-global', filters],
     queryFn: () =>
       apiFetch<JugadorGlobal[]>(`/admin/jugadores${query ? `?${query}` : ''}`),
+  });
+}
+
+// ─── Dashboard admin ──────────────────────────────────────────────────
+export function useDashboardAdmin() {
+  return useQuery({
+    queryKey: ['admin', 'dashboard'],
+    queryFn: () => apiFetch<DashboardAdmin>('/admin/dashboard'),
+    // Refresh cada 60s para que los KPIs se actualicen sin recargar
+    refetchInterval: 60_000,
   });
 }
