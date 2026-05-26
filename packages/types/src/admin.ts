@@ -144,6 +144,11 @@ export const JugadorAdminSchema = z.object({
 });
 export type JugadorAdmin = z.infer<typeof JugadorAdminSchema>;
 
+export const BulkCreateJugadoresSchema = z.object({
+  jugadores: z.array(CreateJugadorSchema).min(1).max(50),
+});
+export type BulkCreateJugadoresRequest = z.infer<typeof BulkCreateJugadoresSchema>;
+
 // ─── Fixture ─────────────────────────────────────────────────────────
 export const GenerarFixtureSchema = z.object({
   fechaInicio: z.iso.date(),

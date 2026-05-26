@@ -26,6 +26,9 @@ export const PartidoAdminSchema = z.object({
 export type PartidoAdmin = z.infer<typeof PartidoAdminSchema>;
 
 export const UpdatePartidoSchema = z.object({
+  // Cambiar de fecha (reprogramar). Útil para drag&drop entre fechas en
+  // el editor de fixture admin.
+  fechaId: z.uuid().optional(),
   canchaNombre: z.string().max(100).nullable().optional(),
   fechaHora: z.iso.datetime().nullable().optional(),
   estado: z.enum(ESTADO_PARTIDO).optional(),

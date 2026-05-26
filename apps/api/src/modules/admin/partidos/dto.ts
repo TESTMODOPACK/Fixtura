@@ -34,6 +34,10 @@ const TIPO_INCIDENCIA = [
 
 export class UpdatePartidoDto {
   @IsOptional()
+  @IsUUID()
+  fechaId?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(100)
   canchaNombre?: string | null;

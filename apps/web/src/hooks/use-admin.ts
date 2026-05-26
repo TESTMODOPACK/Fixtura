@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
   AsignarDesignacionRequest,
+  BulkCreateJugadoresRequest,
   CerrarActaRequest,
   CreateEquipoRequest,
   CreateIncidenciaRequest,
@@ -126,6 +127,20 @@ export function useCreateJugador(equipoId: string) {
   return useMutation({
     mutationFn: (input: CreateJugadorRequest) =>
       apiFetch<JugadorAdmin>(`/admin/equipos/${equipoId}/jugadores`, { method: 'POST', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'equipos', equipoId, 'jugadores'] });
+    },
+  });
+}
+
+export function useBulkCreateJugadores(equipoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: BulkCreateJugadoresRequest) =>
+      apiFetch<JugadorAdmin[]>(`/admin/equipos/${equipoId}/jugadores/bulk`, {
+        method: 'POST',
+        body: input,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'equipos', equipoId, 'jugadores'] });
     },

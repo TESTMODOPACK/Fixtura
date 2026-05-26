@@ -94,13 +94,40 @@ export class PartidosAdminService {
     };
   }
 
-  // ─── Update partido (cancha, hora, estado, observaciones) ──────────
+  // ─── Update partido (cancha, hora, estado, observaciones, fecha) ──
   async update(
     partidoId: string,
     tenantId: string,
     input: UpdatePartidoRequest,
   ): Promise<PartidoAdmin> {
     const partido = await this.findPartido(partidoId, tenantId);
+
+    // Cambiar de fecha (reprogramación). Validamos:
+    //   1) la fecha destino existe en este tenant
+    //   2) pertenece al MISMO torneo (no se mueve un partido entre torneos)
+    //   3) el acta del partido NO está cerrada (sería re-escribir historia)
+    if (input.fechaId !== undefined && input.fechaId !== partido.fechaId) {
+      if (partido.actaCerradaAt) {
+        throw new ConflictException(
+          'No se puede mover un partido con acta cerrada. Reabrir primero.',
+        );
+      }
+      const fechaActual = await this.fechaRepo.findOneOrFail({
+        where: { id: partido.fechaId },
+      });
+      const fechaDestino = await this.fechaRepo.findOne({
+        where: { id: input.fechaId, tenantId },
+      });
+      if (!fechaDestino) {
+        throw new NotFoundException(`Fecha destino ${input.fechaId} no encontrada`);
+      }
+      if (fechaDestino.torneoId !== fechaActual.torneoId) {
+        throw new BadRequestException(
+          'La fecha destino pertenece a un torneo distinto',
+        );
+      }
+      partido.fechaId = input.fechaId;
+    }
 
     if (input.canchaNombre !== undefined) partido.canchaNombre = input.canchaNombre;
     if (input.fechaHora !== undefined) {

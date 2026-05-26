@@ -1,19 +1,32 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Save, UserPlus } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  FileSpreadsheet,
+  Save,
+  UploadCloud,
+  UserPlus,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import type { JugadorAdmin } from '@fixtura/types';
+import type { CreateJugadorRequest, JugadorAdmin } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
-import { useCreateJugador, useJugadores } from '@/hooks/use-admin';
+import {
+  useBulkCreateJugadores,
+  useCreateJugador,
+  useJugadores,
+} from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
@@ -32,13 +45,14 @@ export default function EquipoDetallePage({
   const { equipoId } = params;
   const { data: jugadores, isLoading } = useJugadores(equipoId);
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   return (
     <>
       <PageHead
         eyebrow="Equipo · Plantilla"
         title="Plantilla del equipo"
-        sub="Inscribí los jugadores que van a participar en el torneo. Podés cargarlos uno por uno o en bulk desde CSV (próximamente)."
+        sub="Inscribí los jugadores que van a participar en el torneo. Cargalos uno por uno o pegá la planilla desde Excel."
       >
         <Link href="/admin/torneos">
           <Button variant="default" size="sm">
@@ -49,17 +63,42 @@ export default function EquipoDetallePage({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <Card padding="none" className="lg:col-span-2 overflow-hidden">
-          <div className="px-5 py-3 border-b border-line flex items-center justify-between">
+          <div className="px-5 py-3 border-b border-line flex items-center justify-between gap-2 flex-wrap">
             <div>
               <CardLabel>Jugadores inscritos</CardLabel>
               <div className="font-display text-xl text-green-deep tracking-display">
                 {isLoading ? '…' : `${jugadores?.length ?? 0} JUGADORES`}
               </div>
             </div>
-            <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
-              <UserPlus size={14} /> {adding ? 'Cancelar' : 'Agregar jugador'}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  setImporting((v) => !v);
+                  setAdding(false);
+                }}
+              >
+                <FileSpreadsheet size={14} /> {importing ? 'Cancelar' : 'Importar CSV'}
+              </Button>
+              <Button
+                variant="accent"
+                size="sm"
+                onClick={() => {
+                  setAdding((v) => !v);
+                  setImporting(false);
+                }}
+              >
+                <UserPlus size={14} /> {adding ? 'Cancelar' : 'Agregar jugador'}
+              </Button>
+            </div>
           </div>
+
+          {importing && (
+            <div className="px-5 py-4 bg-paper-dark border-b border-line">
+              <ImportCsvForm equipoId={equipoId} onDone={() => setImporting(false)} />
+            </div>
+          )}
 
           {adding && (
             <div className="px-5 py-4 bg-paper-dark border-b border-line">
@@ -275,4 +314,289 @@ function NuevoJugadorForm({
       </div>
     </form>
   );
+}
+
+// ─── Import CSV ──────────────────────────────────────────────────────
+type FilaParseada = {
+  raw: string;
+  ok: boolean;
+  jugador?: CreateJugadorRequest;
+  errores?: string[];
+};
+
+function ImportCsvForm({
+  equipoId,
+  onDone,
+}: {
+  equipoId: string;
+  onDone: () => void;
+}): React.ReactElement {
+  const [csv, setCsv] = useState('');
+  const mutation = useBulkCreateJugadores(equipoId);
+  const error = mutation.error as ApiError | undefined;
+
+  const parsed = useMemo(() => parseCsv(csv), [csv]);
+  const validos = parsed.filter((p) => p.ok);
+  const invalidos = parsed.filter((p) => !p.ok);
+
+  const handleFile = (file: File): void => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : '';
+      setCsv(text);
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>): void => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  };
+
+  const enviar = async (): Promise<void> => {
+    if (validos.length === 0) return;
+    // El backend acepta hasta 50 por request — chunked si excede.
+    const CHUNK = 50;
+    for (let i = 0; i < validos.length; i += CHUNK) {
+      const chunk = validos.slice(i, i + CHUNK);
+      await mutation.mutateAsync({
+        jugadores: chunk.map((p) => p.jugador!),
+      });
+    }
+    setCsv('');
+    onDone();
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <FileSpreadsheet size={18} className="text-accent" />
+        <CardLabel>Importar plantilla desde planilla</CardLabel>
+      </div>
+
+      <div className="bg-paper border border-line rounded-card p-3 mb-3 text-xs text-ink-mute font-serif italic leading-relaxed">
+        Columnas esperadas (cabecera obligatoria, separador <span className="font-mono">,</span> o{' '}
+        <span className="font-mono">;</span>):
+        <div className="font-mono not-italic text-ink mt-1 break-all">
+          nombre,apellido,rut,numero,posicion,pie,fecha_nac,apodo,capitan
+        </div>
+        <div className="mt-1">
+          Solo <span className="font-semibold">nombre</span> y{' '}
+          <span className="font-semibold">apellido</span> son obligatorios. El resto pueden ir
+          vacíos. <span className="font-mono">posicion</span> ∈ ARQUERO/DEFENSA/MEDIO/DELANTERO.
+          <span className="font-mono"> pie</span> ∈ IZQUIERDO/DERECHO/AMBIDIESTRO.
+          <span className="font-mono"> capitan</span> ∈ true/false/1/0.
+        </div>
+      </div>
+
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDrop}
+        className="border-2 border-dashed border-line rounded-card p-4 mb-3 text-center"
+      >
+        <UploadCloud size={20} className="mx-auto text-ink-mute mb-1" />
+        <p className="text-xs text-ink-mute font-serif italic mb-2">
+          Arrastrá el .csv aquí o seleccionalo
+        </p>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleFile(file);
+          }}
+          className="text-xs"
+        />
+      </div>
+
+      <label className="label">…o pegá el CSV directamente</label>
+      <textarea
+        className="input min-h-[140px] font-mono text-xs"
+        placeholder={`nombre,apellido,rut,numero,posicion,pie,fecha_nac,apodo,capitan\nJuan,Pérez,12345678-9,10,DELANTERO,DERECHO,1995-04-22,,true\n...`}
+        value={csv}
+        onChange={(e) => setCsv(e.target.value)}
+      />
+
+      {parsed.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center gap-3 text-xs">
+            <span className="flex items-center gap-1 text-green-bright font-semibold">
+              <CheckCircle2 size={12} /> {validos.length} válidas
+            </span>
+            {invalidos.length > 0 && (
+              <span className="flex items-center gap-1 text-danger font-semibold">
+                <AlertTriangle size={12} /> {invalidos.length} con error
+              </span>
+            )}
+          </div>
+
+          {invalidos.length > 0 && (
+            <div className="bg-danger/5 border border-danger/30 rounded-card p-2 max-h-40 overflow-auto">
+              {invalidos.slice(0, 10).map((p, idx) => (
+                <div key={idx} className="text-xs text-danger font-mono mb-1">
+                  línea: {p.raw.slice(0, 80)} → {p.errores?.join('; ')}
+                </div>
+              ))}
+              {invalidos.length > 10 && (
+                <div className="text-xs text-ink-mute italic">
+                  …{invalidos.length - 10} errores más
+                </div>
+              )}
+            </div>
+          )}
+
+          {validos.length > 0 && (
+            <div className="bg-paper border border-line rounded-card max-h-48 overflow-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-paper-dark sticky top-0">
+                  <tr className="text-left">
+                    <th className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-ink-mute font-semibold">#</th>
+                    <th className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-ink-mute font-semibold">Nombre</th>
+                    <th className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-ink-mute font-semibold">Pos</th>
+                    <th className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-ink-mute font-semibold">Cap</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {validos.map((p, idx) => (
+                    <tr key={idx} className="border-t border-line">
+                      <td className="px-2 py-1 font-mono">{p.jugador?.numeroCamiseta ?? '—'}</td>
+                      <td className="px-2 py-1">
+                        {p.jugador?.nombre} {p.jugador?.apellido}
+                        {p.jugador?.rut && (
+                          <span className="text-ink-mute font-mono ml-1">· {p.jugador.rut}</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1 text-[10px] uppercase">{p.jugador?.posicion ?? '—'}</td>
+                      <td className="px-2 py-1">{p.jugador?.capitan ? '★' : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mt-3">
+          {error.message}
+        </div>
+      )}
+
+      <div className="flex gap-2 mt-3">
+        <Button
+          type="button"
+          variant="accent"
+          loading={mutation.isPending}
+          disabled={validos.length === 0}
+          onClick={enviar}
+        >
+          <UploadCloud size={14} /> Importar {validos.length > 0 ? `${validos.length} jugadores` : ''}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onDone}>
+          <X size={14} /> Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Parser CSV simple — soporta separador `,` o `;`, header obligatoria,
+ * filas con campos vacíos. No usa libs (vendría con `papaparse` pero
+ * para este formato fijo no se justifica).
+ */
+function parseCsv(input: string): FilaParseada[] {
+  // Quitar BOM UTF-8 que Excel pone al exportar (﻿ al inicio)
+  const withoutBom = input.replace(/^﻿/, '');
+  const trimmed = withoutBom.trim();
+  if (!trimmed) return [];
+  const lines = trimmed.split(/\r?\n/);
+  if (lines.length < 2) return [];
+
+  const headerLine = lines[0]!;
+  const sep = headerLine.includes(';') ? ';' : ',';
+  const headers = headerLine.split(sep).map((h) => h.trim().toLowerCase());
+
+  const required = ['nombre', 'apellido'];
+  const missingHeaders = required.filter((r) => !headers.includes(r));
+  if (missingHeaders.length > 0) {
+    return [
+      {
+        raw: headerLine,
+        ok: false,
+        errores: [`faltan columnas obligatorias: ${missingHeaders.join(', ')}`],
+      },
+    ];
+  }
+
+  const idx = (col: string): number => headers.indexOf(col);
+  const POS_VALIDOS = ['ARQUERO', 'DEFENSA', 'MEDIO', 'DELANTERO'];
+  const PIE_VALIDOS = ['IZQUIERDO', 'DERECHO', 'AMBIDIESTRO'];
+
+  return lines.slice(1).map((line) => {
+    if (!line.trim()) {
+      return { raw: line, ok: false, errores: ['línea vacía'] };
+    }
+    const cols = line.split(sep).map((c) => c.trim());
+
+    const errores: string[] = [];
+    const nombre = cols[idx('nombre')] ?? '';
+    const apellido = cols[idx('apellido')] ?? '';
+    if (nombre.length < 2) errores.push('nombre muy corto');
+    if (apellido.length < 2) errores.push('apellido muy corto');
+
+    const rutRaw = idx('rut') >= 0 ? (cols[idx('rut')] ?? '') : '';
+    const numRaw = idx('numero') >= 0 ? (cols[idx('numero')] ?? '') : '';
+    const numero = numRaw ? Number(numRaw) : null;
+    if (numRaw && (Number.isNaN(numero) || (numero as number) < 0 || (numero as number) > 99)) {
+      errores.push('numero camiseta inválido');
+    }
+
+    const posRaw = idx('posicion') >= 0 ? (cols[idx('posicion')] ?? '').toUpperCase() : '';
+    const posicion = posRaw
+      ? POS_VALIDOS.includes(posRaw)
+        ? (posRaw as CreateJugadorRequest['posicion'])
+        : null
+      : null;
+    if (posRaw && !posicion) errores.push(`posicion inválida: ${posRaw}`);
+
+    const pieRaw = idx('pie') >= 0 ? (cols[idx('pie')] ?? '').toUpperCase() : '';
+    const pieHabil = pieRaw
+      ? PIE_VALIDOS.includes(pieRaw)
+        ? (pieRaw as CreateJugadorRequest['pieHabil'])
+        : null
+      : null;
+    if (pieRaw && !pieHabil) errores.push(`pie inválido: ${pieRaw}`);
+
+    const fechaRaw = idx('fecha_nac') >= 0 ? (cols[idx('fecha_nac')] ?? '') : '';
+    if (fechaRaw && !/^\d{4}-\d{2}-\d{2}$/.test(fechaRaw)) {
+      errores.push('fecha_nac debe ser AAAA-MM-DD');
+    }
+
+    const apodo = idx('apodo') >= 0 ? (cols[idx('apodo')] ?? '') : '';
+    const capRaw = idx('capitan') >= 0 ? (cols[idx('capitan')] ?? '').toLowerCase() : '';
+    const capitan = capRaw === 'true' || capRaw === '1' || capRaw === 'sí' || capRaw === 'si';
+
+    if (errores.length > 0) {
+      return { raw: line, ok: false, errores };
+    }
+
+    return {
+      raw: line,
+      ok: true,
+      jugador: {
+        nombre,
+        apellido,
+        rut: rutRaw || null,
+        numeroCamiseta: numRaw ? (numero as number) : null,
+        posicion,
+        pieHabil,
+        fechaNac: fechaRaw || null,
+        apodo: apodo || null,
+        capitan,
+      },
+    };
+  });
 }
