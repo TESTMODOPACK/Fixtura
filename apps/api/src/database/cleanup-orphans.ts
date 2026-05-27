@@ -121,6 +121,9 @@ async function main(): Promise<void> {
     );
     log('tenants.requiere_carnet_anfa asegurada.');
 
+    // Sprint 6: tabla canchas.
+    await ensureCanchasTable(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -281,6 +284,40 @@ async function ensureDesignacionesRecintoTable(
   );
   await ensureTrigger(client, 'designaciones_recinto');
   log('Designaciones de recinto aseguradas (idempotente).');
+}
+
+async function ensureCanchasTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS canchas (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      nombre          VARCHAR(150) NOT NULL,
+      direccion       VARCHAR(500),
+      lat             NUMERIC(10, 7),
+      lng             NUMERIC(10, 7),
+      capacidad       INTEGER,
+      superficie      VARCHAR(30) NOT NULL DEFAULT 'PASTO_NATURAL'
+                        CHECK (superficie IN (
+                          'PASTO_NATURAL','PASTO_SINTETICO','CEMENTO','TIERRA','OTRA'
+                        )),
+      iluminacion     BOOLEAN NOT NULL DEFAULT FALSE,
+      tiene_camarines BOOLEAN NOT NULL DEFAULT FALSE,
+      observaciones   TEXT,
+      activa          BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await ensureRls(client, 'canchas');
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_canchas_tenant ON canchas(tenant_id)`);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_canchas_activa ON canchas(activa) WHERE activa = TRUE`,
+  );
+  await ensureTrigger(client, 'canchas');
+  log('Canchas asegurada (idempotente).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

@@ -675,3 +675,53 @@ export function useRemoveRecinto(invalidate: { torneoId: string; fechaId: string
     },
   });
 }
+
+// ─── Canchas ─────────────────────────────────────────────────────────
+import type {
+  CanchaAdmin,
+  CreateCanchaRequest,
+  UpdateCanchaRequest,
+} from '@fixtura/types';
+
+export function useCanchas(soloActivas = false) {
+  return useQuery({
+    queryKey: ['admin', 'canchas', { soloActivas }],
+    queryFn: () =>
+      apiFetch<CanchaAdmin[]>(
+        soloActivas ? '/admin/canchas?activas=true' : '/admin/canchas',
+      ),
+  });
+}
+
+export function useCreateCancha() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateCanchaRequest) =>
+      apiFetch<CanchaAdmin>('/admin/canchas', { method: 'POST', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'canchas'] });
+    },
+  });
+}
+
+export function useUpdateCancha(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateCanchaRequest) =>
+      apiFetch<CanchaAdmin>(`/admin/canchas/${id}`, { method: 'PATCH', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'canchas'] });
+    },
+  });
+}
+
+export function useDeactivateCancha() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/canchas/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'canchas'] });
+    },
+  });
+}

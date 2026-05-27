@@ -15,3 +15,4 @@ export * from './dashboard-admin';
 export * from './ajustes';
 export * from './sponsors';
 export * from './rut';
+export * from './canchas';

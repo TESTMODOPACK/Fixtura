@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import {
+  Cancha,
   Designacion,
   DesignacionRecinto,
   Equipo,
@@ -42,6 +43,7 @@ import {
       Designacion,
       DesignacionRecinto,
       Sponsor,
+      Cancha,
     ]),
   ],
   exports: [TypeOrmModule],
