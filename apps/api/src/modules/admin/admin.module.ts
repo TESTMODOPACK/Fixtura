@@ -1,8 +1,14 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { CompetitionModule } from '../competition/competition.module';
+import { Tenant } from '../tenants/entities/tenant.entity';
+import { User } from '../users/entities/user.entity';
+import { UserRole } from '../users/entities/user-role.entity';
 import { ActasAdminController } from './actas/actas-admin.controller';
 import { ActasAdminService } from './actas/actas-admin.service';
+import { AjustesAdminController } from './ajustes/ajustes-admin.controller';
+import { AjustesAdminService } from './ajustes/ajustes-admin.service';
 import { DashboardAdminController } from './dashboard/dashboard-admin.controller';
 import { DashboardAdminService } from './dashboard/dashboard-admin.service';
 import { DesignacionesAdminController } from './designaciones/designaciones-admin.controller';
@@ -41,7 +47,12 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
  * filtradas por RLS.
  */
 @Module({
-  imports: [CompetitionModule],
+  imports: [
+    CompetitionModule,
+    // Ajustes necesita Tenant + User + UserRole — los registramos
+    // localmente (no se duplican: TypeORM resuelve la metadata).
+    TypeOrmModule.forFeature([Tenant, User, UserRole]),
+  ],
   controllers: [
     TemporadasAdminController,
     TorneosAdminController,
@@ -57,6 +68,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     DesignacionesRespuestaController,
     ActasAdminController,
     DashboardAdminController,
+    AjustesAdminController,
   ],
   providers: [
     TemporadasAdminService,
@@ -72,6 +84,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     DesignacionesEmailService,
     ActasAdminService,
     DashboardAdminService,
+    AjustesAdminService,
   ],
 })
 export class AdminModule {}

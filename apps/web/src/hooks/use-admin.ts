@@ -6,7 +6,11 @@ import type {
   BulkCreateJugadoresRequest,
   CerrarActaRequest,
   DashboardAdmin,
+  InvitarMiembroRequest,
   JugadorGlobal,
+  MiembroAdmin,
+  TenantSettings,
+  UpdateTenantSettingsRequest,
   CreateEquipoRequest,
   CreateIncidenciaRequest,
   CreateJugadorRequest,
@@ -493,5 +497,58 @@ export function useDashboardAdmin() {
     queryFn: () => apiFetch<DashboardAdmin>('/admin/dashboard'),
     // Refresh cada 60s para que los KPIs se actualicen sin recargar
     refetchInterval: 60_000,
+  });
+}
+
+// ─── Ajustes del tenant (settings + miembros) ─────────────────────────
+export function useTenantSettings() {
+  return useQuery({
+    queryKey: ['admin', 'ajustes'],
+    queryFn: () => apiFetch<TenantSettings>('/admin/ajustes'),
+  });
+}
+
+export function useUpdateTenantSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateTenantSettingsRequest) =>
+      apiFetch<TenantSettings>('/admin/ajustes', { method: 'PATCH', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'ajustes'] });
+      qc.invalidateQueries({ queryKey: ['public'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'dashboard'] });
+    },
+  });
+}
+
+export function useMiembros() {
+  return useQuery({
+    queryKey: ['admin', 'ajustes', 'miembros'],
+    queryFn: () => apiFetch<MiembroAdmin[]>('/admin/ajustes/miembros'),
+  });
+}
+
+export function useInvitarMiembro() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: InvitarMiembroRequest) =>
+      apiFetch<MiembroAdmin>('/admin/ajustes/miembros', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'ajustes', 'miembros'] });
+    },
+  });
+}
+
+export function useRemoveMiembro() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userRoleId: string) =>
+      apiFetch<void>(`/admin/ajustes/miembros/${userRoleId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'ajustes', 'miembros'] });
+    },
   });
 }

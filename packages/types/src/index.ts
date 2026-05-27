@@ -12,3 +12,4 @@ export * from './designaciones';
 export * from './actas-global';
 export * from './jugadores-global';
 export * from './dashboard-admin';
+export * from './ajustes';

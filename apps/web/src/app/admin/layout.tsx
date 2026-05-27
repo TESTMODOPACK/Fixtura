@@ -71,7 +71,7 @@ const NAV: NavSection[] = [
     title: 'Configuración',
     items: [
       { href: '/admin/personal', label: 'Personal & roles', icon: UserCog },
-      { href: '/admin/ajustes', label: 'Ajustes', icon: Settings, comingSoon: true },
+      { href: '/admin/ajustes', label: 'Ajustes', icon: Settings },
     ],
   },
 ];

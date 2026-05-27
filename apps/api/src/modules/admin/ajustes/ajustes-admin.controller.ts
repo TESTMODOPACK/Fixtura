@@ -1,0 +1,79 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
+
+import {
+  ROLE,
+  type MiembroAdmin,
+  type TenantSettings,
+  type UserContext,
+} from '@fixtura/types';
+
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { AjustesAdminService } from './ajustes-admin.service';
+import {
+  InvitarMiembroDto,
+  UpdateTenantSettingsDto,
+} from './dto';
+
+function ensureTenant(user: UserContext): string {
+  if (!user.tenantId) {
+    throw new BadRequestException('No hay tenant en el contexto del usuario.');
+  }
+  return user.tenantId;
+}
+
+/**
+ * Ajustes del tenant — solo LIGA_ADMIN puede tocarlos. El coordinador
+ * tiene acceso de solo lectura (no incluido aquí; si se necesita
+ * después, agregamos un endpoint /admin/ajustes/lectura con roles más
+ * laxos).
+ */
+@Controller('admin/ajustes')
+@Roles(ROLE.LIGA_ADMIN, ROLE.SUPER_ADMIN)
+export class AjustesAdminController {
+  constructor(private readonly svc: AjustesAdminService) {}
+
+  @Get()
+  get(@CurrentUser() user: UserContext): Promise<TenantSettings> {
+    return this.svc.getSettings(ensureTenant(user));
+  }
+
+  @Patch()
+  update(
+    @CurrentUser() user: UserContext,
+    @Body() dto: UpdateTenantSettingsDto,
+  ): Promise<TenantSettings> {
+    return this.svc.updateSettings(ensureTenant(user), dto);
+  }
+
+  @Get('miembros')
+  listMiembros(@CurrentUser() user: UserContext): Promise<MiembroAdmin[]> {
+    return this.svc.listMiembros(ensureTenant(user));
+  }
+
+  @Post('miembros')
+  invitarMiembro(
+    @CurrentUser() user: UserContext,
+    @Body() dto: InvitarMiembroDto,
+  ): Promise<MiembroAdmin> {
+    return this.svc.invitarMiembro(ensureTenant(user), user.userId, dto);
+  }
+
+  @Delete('miembros/:userRoleId')
+  removeMiembro(
+    @CurrentUser() user: UserContext,
+    @Param('userRoleId', new ParseUUIDPipe()) userRoleId: string,
+  ): Promise<void> {
+    return this.svc.removeMiembro(ensureTenant(user), userRoleId, user.userId);
+  }
+}
