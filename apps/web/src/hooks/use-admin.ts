@@ -726,6 +726,25 @@ export function useDeactivateCancha() {
   });
 }
 
+// ─── Pagos online (Webpay) ──────────────────────────────────────────
+import type { IniciarPagoResponse } from '@fixtura/types';
+
+export function useIniciarPago() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cobroId, urlRetornoBase }: { cobroId: string; urlRetornoBase?: string }) =>
+      apiFetch<IniciarPagoResponse>('/admin/pagos/iniciar', {
+        method: 'POST',
+        body: { cobroId, urlRetornoBase },
+      }),
+    onSuccess: () => {
+      // El cobro va a cambiar de estado cuando llegue la confirmación.
+      // Invalidamos para que el listado se refresque al volver.
+      qc.invalidateQueries({ queryKey: ['admin', 'cobros'] });
+    },
+  });
+}
+
 // ─── Ocupación de canchas ───────────────────────────────────────────
 import type { OcupacionCancha } from '@fixtura/types';
 
