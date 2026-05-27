@@ -76,10 +76,15 @@ export class AuthService {
     await this.refreshRepo.update({ id: row.id }, { revokedAt: new Date() });
     const user = await this.users.findByIdOrFail(row.userId);
     const roles = await this.users.getActiveRoles(user.id);
+    // Re-resolver tenantId default igual que al login. Sin esto, el
+    // refresh perdía el tenantId y dejaba al usuario sin contexto —
+    // los endpoints admin devolvían "No hay tenant en el contexto".
+    const tenantRoles = roles.filter((r) => r.scope === 'TENANT');
+    const defaultTenantId = tenantRoles.length === 1 ? (tenantRoles[0]!.scopeId ?? null) : null;
     return this.issueTokens({
       userId: user.id,
       email: user.email,
-      tenantId: null,
+      tenantId: defaultTenantId,
       roles,
       impersonatorId: null,
     });

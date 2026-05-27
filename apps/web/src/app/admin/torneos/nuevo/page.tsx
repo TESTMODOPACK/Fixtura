@@ -193,6 +193,27 @@ export default function NuevoTorneoPage(): React.ReactElement {
               {apiError && (
                 <div className="text-sm mt-1">{apiError.message}</div>
               )}
+              {/* Caso especial: error de tenant en contexto → instruir relogueo */}
+              {apiError?.message?.includes('tenant en el contexto') && (
+                <div className="mt-2 text-sm bg-danger/5 border border-danger/30 rounded-card p-2">
+                  <div className="font-semibold mb-1">¿Cómo lo soluciono?</div>
+                  <div>
+                    Tu sesión actual no tiene una liga asignada. Cerrá sesión y volvé a entrar
+                    para que el sistema te asigne el tenant automáticamente.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Limpiamos auth en localStorage y redirigimos a /
+                      window.localStorage.removeItem('fixtura-auth');
+                      window.location.href = '/';
+                    }}
+                    className="mt-2 text-sm text-danger font-semibold hover:underline"
+                  >
+                    → Cerrar sesión y reingresar
+                  </button>
+                </div>
+              )}
               {erroresParaMostrar.length > 0 && (
                 <ul className="text-sm mt-1 space-y-0.5">
                   {erroresParaMostrar.map((e) => (

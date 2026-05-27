@@ -15,6 +15,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+import { IsRutChileno } from '../../../common/validators/is-rut-chileno.validator';
+
 const POSICIONES = ['ARQUERO', 'DEFENSA', 'MEDIO', 'DELANTERO'] as const;
 const PIES = ['IZQUIERDO', 'DERECHO', 'AMBIDIESTRO'] as const;
 
@@ -35,6 +37,7 @@ export class CreateJugadorDto {
   @IsOptional()
   @IsString()
   @Length(0, 20)
+  @IsRutChileno()
   rut?: string | null;
 
   @IsOptional()

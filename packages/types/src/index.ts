@@ -14,3 +14,4 @@ export * from './jugadores-global';
 export * from './dashboard-admin';
 export * from './ajustes';
 export * from './sponsors';
+export * from './rut';

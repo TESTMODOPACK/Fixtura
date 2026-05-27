@@ -20,7 +20,13 @@ import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import { ROL_PERSONAL, type PersonalAdmin, type RolPersonal } from '@fixtura/types';
+import {
+  ROL_PERSONAL,
+  formatearRut,
+  validarRut,
+  type PersonalAdmin,
+  type RolPersonal,
+} from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
@@ -357,7 +363,10 @@ function EditarPersonalForm({
     nombre: z.string().min(2).max(100),
     apellido: z.string().min(2).max(100),
     rol: z.enum(ROL_PERSONAL),
-    rut: z.string().optional(),
+    rut: z
+      .string()
+      .optional()
+      .refine((v) => !v || validarRut(v), 'RUT inválido (verificá el dígito verificador)'),
     telefono: z.string().optional(),
     email: z.union([z.literal(''), z.string().email('Email inválido')]).optional(),
     tarifaBase: z.coerce.number().int().min(0).optional(),
@@ -429,7 +438,19 @@ function EditarPersonalForm({
           ))}
         </select>
       </div>
-      <Input label="RUT" {...form.register('rut')} />
+      <Input
+        label="RUT"
+        placeholder="12.345.678-9"
+        {...form.register('rut', {
+          onBlur: (e) => {
+            const v = e.target.value as string;
+            if (v && validarRut(v)) {
+              form.setValue('rut', formatearRut(v), { shouldValidate: true });
+            }
+          },
+        })}
+        error={form.formState.errors.rut?.message}
+      />
       <Input label="Teléfono" {...form.register('telefono')} />
       <Input
         label="Email"
@@ -485,7 +506,10 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
     nombre: z.string().min(2, 'Mínimo 2 caracteres').max(100),
     apellido: z.string().min(2, 'Mínimo 2 caracteres').max(100),
     rol: z.enum(ROL_PERSONAL),
-    rut: z.string().optional(),
+    rut: z
+      .string()
+      .optional()
+      .refine((v) => !v || validarRut(v), 'RUT inválido (verificá el dígito verificador)'),
     telefono: z.string().optional(),
     email: z.union([z.literal(''), z.string().email('Email inválido')]).optional(),
     tarifaBase: z.coerce.number().int().min(0).optional(),
@@ -553,7 +577,19 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
             ))}
           </select>
         </div>
-        <Input label="RUT" {...form.register('rut')} placeholder="12.345.678-9" />
+        <Input
+          label="RUT"
+          placeholder="12.345.678-9"
+          {...form.register('rut', {
+            onBlur: (e) => {
+              const v = e.target.value as string;
+              if (v && validarRut(v)) {
+                form.setValue('rut', formatearRut(v), { shouldValidate: true });
+              }
+            },
+          })}
+          error={form.formState.errors.rut?.message}
+        />
 
         <Input label="Teléfono" {...form.register('telefono')} placeholder="+56 9 1234 5678" />
         <Input

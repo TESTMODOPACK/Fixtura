@@ -14,6 +14,8 @@ import {
 
 import { ROL_PERSONAL, type RolPersonal } from '@fixtura/types';
 
+import { IsRutChileno } from '../../../common/validators/is-rut-chileno.validator';
+
 export class CreatePersonalDto {
   @IsString()
   @MinLength(2)
@@ -31,6 +33,7 @@ export class CreatePersonalDto {
   @IsOptional()
   @IsString()
   @MaxLength(20)
+  @IsRutChileno()
   rut?: string | null;
 
   @IsOptional()
@@ -84,6 +87,7 @@ export class UpdatePersonalDto {
   @IsOptional()
   @IsString()
   @MaxLength(20)
+  @IsRutChileno()
   rut?: string | null;
 
   @IsOptional()

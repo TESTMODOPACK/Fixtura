@@ -25,7 +25,9 @@
     "migration:run:dev": "npx typeorm-ts-node-commonjs migration:run -d src/database/datasource.ts",
     "migration:revert:dev": "npx typeorm-ts-node-commonjs migration:revert -d src/database/datasource.ts",
     "db:seed": "node dist/database/seed.js",
-    "db:seed:dev": "ts-node -r tsconfig-paths/register src/database/seed.ts"
+    "db:seed:dev": "ts-node -r tsconfig-paths/register src/database/seed.ts",
+    "db:seed:extra": "node dist/database/seed-extra.js",
+    "db:seed:extra:dev": "ts-node -r tsconfig-paths/register src/database/seed-extra.ts"
   },
   "dependencies": {
     "@fixtura/domain": "workspace:*",

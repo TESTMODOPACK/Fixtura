@@ -16,7 +16,12 @@ import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import type { CreateJugadorRequest, JugadorAdmin } from '@fixtura/types';
+import {
+  formatearRut,
+  validarRut,
+  type CreateJugadorRequest,
+  type JugadorAdmin,
+} from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
@@ -224,7 +229,11 @@ function NuevoJugadorForm({
     nombre: z.string().min(2).max(100),
     apellido: z.string().min(2).max(100),
     apodo: z.string().max(50).optional(),
-    rut: z.string().max(20).optional(),
+    rut: z
+      .string()
+      .max(20)
+      .optional()
+      .refine((v) => !v || validarRut(v), 'RUT inválido (verificá el dígito verificador)'),
     numeroCamiseta: z.coerce.number().int().min(0).max(99).optional(),
     posicion: z.enum(['ARQUERO', 'DEFENSA', 'MEDIO', 'DELANTERO']).optional(),
     pieHabil: z.enum(['IZQUIERDO', 'DERECHO', 'AMBIDIESTRO']).optional(),
@@ -273,7 +282,19 @@ function NuevoJugadorForm({
       />
       <Input label="Apodo (opcional)" {...form.register('apodo')} />
 
-      <Input label="RUT" placeholder="12345678-9" {...form.register('rut')} />
+      <Input
+        label="RUT"
+        placeholder="12.345.678-9"
+        {...form.register('rut', {
+          onBlur: (e) => {
+            const v = e.target.value as string;
+            if (v && validarRut(v)) {
+              form.setValue('rut', formatearRut(v), { shouldValidate: true });
+            }
+          },
+        })}
+        error={form.formState.errors.rut?.message}
+      />
       <Input
         label="Número de camiseta"
         type="number"
@@ -548,6 +569,10 @@ function parseCsv(input: string): FilaParseada[] {
     if (apellido.length < 2) errores.push('apellido muy corto');
 
     const rutRaw = idx('rut') >= 0 ? (cols[idx('rut')] ?? '') : '';
+    if (rutRaw && !validarRut(rutRaw)) {
+      errores.push(`RUT inválido: ${rutRaw}`);
+    }
+    const rutFormateado = rutRaw && validarRut(rutRaw) ? formatearRut(rutRaw) : rutRaw;
     const numRaw = idx('numero') >= 0 ? (cols[idx('numero')] ?? '') : '';
     const numero = numRaw ? Number(numRaw) : null;
     if (numRaw && (Number.isNaN(numero) || (numero as number) < 0 || (numero as number) > 99)) {
@@ -589,7 +614,7 @@ function parseCsv(input: string): FilaParseada[] {
       jugador: {
         nombre,
         apellido,
-        rut: rutRaw || null,
+        rut: rutFormateado || null,
         numeroCamiseta: numRaw ? (numero as number) : null,
         posicion,
         pieHabil,
