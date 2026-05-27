@@ -50,7 +50,8 @@ const ROL_LABEL: Record<RolAdminInvitable, string> = {
 
 export default function AjustesPage(): React.ReactElement {
   const [tab, setTab] = useState<Tab>('branding');
-  const { data: settings, isLoading } = useTenantSettings();
+  const { data: settings, isLoading, error, refetch } = useTenantSettings();
+  const apiError = error as ApiError | undefined;
 
   return (
     <>
@@ -62,6 +63,49 @@ export default function AjustesPage(): React.ReactElement {
 
       {isLoading && (
         <div className="font-serif italic text-ink-mute">Cargando ajustes…</div>
+      )}
+
+      {!isLoading && apiError && (
+        <Card padding="roomy" className="border-2 border-danger/40 bg-danger/5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={20} className="text-danger flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="font-display tracking-display text-xl text-danger mb-1">
+                NO PUDIMOS CARGAR LOS AJUSTES
+              </div>
+              <div className="text-sm text-danger mb-3">{apiError.message}</div>
+              <div className="text-sm text-ink-mute font-serif italic mb-3">
+                Causas frecuentes:
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  <li>Tu sesión expiró — cerrá sesión y volvé a entrar.</li>
+                  <li>
+                    Tu rol actual no es <span className="font-mono">LIGA_ADMIN</span> (solo ese rol
+                    puede modificar ajustes; el coordinador no tiene acceso).
+                  </li>
+                  <li>
+                    El API todavía no terminó de bootear — esperá 30 segundos y reintentá.
+                  </li>
+                </ul>
+              </div>
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="text-sm text-accent hover:underline font-semibold"
+              >
+                ↺ Reintentar
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {!isLoading && !apiError && !settings && (
+        <Card padding="roomy">
+          <CardLabel>Sin datos</CardLabel>
+          <p className="font-serif italic text-ink-mute mt-2">
+            El endpoint respondió OK pero sin datos. Reportá esto al soporte.
+          </p>
+        </Card>
       )}
 
       {settings && (
