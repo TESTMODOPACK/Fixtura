@@ -1,10 +1,10 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Save } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Save } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -44,11 +44,24 @@ function slugify(s: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+// Labels legibles por campo para el banner de errores.
+const FIELD_LABEL: Record<string, string> = {
+  nombre: 'Nombre',
+  slug: 'Slug',
+  temporadaId: 'Temporada',
+  tipoFormato: 'Formato',
+  ruedas: 'Ruedas',
+  puntosVictoria: 'Puntos por victoria',
+  puntosEmpate: 'Puntos por empate',
+  puntosDerrota: 'Puntos por derrota',
+};
+
 export default function NuevoTorneoPage(): React.ReactElement {
   const router = useRouter();
   const { data: temporadas, isLoading: loadingTemporadas } = useTemporadas();
   const createTemporada = useCreateTemporada();
   const createTorneo = useCreateTorneo();
+  const errorBannerRef = useRef<HTMLDivElement | null>(null);
 
   const form = useForm<TorneoForm>({
     resolver: zodResolver(TorneoFormSchema),
@@ -62,14 +75,23 @@ export default function NuevoTorneoPage(): React.ReactElement {
       puntosEmpate: 1,
       puntosDerrota: 0,
     },
+    // Re-validar mientras tipea — para que el slug muestre su error
+    // apenas el usuario haga `min < 3`.
+    mode: 'onChange',
   });
 
-  // Auto-slugify desde el nombre mientras el slug esté vacío o sin tocar
+  // Auto-slugify: solo si el usuario NO tocó manualmente el campo slug.
+  // form.formState.dirtyFields.slug se marca true en cuanto hay un onChange
+  // explícito del usuario en ese input.
   const nombre = form.watch('nombre');
   useEffect(() => {
-    const slug = form.getValues('slug');
-    if (!slug || slug === slugify(form.formState.defaultValues?.nombre ?? '')) {
-      form.setValue('slug', slugify(nombre));
+    const slugTocado = form.formState.dirtyFields.slug === true;
+    if (!slugTocado) {
+      const auto = slugify(nombre);
+      if (auto !== form.getValues('slug')) {
+        // shouldValidate true para que el error del min(3) refresque.
+        form.setValue('slug', auto, { shouldValidate: true, shouldDirty: false });
+      }
     }
   }, [nombre, form]);
 
@@ -111,25 +133,36 @@ export default function NuevoTorneoPage(): React.ReactElement {
     router.push(`/admin/torneos/${torneo.id}`);
   };
 
-  // Si el form falla validación zod, mostramos el primer error como
-  // banner global. Sin esto, los campos ocultos (como el select de
-  // temporada cuando aún no hay temporadas) hacían que el submit no
-  // hiciera nada visible.
-  const onError = (errors: Record<string, { message?: string } | undefined>): void => {
+  // Si la validación falla, scrolleamos al banner de errores + focus al
+  // primer campo con error. Sin esto, el "Crear torneo" parecía no hacer
+  // nada cuando el error estaba lejos del botón.
+  const onError = (errors: Record<string, unknown>): void => {
     // eslint-disable-next-line no-console
     console.warn('[nuevo-torneo] validación falló:', errors);
+    if (errorBannerRef.current) {
+      errorBannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    const primerCampoConError = Object.keys(errors)[0];
+    if (primerCampoConError) {
+      // Pequeño delay para que el scroll no compita con el focus.
+      setTimeout(() => {
+        const el = document.querySelector<HTMLElement>(
+          `[name="${primerCampoConError}"]`,
+        );
+        el?.focus();
+      }, 250);
+    }
   };
 
   const apiError = (createTorneo.error ?? createTemporada.error) as ApiError | undefined;
   const formErrors = form.formState.errors;
-  const primerErrorMensaje =
-    formErrors.nombre?.message ??
-    formErrors.slug?.message ??
-    formErrors.temporadaId?.message ??
-    formErrors.puntosVictoria?.message ??
-    formErrors.puntosEmpate?.message ??
-    formErrors.puntosDerrota?.message ??
-    null;
+  // Lista completa de errores para el banner visible.
+  const erroresParaMostrar = Object.entries(formErrors)
+    .map(([campo, err]) => {
+      const errObj = err as { message?: string } | undefined;
+      return { campo, label: FIELD_LABEL[campo] ?? campo, mensaje: errObj?.message ?? 'inválido' };
+    })
+    .filter((e) => e.mensaje);
 
   return (
     <>
@@ -144,6 +177,35 @@ export default function NuevoTorneoPage(): React.ReactElement {
           </Button>
         </Link>
       </PageHead>
+
+      {/* Banner de errores AL TOPE — siempre visible cuando hay problemas */}
+      {(erroresParaMostrar.length > 0 || apiError) && (
+        <div
+          ref={errorBannerRef}
+          className="mb-5 bg-danger/10 border-2 border-danger/40 rounded-card px-4 py-3"
+        >
+          <div className="flex items-start gap-2 text-danger">
+            <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="font-semibold text-sm">
+                {apiError ? 'No se pudo crear el torneo' : 'Revisá los campos marcados:'}
+              </div>
+              {apiError && (
+                <div className="text-sm mt-1">{apiError.message}</div>
+              )}
+              {erroresParaMostrar.length > 0 && (
+                <ul className="text-sm mt-1 space-y-0.5">
+                  {erroresParaMostrar.map((e) => (
+                    <li key={e.campo}>
+                      <span className="font-semibold">{e.label}:</span> {e.mensaje}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <form
         onSubmit={form.handleSubmit(onSubmit, onError)}
@@ -161,12 +223,18 @@ export default function NuevoTorneoPage(): React.ReactElement {
               error={form.formState.errors.nombre?.message}
             />
 
-            <Input
-              label="Slug (URL)"
-              placeholder="apertura-2026"
-              {...form.register('slug')}
-              error={form.formState.errors.slug?.message}
-            />
+            <div>
+              <Input
+                label="Slug (URL)"
+                placeholder="apertura-2026"
+                {...form.register('slug')}
+                error={form.formState.errors.slug?.message}
+              />
+              <p className="text-xs text-ink-mute font-serif italic mt-1">
+                Se autocompleta desde el nombre. Mínimo 3 caracteres, solo minúsculas, números y
+                guiones.
+              </p>
+            </div>
 
             <div>
               <label className="label">Temporada</label>
@@ -255,17 +323,6 @@ export default function NuevoTorneoPage(): React.ReactElement {
         </Card>
 
         <div className="lg:col-span-3">
-          {primerErrorMensaje && !apiError && (
-            <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mb-3">
-              No se pudo crear el torneo: {primerErrorMensaje}
-            </div>
-          )}
-          {apiError && (
-            <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mb-3">
-              {apiError.message}
-            </div>
-          )}
-
           <div className="flex items-center gap-3">
             <Button
               type="submit"

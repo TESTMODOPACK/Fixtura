@@ -25,8 +25,8 @@ export default function DesignacionesIndexPage(): React.ReactElement {
     <>
       <PageHead
         eyebrow="Operaciones"
-        title="Designaciones de árbitros"
-        sub="Asigná árbitros, asistentes, planilleros y paramédicos a los partidos de cada fecha."
+        title="Designación de personal"
+        sub="Asigná árbitros, asistentes y planilleros a los partidos de cada fecha. (Paramédicos y personal de recinto se gestionan desde el catálogo.)"
       >
         <Link href="/admin/personal">
           <Button variant="default" size="sm">

@@ -98,9 +98,9 @@ export default function DesignacionesPage({
   return (
     <>
       <PageHead
-        eyebrow={torneo ? `Torneo · ${torneo.nombre}` : 'Designaciones'}
-        title="Designaciones de árbitros"
-        sub="Asigná árbitros principales, asistentes y planilleros a cada partido. (Paramédico y otros van por recinto, no por partido)."
+        eyebrow={torneo ? `Torneo · ${torneo.nombre}` : 'Designación de personal'}
+        title="Designación de personal"
+        sub="Asigná árbitros principales, asistentes y planilleros a cada partido. (Paramédicos y personal de recinto se gestionan desde el catálogo.)"
       >
         <Link href={`/admin/torneos/${torneoId}`}>
           <Button variant="default" size="sm">
