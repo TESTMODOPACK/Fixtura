@@ -23,6 +23,7 @@ import type {
   UpdatePartidoRequest,
 } from '@fixtura/types';
 
+import { Cancha } from '../../competition/entities/cancha.entity';
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
@@ -44,7 +45,16 @@ export class PartidosAdminService {
     private readonly jugadorRepo: Repository<JugadorInscrito>,
     @InjectRepository(SancionActiva)
     private readonly sancionRepo: Repository<SancionActiva>,
+    @InjectRepository(Cancha) private readonly canchaRepo: Repository<Cancha>,
   ) {}
+
+  /**
+   * Ventana mínima entre dos partidos en la misma cancha (en minutos).
+   * 120 = 2h cubre 90min de partido + 30min de margen para preparación
+   * de la siguiente cita. Si dos partidos del mismo tenant están a menos
+   * de esto en la misma cancha, hay choque.
+   */
+  private static readonly VENTANA_OCUPACION_MIN = 120;
 
   // ─── Fixture completo de un torneo (admin) ─────────────────────────
   async getFixtureFull(torneoId: string, tenantId: string): Promise<FixtureAdminFull> {
@@ -129,16 +139,101 @@ export class PartidosAdminService {
       partido.fechaId = input.fechaId;
     }
 
-    if (input.canchaNombre !== undefined) partido.canchaNombre = input.canchaNombre;
+    // canchaId tiene prioridad sobre canchaNombre. Si llega canchaId
+    // poblamos el nombre desde el catálogo (cache). Si llega null, lo
+    // limpiamos. canchaNombre solo aplica si NO se mandó canchaId (modo
+    // legacy / cancha no catalogada).
+    if (input.canchaId !== undefined) {
+      if (input.canchaId) {
+        const cancha = await this.canchaRepo.findOne({
+          where: { id: input.canchaId, tenantId },
+        });
+        if (!cancha) {
+          throw new BadRequestException(
+            'La cancha no existe o no pertenece a esta liga',
+          );
+        }
+        partido.canchaId = cancha.id;
+        partido.canchaNombre = cancha.nombre;
+      } else {
+        partido.canchaId = null;
+        // Mantenemos canchaNombre si el caller solo nulleó el id.
+      }
+    }
+    if (input.canchaNombre !== undefined && input.canchaId === undefined) {
+      partido.canchaNombre = input.canchaNombre;
+    }
     if (input.fechaHora !== undefined) {
       partido.fechaHora = input.fechaHora ? new Date(input.fechaHora) : null;
     }
     if (input.estado !== undefined) partido.estado = input.estado;
     if (input.observaciones !== undefined) partido.observaciones = input.observaciones;
 
+    // Detección de choque cancha+horario. Solo aplica si hay AMBOS
+    // poblados después de aplicar los cambios. Si el partido ya estaba
+    // suspendido / walkover, no validamos (no van a jugarse).
+    if (
+      partido.canchaId &&
+      partido.fechaHora &&
+      partido.estado !== 'SUSPENDIDO_FUERZA_MAYOR' &&
+      partido.estado !== 'WALKOVER'
+    ) {
+      await this.validarChoqueCancha(partido);
+    }
+
     await this.repo.save(partido);
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     return this.toDto(partido, fecha.numero, fecha.etiqueta);
+  }
+
+  /**
+   * Lanza ConflictException si existe OTRO partido del mismo tenant en
+   * la misma cancha cuyo horario esté dentro de ±VENTANA_OCUPACION_MIN
+   * del partido que se está guardando.
+   *
+   * No verificamos solapamiento de bloques porque no tenemos `duracion`
+   * persistida en `partidos` — asumimos slots de 90+30=120min uniformes.
+   * Cuando agreguemos duración variable (canchas con baby-fútbol vs F11),
+   * acá comparamos rangos `[a, a+90)` vs `[b, b+90)`.
+   */
+  private async validarChoqueCancha(partido: Partido): Promise<void> {
+    if (!partido.canchaId || !partido.fechaHora) return;
+
+    const ventanaMs = PartidosAdminService.VENTANA_OCUPACION_MIN * 60 * 1000;
+    const desde = new Date(partido.fechaHora.getTime() - ventanaMs);
+    const hasta = new Date(partido.fechaHora.getTime() + ventanaMs);
+
+    const choque = await this.repo
+      .createQueryBuilder('p')
+      .leftJoinAndSelect('p.cancha', 'cancha')
+      .leftJoinAndSelect('p.equipoLocal', 'el')
+      .leftJoinAndSelect('p.equipoVisita', 'ev')
+      .where('p.tenant_id = :tenantId', { tenantId: partido.tenantId })
+      .andWhere('p.id <> :id', { id: partido.id })
+      .andWhere('p.cancha_id = :canchaId', { canchaId: partido.canchaId })
+      .andWhere('p.fecha_hora IS NOT NULL')
+      .andWhere('p.fecha_hora >= :desde', { desde })
+      .andWhere('p.fecha_hora <= :hasta', { hasta })
+      .andWhere(`p.estado NOT IN ('SUSPENDIDO_FUERZA_MAYOR','WALKOVER')`)
+      .getOne();
+
+    if (choque) {
+      const nombreCancha = choque.cancha?.nombre ?? partido.canchaNombre ?? 'cancha';
+      const local = choque.equipoLocal?.nombre ?? '?';
+      const visita = choque.equipoVisita?.nombre ?? '?';
+      const hora = choque.fechaHora
+        ? new Date(choque.fechaHora).toLocaleString('es-CL', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '?';
+      throw new ConflictException(
+        `Choque de cancha: "${nombreCancha}" ya tiene "${local} vs ${visita}" el ${hora}. ` +
+          `Las citas deben separarse al menos ${PartidosAdminService.VENTANA_OCUPACION_MIN} min.`,
+      );
+    }
   }
 
   // ─── Incidencias ────────────────────────────────────────────────────
@@ -539,6 +634,7 @@ export class PartidosAdminService {
       equipoLocalNombre: p.equipoLocal?.nombre ?? '',
       equipoVisitaId: p.equipoVisitaId,
       equipoVisitaNombre: p.equipoVisita?.nombre ?? '',
+      canchaId: p.canchaId,
       canchaNombre: p.canchaNombre,
       fechaHora: p.fechaHora?.toISOString() ?? null,
       estado: p.estado,

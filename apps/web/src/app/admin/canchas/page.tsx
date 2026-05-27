@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   AlertTriangle,
+  CalendarRange,
   CheckCircle2,
   Lightbulb,
   MapPin,
@@ -14,6 +15,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -68,8 +70,14 @@ export default function CanchasPage(): React.ReactElement {
       <PageHead
         eyebrow="Operaciones"
         title="Ocupación de canchas"
-        sub="Catálogo de canchas donde se juegan los partidos. Por ahora informativo; pronto se cruza con el fixture para detectar choques de horario."
+        sub="Catálogo de canchas donde se juegan los partidos. Al editar un partido, el sistema avisa si hay choque de horario en la misma cancha."
       >
+        <Link
+          href="/admin/canchas/ocupacion"
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-card text-sm font-semibold bg-paper border border-line hover:border-green-deep hover:text-green-deep transition-colors"
+        >
+          <CalendarRange size={14} /> Vista calendario
+        </Link>
         <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
           <Plus size={14} /> {adding ? 'Cancelar' : 'Nueva cancha'}
         </Button>

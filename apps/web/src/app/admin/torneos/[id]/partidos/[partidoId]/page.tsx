@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
   useAddIncidencia,
+  useCanchas,
   useCerrarActa,
   useDesignacionesPorPartido,
   useJugadores,
@@ -318,13 +319,22 @@ function EditarPartidoCard({
   torneoId,
   cerrada,
 }: {
-  partido: { id: string; canchaNombre: string | null; fechaHora: string | null; estado: string };
+  partido: {
+    id: string;
+    canchaId: string | null;
+    canchaNombre: string | null;
+    fechaHora: string | null;
+    estado: string;
+  };
   torneoId: string;
   cerrada: boolean;
 }): React.ReactElement {
   const mutation = useUpdatePartido(partido.id, torneoId);
+  const { data: canchas } = useCanchas(true);
 
   const Schema = z.object({
+    // "" representa "sin cancha del catálogo / texto libre"
+    canchaId: z.string().nullable(),
     canchaNombre: z.string().max(100).nullable(),
     fechaHora: z.string().min(1, 'Requerida').nullable(),
     estado: z.enum([
@@ -341,33 +351,62 @@ function EditarPartidoCard({
   const form = useForm<Form>({
     resolver: zodResolver(Schema),
     defaultValues: {
+      canchaId: partido.canchaId,
       canchaNombre: partido.canchaNombre,
       fechaHora: partido.fechaHora ? partido.fechaHora.slice(0, 16) : '',
       estado: partido.estado as Form['estado'],
     },
   });
 
+  const canchaIdSeleccionada = form.watch('canchaId');
   const error = mutation.error as ApiError | undefined;
 
   return (
     <Card padding="comfortable" className="mb-5">
       <CardLabel>Detalles del partido</CardLabel>
       <form
-        onSubmit={form.handleSubmit((vals) =>
-          mutation.mutate({
-            canchaNombre: vals.canchaNombre,
+        onSubmit={form.handleSubmit((vals) => {
+          const payload: {
+            canchaId: string | null;
+            canchaNombre?: string | null;
+            fechaHora: string | null;
+            estado: Form['estado'];
+          } = {
+            canchaId: vals.canchaId || null,
             fechaHora: vals.fechaHora ? new Date(vals.fechaHora).toISOString() : null,
             estado: vals.estado,
-          }),
-        )}
+          };
+          // Solo enviamos canchaNombre cuando no hay cancha del catálogo
+          // (modo legacy). Si hay canchaId, el backend setea el nombre.
+          if (!vals.canchaId) payload.canchaNombre = vals.canchaNombre;
+          mutation.mutate(payload);
+        })}
         className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3"
       >
-        <Input
-          label="Cancha"
-          placeholder="Cancha 1"
-          {...form.register('canchaNombre')}
-          disabled={cerrada}
-        />
+        <div>
+          <label className="label">Cancha</label>
+          <select
+            className="input"
+            {...form.register('canchaId')}
+            disabled={cerrada}
+          >
+            <option value="">— Sin cancha del catálogo —</option>
+            {canchas?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
+          {!canchaIdSeleccionada && (
+            <input
+              type="text"
+              placeholder="Nombre libre (legacy)"
+              className="input mt-2"
+              {...form.register('canchaNombre')}
+              disabled={cerrada}
+            />
+          )}
+        </div>
         <Input
           label="Fecha y hora"
           type="datetime-local"
@@ -386,12 +425,16 @@ function EditarPartidoCard({
           </select>
         </div>
 
-        <div className="md:col-span-3 flex items-center gap-2">
+        <div className="md:col-span-3 flex items-start gap-2 flex-wrap">
           <Button type="submit" variant="accent" size="sm" loading={mutation.isPending} disabled={cerrada}>
             <Save size={14} /> Guardar
           </Button>
           {cerrada && <span className="text-xs text-ink-mute">Reabrí el acta para editar.</span>}
-          {error && <span className="text-xs text-danger">{error.message}</span>}
+          {error && (
+            <span className="text-xs text-danger font-semibold flex-1 min-w-[200px]">
+              {error.message}
+            </span>
+          )}
         </div>
       </form>
     </Card>

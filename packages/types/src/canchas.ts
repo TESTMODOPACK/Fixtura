@@ -59,3 +59,27 @@ export const UpdateCanchaSchema = CreateCanchaSchema.partial().extend({
   activa: z.boolean().optional(),
 });
 export type UpdateCanchaRequest = z.infer<typeof UpdateCanchaSchema>;
+
+/**
+ * Ocupación: partidos programados por cancha en un rango de fechas.
+ * Alimenta la vista calendario `/admin/canchas/ocupacion`.
+ */
+export const OcupacionPartidoSchema = z.object({
+  partidoId: z.uuid(),
+  torneoId: z.uuid(),
+  fechaHora: z.iso.datetime(),
+  // Duración estimada en minutos (default 90 — fixturizable después).
+  duracionMin: z.number().int().positive(),
+  equipoLocal: z.string(),
+  equipoVisita: z.string(),
+  torneoNombre: z.string(),
+  estado: z.string(),
+});
+export type OcupacionPartido = z.infer<typeof OcupacionPartidoSchema>;
+
+export const OcupacionCanchaSchema = z.object({
+  canchaId: z.uuid(),
+  canchaNombre: z.string(),
+  partidos: z.array(OcupacionPartidoSchema),
+});
+export type OcupacionCancha = z.infer<typeof OcupacionCanchaSchema>;

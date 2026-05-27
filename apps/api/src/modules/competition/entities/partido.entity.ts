@@ -12,6 +12,7 @@ import {
 
 import { User } from '../../users/entities/user.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { Cancha } from './cancha.entity';
 import { Equipo } from './equipo.entity';
 import { Fecha } from './fecha.entity';
 
@@ -60,6 +61,16 @@ export class Partido {
   @JoinColumn({ name: 'equipo_visita_id' })
   equipoVisita?: Equipo;
 
+  @Column({ name: 'cancha_id', type: 'uuid', nullable: true })
+  canchaId!: string | null;
+
+  @ManyToOne(() => Cancha, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'cancha_id' })
+  cancha?: Cancha | null;
+
+  // Mantenido por backwards-compat. Cuando canchaId está poblado, este
+  // campo se usa como cache para mostrar (admin pueden seguir editándolo
+  // como texto libre si no hay cancha en el catálogo todavía).
   @Column({ name: 'cancha_nombre', type: 'varchar', length: 100, nullable: true })
   canchaNombre!: string | null;
 

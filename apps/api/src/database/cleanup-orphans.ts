@@ -127,6 +127,10 @@ async function main(): Promise<void> {
     // Sprint 6B: tabla cobros (finanzas MVP).
     await ensureCobrosTable(client, log);
 
+    // Sprint 6A-v2: FK formal partidos.cancha_id → canchas.id, con
+    // backfill por nombre para no perder los partidos ya creados.
+    await ensurePartidosCanchaId(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -362,6 +366,35 @@ async function ensureCobrosTable(
   );
   await ensureTrigger(client, 'cobros');
   log('Cobros asegurada (idempotente).');
+}
+
+async function ensurePartidosCanchaId(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    ALTER TABLE partidos
+      ADD COLUMN IF NOT EXISTS cancha_id UUID
+        REFERENCES canchas(id) ON DELETE SET NULL
+  `);
+  // Backfill por nombre (case-insensitive, mismo tenant) si todavía no
+  // se hizo. Solo afecta filas con cancha_id IS NULL y cancha_nombre no
+  // vacío — no pisa asignaciones manuales hechas desde la UI.
+  await client.query(`
+    UPDATE partidos p
+       SET cancha_id = c.id
+      FROM canchas c
+     WHERE p.tenant_id = c.tenant_id
+       AND p.cancha_id IS NULL
+       AND p.cancha_nombre IS NOT NULL
+       AND LOWER(TRIM(p.cancha_nombre)) = LOWER(TRIM(c.nombre))
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_partidos_cancha_horario
+       ON partidos(cancha_id, fecha_hora)
+       WHERE cancha_id IS NOT NULL AND fecha_hora IS NOT NULL`,
+  );
+  log('partidos.cancha_id asegurado (con backfill por nombre).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

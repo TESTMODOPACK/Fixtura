@@ -2,16 +2,21 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import type { CanchaAdmin } from '@fixtura/types';
+import type { CanchaAdmin, OcupacionCancha } from '@fixtura/types';
 
 import { Cancha } from '../../competition/entities/cancha.entity';
+import { Partido } from '../../competition/entities/partido.entity';
 import type { CreateCanchaDto, UpdateCanchaDto } from './dto';
 
 @Injectable()
 export class CanchasAdminService {
   constructor(
     @InjectRepository(Cancha) private readonly repo: Repository<Cancha>,
+    @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
   ) {}
+
+  /** Duración asumida de un partido en minutos. Futuro: configurable. */
+  private static readonly DURACION_PARTIDO_MIN = 90;
 
   async list(tenantId: string, soloActivas = false): Promise<CanchaAdmin[]> {
     const qb = this.repo
@@ -69,6 +74,88 @@ export class CanchasAdminService {
 
     const saved = await this.repo.save(c);
     return this.toDto(saved);
+  }
+
+  /**
+   * Ocupación: lista partidos por cancha activa en un rango. Si no se
+   * pasa rango, devuelve la semana actual (lunes a domingo Chile).
+   * Solo incluye canchas con `activa = true` aunque el partido aún
+   * referencie una cancha inactiva (caso raro post-soft-delete).
+   */
+  async ocupacion(
+    tenantId: string,
+    desde?: string,
+    hasta?: string,
+  ): Promise<OcupacionCancha[]> {
+    const { desdeDt, hastaDt } = this.resolverRango(desde, hasta);
+
+    const canchas = await this.repo
+      .createQueryBuilder('c')
+      .where('c.tenant_id = :tenantId', { tenantId })
+      .andWhere('c.activa = true')
+      .orderBy('c.nombre', 'ASC')
+      .getMany();
+
+    if (canchas.length === 0) return [];
+
+    const canchaIds = canchas.map((c) => c.id);
+    const partidos = await this.partidoRepo
+      .createQueryBuilder('p')
+      .leftJoinAndSelect('p.equipoLocal', 'el')
+      .leftJoinAndSelect('p.equipoVisita', 'ev')
+      .leftJoinAndSelect('p.fecha', 'f')
+      .leftJoinAndSelect('f.torneo', 't')
+      .where('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('p.cancha_id IN (:...canchaIds)', { canchaIds })
+      .andWhere('p.fecha_hora IS NOT NULL')
+      .andWhere('p.fecha_hora >= :desde', { desde: desdeDt })
+      .andWhere('p.fecha_hora < :hasta', { hasta: hastaDt })
+      .orderBy('p.fecha_hora', 'ASC')
+      .getMany();
+
+    const porCancha = new Map<string, OcupacionCancha>();
+    for (const c of canchas) {
+      porCancha.set(c.id, {
+        canchaId: c.id,
+        canchaNombre: c.nombre,
+        partidos: [],
+      });
+    }
+    for (const p of partidos) {
+      if (!p.canchaId || !p.fechaHora) continue;
+      const bucket = porCancha.get(p.canchaId);
+      if (!bucket) continue;
+      bucket.partidos.push({
+        partidoId: p.id,
+        torneoId: p.fecha?.torneoId ?? '',
+        fechaHora: p.fechaHora.toISOString(),
+        duracionMin: CanchasAdminService.DURACION_PARTIDO_MIN,
+        equipoLocal: p.equipoLocal?.nombre ?? '?',
+        equipoVisita: p.equipoVisita?.nombre ?? '?',
+        torneoNombre: p.fecha?.torneo?.nombre ?? '?',
+        estado: p.estado,
+      });
+    }
+    return Array.from(porCancha.values());
+  }
+
+  private resolverRango(
+    desde?: string,
+    hasta?: string,
+  ): { desdeDt: Date; hastaDt: Date } {
+    if (desde && hasta) {
+      return { desdeDt: new Date(desde), hastaDt: new Date(hasta) };
+    }
+    // Default: semana actual lunes 00:00 a lunes siguiente 00:00 (UTC).
+    const ahora = new Date();
+    const day = ahora.getUTCDay(); // 0=Dom, 1=Lun ... 6=Sab
+    const diffLunes = day === 0 ? -6 : 1 - day;
+    const lunes = new Date(ahora);
+    lunes.setUTCDate(ahora.getUTCDate() + diffLunes);
+    lunes.setUTCHours(0, 0, 0, 0);
+    const lunesSiguiente = new Date(lunes);
+    lunesSiguiente.setUTCDate(lunes.getUTCDate() + 7);
+    return { desdeDt: lunes, hastaDt: lunesSiguiente };
   }
 
   /** Soft delete: marcar como inactiva. Preserva historial. */

@@ -11,7 +11,12 @@ import {
   Query,
 } from '@nestjs/common';
 
-import { ROLE, type CanchaAdmin, type UserContext } from '@fixtura/types';
+import {
+  ROLE,
+  type CanchaAdmin,
+  type OcupacionCancha,
+  type UserContext,
+} from '@fixtura/types';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -36,6 +41,17 @@ export class CanchasAdminController {
     @Query('activas') soloActivas?: string,
   ): Promise<CanchaAdmin[]> {
     return this.svc.list(ensureTenant(user), soloActivas === 'true');
+  }
+
+  // OJO: este endpoint debe ir ANTES de `@Get(':id')` para que NestJS no
+  // intente parsear "ocupacion" como un UUID.
+  @Get('ocupacion')
+  ocupacion(
+    @CurrentUser() user: UserContext,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ): Promise<OcupacionCancha[]> {
+    return this.svc.ocupacion(ensureTenant(user), desde, hasta);
   }
 
   @Get(':id')

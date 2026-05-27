@@ -15,6 +15,7 @@ export const PartidoAdminSchema = z.object({
   equipoLocalNombre: z.string(),
   equipoVisitaId: z.uuid(),
   equipoVisitaNombre: z.string(),
+  canchaId: z.uuid().nullable(),
   canchaNombre: z.string().nullable(),
   fechaHora: z.iso.datetime().nullable(),
   estado: z.enum(ESTADO_PARTIDO),
@@ -29,6 +30,9 @@ export const UpdatePartidoSchema = z.object({
   // Cambiar de fecha (reprogramar). Útil para drag&drop entre fechas en
   // el editor de fixture admin.
   fechaId: z.uuid().optional(),
+  // canchaId: nueva relación formal con tabla canchas.
+  canchaId: z.uuid().nullable().optional(),
+  // canchaNombre: texto libre (legacy / canchas no catalogadas).
   canchaNombre: z.string().max(100).nullable().optional(),
   fechaHora: z.iso.datetime().nullable().optional(),
   estado: z.enum(ESTADO_PARTIDO).optional(),

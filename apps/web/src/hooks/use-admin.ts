@@ -726,6 +726,21 @@ export function useDeactivateCancha() {
   });
 }
 
+// ─── Ocupación de canchas ───────────────────────────────────────────
+import type { OcupacionCancha } from '@fixtura/types';
+
+export function useCanchasOcupacion(desde?: string, hasta?: string) {
+  const qs = new URLSearchParams();
+  if (desde) qs.set('desde', desde);
+  if (hasta) qs.set('hasta', hasta);
+  const query = qs.toString();
+  return useQuery({
+    queryKey: ['admin', 'canchas', 'ocupacion', { desde: desde ?? null, hasta: hasta ?? null }],
+    queryFn: () =>
+      apiFetch<OcupacionCancha[]>(`/admin/canchas/ocupacion${query ? `?${query}` : ''}`),
+  });
+}
+
 // ─── Cobros (finanzas) ──────────────────────────────────────────────
 import type {
   CobroAdmin,
