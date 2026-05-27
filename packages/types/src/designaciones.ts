@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ROL_PERSONAL } from './personal';
+import { ROL_PERSONAL, ROLES_DESIGNABLES_PARTIDO } from './personal';
 
 export const ESTADO_DESIGNACION = [
   'PROPUESTA',
@@ -19,14 +19,12 @@ export const DesignacionAdminSchema = z.object({
   personalApellido: z.string(),
   personalRolBase: z.enum(ROL_PERSONAL),
   carnetAnfaVence: z.string().nullable(),
-  rolAsignado: z.enum(ROL_PERSONAL),
+  rolAsignado: z.enum(ROLES_DESIGNABLES_PARTIDO),
   estado: z.enum(ESTADO_DESIGNACION),
   montoPago: z.number().int().nullable(),
   confirmadoAt: z.iso.datetime().nullable(),
   notas: z.string().nullable(),
-  // Cruce con otros partidos del mismo personal a la misma hora (warning UI)
   conflictoDobleBooking: z.boolean(),
-  // Carnet ANFA vencido o por vencer (<30 días) cuando aplica al rol arbitral
   carnetAnfaWarning: z.enum(['VENCIDO', 'POR_VENCER', 'OK', 'NO_APLICA']),
   createdAt: z.iso.datetime(),
 });
@@ -35,7 +33,8 @@ export type DesignacionAdmin = z.infer<typeof DesignacionAdminSchema>;
 export const AsignarDesignacionSchema = z.object({
   partidoId: z.uuid(),
   personalId: z.uuid(),
-  rolAsignado: z.enum(ROL_PERSONAL),
+  // Solo árbitros y planillero — paramédico y "otro" son del recinto.
+  rolAsignado: z.enum(ROLES_DESIGNABLES_PARTIDO),
   montoPago: z.number().int().min(0).optional().nullable(),
   notas: z.string().max(500).optional().nullable(),
 });
@@ -65,3 +64,44 @@ export const DesignacionesPorFechaSchema = z.object({
   ),
 });
 export type DesignacionesPorFecha = z.infer<typeof DesignacionesPorFechaSchema>;
+
+/**
+ * Request para auto-asignar árbitros a los partidos de una fecha.
+ * - roles: qué roles cubrir. Default: ['ARBITRO_PRINCIPAL'].
+ * - sobreescribir: si ya hay alguien asignado en ese rol, ¿reemplazar?
+ *   Default false — solo cubre partidos sin designar.
+ */
+export const AutoAsignarSchema = z.object({
+  roles: z.array(z.enum(ROLES_DESIGNABLES_PARTIDO)).min(1).optional(),
+  sobreescribir: z.boolean().optional(),
+});
+export type AutoAsignarRequest = z.infer<typeof AutoAsignarSchema>;
+
+export const AutoAsignarResultSchema = z.object({
+  // Designaciones nuevas creadas (con su partido_id + personal asignado).
+  asignados: z.array(
+    z.object({
+      partidoId: z.uuid(),
+      rolAsignado: z.enum(ROLES_DESIGNABLES_PARTIDO),
+      personalId: z.uuid(),
+      personalNombre: z.string(),
+      personalApellido: z.string(),
+    }),
+  ),
+  // Partidos+rol donde no se pudo asignar (sin árbitros disponibles).
+  sinDisponibilidad: z.array(
+    z.object({
+      partidoId: z.uuid(),
+      rolAsignado: z.enum(ROLES_DESIGNABLES_PARTIDO),
+      motivo: z.string(),
+    }),
+  ),
+  // Partidos+rol que ya tenían designación y no se sobreescribió.
+  yaAsignados: z.array(
+    z.object({
+      partidoId: z.uuid(),
+      rolAsignado: z.enum(ROLES_DESIGNABLES_PARTIDO),
+    }),
+  ),
+});
+export type AutoAsignarResult = z.infer<typeof AutoAsignarResultSchema>;

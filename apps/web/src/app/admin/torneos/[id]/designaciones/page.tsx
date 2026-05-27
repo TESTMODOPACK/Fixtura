@@ -8,17 +8,19 @@ import {
   Plus,
   Trash2,
   UserCog,
+  Wand2,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import {
-  ROL_PERSONAL,
+  ROLES_DESIGNABLES_PARTIDO,
+  type AutoAsignarResult,
   type DesignacionAdmin,
   type EstadoDesignacion,
   type PersonalAdmin,
-  type RolPersonal,
+  type RolDesignablePartido,
 } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
@@ -26,6 +28,7 @@ import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import {
   useAsignarDesignacion,
+  useAutoAsignarDesignaciones,
   useDesignacionesPorFecha,
   useFixtureDetail,
   usePersonal,
@@ -36,20 +39,16 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
-const ROL_LABEL: Record<RolPersonal, string> = {
+const ROL_LABEL: Record<RolDesignablePartido, string> = {
   ARBITRO_PRINCIPAL: 'Árbitro principal',
   ARBITRO_ASISTENTE: 'Asistente',
   PLANILLERO: 'Planillero',
-  PARAMEDICO: 'Paramédico',
-  OTRO: 'Otro',
 };
 
-const ROL_ABREV: Record<RolPersonal, string> = {
+const ROL_ABREV: Record<RolDesignablePartido, string> = {
   ARBITRO_PRINCIPAL: 'Principal',
   ARBITRO_ASISTENTE: 'Asistente',
   PLANILLERO: 'Planilla',
-  PARAMEDICO: 'Paramédico',
-  OTRO: 'Otro',
 };
 
 const ESTADO_LABEL: Record<EstadoDesignacion, string> = {
@@ -101,7 +100,7 @@ export default function DesignacionesPage({
       <PageHead
         eyebrow={torneo ? `Torneo · ${torneo.nombre}` : 'Designaciones'}
         title="Designaciones de árbitros"
-        sub="Asigná árbitros principales, asistentes, planilleros y paramédicos a cada partido de la fecha."
+        sub="Asigná árbitros principales, asistentes y planilleros a cada partido. (Paramédico y otros van por recinto, no por partido)."
       >
         <Link href={`/admin/torneos/${torneoId}`}>
           <Button variant="default" size="sm">
@@ -135,7 +134,7 @@ export default function DesignacionesPage({
 
       {fechas.length > 0 && (
         <>
-          {/* Selector de fecha en chips */}
+          {/* Selector de fecha en chips + acciones */}
           <div className="flex gap-2 mb-5 flex-wrap items-center">
             <CalendarRange size={14} className="text-ink-mute" />
             {fechas.map((f) => (
@@ -153,6 +152,11 @@ export default function DesignacionesPage({
                 F{f.numero}
               </button>
             ))}
+            {fechaId && (
+              <div className="ml-auto">
+                <AutoAsignarBoton torneoId={torneoId} fechaId={fechaId} />
+              </div>
+            )}
           </div>
 
           {loadingDesig && (
@@ -276,7 +280,7 @@ function PartidoCard({
   fechaId: string;
   personal: PersonalAdmin[];
 }): React.ReactElement {
-  const [addingRol, setAddingRol] = useState<RolPersonal | null>(null);
+  const [addingRol, setAddingRol] = useState<RolDesignablePartido | null>(null);
   const asignar = useAsignarDesignacion({ torneoId, fechaId });
   const remove = useRemoveDesignacion({ torneoId, fechaId });
   const updateEstado = useUpdateDesignacionEstado({ torneoId, fechaId });
@@ -307,7 +311,7 @@ function PartidoCard({
       </div>
 
       <div className="divide-y divide-line">
-        {ROL_PERSONAL.map((rol) => {
+        {ROLES_DESIGNABLES_PARTIDO.map((rol) => {
           const desigs = partido.designaciones.filter((d) => d.rolAsignado === rol);
           return (
             <div key={rol} className="px-5 py-3 flex items-start gap-3">
@@ -447,7 +451,7 @@ function AsignarForm({
   error,
 }: {
   personal: PersonalAdmin[];
-  rol: RolPersonal;
+  rol: RolDesignablePartido;
   yaAsignados: string[];
   onSubmit: (personalId: string) => Promise<void>;
   onCancel: () => void;
@@ -456,13 +460,25 @@ function AsignarForm({
 }): React.ReactElement {
   const [personalId, setPersonalId] = useState('');
 
+  // Solo personal con rol designable a partidos. Paramédicos y "otro"
+  // son del recinto, no por partido.
+  const designables = useMemo(
+    () =>
+      personal.filter((p) =>
+        (ROLES_DESIGNABLES_PARTIDO as readonly string[]).includes(p.rol),
+      ),
+    [personal],
+  );
+
   // Sugerencias: personal cuyo rol base coincide con el rol pedido.
-  // Si no hay coincidencias, mostrar todos.
+  // Si no hay coincidencias, mostrar todos los designables.
   const candidatos = useMemo(() => {
-    const sugeridos = personal.filter((p) => p.rol === rol && !yaAsignados.includes(p.id));
+    const sugeridos = designables.filter(
+      (p) => p.rol === rol && !yaAsignados.includes(p.id),
+    );
     if (sugeridos.length > 0) return sugeridos;
-    return personal.filter((p) => !yaAsignados.includes(p.id));
-  }, [personal, rol, yaAsignados]);
+    return designables.filter((p) => !yaAsignados.includes(p.id));
+  }, [designables, rol, yaAsignados]);
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
@@ -472,12 +488,16 @@ function AsignarForm({
         onChange={(e) => setPersonalId(e.target.value)}
       >
         <option value="">— elegí persona —</option>
-        {candidatos.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.nombre} {p.apellido}
-            {p.rol !== rol ? ` (${ROL_ABREV[p.rol]})` : ''}
-          </option>
-        ))}
+        {candidatos.map((p) => {
+          const rolBase = p.rol as RolDesignablePartido;
+          const abrev = ROL_ABREV[rolBase] ?? p.rol;
+          return (
+            <option key={p.id} value={p.id}>
+              {p.nombre} {p.apellido}
+              {p.rol !== rol ? ` (${abrev})` : ''}
+            </option>
+          );
+        })}
       </select>
       <Button
         type="button"
@@ -495,6 +515,230 @@ function AsignarForm({
       {error && (
         <span className="text-xs text-danger">{error.message}</span>
       )}
+    </div>
+  );
+}
+
+// ─── Auto-asignar (botón + modal de resumen) ─────────────────────────
+function AutoAsignarBoton({
+  torneoId,
+  fechaId,
+}: {
+  torneoId: string;
+  fechaId: string;
+}): React.ReactElement {
+  const [open, setOpen] = useState(false);
+  const [rolesElegidos, setRolesElegidos] = useState<RolDesignablePartido[]>([
+    'ARBITRO_PRINCIPAL',
+  ]);
+  const [sobreescribir, setSobreescribir] = useState(false);
+  const [resultado, setResultado] = useState<AutoAsignarResult | null>(null);
+  const mutation = useAutoAsignarDesignaciones({ torneoId, fechaId });
+  const error = mutation.error as ApiError | undefined;
+
+  const toggleRol = (rol: RolDesignablePartido): void => {
+    setRolesElegidos((prev) =>
+      prev.includes(rol) ? prev.filter((r) => r !== rol) : [...prev, rol],
+    );
+  };
+
+  const ejecutar = async (): Promise<void> => {
+    if (rolesElegidos.length === 0) return;
+    const res = await mutation.mutateAsync({
+      roles: rolesElegidos,
+      sobreescribir,
+    });
+    setResultado(res);
+  };
+
+  const cerrar = (): void => {
+    setOpen(false);
+    setResultado(null);
+  };
+
+  if (!open) {
+    return (
+      <Button variant="accent" size="sm" onClick={() => setOpen(true)}>
+        <Wand2 size={14} /> Asignar automáticamente
+      </Button>
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) cerrar();
+      }}
+    >
+      <Card padding="roomy" className="w-full max-w-lg">
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Wand2 size={18} className="text-accent" />
+            <CardLabel>Auto-asignar designaciones</CardLabel>
+          </div>
+          <button
+            type="button"
+            onClick={cerrar}
+            className="p-1 text-ink-mute hover:text-ink"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {!resultado && (
+          <>
+            <p className="text-sm text-ink-mute font-serif italic mb-4">
+              El sistema asigna el personal disponible automáticamente. Balancea la carga entre
+              árbitros, evita doble booking y excluye carnets vencidos.
+            </p>
+
+            <div className="mb-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-ink-mute font-semibold mb-2">
+                → Roles a cubrir
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {ROLES_DESIGNABLES_PARTIDO.map((rol) => {
+                  const active = rolesElegidos.includes(rol);
+                  return (
+                    <button
+                      key={rol}
+                      type="button"
+                      onClick={() => toggleRol(rol)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-full text-xs uppercase tracking-[0.15em] font-semibold border transition-colors',
+                        active
+                          ? 'bg-green-deep text-chalk border-green-deep'
+                          : 'bg-paper text-ink-mute border-line hover:border-green-deep hover:text-ink',
+                      )}
+                    >
+                      {ROL_LABEL[rol]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <label className="flex items-start gap-2 text-sm mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sobreescribir}
+                onChange={(e) => setSobreescribir(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-semibold">Sobreescribir</span>: reemplazar designaciones
+                existentes con la nueva asignación.{' '}
+                <span className="text-ink-mute font-serif italic">
+                  (Por defecto solo cubre lo vacío.)
+                </span>
+              </span>
+            </label>
+
+            {error && (
+              <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mb-3">
+                {error.message}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="accent"
+                loading={mutation.isPending}
+                disabled={rolesElegidos.length === 0}
+                onClick={ejecutar}
+              >
+                <Wand2 size={14} /> Ejecutar asignación
+              </Button>
+              <Button type="button" variant="ghost" onClick={cerrar}>
+                Cancelar
+              </Button>
+            </div>
+          </>
+        )}
+
+        {resultado && (
+          <>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="text-center">
+                <div className="font-display text-3xl text-green-bright tracking-display">
+                  {resultado.asignados.length}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-ink-mute font-semibold mt-1">
+                  Asignados
+                </div>
+              </div>
+              <div className="text-center">
+                <div
+                  className={cn(
+                    'font-display text-3xl tracking-display',
+                    resultado.sinDisponibilidad.length > 0
+                      ? 'text-danger'
+                      : 'text-ink-mute',
+                  )}
+                >
+                  {resultado.sinDisponibilidad.length}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-ink-mute font-semibold mt-1">
+                  Sin disponibilidad
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="font-display text-3xl text-ink-mute tracking-display">
+                  {resultado.yaAsignados.length}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-ink-mute font-semibold mt-1">
+                  Ya cubiertos
+                </div>
+              </div>
+            </div>
+
+            {resultado.asignados.length > 0 && (
+              <div className="mb-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-green-bright font-semibold mb-2">
+                  ✓ Nuevas designaciones
+                </div>
+                <ul className="text-sm space-y-1 max-h-32 overflow-y-auto">
+                  {resultado.asignados.map((a, idx) => (
+                    <li key={idx} className="flex items-center gap-2">
+                      <CheckCircle2 size={12} className="text-green-bright flex-shrink-0" />
+                      <span className="font-semibold">
+                        {a.personalNombre} {a.personalApellido}
+                      </span>
+                      <span className="text-xs text-ink-mute">como {ROL_LABEL[a.rolAsignado]}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {resultado.sinDisponibilidad.length > 0 && (
+              <div className="mb-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-danger font-semibold mb-2">
+                  ✗ Sin disponibilidad
+                </div>
+                <ul className="text-sm space-y-1 max-h-32 overflow-y-auto">
+                  {resultado.sinDisponibilidad.map((s, idx) => (
+                    <li key={idx} className="flex items-center gap-2 text-danger">
+                      <AlertTriangle size={12} className="flex-shrink-0" />
+                      <span className="text-xs">
+                        {ROL_LABEL[s.rolAsignado]}: {s.motivo}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-4">
+              <Button type="button" variant="accent" onClick={cerrar}>
+                Cerrar
+              </Button>
+            </div>
+          </>
+        )}
+      </Card>
     </div>
   );
 }

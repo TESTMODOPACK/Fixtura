@@ -278,12 +278,10 @@ function DesignacionesSection({
               d.rolAsignado === 'ARBITRO_PRINCIPAL'
                 ? 'Principal'
                 : d.rolAsignado === 'ARBITRO_ASISTENTE'
-                ? 'Asistente'
-                : d.rolAsignado === 'PLANILLERO'
-                ? 'Planilla'
-                : d.rolAsignado === 'PARAMEDICO'
-                ? 'Paramédico'
-                : 'Otro';
+                  ? 'Asistente'
+                  : d.rolAsignado === 'PLANILLERO'
+                    ? 'Planilla'
+                    : d.rolAsignado;
             const warning =
               d.conflictoDobleBooking ||
               d.carnetAnfaWarning === 'VENCIDO' ||

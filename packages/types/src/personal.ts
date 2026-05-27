@@ -14,6 +14,28 @@ export const ROL_PERSONAL = [
 ] as const;
 export type RolPersonal = (typeof ROL_PERSONAL)[number];
 
+/**
+ * Roles que se asignan a un partido específico. Paramédico y "otro"
+ * son personal del RECINTO (cubre toda la jornada de la cancha, no un
+ * partido individual) — quedan fuera de las designaciones por partido.
+ */
+export const ROLES_DESIGNABLES_PARTIDO = [
+  'ARBITRO_PRINCIPAL',
+  'ARBITRO_ASISTENTE',
+  'PLANILLERO',
+] as const;
+export type RolDesignablePartido = (typeof ROLES_DESIGNABLES_PARTIDO)[number];
+
+/**
+ * Roles arbitrales que requieren carnet ANFA vigente. Usado para
+ * computar warnings en designaciones.
+ */
+export const ROLES_ARBITRAJE = [
+  'ARBITRO_PRINCIPAL',
+  'ARBITRO_ASISTENTE',
+] as const;
+export type RolArbitraje = (typeof ROLES_ARBITRAJE)[number];
+
 export const PersonalAdminSchema = z.object({
   id: z.uuid(),
   userId: z.uuid().nullable(),

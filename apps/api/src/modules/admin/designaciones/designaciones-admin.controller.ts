@@ -12,6 +12,7 @@ import {
 
 import {
   ROLE,
+  type AutoAsignarResult,
   type DesignacionAdmin,
   type DesignacionesPorFecha,
   type UserContext,
@@ -20,7 +21,11 @@ import {
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { DesignacionesAdminService } from './designaciones-admin.service';
-import { AsignarDesignacionDto, UpdateDesignacionEstadoDto } from './dto';
+import {
+  AsignarDesignacionDto,
+  AutoAsignarDto,
+  UpdateDesignacionEstadoDto,
+} from './dto';
 
 function ensureTenant(user: UserContext): string {
   if (!user.tenantId) {
@@ -76,5 +81,19 @@ export class DesignacionesAdminController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<void> {
     return this.svc.remove(id, ensureTenant(user));
+  }
+
+  /**
+   * Asigna automáticamente personal a los partidos de una fecha.
+   * Por default cubre solo ARBITRO_PRINCIPAL y no sobreescribe.
+   */
+  @Post('torneos/:torneoId/fechas/:fechaId/designaciones/auto')
+  autoAsignar(
+    @CurrentUser() user: UserContext,
+    @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Param('fechaId', new ParseUUIDPipe()) fechaId: string,
+    @Body() dto: AutoAsignarDto,
+  ): Promise<AutoAsignarResult> {
+    return this.svc.autoAsignar(torneoId, fechaId, ensureTenant(user), dto);
   }
 }

@@ -1,5 +1,8 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -9,7 +12,12 @@ import {
   Min,
 } from 'class-validator';
 
-import { ESTADO_DESIGNACION, ROL_PERSONAL, type EstadoDesignacion, type RolPersonal } from '@fixtura/types';
+import {
+  ESTADO_DESIGNACION,
+  ROLES_DESIGNABLES_PARTIDO,
+  type EstadoDesignacion,
+  type RolDesignablePartido,
+} from '@fixtura/types';
 
 export class AsignarDesignacionDto {
   @IsUUID()
@@ -18,8 +26,10 @@ export class AsignarDesignacionDto {
   @IsUUID()
   personalId!: string;
 
-  @IsIn(ROL_PERSONAL)
-  rolAsignado!: RolPersonal;
+  // Solo árbitros principal/asistente y planillero. Paramédico y "otro"
+  // son del recinto — no se asignan por partido.
+  @IsIn(ROLES_DESIGNABLES_PARTIDO)
+  rolAsignado!: RolDesignablePartido;
 
   @IsOptional()
   @Type(() => Number)
@@ -36,4 +46,16 @@ export class AsignarDesignacionDto {
 export class UpdateDesignacionEstadoDto {
   @IsIn(ESTADO_DESIGNACION)
   estado!: EstadoDesignacion;
+}
+
+export class AutoAsignarDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsIn(ROLES_DESIGNABLES_PARTIDO, { each: true })
+  roles?: RolDesignablePartido[];
+
+  @IsOptional()
+  @IsBoolean()
+  sobreescribir?: boolean;
 }

@@ -8,9 +8,11 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
 import type {
+  AutoAsignarResult,
   DesignacionAdmin,
   DesignacionesPorFecha,
   EstadoDesignacion,
+  RolDesignablePartido,
   RolPersonal,
 } from '@fixtura/types';
 
@@ -22,6 +24,7 @@ import { Torneo } from '../../competition/entities/torneo.entity';
 import { DesignacionesEmailService } from './designaciones-email.service';
 import type {
   AsignarDesignacionDto,
+  AutoAsignarDto,
   UpdateDesignacionEstadoDto,
 } from './dto';
 
@@ -422,7 +425,10 @@ export class DesignacionesAdminService {
       personalApellido: d.personal?.apellido ?? '',
       personalRolBase: d.personal?.rol ?? d.rolAsignado,
       carnetAnfaVence: d.personal?.carnetAnfaVence ?? null,
-      rolAsignado: d.rolAsignado,
+      // El DTO restringe a ROLES_DESIGNABLES_PARTIDO. Si hay registros
+      // antiguos con PARAMEDICO/OTRO en DB (de antes del restringir),
+      // se castean — la UI los muestra pero ya no se pueden crear.
+      rolAsignado: d.rolAsignado as RolDesignablePartido,
       estado: d.estado as EstadoDesignacion,
       montoPago: d.montoPago,
       confirmadoAt: d.confirmadoAt ? d.confirmadoAt.toISOString() : null,
@@ -470,5 +476,235 @@ export class DesignacionesAdminService {
     if (diff < 0) return 'VENCIDO';
     if (diff < treintaDiasMs) return 'POR_VENCER';
     return 'OK';
+  }
+
+  // ─── Auto-asignación ────────────────────────────────────────────────
+  /**
+   * Asigna automáticamente personal disponible a los partidos de una
+   * fecha. Algoritmo greedy con balance:
+   *
+   *   1. Para cada rol pedido (default: ARBITRO_PRINCIPAL):
+   *   2.   Ordena los partidos por fecha_hora ASC.
+   *   3.   Trae el catálogo de personal activo del tenant que coincide
+   *        con el rol base.
+   *   4.   Para cada partido sin designación en ese rol (o todos, si
+   *        sobreescribir=true):
+   *        - Filtra candidatos:
+   *           a) que tengan carnet ANFA vigente si aplica
+   *           b) que no estén designados en otro partido del tenant
+   *              cuya fecha_hora esté a <2h de diferencia
+   *        - Elige al candidato con MENOS designaciones en estado
+   *          PROPUESTA/CONFIRMADA/ASISTIO en el torneo (balance).
+   *        - Si no hay candidato: registra "sin disponibilidad".
+   *   5.   Persiste las designaciones nuevas, dispara emails async.
+   *
+   * Devuelve resumen de qué se asignó, qué quedó sin asignar y qué
+   * ya tenía designación (cuando sobreescribir=false).
+   */
+  async autoAsignar(
+    torneoId: string,
+    fechaId: string,
+    tenantId: string,
+    input: AutoAsignarDto,
+  ): Promise<AutoAsignarResult> {
+    await this.ensureTorneo(torneoId, tenantId);
+    const fecha = await this.fechaRepo.findOne({ where: { id: fechaId, tenantId } });
+    if (!fecha) throw new NotFoundException(`Fecha ${fechaId} no encontrada`);
+    if (fecha.torneoId !== torneoId) {
+      throw new BadRequestException('La fecha no pertenece al torneo indicado');
+    }
+
+    const roles: RolDesignablePartido[] = input.roles ?? ['ARBITRO_PRINCIPAL'];
+    const sobreescribir = input.sobreescribir ?? false;
+
+    const partidos = await this.partidoRepo
+      .createQueryBuilder('p')
+      .where('p.fecha_id = :fechaId', { fechaId })
+      .andWhere('p.tenant_id = :tenantId', { tenantId })
+      .orderBy('p.fecha_hora', 'ASC', 'NULLS LAST')
+      .getMany();
+
+    // Catálogo de personal activo agrupado por rol base
+    const personalActivo = await this.personalRepo.find({
+      where: { tenantId, activo: true },
+    });
+
+    // Carga inicial: cuántas designaciones activas (no rechazada/ausente)
+    // tiene cada personal en este torneo — para balance de carga.
+    const cargaTorneo = await this.repo
+      .createQueryBuilder('d')
+      .leftJoin('d.partido', 'partido')
+      .leftJoin('partido.fecha', 'fecha')
+      .select('d.personal_id', 'personalId')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('d.tenant_id = :tenantId', { tenantId })
+      .andWhere('fecha.torneo_id = :torneoId', { torneoId })
+      .andWhere(`d.estado NOT IN ('RECHAZADA','AUSENTE')`)
+      .groupBy('d.personal_id')
+      .getRawMany<{ personalId: string; cnt: string }>();
+    const cargaPorPersonal = new Map<string, number>();
+    for (const r of cargaTorneo) {
+      cargaPorPersonal.set(r.personalId, Number(r.cnt));
+    }
+
+    // Designaciones existentes en esta fecha — para conflictos por fecha_hora
+    const partidoIds = partidos.map((p) => p.id);
+    const designacionesExistentes = partidoIds.length
+      ? await this.repo
+          .createQueryBuilder('d')
+          .leftJoin('d.partido', 'partido')
+          .select([
+            'd.id AS "id"',
+            'd.personal_id AS "personalId"',
+            'd.partido_id AS "partidoId"',
+            'd.rol_asignado AS "rolAsignado"',
+            'partido.fecha_hora AS "fechaHora"',
+          ])
+          .where('d.tenant_id = :tenantId', { tenantId })
+          .andWhere('d.partido_id IN (:...partidoIds)', { partidoIds })
+          .andWhere(`d.estado NOT IN ('RECHAZADA','AUSENTE')`)
+          .getRawMany<{
+            id: string;
+            personalId: string;
+            partidoId: string;
+            rolAsignado: string;
+            fechaHora: string | null;
+          }>()
+      : [];
+
+    // Index: { partidoId-rol → designacionId } para saber qué ya está cubierto
+    const cubiertoMap = new Map<string, string>();
+    // Index: personalId → lista de fechaHora donde ya está ocupado
+    const ocupadoMap = new Map<string, Array<Date>>();
+    for (const d of designacionesExistentes) {
+      cubiertoMap.set(`${d.partidoId}-${d.rolAsignado}`, d.id);
+      const fh = d.fechaHora ? new Date(d.fechaHora) : null;
+      if (fh) {
+        const arr = ocupadoMap.get(d.personalId) ?? [];
+        arr.push(fh);
+        ocupadoMap.set(d.personalId, arr);
+      }
+    }
+
+    const result: AutoAsignarResult = {
+      asignados: [],
+      sinDisponibilidad: [],
+      yaAsignados: [],
+    };
+
+    const hoy = new Date();
+    const treintaDiasMs = 30 * 24 * 60 * 60 * 1000;
+    const margenMs = DOBLE_BOOKING_HORAS * 60 * 60 * 1000;
+    const nuevasParaNotificar: string[] = [];
+
+    for (const rol of roles) {
+      // Candidatos: personal activo cuyo rol base = rol pedido. Si el rol
+      // pedido es PLANILLERO y no hay planilleros, NO usamos árbitros como
+      // fallback — sería sorpresivo.
+      const candidatosBase = personalActivo.filter((p) => p.rol === rol);
+
+      for (const partido of partidos) {
+        const key = `${partido.id}-${rol}`;
+        const cubierto = cubiertoMap.get(key);
+
+        if (cubierto && !sobreescribir) {
+          result.yaAsignados.push({ partidoId: partido.id, rolAsignado: rol });
+          continue;
+        }
+
+        // Filtrar candidatos disponibles
+        const disponibles = candidatosBase.filter((p) => {
+          // No designar a alguien con carnet vencido a un rol arbitral
+          if (ROLES_ARBITRAJE.includes(rol as RolPersonal)) {
+            const w = this.checkCarnetWarning(
+              p.rol,
+              p.carnetAnfaVence,
+              hoy,
+              treintaDiasMs,
+            );
+            if (w === 'VENCIDO') return false;
+          }
+          // Doble booking: ya designado a otro partido a <2h
+          if (partido.fechaHora) {
+            const ocupados = ocupadoMap.get(p.id) ?? [];
+            for (const otro of ocupados) {
+              if (Math.abs(otro.getTime() - partido.fechaHora.getTime()) < margenMs) {
+                return false;
+              }
+            }
+          }
+          return true;
+        });
+
+        if (disponibles.length === 0) {
+          result.sinDisponibilidad.push({
+            partidoId: partido.id,
+            rolAsignado: rol,
+            motivo: candidatosBase.length === 0
+              ? `No hay personal activo con rol ${rol}`
+              : 'Todos los candidatos tienen conflicto de horario o carnet vencido',
+          });
+          continue;
+        }
+
+        // Elegir el que tiene MENOS carga en este torneo (balance).
+        // En empate, el de menor apellido (orden estable).
+        disponibles.sort((a, b) => {
+          const ca = cargaPorPersonal.get(a.id) ?? 0;
+          const cb = cargaPorPersonal.get(b.id) ?? 0;
+          if (ca !== cb) return ca - cb;
+          return a.apellido.localeCompare(b.apellido);
+        });
+        const elegido = disponibles[0]!;
+
+        // Si era sobreescribir y había uno previo: borrar el previo
+        if (cubierto && sobreescribir) {
+          const prev = await this.repo.findOne({ where: { id: cubierto, tenantId } });
+          if (prev) await this.repo.remove(prev);
+        }
+
+        const created = await this.repo.save(
+          this.repo.create({
+            tenantId,
+            partidoId: partido.id,
+            personalId: elegido.id,
+            rolAsignado: rol,
+            estado: 'PROPUESTA',
+            montoPago: elegido.tarifaBase ?? null,
+            notas: null,
+          }),
+        );
+
+        // Actualizar índices in-memory para que el resto del loop respete
+        // este nuevo lock (otro partido del mismo elegido a <2h se evita)
+        cubiertoMap.set(key, created.id);
+        if (partido.fechaHora) {
+          const arr = ocupadoMap.get(elegido.id) ?? [];
+          arr.push(partido.fechaHora);
+          ocupadoMap.set(elegido.id, arr);
+        }
+        cargaPorPersonal.set(
+          elegido.id,
+          (cargaPorPersonal.get(elegido.id) ?? 0) + 1,
+        );
+
+        result.asignados.push({
+          partidoId: partido.id,
+          rolAsignado: rol,
+          personalId: elegido.id,
+          personalNombre: elegido.nombre,
+          personalApellido: elegido.apellido,
+        });
+        nuevasParaNotificar.push(created.id);
+      }
+    }
+
+    // Disparar emails async — fuera del loop principal para no demorar
+    // la respuesta. Errores no propagan (best-effort).
+    for (const designacionId of nuevasParaNotificar) {
+      void this.notificarAsignacionPorEmail(designacionId, tenantId);
+    }
+
+    return result;
   }
 }

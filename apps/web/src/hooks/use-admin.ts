@@ -552,3 +552,22 @@ export function useRemoveMiembro() {
     },
   });
 }
+
+// ─── Auto-asignación de designaciones ─────────────────────────────────
+import type { AutoAsignarRequest, AutoAsignarResult } from '@fixtura/types';
+
+export function useAutoAsignarDesignaciones(invalidate: { torneoId: string; fechaId: string }) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AutoAsignarRequest) =>
+      apiFetch<AutoAsignarResult>(
+        `/admin/torneos/${invalidate.torneoId}/fechas/${invalidate.fechaId}/designaciones/auto`,
+        { method: 'POST', body: input },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'torneos', invalidate.torneoId, 'fechas', invalidate.fechaId, 'designaciones'],
+      });
+    },
+  });
+}
