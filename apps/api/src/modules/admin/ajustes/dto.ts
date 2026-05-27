@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsHexColor,
   IsIn,
@@ -70,6 +71,10 @@ export class UpdateTenantSettingsDto {
   @ValidateNested()
   @Type(() => BrandingDto)
   branding?: BrandingDto;
+
+  @IsOptional()
+  @IsBoolean()
+  requiereCarnetAnfa?: boolean;
 }
 
 export class InvitarMiembroDto {

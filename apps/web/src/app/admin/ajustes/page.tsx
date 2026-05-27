@@ -37,7 +37,7 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
-type Tab = 'branding' | 'dominio' | 'equipo';
+type Tab = 'branding' | 'dominio' | 'reglamento' | 'equipo';
 
 const ROL_LABEL: Record<RolAdminInvitable, string> = {
   LIGA_ADMIN: 'Administrador',
@@ -118,6 +118,12 @@ export default function AjustesPage(): React.ReactElement {
               <TabButton active={tab === 'dominio'} onClick={() => setTab('dominio')}>
                 Dominio
               </TabButton>
+              <TabButton
+                active={tab === 'reglamento'}
+                onClick={() => setTab('reglamento')}
+              >
+                Reglamento
+              </TabButton>
               <TabButton active={tab === 'equipo'} onClick={() => setTab('equipo')}>
                 Equipo admin
               </TabButton>
@@ -126,6 +132,7 @@ export default function AjustesPage(): React.ReactElement {
 
           {tab === 'branding' && <BrandingTab settings={settings} />}
           {tab === 'dominio' && <DominioTab settings={settings} />}
+          {tab === 'reglamento' && <ReglamentoTab settings={settings} />}
           {tab === 'equipo' && <EquipoTab />}
         </>
       )}
@@ -490,6 +497,110 @@ function DominioTab({ settings }: { settings: TenantSettings }): React.ReactElem
         </ol>
       </Card>
     </form>
+  );
+}
+
+// ─── Tab: Reglamento ─────────────────────────────────────────────────
+function ReglamentoTab({ settings }: { settings: TenantSettings }): React.ReactElement {
+  const update = useUpdateTenantSettings();
+  const [saved, setSaved] = useState(false);
+  const [requiereCarnetAnfa, setRequiereCarnetAnfa] = useState(
+    settings.requiereCarnetAnfa,
+  );
+
+  useEffect(() => {
+    setRequiereCarnetAnfa(settings.requiereCarnetAnfa);
+  }, [settings.requiereCarnetAnfa]);
+
+  const toggle = async (next: boolean): Promise<void> => {
+    setRequiereCarnetAnfa(next);
+    try {
+      await update.mutateAsync({ requiereCarnetAnfa: next });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      // Si falla, revertir el toggle visual
+      setRequiereCarnetAnfa(!next);
+    }
+  };
+
+  const error = update.error as ApiError | undefined;
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      <Card padding="roomy">
+        <CardLabel>Carnet ANFA</CardLabel>
+
+        <p className="text-sm text-ink-mute font-serif italic mt-2 mb-4">
+          En Chile, las ligas afiliadas a la <strong className="text-ink">ANFA</strong>{' '}
+          (Asociación Nacional de Fútbol Amateur) están obligadas a usar árbitros con
+          carnet vigente. Las ligas libres (corporativas, barriales, sénior) no tienen
+          esa obligación.
+        </p>
+
+        <label className="flex items-start gap-3 cursor-pointer p-3 rounded-card border border-line hover:border-accent transition-colors">
+          <input
+            type="checkbox"
+            checked={requiereCarnetAnfa}
+            onChange={(e) => void toggle(e.target.checked)}
+            className="mt-1"
+          />
+          <div className="flex-1">
+            <div className="font-semibold text-ink">
+              Esta liga está afiliada a ANFA y exige carnet ANFA vigente
+            </div>
+            <div className="text-xs text-ink-mute font-serif italic mt-1">
+              Si está activado, la auto-asignación excluye árbitros con carnet vencido y
+              el panel muestra alertas de vencimientos. Si está desactivado, el campo de
+              carnet sigue disponible pero no bloquea ni alerta.
+            </div>
+          </div>
+        </label>
+
+        <div className="mt-4">
+          <div
+            className={cn(
+              'p-3 rounded-card text-sm border',
+              requiereCarnetAnfa
+                ? 'bg-accent/5 border-accent/30 text-ink'
+                : 'bg-green-bright/5 border-green-bright/30 text-ink',
+            )}
+          >
+            <div className="font-semibold mb-1">
+              {requiereCarnetAnfa
+                ? '→ Modo ANFA activado'
+                : '→ Modo liga libre activado'}
+            </div>
+            <ul className="text-xs space-y-0.5 list-disc list-inside font-serif italic">
+              {requiereCarnetAnfa ? (
+                <>
+                  <li>Auto-asignación excluye árbitros con carnet vencido.</li>
+                  <li>Dashboard muestra alertas de vencimientos.</li>
+                  <li>UI marca con warning rojo a árbitros sin carnet vigente.</li>
+                </>
+              ) : (
+                <>
+                  <li>Todos los árbitros activos son elegibles para auto-asignación.</li>
+                  <li>El campo carnet ANFA sigue disponible (es opcional registrarlo).</li>
+                  <li>No se muestran alertas de carnet en el dashboard.</li>
+                </>
+              )}
+            </ul>
+          </div>
+        </div>
+
+        {error && (
+          <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mt-3">
+            {error.message}
+          </div>
+        )}
+        {saved && !error && (
+          <div className="text-sm text-green-bright bg-green-bright/10 px-3 py-2 rounded-card mt-3 flex items-center gap-2">
+            <CheckCircle2 size={14} /> Cambio guardado
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }
 

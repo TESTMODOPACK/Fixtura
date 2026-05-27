@@ -13,6 +13,7 @@ import { Partido } from '../../competition/entities/partido.entity';
 import { Personal } from '../../competition/entities/personal.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { Tenant } from '../../tenants/entities/tenant.entity';
 
 const TREINTA_DIAS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -32,9 +33,15 @@ export class DashboardAdminService {
     private readonly sancionRepo: Repository<SancionActiva>,
     @InjectRepository(Designacion)
     private readonly designacionRepo: Repository<Designacion>,
+    @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
   ) {}
 
   async get(tenantId: string): Promise<DashboardAdmin> {
+    // Flag de regla de negocio: ¿la liga es ANFA? Determina si las
+    // alertas de carnet vencido/por-vencer son relevantes.
+    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    const requiereCarnetAnfa = tenant?.requiereCarnetAnfa ?? false;
+
     // 1) Torneo activo (el más reciente ACTIVO; si no hay, el más reciente)
     const torneoActivo = await this.torneoRepo
       .createQueryBuilder('t')
@@ -68,6 +75,7 @@ export class DashboardAdminService {
     ]);
 
     return {
+      requiereCarnetAnfa,
       torneoActivo: torneoActivo
         ? {
             id: torneoActivo.id,
@@ -80,8 +88,10 @@ export class DashboardAdminService {
       proximaFecha: proximaFechaData,
       actasPendientes: actasPendientesCount,
       sancionesActivas: sancionesActivasCount,
-      carnetVencido: personalCounts.carnetVencido,
-      carnetPorVencer: personalCounts.carnetPorVencer,
+      // Si la liga NO es ANFA, devolvemos 0/0 en counts de carnet —
+      // los datos no son relevantes para la operación de esa liga.
+      carnetVencido: requiereCarnetAnfa ? personalCounts.carnetVencido : 0,
+      carnetPorVencer: requiereCarnetAnfa ? personalCounts.carnetPorVencer : 0,
       torneosActivos: torneosCounts.activos,
       torneosDraft: torneosCounts.draft,
       equiposTotales: equiposCount,

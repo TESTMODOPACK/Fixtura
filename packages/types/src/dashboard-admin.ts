@@ -30,6 +30,10 @@ export type DashboardTopEquipo = z.infer<typeof DashboardTopEquipoSchema>;
 
 export const DashboardAdminSchema = z.object({
   // ─── Contexto ──────────────────────────────────────────────────────
+  // Flag del tenant: ¿es liga ANFA? Determina si se muestran alertas
+  // de carnet en el dashboard.
+  requiereCarnetAnfa: z.boolean(),
+
   torneoActivo: z
     .object({
       id: z.uuid(),

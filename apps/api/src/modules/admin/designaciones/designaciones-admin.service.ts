@@ -22,6 +22,7 @@ import { Fecha } from '../../competition/entities/fecha.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Personal } from '../../competition/entities/personal.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { Tenant } from '../../tenants/entities/tenant.entity';
 import { DesignacionesEmailService } from './designaciones-email.service';
 import type {
   AsignarDesignacionDto,
@@ -49,6 +50,7 @@ export class DesignacionesAdminService {
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
+    @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
     private readonly emailSvc: DesignacionesEmailService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
@@ -515,6 +517,12 @@ export class DesignacionesAdminService {
       throw new BadRequestException('La fecha no pertenece al torneo indicado');
     }
 
+    // Leer el setting de la liga: ¿requiere carnet ANFA vigente?
+    // Si SÍ → excluir árbitros con carnet vencido.
+    // Si NO → cualquier árbitro activo es elegible (liga libre).
+    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    const requiereCarnetAnfa = tenant?.requiereCarnetAnfa ?? false;
+
     const roles: RolDesignablePartido[] = input.roles ?? ['ARBITRO_PRINCIPAL'];
     const sobreescribir = input.sobreescribir ?? false;
 
@@ -650,8 +658,10 @@ export class DesignacionesAdminService {
         const idsYaUsados = new Set(cubiertos.map((c) => c.personalId));
         const disponibles = candidatosBase.filter((p) => {
           if (idsYaUsados.has(p.id)) return false;
-          // No designar a alguien con carnet vencido a un rol arbitral
-          if (ROLES_ARBITRAJE.includes(rol as RolPersonal)) {
+          // Solo bloqueamos por carnet vencido si la liga es ANFA. Para
+          // ligas libres (corporativas, barriales) el carnet ANFA no es
+          // obligatorio y no debe excluir candidatos.
+          if (requiereCarnetAnfa && ROLES_ARBITRAJE.includes(rol as RolPersonal)) {
             const w = this.checkCarnetWarning(
               p.rol,
               p.carnetAnfaVence,

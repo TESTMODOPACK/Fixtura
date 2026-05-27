@@ -34,6 +34,15 @@ export class Tenant {
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
 
+  /**
+   * Flag de regla de negocio: ¿la liga está afiliada a ANFA y exige
+   * carnet vigente a sus árbitros? Default false (la mayoría de las
+   * ligas amateur son libres). Cuando true, la auto-asignación
+   * excluye árbitros con carnet vencido y la UI muestra alertas.
+   */
+  @Column({ name: 'requiere_carnet_anfa', type: 'boolean', default: false })
+  requiereCarnetAnfa!: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

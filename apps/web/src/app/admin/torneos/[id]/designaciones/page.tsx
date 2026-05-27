@@ -41,6 +41,7 @@ import {
   usePersonal,
   useRemoveDesignacion,
   useRemoveRecinto,
+  useTenantSettings,
   useTorneo,
   useUpdateDesignacionEstado,
 } from '@/hooks/use-admin';
@@ -84,6 +85,8 @@ export default function DesignacionesPage({
   const { data: torneo } = useTorneo(torneoId);
   const { data: fixture, isLoading: loadingFixture } = useFixtureDetail(torneoId);
   const { data: personal } = usePersonal(true);
+  const { data: settings } = useTenantSettings();
+  const requiereCarnetAnfa = settings?.requiereCarnetAnfa ?? false;
 
   const fechas = fixture?.fechas ?? [];
   const [fechaId, setFechaId] = useState<string | null>(null);
@@ -196,6 +199,8 @@ function FechaDesignacionesView({
   partidos: NonNullable<ReturnType<typeof useDesignacionesPorFecha>['data']>['partidos'];
   personal: PersonalAdmin[];
 }): React.ReactElement {
+  const { data: settings } = useTenantSettings();
+  const requiereCarnetAnfa = settings?.requiereCarnetAnfa ?? false;
   if (partidos.length === 0) {
     return (
       <Card padding="roomy">
@@ -223,7 +228,12 @@ function FechaDesignacionesView({
 
   return (
     <>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      <div
+        className={cn(
+          'grid grid-cols-2 gap-3 mb-5',
+          requiereCarnetAnfa ? 'md:grid-cols-4' : 'md:grid-cols-3',
+        )}
+      >
         <Card padding="comfortable">
           <CardLabel>Designaciones</CardLabel>
           <div className="font-display text-3xl text-green-deep tracking-display">
@@ -248,18 +258,20 @@ function FechaDesignacionesView({
           </div>
           <div className="text-xs text-ink-mute font-serif italic mt-1">Doble booking</div>
         </Card>
-        <Card padding="comfortable">
-          <CardLabel>Carnet ANFA</CardLabel>
-          <div
-            className={cn(
-              'font-display text-3xl tracking-display',
-              carnetIssues > 0 ? 'text-orange-700' : 'text-green-bright',
-            )}
-          >
-            {carnetIssues}
-          </div>
-          <div className="text-xs text-ink-mute font-serif italic mt-1">Por revisar</div>
-        </Card>
+        {requiereCarnetAnfa && (
+          <Card padding="comfortable">
+            <CardLabel>Carnet ANFA</CardLabel>
+            <div
+              className={cn(
+                'font-display text-3xl tracking-display',
+                carnetIssues > 0 ? 'text-orange-700' : 'text-green-bright',
+              )}
+            >
+              {carnetIssues}
+            </div>
+            <div className="text-xs text-ink-mute font-serif italic mt-1">Por revisar</div>
+          </Card>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -412,6 +424,11 @@ function DesignacionRow({
   onRemove: () => void;
   onUpdateEstado: (estado: EstadoDesignacion) => void;
 }): React.ReactElement {
+  // Solo mostramos badges de carnet ANFA si la liga está afiliada a ANFA.
+  // Para ligas libres el dato es irrelevante operativamente.
+  const { data: settings } = useTenantSettings();
+  const mostrarCarnet = settings?.requiereCarnetAnfa ?? false;
+
   return (
     <div className="flex items-center gap-2 flex-wrap text-sm">
       <span className="font-semibold text-ink">
@@ -439,17 +456,17 @@ function DesignacionRow({
         </span>
       )}
 
-      {desig.carnetAnfaWarning === 'VENCIDO' && (
+      {mostrarCarnet && desig.carnetAnfaWarning === 'VENCIDO' && (
         <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-danger/15 text-danger flex items-center gap-1">
           <AlertTriangle size={11} /> Carnet vencido
         </span>
       )}
-      {desig.carnetAnfaWarning === 'POR_VENCER' && (
+      {mostrarCarnet && desig.carnetAnfaWarning === 'POR_VENCER' && (
         <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-orange-700/15 text-orange-700 flex items-center gap-1">
           <AlertTriangle size={11} /> Carnet por vencer
         </span>
       )}
-      {desig.carnetAnfaWarning === 'OK' && (
+      {mostrarCarnet && desig.carnetAnfaWarning === 'OK' && (
         <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-green-bright/15 text-green-bright flex items-center gap-1">
           <CheckCircle2 size={11} /> Carnet OK
         </span>

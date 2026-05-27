@@ -49,6 +49,12 @@ export const TenantSettingsSchema = z.object({
   plan: z.string(),
   tipo: z.string(),
   isActive: z.boolean(),
+  /**
+   * Regla de negocio: ¿la liga está afiliada a ANFA y exige carnet
+   * vigente a sus árbitros? Cuando true, auto-asignación excluye
+   * carnets vencidos y la UI muestra alertas. Default false.
+   */
+  requiereCarnetAnfa: z.boolean(),
 });
 export type TenantSettings = z.infer<typeof TenantSettingsSchema>;
 
@@ -68,6 +74,7 @@ export const UpdateTenantSettingsSchema = z.object({
     ])
     .optional(),
   branding: BrandingSchema.optional(),
+  requiereCarnetAnfa: z.boolean().optional(),
 });
 export type UpdateTenantSettingsRequest = z.infer<typeof UpdateTenantSettingsSchema>;
 

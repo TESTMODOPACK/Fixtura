@@ -36,6 +36,7 @@ import {
   useCreatePersonal,
   useDeactivatePersonal,
   usePersonal,
+  useTenantSettings,
   useUpdatePersonal,
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
@@ -64,6 +65,8 @@ const ROLES_ARBITRAJE: ReadonlyArray<RolPersonal> = [
 
 export default function PersonalPage(): React.ReactElement {
   const { data: personal, isLoading } = usePersonal(false);
+  const { data: settings } = useTenantSettings();
+  const requiereCarnetAnfa = settings?.requiereCarnetAnfa ?? false;
   const [adding, setAdding] = useState(false);
   const [filtro, setFiltro] = useState<RolPersonal | 'TODOS'>('TODOS');
 
@@ -91,7 +94,11 @@ export default function PersonalPage(): React.ReactElement {
       <PageHead
         eyebrow="Operaciones"
         title="Personal & roles"
-        sub="Catálogo de árbitros, planilleros, paramédicos. El carnet ANFA es obligatorio para árbitros oficiales."
+        sub={
+          requiereCarnetAnfa
+            ? 'Catálogo de árbitros, planilleros, paramédicos. El carnet ANFA es obligatorio para árbitros oficiales.'
+            : 'Catálogo de árbitros, planilleros, paramédicos. El carnet ANFA es opcional (esta liga no es ANFA — cambiá la configuración en Ajustes si corresponde).'
+        }
       >
         <Link href="/admin">
           <Button variant="default" size="sm">
@@ -103,7 +110,12 @@ export default function PersonalPage(): React.ReactElement {
         </Button>
       </PageHead>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div
+        className={cn(
+          'grid grid-cols-2 gap-3 mb-6',
+          requiereCarnetAnfa ? 'md:grid-cols-5' : 'md:grid-cols-3',
+        )}
+      >
         <Card padding="comfortable">
           <CardLabel>Total</CardLabel>
           <div className="font-display text-3xl text-green-deep tracking-display">
@@ -122,28 +134,32 @@ export default function PersonalPage(): React.ReactElement {
             {isLoading ? '…' : stats.arbitros}
           </div>
         </Card>
-        <Card padding="comfortable">
-          <CardLabel>Carnet vencido</CardLabel>
-          <div
-            className={cn(
-              'font-display text-3xl tracking-display',
-              stats.carnetVencido > 0 ? 'text-danger' : 'text-green-bright',
-            )}
-          >
-            {isLoading ? '…' : stats.carnetVencido}
-          </div>
-        </Card>
-        <Card padding="comfortable">
-          <CardLabel>Por vencer (30d)</CardLabel>
-          <div
-            className={cn(
-              'font-display text-3xl tracking-display',
-              stats.carnetPorVencer > 0 ? 'text-orange-700' : 'text-green-bright',
-            )}
-          >
-            {isLoading ? '…' : stats.carnetPorVencer}
-          </div>
-        </Card>
+        {requiereCarnetAnfa && (
+          <>
+            <Card padding="comfortable">
+              <CardLabel>Carnet vencido</CardLabel>
+              <div
+                className={cn(
+                  'font-display text-3xl tracking-display',
+                  stats.carnetVencido > 0 ? 'text-danger' : 'text-green-bright',
+                )}
+              >
+                {isLoading ? '…' : stats.carnetVencido}
+              </div>
+            </Card>
+            <Card padding="comfortable">
+              <CardLabel>Por vencer (30d)</CardLabel>
+              <div
+                className={cn(
+                  'font-display text-3xl tracking-display',
+                  stats.carnetPorVencer > 0 ? 'text-orange-700' : 'text-green-bright',
+                )}
+              >
+                {isLoading ? '…' : stats.carnetPorVencer}
+              </div>
+            </Card>
+          </>
+        )}
       </div>
 
       {adding && (
@@ -178,7 +194,11 @@ export default function PersonalPage(): React.ReactElement {
         {filtrados.length > 0 && (
           <div className="divide-y divide-line">
             {filtrados.map((p) => (
-              <PersonaRow key={p.id} persona={p} />
+              <PersonaRow
+                key={p.id}
+                persona={p}
+                requiereCarnetAnfa={requiereCarnetAnfa}
+              />
             ))}
           </div>
         )}
@@ -212,12 +232,20 @@ function FiltroChip({
   );
 }
 
-function PersonaRow({ persona }: { persona: PersonalAdmin }): React.ReactElement {
+function PersonaRow({
+  persona,
+  requiereCarnetAnfa,
+}: {
+  persona: PersonalAdmin;
+  requiereCarnetAnfa: boolean;
+}): React.ReactElement {
   const deactivate = useDeactivatePersonal();
   const update = useUpdatePersonal(persona.id);
   const [editing, setEditing] = useState(false);
   const status = carnetStatus(persona);
-  const aplicaCarnet = ROLES_ARBITRAJE.includes(persona.rol);
+  // Solo mostrar badges de carnet si la liga es ANFA. Para ligas libres,
+  // el carnet sigue siendo data útil pero no la mostramos como warning.
+  const aplicaCarnet = requiereCarnetAnfa && ROLES_ARBITRAJE.includes(persona.rol);
 
   if (editing) {
     return (

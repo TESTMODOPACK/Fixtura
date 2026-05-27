@@ -115,6 +115,12 @@ async function main(): Promise<void> {
     // Sprint 2E.x: designaciones de RECINTO (paramédicos por jornada).
     await ensureDesignacionesRecintoTable(client, log);
 
+    // Sprint ANFA: flag por tenant para exigir carnet ANFA a árbitros.
+    await client.query(
+      `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS requiere_carnet_anfa BOOLEAN NOT NULL DEFAULT FALSE`,
+    );
+    log('tenants.requiere_carnet_anfa asegurada.');
+
     log('Done.');
   } finally {
     await client.end();

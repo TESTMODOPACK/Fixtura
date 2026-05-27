@@ -105,6 +105,10 @@ export class AjustesAdminService {
       t.brandingJson = updated as unknown as Record<string, unknown>;
     }
 
+    if (input.requiereCarnetAnfa !== undefined) {
+      t.requiereCarnetAnfa = input.requiereCarnetAnfa;
+    }
+
     const saved = await this.tenantRepo.save(t);
     return this.toSettings(saved);
   }
@@ -259,6 +263,7 @@ export class AjustesAdminService {
       plan: t.plan,
       tipo: t.tipo,
       isActive: t.isActive,
+      requiereCarnetAnfa: t.requiereCarnetAnfa ?? false,
     };
   }
 }
