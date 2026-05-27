@@ -64,7 +64,7 @@ const NAV: NavSection[] = [
     title: 'Comunidad',
     items: [
       { href: '/admin/jugadores', label: 'Jugadores & ranking', icon: Users },
-      { href: '/admin/sponsors', label: 'Sponsors & banners', icon: Megaphone, comingSoon: true },
+      { href: '/admin/sponsors', label: 'Sponsors & banners', icon: Megaphone },
     ],
   },
   {

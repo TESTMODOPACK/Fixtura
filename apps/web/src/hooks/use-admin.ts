@@ -5,11 +5,14 @@ import type {
   AsignarDesignacionRequest,
   BulkCreateJugadoresRequest,
   CerrarActaRequest,
+  CreateSponsorRequest,
   DashboardAdmin,
   InvitarMiembroRequest,
   JugadorGlobal,
   MiembroAdmin,
+  SponsorAdmin,
   TenantSettings,
+  UpdateSponsorRequest,
   UpdateTenantSettingsRequest,
   CreateEquipoRequest,
   CreateIncidenciaRequest,
@@ -568,6 +571,51 @@ export function useAutoAsignarDesignaciones(invalidate: { torneoId: string; fech
       qc.invalidateQueries({
         queryKey: ['admin', 'torneos', invalidate.torneoId, 'fechas', invalidate.fechaId, 'designaciones'],
       });
+    },
+  });
+}
+
+// ─── Sponsors (admin) ────────────────────────────────────────────────
+export function useSponsors(posicion?: string) {
+  const qs = posicion ? `?posicion=${posicion}` : '';
+  return useQuery({
+    queryKey: ['admin', 'sponsors', { posicion: posicion ?? null }],
+    queryFn: () => apiFetch<SponsorAdmin[]>(`/admin/sponsors${qs}`),
+  });
+}
+
+export function useCreateSponsor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateSponsorRequest) =>
+      apiFetch<SponsorAdmin>('/admin/sponsors', { method: 'POST', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'sponsors'] });
+      qc.invalidateQueries({ queryKey: ['public'] });
+    },
+  });
+}
+
+export function useUpdateSponsor(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateSponsorRequest) =>
+      apiFetch<SponsorAdmin>(`/admin/sponsors/${id}`, { method: 'PATCH', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'sponsors'] });
+      qc.invalidateQueries({ queryKey: ['public'] });
+    },
+  });
+}
+
+export function useDeleteSponsor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/sponsors/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'sponsors'] });
+      qc.invalidateQueries({ queryKey: ['public'] });
     },
   });
 }

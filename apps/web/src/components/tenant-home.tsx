@@ -6,6 +6,7 @@ import Link from 'next/link';
 import type { PartidoPublico } from '@fixtura/types';
 
 import { PublicHeader } from '@/components/public-header';
+import { SponsorBanner } from '@/components/sponsor-banner';
 import { Card, CardLabel } from '@/components/ui/card';
 import { useResumenLiga } from '@/hooks/use-portal';
 import { cn } from '@/lib/cn';
@@ -20,6 +21,12 @@ export function TenantHome(): React.ReactElement {
     <>
       <PublicHeader ligaNombre={data.liga.nombre} active="home" />
 
+      {/* Banner sponsors HEADER — full width debajo del header */}
+      <SponsorBanner
+        posicion="HEADER"
+        className="bg-paper-dark border-b border-line py-3 px-6"
+      />
+
       <main className="max-w-7xl mx-auto px-6 py-10">
         <section className="mb-8">
           <div className="eyebrow mb-2">→ Torneo en curso</div>
@@ -32,6 +39,8 @@ export function TenantHome(): React.ReactElement {
               Temporada {data.torneoActivo.temporada}
             </p>
           )}
+          {/* Sponsors HOME_HERO — dentro del hero */}
+          <SponsorBanner posicion="HOME_HERO" className="mt-6" maxItems={4} />
         </section>
 
         {data.proximaFecha && (
@@ -141,6 +150,9 @@ export function TenantHome(): React.ReactElement {
       </main>
 
       <footer className="border-t border-line bg-chalk mt-12">
+        {/* Sponsors FOOTER — antes del copyright */}
+        <SponsorBanner posicion="FOOTER" className="px-6 py-6 border-b border-line" />
+
         <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-ink-mute">
           <div>
             <span className="font-display tracking-[0.18em] text-green-deep">

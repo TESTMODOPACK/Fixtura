@@ -109,6 +109,9 @@ async function main(): Promise<void> {
     // tanto en tablas como en índices y triggers.
     await ensurePersonalDesignacionesTables(client, log);
 
+    // Sprint 4B: tabla sponsors (banners portal público).
+    await ensureSponsorsTable(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -195,6 +198,40 @@ async function ensurePersonalDesignacionesTables(
   await ensureTrigger(client, 'designaciones');
 
   log('Personal + designaciones aseguradas (idempotente).');
+}
+
+async function ensureSponsorsTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS sponsors (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      nombre              VARCHAR(150) NOT NULL,
+      imagen_url          VARCHAR(500) NOT NULL,
+      link_url            VARCHAR(500),
+      posicion            VARCHAR(20) NOT NULL
+                            CHECK (posicion IN ('HOME_HERO','HEADER','SIDEBAR','FOOTER')),
+      prioridad           SMALLINT NOT NULL DEFAULT 0,
+      vigente_desde       DATE,
+      vigente_hasta       DATE,
+      activo              BOOLEAN NOT NULL DEFAULT TRUE,
+      impresiones_count   INTEGER NOT NULL DEFAULT 0,
+      clicks_count        INTEGER NOT NULL DEFAULT 0,
+      notas               TEXT,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await ensureRls(client, 'sponsors');
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_sponsors_tenant ON sponsors(tenant_id)`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_sponsors_posicion ON sponsors(posicion)`);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_sponsors_activos ON sponsors(activo) WHERE activo = TRUE`,
+  );
+  await ensureTrigger(client, 'sponsors');
+  log('Sponsors asegurada (idempotente).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

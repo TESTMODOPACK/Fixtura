@@ -9,6 +9,7 @@ import type {
   Ranking,
   RankingItem,
   ResumenLiga,
+  SponsorPublico,
   TablaPosiciones,
   TorneoPublico,
 } from '@fixtura/types';
@@ -18,6 +19,7 @@ import { Equipo } from '../competition/entities/equipo.entity';
 import { Fecha } from '../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../competition/entities/incidencia-partido.entity';
 import { Partido } from '../competition/entities/partido.entity';
+import { Sponsor } from '../competition/entities/sponsor.entity';
 import { Torneo } from '../competition/entities/torneo.entity';
 
 /**
@@ -38,7 +40,46 @@ export class PublicService {
     private readonly incidenciaRepo: Repository<IncidenciaPartido>,
     @InjectRepository(Designacion)
     private readonly designacionRepo: Repository<Designacion>,
+    @InjectRepository(Sponsor)
+    private readonly sponsorRepo: Repository<Sponsor>,
   ) {}
+
+  /**
+   * Lista los sponsors activos y vigentes del tenant indicado. Filtra
+   * por:
+   *   - activo = TRUE
+   *   - vigente_desde IS NULL OR vigente_desde <= hoy
+   *   - vigente_hasta IS NULL OR vigente_hasta >= hoy
+   *
+   * Devuelve agrupados por posición — el frontend público los toma
+   * según dónde están en la página.
+   */
+  async getSponsors(slug: string, posicion?: string): Promise<SponsorPublico[]> {
+    const torneo = await this.findTorneoActivo(slug);
+    const tenantId = torneo.tenantId;
+
+    const qb = this.sponsorRepo
+      .createQueryBuilder('s')
+      .where('s.tenant_id = :tenantId', { tenantId })
+      .andWhere('s.activo = true')
+      .andWhere('(s.vigente_desde IS NULL OR s.vigente_desde <= CURRENT_DATE)')
+      .andWhere('(s.vigente_hasta IS NULL OR s.vigente_hasta >= CURRENT_DATE)')
+      .orderBy('s.prioridad', 'DESC')
+      .addOrderBy('s.created_at', 'DESC');
+
+    if (posicion) {
+      qb.andWhere('s.posicion = :posicion', { posicion });
+    }
+
+    const items = await qb.getMany();
+    return items.map((s) => ({
+      id: s.id,
+      nombre: s.nombre,
+      imagenUrl: s.imagenUrl,
+      linkUrl: s.linkUrl,
+      posicion: s.posicion,
+    }));
+  }
 
   // ─── Resumen home pública ────────────────────────────────────────
   async getResumen(slug: string): Promise<ResumenLiga> {

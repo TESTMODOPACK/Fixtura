@@ -30,6 +30,8 @@ import {
 import { PartidosAdminService } from './partidos/partidos-admin.service';
 import { PersonalAdminController } from './personal/personal-admin.controller';
 import { PersonalAdminService } from './personal/personal-admin.service';
+import { SponsorsAdminController } from './sponsors/sponsors-admin.controller';
+import { SponsorsAdminService } from './sponsors/sponsors-admin.service';
 import { TemporadasAdminController } from './temporadas/temporadas-admin.controller';
 import { TemporadasAdminService } from './temporadas/temporadas-admin.service';
 import { TorneosAdminController } from './torneos/torneos-admin.controller';
@@ -69,6 +71,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     ActasAdminController,
     DashboardAdminController,
     AjustesAdminController,
+    SponsorsAdminController,
   ],
   providers: [
     TemporadasAdminService,
@@ -85,6 +88,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     ActasAdminService,
     DashboardAdminService,
     AjustesAdminService,
+    SponsorsAdminService,
   ],
 })
 export class AdminModule {}

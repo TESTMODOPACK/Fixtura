@@ -15,6 +15,8 @@ export type { RolPersonal } from './personal.entity';
 export { SancionActiva } from './sancion-activa.entity';
 export type { MotivoSancion } from './sancion-activa.entity';
 export { Serie } from './serie.entity';
+export { Sponsor } from './sponsor.entity';
+export type { PosicionSponsor } from './sponsor.entity';
 export { Temporada } from './temporada.entity';
 export { Torneo } from './torneo.entity';
 export type { EstadoTorneo, TipoFormato } from './torneo.entity';

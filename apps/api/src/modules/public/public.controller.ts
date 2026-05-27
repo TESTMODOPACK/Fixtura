@@ -1,7 +1,13 @@
-import { Controller, Get, NotFoundException, Req } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 
-import type { FixturePublico, Ranking, ResumenLiga, TablaPosiciones } from '@fixtura/types';
+import type {
+  FixturePublico,
+  Ranking,
+  ResumenLiga,
+  SponsorPublico,
+  TablaPosiciones,
+} from '@fixtura/types';
 
 import { Public } from '../../common/decorators/public.decorator';
 import { TenantsService } from '../tenants/tenants.service';
@@ -67,5 +73,18 @@ export class PublicController {
   async mvp(@Req() req: Request): Promise<Ranking> {
     const slug = await this.resolveSlug(req);
     return this.svc.getRanking(slug, 'MVP');
+  }
+
+  /**
+   * Lista de sponsors activos y vigentes del tenant, ordenados por
+   * prioridad. Opcionalmente filtrá por posición.
+   */
+  @Get('sponsors')
+  async sponsors(
+    @Req() req: Request,
+    @Query('posicion') posicion?: string,
+  ): Promise<SponsorPublico[]> {
+    const slug = await this.resolveSlug(req);
+    return this.svc.getSponsors(slug, posicion);
   }
 }

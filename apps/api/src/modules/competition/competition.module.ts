@@ -11,6 +11,7 @@ import {
   Personal,
   SancionActiva,
   Serie,
+  Sponsor,
   Temporada,
   Torneo,
 } from './entities';
@@ -38,6 +39,7 @@ import {
       SancionActiva,
       Personal,
       Designacion,
+      Sponsor,
     ]),
   ],
   exports: [TypeOrmModule],
