@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background con el color brand -->
+  <rect width="512" height="512" rx="80" fill="#0F2A1F"/>
+  <!-- "X" del logo Fixtura -->
+  <line x1="136" y1="136" x2="376" y2="376" stroke="#E76F26" stroke-width="60" stroke-linecap="round"/>
+  <line x1="376" y1="136" x2="136" y2="376" stroke="#95D5B2" stroke-width="60" stroke-linecap="round"/>
+</svg>

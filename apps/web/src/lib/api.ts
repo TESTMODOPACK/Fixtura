@@ -8,9 +8,10 @@
 import type { AuthTokens } from '@fixtura/types';
 
 import { useAuthStore } from '@/store/auth-store';
+import { enqueue as enqueueOffline } from '@/lib/offline-queue';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
-const API_BASE = `${API_URL}/api/v1`;
+export const API_URL = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'}/api/v1`;
+const API_BASE = API_URL;
 
 export class ApiError extends Error {
   constructor(
@@ -26,7 +27,22 @@ export class ApiError extends Error {
 type FetchOpts = Omit<RequestInit, 'body'> & {
   body?: unknown;
   skipAuth?: boolean;
+  /**
+   * Si true y el cliente está offline, en lugar de fallar encola la
+   * operación en IndexedDB. Aplica solo para POST/PATCH. La promesa
+   * resuelve con un placeholder `__queued: true`. El caller debe
+   * tolerar ese caso (típicamente con optimistic update en UI).
+   */
+  enqueueIfOffline?: {
+    kind: 'incidencia' | 'cerrar-acta' | 'otro';
+    partidoId?: string;
+  };
 };
+
+/** Indica si una respuesta es un "queued" (encolada offline). */
+export function isQueuedResponse(res: unknown): boolean {
+  return typeof res === 'object' && res !== null && '__queued' in res;
+}
 
 let refreshPromise: Promise<AuthTokens> | null = null;
 
@@ -57,8 +73,27 @@ async function refreshTokens(): Promise<AuthTokens> {
 }
 
 export async function apiFetch<T = unknown>(path: string, opts: FetchOpts = {}): Promise<T> {
-  const { body, skipAuth, headers, ...rest } = opts;
+  const { body, skipAuth, headers, enqueueIfOffline, ...rest } = opts;
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
+
+  // Si estamos offline + esta operación es encolable → IDB en vez de fail
+  if (
+    enqueueIfOffline &&
+    typeof navigator !== 'undefined' &&
+    !navigator.onLine &&
+    (rest.method === 'POST' || rest.method === 'PATCH')
+  ) {
+    const token = useAuthStore.getState().accessToken;
+    await enqueueOffline({
+      url: path,
+      method: rest.method as 'POST' | 'PATCH',
+      body,
+      authToken: token,
+      kind: enqueueIfOffline.kind,
+      partidoId: enqueueIfOffline.partidoId,
+    });
+    return { __queued: true } as unknown as T;
+  }
 
   const buildHeaders = (token: string | null): HeadersInit => {
     const h: Record<string, string> = {

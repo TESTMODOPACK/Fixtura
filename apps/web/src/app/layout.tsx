@@ -2,6 +2,8 @@ import { GeistSans } from 'geist/font/sans';
 import type { Metadata, Viewport } from 'next';
 import { Anton, Archivo_Black, Newsreader, Space_Grotesk } from 'next/font/google';
 
+import { OfflineBanner } from '@/components/offline-banner';
+import { ServiceWorkerRegister } from '@/components/service-worker-register';
 import { Providers } from '@/providers/providers';
 
 import './globals.css';
@@ -42,8 +44,18 @@ export const metadata: Metadata = {
   applicationName: 'Fixtura',
   authors: [{ name: 'Fixtura' }],
   creator: 'Fixtura',
+  manifest: '/manifest.json',
   icons: {
     icon: '/favicon.svg',
+    apple: '/icons/icon.svg',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Fixtura',
+  },
+  formatDetection: {
+    telephone: false,
   },
 };
 
@@ -51,6 +63,7 @@ export const viewport: Viewport = {
   themeColor: '#0F2A1F',
   width: 'device-width',
   initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }): React.ReactElement {
@@ -60,7 +73,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
       className={`${anton.variable} ${archivoBlack.variable} ${newsreader.variable} ${GeistSans.variable} ${spaceGrotesk.variable}`}
     >
       <body className="font-sans antialiased">
-        <Providers>{children}</Providers>
+        <Providers>
+          <ServiceWorkerRegister />
+          <OfflineBanner />
+          {children}
+        </Providers>
       </body>
     </html>
   );

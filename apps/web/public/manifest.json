@@ -1,0 +1,41 @@
+{
+  "name": "Fixtura — Plataforma para ligas amateur",
+  "short_name": "Fixtura",
+  "description": "Gestión de torneos, fixture, actas y designaciones para ligas amateur de Chile y LATAM.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F1ECE2",
+  "theme_color": "#0F2A1F",
+  "lang": "es-CL",
+  "categories": ["sports", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Panel admin",
+      "short_name": "Admin",
+      "description": "Ir al panel de administración",
+      "url": "/admin"
+    },
+    {
+      "name": "Fixture",
+      "short_name": "Fixture",
+      "description": "Ver el fixture del torneo",
+      "url": "/fixture"
+    }
+  ]
+}

@@ -222,6 +222,9 @@ export function useAddIncidencia(partidoId: string) {
       apiFetch<IncidenciaAdmin>(`/admin/partidos/${partidoId}/incidencias`, {
         method: 'POST',
         body: input,
+        // Si estamos en cancha sin señal, encolar en IndexedDB y resolver
+        // optimista. El banner offline + auto-flush hacen el resto.
+        enqueueIfOffline: { kind: 'incidencia', partidoId },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
@@ -247,6 +250,10 @@ export function useCerrarActa(partidoId: string, torneoId: string) {
       apiFetch<PartidoAdmin>(`/admin/partidos/${partidoId}/cerrar-acta`, {
         method: 'POST',
         body: input,
+        // Si se cierra el acta sin señal, encolar. La operación es
+        // idempotente: si llegan 2 cierres, el segundo da 409 y la
+        // queue lo absorbe.
+        enqueueIfOffline: { kind: 'cerrar-acta', partidoId },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
