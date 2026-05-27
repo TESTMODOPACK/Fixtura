@@ -725,3 +725,81 @@ export function useDeactivateCancha() {
     },
   });
 }
+
+// ─── Cobros (finanzas) ──────────────────────────────────────────────
+import type {
+  CobroAdmin,
+  CreateCobroRequest,
+  MarcarPagadoRequest,
+  UpdateCobroRequest,
+} from '@fixtura/types';
+
+export function useCobros(filtro?: string, equipoId?: string) {
+  const qs = new URLSearchParams();
+  if (filtro) qs.set('filtro', filtro);
+  if (equipoId) qs.set('equipoId', equipoId);
+  const query = qs.toString();
+  return useQuery({
+    queryKey: ['admin', 'cobros', { filtro: filtro ?? null, equipoId: equipoId ?? null }],
+    queryFn: () =>
+      apiFetch<CobroAdmin[]>(`/admin/cobros${query ? `?${query}` : ''}`),
+  });
+}
+
+export function useCreateCobro() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateCobroRequest) =>
+      apiFetch<CobroAdmin>('/admin/cobros', { method: 'POST', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'cobros'] });
+    },
+  });
+}
+
+export function useUpdateCobro(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateCobroRequest) =>
+      apiFetch<CobroAdmin>(`/admin/cobros/${id}`, { method: 'PATCH', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'cobros'] });
+    },
+  });
+}
+
+export function useMarcarPagado() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: MarcarPagadoRequest }) =>
+      apiFetch<CobroAdmin>(`/admin/cobros/${id}/pagar`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'cobros'] });
+    },
+  });
+}
+
+export function useRevertirPago() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<CobroAdmin>(`/admin/cobros/${id}/revertir-pago`, { method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'cobros'] });
+    },
+  });
+}
+
+export function useDeleteCobro() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/cobros/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'cobros'] });
+    },
+  });
+}

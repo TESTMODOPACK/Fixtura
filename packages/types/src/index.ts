@@ -16,3 +16,4 @@ export * from './ajustes';
 export * from './sponsors';
 export * from './rut';
 export * from './canchas';
+export * from './cobros';

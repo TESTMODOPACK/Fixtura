@@ -55,7 +55,7 @@ const NAV: NavSection[] = [
   {
     title: 'Operaciones',
     items: [
-      { href: '/admin/finanzas', label: 'Finanzas & cobros', icon: PiggyBank, comingSoon: true },
+      { href: '/admin/finanzas', label: 'Finanzas & cobros', icon: PiggyBank },
       { href: '/admin/canchas', label: 'Ocupación canchas', icon: Calendar },
       { href: '/admin/analytics', label: 'Analytics & NPS', icon: BarChart3, comingSoon: true },
     ],

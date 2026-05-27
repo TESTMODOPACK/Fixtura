@@ -11,6 +11,8 @@ import { AjustesAdminController } from './ajustes/ajustes-admin.controller';
 import { AjustesAdminService } from './ajustes/ajustes-admin.service';
 import { CanchasAdminController } from './canchas/canchas-admin.controller';
 import { CanchasAdminService } from './canchas/canchas-admin.service';
+import { CobrosAdminController } from './cobros/cobros-admin.controller';
+import { CobrosAdminService } from './cobros/cobros-admin.service';
 import { DashboardAdminController } from './dashboard/dashboard-admin.controller';
 import { DashboardAdminService } from './dashboard/dashboard-admin.service';
 import { DesignacionesAdminController } from './designaciones/designaciones-admin.controller';
@@ -76,6 +78,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     AjustesAdminController,
     SponsorsAdminController,
     CanchasAdminController,
+    CobrosAdminController,
   ],
   providers: [
     TemporadasAdminService,
@@ -95,6 +98,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     AjustesAdminService,
     SponsorsAdminService,
     CanchasAdminService,
+    CobrosAdminService,
   ],
 })
 export class AdminModule {}

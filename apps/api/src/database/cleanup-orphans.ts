@@ -124,6 +124,9 @@ async function main(): Promise<void> {
     // Sprint 6: tabla canchas.
     await ensureCanchasTable(client, log);
 
+    // Sprint 6B: tabla cobros (finanzas MVP).
+    await ensureCobrosTable(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -318,6 +321,47 @@ async function ensureCanchasTable(
   );
   await ensureTrigger(client, 'canchas');
   log('Canchas asegurada (idempotente).');
+}
+
+async function ensureCobrosTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS cobros (
+      id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id         UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      equipo_id         UUID REFERENCES equipos(id) ON DELETE SET NULL,
+      concepto          VARCHAR(200) NOT NULL,
+      categoria         VARCHAR(30) NOT NULL DEFAULT 'CUOTA'
+                          CHECK (categoria IN (
+                            'INSCRIPCION','CUOTA','MULTA','ALQUILER_CANCHA',
+                            'ARBITRAJE','OTRO'
+                          )),
+      monto             INTEGER NOT NULL CHECK (monto >= 0),
+      vencimiento       DATE,
+      pagado_at         TIMESTAMPTZ,
+      pagado_metodo     VARCHAR(30)
+                          CHECK (pagado_metodo IS NULL OR pagado_metodo IN (
+                            'EFECTIVO','TRANSFERENCIA','WEBPAY','MERCADOPAGO','OTRO'
+                          )),
+      pagado_referencia VARCHAR(150),
+      cancelado         BOOLEAN NOT NULL DEFAULT FALSE,
+      notas             TEXT,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await ensureRls(client, 'cobros');
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_cobros_tenant ON cobros(tenant_id)`);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_cobros_equipo ON cobros(equipo_id) WHERE equipo_id IS NOT NULL`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_cobros_pendientes ON cobros(vencimiento) WHERE pagado_at IS NULL AND cancelado = FALSE`,
+  );
+  await ensureTrigger(client, 'cobros');
+  log('Cobros asegurada (idempotente).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {
