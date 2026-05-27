@@ -17,6 +17,7 @@ import {
   Sponsor,
   Temporada,
   Torneo,
+  Transaccion,
 } from './entities';
 
 /**
@@ -46,6 +47,7 @@ import {
       Sponsor,
       Cancha,
       Cobro,
+      Transaccion,
     ]),
   ],
   exports: [TypeOrmModule],

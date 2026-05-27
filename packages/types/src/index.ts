@@ -17,3 +17,4 @@ export * from './sponsors';
 export * from './rut';
 export * from './canchas';
 export * from './cobros';
+export * from './transacciones';

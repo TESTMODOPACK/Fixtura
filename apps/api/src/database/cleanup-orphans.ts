@@ -131,6 +131,9 @@ async function main(): Promise<void> {
     // backfill por nombre para no perder los partidos ya creados.
     await ensurePartidosCanchaId(client, log);
 
+    // Sprint 7A: tabla transacciones (Webpay + integraciones futuras).
+    await ensureTransaccionesTable(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -366,6 +369,54 @@ async function ensureCobrosTable(
   );
   await ensureTrigger(client, 'cobros');
   log('Cobros asegurada (idempotente).');
+}
+
+async function ensureTransaccionesTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS transacciones (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      cobro_id            UUID REFERENCES cobros(id) ON DELETE SET NULL,
+      monto               INTEGER NOT NULL CHECK (monto >= 0),
+      pasarela            VARCHAR(30) NOT NULL
+                            CHECK (pasarela IN (
+                              'WEBPAY','MERCADOPAGO','MACH','MOCK'
+                            )),
+      estado              VARCHAR(30) NOT NULL DEFAULT 'PENDIENTE'
+                            CHECK (estado IN (
+                              'PENDIENTE','PAGO_EN_TRANSITO','APROBADO',
+                              'EXPIRADO','REVERSADO','RECHAZADO'
+                            )),
+      idempotency_key     VARCHAR(150) NOT NULL UNIQUE,
+      token_pasarela      VARCHAR(200),
+      url_redireccion     VARCHAR(500),
+      respuesta_pasarela  JSONB,
+      user_pagador_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+      pagado_at           TIMESTAMPTZ,
+      expira_at           TIMESTAMPTZ NOT NULL,
+      notas               TEXT,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await ensureRls(client, 'transacciones');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_transacciones_tenant ON transacciones(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_transacciones_cobro ON transacciones(cobro_id) WHERE cobro_id IS NOT NULL`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_transacciones_estado ON transacciones(estado, expira_at) WHERE estado IN ('PENDIENTE','PAGO_EN_TRANSITO')`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_transacciones_token ON transacciones(token_pasarela) WHERE token_pasarela IS NOT NULL`,
+  );
+  await ensureTrigger(client, 'transacciones');
+  log('Transacciones asegurada (idempotente).');
 }
 
 async function ensurePartidosCanchaId(

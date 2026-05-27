@@ -25,4 +25,6 @@ export { Sponsor } from './sponsor.entity';
 export type { PosicionSponsor } from './sponsor.entity';
 export { Temporada } from './temporada.entity';
 export { Torneo } from './torneo.entity';
+export { Transaccion } from './transaccion.entity';
+export type { EstadoTransaccion, PasarelaPago } from './transaccion.entity';
 export type { EstadoTorneo, TipoFormato } from './torneo.entity';
