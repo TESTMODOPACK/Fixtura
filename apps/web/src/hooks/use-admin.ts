@@ -619,3 +619,52 @@ export function useDeleteSponsor() {
     },
   });
 }
+
+// ─── Designaciones de RECINTO (paramédicos por jornada) ──────────────
+import type {
+  AsignarRecintoRequest,
+  DesignacionRecinto as DesignacionRecintoType,
+} from '@fixtura/types';
+
+export function useDesignacionesRecinto(
+  torneoId: string | null | undefined,
+  fechaId: string | null | undefined,
+) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'fechas', fechaId, 'recinto'],
+    queryFn: () =>
+      apiFetch<DesignacionRecintoType[]>(
+        `/admin/torneos/${torneoId}/fechas/${fechaId}/recinto`,
+      ),
+    enabled: !!torneoId && !!fechaId,
+  });
+}
+
+export function useAsignarRecinto(invalidate: { torneoId: string; fechaId: string }) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AsignarRecintoRequest) =>
+      apiFetch<DesignacionRecintoType>('/admin/designaciones-recinto', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'torneos', invalidate.torneoId, 'fechas', invalidate.fechaId, 'recinto'],
+      });
+    },
+  });
+}
+
+export function useRemoveRecinto(invalidate: { torneoId: string; fechaId: string }) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/designaciones-recinto/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'torneos', invalidate.torneoId, 'fechas', invalidate.fechaId, 'recinto'],
+      });
+    },
+  });
+}

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import {
   Designacion,
+  DesignacionRecinto,
   Equipo,
   Fecha,
   IncidenciaPartido,
@@ -39,6 +40,7 @@ import {
       SancionActiva,
       Personal,
       Designacion,
+      DesignacionRecinto,
       Sponsor,
     ]),
   ],

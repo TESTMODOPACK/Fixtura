@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   ArrowLeft,
+  Building2,
   CalendarRange,
   CheckCircle2,
   Plus,
@@ -16,11 +17,15 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   ROLES_DESIGNABLES_PARTIDO,
+  ROLES_DESIGNABLES_RECINTO,
+  SLOTS_POR_ROL,
   type AutoAsignarResult,
   type DesignacionAdmin,
+  type DesignacionRecinto,
   type EstadoDesignacion,
   type PersonalAdmin,
   type RolDesignablePartido,
+  type RolDesignableRecinto,
 } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
@@ -28,11 +33,14 @@ import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import {
   useAsignarDesignacion,
+  useAsignarRecinto,
   useAutoAsignarDesignaciones,
   useDesignacionesPorFecha,
+  useDesignacionesRecinto,
   useFixtureDetail,
   usePersonal,
   useRemoveDesignacion,
+  useRemoveRecinto,
   useTorneo,
   useUpdateDesignacionEstado,
 } from '@/hooks/use-admin';
@@ -265,6 +273,9 @@ function FechaDesignacionesView({
           />
         ))}
       </div>
+
+      {/* Cobertura del recinto: paramédicos y otros para toda la jornada */}
+      <RecintoSection torneoId={torneoId} fechaId={fechaId} personal={personal} />
     </>
   );
 }
@@ -280,7 +291,9 @@ function PartidoCard({
   fechaId: string;
   personal: PersonalAdmin[];
 }): React.ReactElement {
-  const [addingRol, setAddingRol] = useState<RolDesignablePartido | null>(null);
+  // addingRol guarda el slot id ("ARBITRO_ASISTENTE-1") porque ahora hay
+  // múltiples slots por rol (asistente 1 y asistente 2).
+  const [addingRol, setAddingRol] = useState<string | null>(null);
   const asignar = useAsignarDesignacion({ torneoId, fechaId });
   const remove = useRemoveDesignacion({ torneoId, fechaId });
   const updateEstado = useUpdateDesignacionEstado({ torneoId, fechaId });
@@ -313,56 +326,75 @@ function PartidoCard({
       <div className="divide-y divide-line">
         {ROLES_DESIGNABLES_PARTIDO.map((rol) => {
           const desigs = partido.designaciones.filter((d) => d.rolAsignado === rol);
+          const slotsNecesarios = SLOTS_POR_ROL[rol];
+          // Construyo exactamente N "filas" (slots). Las primeras se llenan
+          // con designaciones existentes; las restantes muestran "Sin
+          // designar" + botón "Asignar".
+          const slots: Array<DesignacionAdmin | null> = Array.from(
+            { length: Math.max(slotsNecesarios, desigs.length) },
+            (_, i) => desigs[i] ?? null,
+          );
+
           return (
-            <div key={rol} className="px-5 py-3 flex items-start gap-3">
-              <div className="w-32 flex-shrink-0">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-ink-mute font-semibold">
-                  {ROL_ABREV[rol]}
-                </div>
-              </div>
+            <div key={rol} className="px-5 py-3">
+              {slots.map((d, idx) => {
+                const slotId = `${rol}-${idx}`;
+                const etiqueta =
+                  slotsNecesarios > 1
+                    ? `${ROL_ABREV[rol]} ${idx + 1}`
+                    : ROL_ABREV[rol];
+                return (
+                  <div key={slotId} className="flex items-start gap-3 mb-1.5 last:mb-0">
+                    <div className="w-32 flex-shrink-0">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-ink-mute font-semibold">
+                        {etiqueta}
+                      </div>
+                    </div>
 
-              <div className="flex-1 space-y-1.5">
-                {desigs.length === 0 && (
-                  <div className="text-sm text-ink-mute italic font-serif">
-                    Sin designar
+                    <div className="flex-1">
+                      {d ? (
+                        <DesignacionRow
+                          desig={d}
+                          onRemove={() => remove.mutate(d.id)}
+                          onUpdateEstado={(estado) =>
+                            updateEstado.mutate({ id: d.id, estado })
+                          }
+                        />
+                      ) : addingRol === slotId ? (
+                        <AsignarForm
+                          personal={personal}
+                          rol={rol}
+                          yaAsignados={partido.designaciones.map((d) => d.personalId)}
+                          onCancel={() => setAddingRol(null)}
+                          onSubmit={async (personalId) => {
+                            await asignar.mutateAsync({
+                              partidoId: partido.partidoId,
+                              personalId,
+                              rolAsignado: rol,
+                            });
+                            setAddingRol(null);
+                          }}
+                          pending={asignar.isPending}
+                          error={asignar.error as ApiError | undefined}
+                        />
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm text-ink-mute italic font-serif">
+                            Sin designar
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setAddingRol(slotId)}
+                            className="text-xs text-accent hover:underline font-semibold inline-flex items-center gap-1"
+                          >
+                            <Plus size={12} /> Asignar
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-                {desigs.map((d) => (
-                  <DesignacionRow
-                    key={d.id}
-                    desig={d}
-                    onRemove={() => remove.mutate(d.id)}
-                    onUpdateEstado={(estado) => updateEstado.mutate({ id: d.id, estado })}
-                  />
-                ))}
-
-                {addingRol === rol ? (
-                  <AsignarForm
-                    personal={personal}
-                    rol={rol}
-                    yaAsignados={partido.designaciones.map((d) => d.personalId)}
-                    onCancel={() => setAddingRol(null)}
-                    onSubmit={async (personalId) => {
-                      await asignar.mutateAsync({
-                        partidoId: partido.partidoId,
-                        personalId,
-                        rolAsignado: rol,
-                      });
-                      setAddingRol(null);
-                    }}
-                    pending={asignar.isPending}
-                    error={asignar.error as ApiError | undefined}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setAddingRol(rol)}
-                    className="text-xs text-accent hover:underline font-semibold inline-flex items-center gap-1"
-                  >
-                    <Plus size={12} /> Asignar
-                  </button>
-                )}
-              </div>
+                );
+              })}
             </div>
           );
         })}
@@ -739,6 +771,236 @@ function AutoAsignarBoton({
           </>
         )}
       </Card>
+    </div>
+  );
+}
+
+// ─── Cobertura del recinto (paramédicos y otros por jornada) ────────
+function RecintoSection({
+  torneoId,
+  fechaId,
+  personal,
+}: {
+  torneoId: string;
+  fechaId: string;
+  personal: PersonalAdmin[];
+}): React.ReactElement {
+  const { data: designaciones, isLoading } = useDesignacionesRecinto(torneoId, fechaId);
+  const asignar = useAsignarRecinto({ torneoId, fechaId });
+  const remove = useRemoveRecinto({ torneoId, fechaId });
+  const [addingRol, setAddingRol] = useState<RolDesignableRecinto | null>(null);
+  const asignarErr = asignar.error as ApiError | undefined;
+
+  // Personal candidato para el recinto (paramédicos y otros del catálogo)
+  const candidatos = useMemo(
+    () =>
+      personal.filter((p) =>
+        (ROLES_DESIGNABLES_RECINTO as readonly string[]).includes(p.rol),
+      ),
+    [personal],
+  );
+
+  return (
+    <Card padding="none" className="overflow-hidden mt-6">
+      <div className="px-5 py-3 bg-paper-dark border-b border-line flex items-center gap-2">
+        <Building2 size={16} className="text-accent" />
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-ink-mute font-semibold">
+            COBERTURA DEL RECINTO · ESTA FECHA
+          </div>
+          <div className="text-xs text-ink-mute font-serif italic">
+            Personal que cubre toda la jornada (no un partido específico): paramédicos, utilería,
+            seguridad, etc.
+          </div>
+        </div>
+      </div>
+
+      <div className="divide-y divide-line">
+        {ROLES_DESIGNABLES_RECINTO.map((rol) => {
+          const desigs = (designaciones ?? []).filter((d) => d.rolAsignado === rol);
+          const rolLabel =
+            rol === 'PARAMEDICO'
+              ? 'Paramédico'
+              : rol === 'OTRO'
+                ? 'Otros (utilería, seguridad)'
+                : rol;
+          return (
+            <div key={rol} className="px-5 py-3">
+              <div className="flex items-start gap-3">
+                <div className="w-32 flex-shrink-0">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-ink-mute font-semibold">
+                    {rolLabel}
+                  </div>
+                </div>
+                <div className="flex-1 space-y-1.5">
+                  {isLoading && desigs.length === 0 && (
+                    <div className="text-sm text-ink-mute font-serif italic">Cargando…</div>
+                  )}
+                  {!isLoading && desigs.length === 0 && (
+                    <div className="text-sm text-ink-mute italic font-serif">Sin designar</div>
+                  )}
+                  {desigs.map((d) => (
+                    <div key={d.id} className="flex items-center gap-3 flex-wrap text-sm">
+                      <span className="font-semibold text-ink">
+                        {d.personalNombre} {d.personalApellido}
+                      </span>
+                      <span
+                        className={cn(
+                          'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
+                          ESTADO_BADGE[d.estado],
+                        )}
+                      >
+                        {ESTADO_LABEL[d.estado]}
+                      </span>
+                      {d.canchaNombre && (
+                        <span className="text-xs text-ink-mute">
+                          Cancha: <span className="font-mono text-ink">{d.canchaNombre}</span>
+                        </span>
+                      )}
+                      {d.montoPago != null && (
+                        <span className="text-xs text-ink-mute">
+                          ${d.montoPago.toLocaleString('es-CL')}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `¿Quitar a ${d.personalNombre} ${d.personalApellido} del recinto?`,
+                            )
+                          ) {
+                            remove.mutate(d.id);
+                          }
+                        }}
+                        className="ml-auto p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
+                        title="Quitar"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+
+                  {addingRol === rol ? (
+                    <RecintoAsignarForm
+                      candidatos={candidatos}
+                      yaAsignados={desigs.map((d) => d.personalId)}
+                      rolBaseEsperado={rol}
+                      onCancel={() => setAddingRol(null)}
+                      onSubmit={async (personalId, canchaNombre) => {
+                        await asignar.mutateAsync({
+                          fechaId,
+                          personalId,
+                          rolAsignado: rol,
+                          canchaNombre: canchaNombre || null,
+                        });
+                        setAddingRol(null);
+                      }}
+                      pending={asignar.isPending}
+                      error={asignarErr}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setAddingRol(rol)}
+                      className="text-xs text-accent hover:underline font-semibold inline-flex items-center gap-1"
+                    >
+                      <Plus size={12} /> Asignar
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function RecintoAsignarForm({
+  candidatos,
+  yaAsignados,
+  rolBaseEsperado,
+  onCancel,
+  onSubmit,
+  pending,
+  error,
+}: {
+  candidatos: PersonalAdmin[];
+  yaAsignados: string[];
+  rolBaseEsperado: RolDesignableRecinto;
+  onCancel: () => void;
+  onSubmit: (personalId: string, canchaNombre: string) => Promise<void>;
+  pending?: boolean;
+  error?: ApiError;
+}): React.ReactElement {
+  const [personalId, setPersonalId] = useState('');
+  const [canchaNombre, setCanchaNombre] = useState('');
+
+  const sugeridos = useMemo(
+    () =>
+      candidatos.filter(
+        (p) => p.rol === rolBaseEsperado && !yaAsignados.includes(p.id),
+      ),
+    [candidatos, rolBaseEsperado, yaAsignados],
+  );
+  const restoCandidatos = useMemo(
+    () =>
+      candidatos.filter(
+        (p) => p.rol !== rolBaseEsperado && !yaAsignados.includes(p.id),
+      ),
+    [candidatos, rolBaseEsperado, yaAsignados],
+  );
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <select
+        className="input max-w-xs"
+        value={personalId}
+        onChange={(e) => setPersonalId(e.target.value)}
+      >
+        <option value="">— elegí persona —</option>
+        {sugeridos.length > 0 && (
+          <optgroup label="Sugeridos por rol base">
+            {sugeridos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre} {p.apellido}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {restoCandidatos.length > 0 && (
+          <optgroup label="Otros candidatos">
+            {restoCandidatos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre} {p.apellido} ({p.rol})
+              </option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+      <input
+        className="input max-w-[180px] text-sm"
+        type="text"
+        placeholder="Cancha (opcional)"
+        value={canchaNombre}
+        onChange={(e) => setCanchaNombre(e.target.value)}
+      />
+      <Button
+        type="button"
+        variant="accent"
+        size="sm"
+        disabled={!personalId || pending}
+        onClick={() => personalId && onSubmit(personalId, canchaNombre.trim())}
+        loading={pending}
+      >
+        Asignar
+      </Button>
+      <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+        <X size={14} />
+      </Button>
+      {error && <span className="text-xs text-danger">{error.message}</span>}
     </div>
   );
 }

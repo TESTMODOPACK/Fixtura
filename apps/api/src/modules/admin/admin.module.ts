@@ -15,6 +15,7 @@ import { DesignacionesAdminController } from './designaciones/designaciones-admi
 import { DesignacionesAdminService } from './designaciones/designaciones-admin.service';
 import { DesignacionesEmailService } from './designaciones/designaciones-email.service';
 import { DesignacionesRespuestaController } from './designaciones/designaciones-respuesta.controller';
+import { RecintoAdminService } from './designaciones/recinto-admin.service';
 import { EquiposAdminController } from './equipos/equipos-admin.controller';
 import { EquiposAdminService } from './equipos/equipos-admin.service';
 import { FixtureAdminController } from './fixture/fixture-admin.controller';
@@ -85,6 +86,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     PersonalAdminService,
     DesignacionesAdminService,
     DesignacionesEmailService,
+    RecintoAdminService,
     ActasAdminService,
     DashboardAdminService,
     AjustesAdminService,

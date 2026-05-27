@@ -112,6 +112,9 @@ async function main(): Promise<void> {
     // Sprint 4B: tabla sponsors (banners portal público).
     await ensureSponsorsTable(client, log);
 
+    // Sprint 2E.x: designaciones de RECINTO (paramédicos por jornada).
+    await ensureDesignacionesRecintoTable(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -232,6 +235,46 @@ async function ensureSponsorsTable(
   );
   await ensureTrigger(client, 'sponsors');
   log('Sponsors asegurada (idempotente).');
+}
+
+async function ensureDesignacionesRecintoTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS designaciones_recinto (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      fecha_id            UUID NOT NULL REFERENCES fechas(id) ON DELETE CASCADE,
+      personal_id         UUID NOT NULL REFERENCES personal(id) ON DELETE CASCADE,
+      rol_asignado        VARCHAR(30) NOT NULL
+                            CHECK (rol_asignado IN ('PARAMEDICO','OTRO')),
+      cancha_nombre       VARCHAR(100),
+      estado              VARCHAR(20) NOT NULL DEFAULT 'PROPUESTA'
+                            CHECK (estado IN (
+                              'PROPUESTA','CONFIRMADA','RECHAZADA',
+                              'ASISTIO','AUSENTE'
+                            )),
+      monto_pago          INTEGER,
+      confirmado_at       TIMESTAMPTZ,
+      notas               TEXT,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (fecha_id, personal_id, rol_asignado, cancha_nombre)
+    )
+  `);
+  await ensureRls(client, 'designaciones_recinto');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_designaciones_recinto_tenant ON designaciones_recinto(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_designaciones_recinto_fecha ON designaciones_recinto(fecha_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_designaciones_recinto_personal ON designaciones_recinto(personal_id)`,
+  );
+  await ensureTrigger(client, 'designaciones_recinto');
+  log('Designaciones de recinto aseguradas (idempotente).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

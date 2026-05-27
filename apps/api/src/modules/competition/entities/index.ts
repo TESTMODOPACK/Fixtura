@@ -1,5 +1,7 @@
 export { Designacion } from './designacion.entity';
 export type { EstadoDesignacion } from './designacion.entity';
+export { DesignacionRecinto } from './designacion-recinto.entity';
+export type { RolRecinto } from './designacion-recinto.entity';
 export { Equipo } from './equipo.entity';
 export type { EstadoEquipo } from './equipo.entity';
 export { Fecha } from './fecha.entity';

@@ -77,6 +77,36 @@ export const AutoAsignarSchema = z.object({
 });
 export type AutoAsignarRequest = z.infer<typeof AutoAsignarSchema>;
 
+// ─── Designaciones de RECINTO (paramédicos / otros por jornada) ─────
+
+export const DesignacionRecintoSchema = z.object({
+  id: z.uuid(),
+  fechaId: z.uuid(),
+  fechaNumero: z.number().int(),
+  personalId: z.uuid(),
+  personalNombre: z.string(),
+  personalApellido: z.string(),
+  personalRolBase: z.enum(ROL_PERSONAL),
+  rolAsignado: z.enum(['PARAMEDICO', 'OTRO']),
+  canchaNombre: z.string().nullable(),
+  estado: z.enum(ESTADO_DESIGNACION),
+  montoPago: z.number().int().nullable(),
+  confirmadoAt: z.iso.datetime().nullable(),
+  notas: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+});
+export type DesignacionRecinto = z.infer<typeof DesignacionRecintoSchema>;
+
+export const AsignarRecintoSchema = z.object({
+  fechaId: z.uuid(),
+  personalId: z.uuid(),
+  rolAsignado: z.enum(['PARAMEDICO', 'OTRO']),
+  canchaNombre: z.string().max(100).optional().nullable(),
+  montoPago: z.number().int().min(0).optional().nullable(),
+  notas: z.string().max(500).optional().nullable(),
+});
+export type AsignarRecintoRequest = z.infer<typeof AsignarRecintoSchema>;
+
 export const AutoAsignarResultSchema = z.object({
   // Designaciones nuevas creadas (con su partido_id + personal asignado).
   asignados: z.array(

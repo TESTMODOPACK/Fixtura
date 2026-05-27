@@ -27,6 +27,31 @@ export const ROLES_DESIGNABLES_PARTIDO = [
 export type RolDesignablePartido = (typeof ROLES_DESIGNABLES_PARTIDO)[number];
 
 /**
+ * Cuántos slots de cada rol se necesitan por partido. Estándar ANFA:
+ *   - 1 árbitro principal
+ *   - 2 árbitros asistentes (uno por línea)
+ *   - 1 planillero
+ *
+ * La auto-asignación itera estos slots. La UI muestra exactamente esta
+ * cantidad de filas por partido y rol.
+ */
+export const SLOTS_POR_ROL: Record<RolDesignablePartido, number> = {
+  ARBITRO_PRINCIPAL: 1,
+  ARBITRO_ASISTENTE: 2,
+  PLANILLERO: 1,
+};
+
+/**
+ * Roles asignables al RECINTO (toda la jornada de una cancha, no por
+ * partido). Típicamente: paramédico y personal de servicio.
+ */
+export const ROLES_DESIGNABLES_RECINTO = [
+  'PARAMEDICO',
+  'OTRO',
+] as const;
+export type RolDesignableRecinto = (typeof ROLES_DESIGNABLES_RECINTO)[number];
+
+/**
  * Roles arbitrales que requieren carnet ANFA vigente. Usado para
  * computar warnings en designaciones.
  */

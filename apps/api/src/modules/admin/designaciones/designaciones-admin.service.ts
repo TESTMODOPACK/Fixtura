@@ -15,6 +15,7 @@ import type {
   RolDesignablePartido,
   RolPersonal,
 } from '@fixtura/types';
+import { SLOTS_POR_ROL } from '@fixtura/types';
 
 import { Designacion } from '../../competition/entities/designacion.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
@@ -572,17 +573,25 @@ export class DesignacionesAdminService {
           }>()
       : [];
 
-    // Index: { partidoId-rol → designacionId } para saber qué ya está cubierto
-    const cubiertoMap = new Map<string, string>();
+    // Index: { partidoId-rol → array de { designacionId, personalId } }
+    // para saber cuántos SLOTS de ese rol ya están cubiertos por partido.
+    // Permite manejar 2 árbitros asistentes (o más) por partido.
+    const cubiertoMap = new Map<
+      string,
+      Array<{ designacionId: string; personalId: string }>
+    >();
     // Index: personalId → lista de fechaHora donde ya está ocupado
     const ocupadoMap = new Map<string, Array<Date>>();
     for (const d of designacionesExistentes) {
-      cubiertoMap.set(`${d.partidoId}-${d.rolAsignado}`, d.id);
+      const key = `${d.partidoId}-${d.rolAsignado}`;
+      const arr = cubiertoMap.get(key) ?? [];
+      arr.push({ designacionId: d.id, personalId: d.personalId });
+      cubiertoMap.set(key, arr);
       const fh = d.fechaHora ? new Date(d.fechaHora) : null;
       if (fh) {
-        const arr = ocupadoMap.get(d.personalId) ?? [];
-        arr.push(fh);
-        ocupadoMap.set(d.personalId, arr);
+        const arrO = ocupadoMap.get(d.personalId) ?? [];
+        arrO.push(fh);
+        ocupadoMap.set(d.personalId, arrO);
       }
     }
 
@@ -602,18 +611,45 @@ export class DesignacionesAdminService {
       // pedido es PLANILLERO y no hay planilleros, NO usamos árbitros como
       // fallback — sería sorpresivo.
       const candidatosBase = personalActivo.filter((p) => p.rol === rol);
+      // Cuántos slots de este rol se necesitan por partido (ej. 2 para
+      // ARBITRO_ASISTENTE — uno por línea).
+      const slotsNecesarios = SLOTS_POR_ROL[rol];
 
       for (const partido of partidos) {
         const key = `${partido.id}-${rol}`;
-        const cubierto = cubiertoMap.get(key);
+        let cubiertos = cubiertoMap.get(key) ?? [];
 
-        if (cubierto && !sobreescribir) {
-          result.yaAsignados.push({ partidoId: partido.id, rolAsignado: rol });
+        // Si sobreescribir, removemos los existentes para empezar desde
+        // cero los N slots
+        if (cubiertos.length > 0 && sobreescribir) {
+          for (const c of cubiertos) {
+            const prev = await this.repo.findOne({
+              where: { id: c.designacionId, tenantId },
+            });
+            if (prev) await this.repo.remove(prev);
+          }
+          cubiertos = [];
+          cubiertoMap.set(key, cubiertos);
+        }
+
+        // Slots que faltan para llegar a la cuota
+        const slotsRestantes = slotsNecesarios - cubiertos.length;
+
+        if (slotsRestantes <= 0) {
+          // Ya está todo cubierto en este rol/partido — marcamos como
+          // ya asignado (una entrada en yaAsignados por slot)
+          for (let i = 0; i < slotsNecesarios; i++) {
+            result.yaAsignados.push({ partidoId: partido.id, rolAsignado: rol });
+          }
           continue;
         }
 
-        // Filtrar candidatos disponibles
+        // Filtrar candidatos disponibles excluyendo los que ya están
+        // asignados en este partido+rol (evita duplicar el mismo
+        // asistente como asistente 1 y asistente 2).
+        const idsYaUsados = new Set(cubiertos.map((c) => c.personalId));
         const disponibles = candidatosBase.filter((p) => {
+          if (idsYaUsados.has(p.id)) return false;
           // No designar a alguien con carnet vencido a un rol arbitral
           if (ROLES_ARBITRAJE.includes(rol as RolPersonal)) {
             const w = this.checkCarnetWarning(
@@ -637,65 +673,84 @@ export class DesignacionesAdminService {
         });
 
         if (disponibles.length === 0) {
-          result.sinDisponibilidad.push({
-            partidoId: partido.id,
-            rolAsignado: rol,
-            motivo: candidatosBase.length === 0
-              ? `No hay personal activo con rol ${rol}`
-              : 'Todos los candidatos tienen conflicto de horario o carnet vencido',
-          });
+          // No hay nadie para cubrir ni siquiera 1 slot restante
+          for (let i = 0; i < slotsRestantes; i++) {
+            result.sinDisponibilidad.push({
+              partidoId: partido.id,
+              rolAsignado: rol,
+              motivo: candidatosBase.length === 0
+                ? `No hay personal activo con rol ${rol}`
+                : 'Todos los candidatos tienen conflicto de horario o carnet vencido',
+            });
+          }
           continue;
         }
 
-        // Elegir el que tiene MENOS carga en este torneo (balance).
-        // En empate, el de menor apellido (orden estable).
-        disponibles.sort((a, b) => {
-          const ca = cargaPorPersonal.get(a.id) ?? 0;
-          const cb = cargaPorPersonal.get(b.id) ?? 0;
-          if (ca !== cb) return ca - cb;
-          return a.apellido.localeCompare(b.apellido);
-        });
-        const elegido = disponibles[0]!;
+        // Iterar hasta llenar los slots restantes (o hasta quedarnos sin
+        // disponibles, lo que pase primero).
+        for (let slot = 0; slot < slotsRestantes; slot++) {
+          // Re-filtrar para excluir los ya elegidos en iteraciones previas
+          const idsUsadosAhora = new Set([
+            ...idsYaUsados,
+            ...(cubiertoMap.get(key) ?? []).map((c) => c.personalId),
+          ]);
+          const aunDisponibles = disponibles.filter((p) => !idsUsadosAhora.has(p.id));
 
-        // Si era sobreescribir y había uno previo: borrar el previo
-        if (cubierto && sobreescribir) {
-          const prev = await this.repo.findOne({ where: { id: cubierto, tenantId } });
-          if (prev) await this.repo.remove(prev);
-        }
+          if (aunDisponibles.length === 0) {
+            result.sinDisponibilidad.push({
+              partidoId: partido.id,
+              rolAsignado: rol,
+              motivo: 'No hay suficientes candidatos para cubrir todos los slots',
+            });
+            break;
+          }
 
-        const created = await this.repo.save(
-          this.repo.create({
-            tenantId,
+          // Elegir el que tiene MENOS carga en este torneo (balance).
+          // En empate, el de menor apellido (orden estable).
+          aunDisponibles.sort((a, b) => {
+            const ca = cargaPorPersonal.get(a.id) ?? 0;
+            const cb = cargaPorPersonal.get(b.id) ?? 0;
+            if (ca !== cb) return ca - cb;
+            return a.apellido.localeCompare(b.apellido);
+          });
+          const elegido = aunDisponibles[0]!;
+
+          const created = await this.repo.save(
+            this.repo.create({
+              tenantId,
+              partidoId: partido.id,
+              personalId: elegido.id,
+              rolAsignado: rol,
+              estado: 'PROPUESTA',
+              montoPago: elegido.tarifaBase ?? null,
+              notas: null,
+            }),
+          );
+
+          // Actualizar índices in-memory para que el resto del loop respete
+          // este nuevo lock (otro partido del mismo elegido a <2h se evita)
+          const cubiertosKey = cubiertoMap.get(key) ?? [];
+          cubiertosKey.push({ designacionId: created.id, personalId: elegido.id });
+          cubiertoMap.set(key, cubiertosKey);
+          if (partido.fechaHora) {
+            const arr = ocupadoMap.get(elegido.id) ?? [];
+            arr.push(partido.fechaHora);
+            ocupadoMap.set(elegido.id, arr);
+          }
+          cargaPorPersonal.set(
+            elegido.id,
+            (cargaPorPersonal.get(elegido.id) ?? 0) + 1,
+          );
+
+          result.asignados.push({
             partidoId: partido.id,
-            personalId: elegido.id,
             rolAsignado: rol,
-            estado: 'PROPUESTA',
-            montoPago: elegido.tarifaBase ?? null,
-            notas: null,
-          }),
-        );
-
-        // Actualizar índices in-memory para que el resto del loop respete
-        // este nuevo lock (otro partido del mismo elegido a <2h se evita)
-        cubiertoMap.set(key, created.id);
-        if (partido.fechaHora) {
-          const arr = ocupadoMap.get(elegido.id) ?? [];
-          arr.push(partido.fechaHora);
-          ocupadoMap.set(elegido.id, arr);
+            personalId: elegido.id,
+            personalNombre: elegido.nombre,
+            personalApellido: elegido.apellido,
+          });
+          nuevasParaNotificar.push(created.id);
         }
-        cargaPorPersonal.set(
-          elegido.id,
-          (cargaPorPersonal.get(elegido.id) ?? 0) + 1,
-        );
-
-        result.asignados.push({
-          partidoId: partido.id,
-          rolAsignado: rol,
-          personalId: elegido.id,
-          personalNombre: elegido.nombre,
-          personalApellido: elegido.apellido,
-        });
-        nuevasParaNotificar.push(created.id);
       }
     }
 

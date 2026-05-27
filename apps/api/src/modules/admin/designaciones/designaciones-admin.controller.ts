@@ -15,6 +15,8 @@ import {
   type AutoAsignarResult,
   type DesignacionAdmin,
   type DesignacionesPorFecha,
+  type DesignacionRecinto as DesignacionRecintoDto,
+  type EstadoDesignacion,
   type UserContext,
 } from '@fixtura/types';
 
@@ -23,9 +25,11 @@ import { Roles } from '../../../common/decorators/roles.decorator';
 import { DesignacionesAdminService } from './designaciones-admin.service';
 import {
   AsignarDesignacionDto,
+  AsignarRecintoDto,
   AutoAsignarDto,
   UpdateDesignacionEstadoDto,
 } from './dto';
+import { RecintoAdminService } from './recinto-admin.service';
 
 function ensureTenant(user: UserContext): string {
   if (!user.tenantId) {
@@ -37,7 +41,10 @@ function ensureTenant(user: UserContext): string {
 @Controller('admin')
 @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
 export class DesignacionesAdminController {
-  constructor(private readonly svc: DesignacionesAdminService) {}
+  constructor(
+    private readonly svc: DesignacionesAdminService,
+    private readonly recintoSvc: RecintoAdminService,
+  ) {}
 
   /** Vista por fecha — usada en /admin/torneos/[id]/designaciones */
   @Get('torneos/:torneoId/fechas/:fechaId/designaciones')
@@ -95,5 +102,45 @@ export class DesignacionesAdminController {
     @Body() dto: AutoAsignarDto,
   ): Promise<AutoAsignarResult> {
     return this.svc.autoAsignar(torneoId, fechaId, ensureTenant(user), dto);
+  }
+
+  // ─── Designaciones de RECINTO (paramédicos / otros por jornada) ───
+
+  @Get('torneos/:torneoId/fechas/:fechaId/recinto')
+  listRecintoPorFecha(
+    @CurrentUser() user: UserContext,
+    @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Param('fechaId', new ParseUUIDPipe()) fechaId: string,
+  ): Promise<DesignacionRecintoDto[]> {
+    return this.recintoSvc.listPorFecha(torneoId, fechaId, ensureTenant(user));
+  }
+
+  @Post('designaciones-recinto')
+  asignarRecinto(
+    @CurrentUser() user: UserContext,
+    @Body() dto: AsignarRecintoDto,
+  ): Promise<DesignacionRecintoDto> {
+    return this.recintoSvc.asignar(ensureTenant(user), dto);
+  }
+
+  @Patch('designaciones-recinto/:id/estado')
+  updateEstadoRecinto(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateDesignacionEstadoDto,
+  ): Promise<DesignacionRecintoDto> {
+    return this.recintoSvc.updateEstado(
+      id,
+      ensureTenant(user),
+      dto.estado as EstadoDesignacion,
+    );
+  }
+
+  @Delete('designaciones-recinto/:id')
+  removeRecinto(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<void> {
+    return this.recintoSvc.remove(id, ensureTenant(user));
   }
 }

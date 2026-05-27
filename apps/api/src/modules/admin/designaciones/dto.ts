@@ -11,6 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+// @IsIn ya viene de class-validator — para los strings literales abajo
 
 import {
   ESTADO_DESIGNACION,
@@ -58,4 +59,30 @@ export class AutoAsignarDto {
   @IsOptional()
   @IsBoolean()
   sobreescribir?: boolean;
+}
+
+export class AsignarRecintoDto {
+  @IsUUID()
+  fechaId!: string;
+
+  @IsUUID()
+  personalId!: string;
+
+  @IsIn(['PARAMEDICO', 'OTRO'])
+  rolAsignado!: 'PARAMEDICO' | 'OTRO';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  canchaNombre?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  montoPago?: number | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notas?: string | null;
 }
