@@ -9,7 +9,7 @@ import { DataSource, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
 import type { FixtureGenerationResult, GenerarFixtureRequest } from '@fixtura/types';
-import { generarFixtureBerger } from '@fixtura/domain';
+import { aplicarConstraintsFixture, generarFixtureBerger } from '@fixtura/domain';
 
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
@@ -62,10 +62,30 @@ export class FixtureAdminService {
     }
 
     // Generar con Berger
-    const fixture = generarFixtureBerger(
+    const fixtureBruto = generarFixtureBerger(
       equipos.map((e) => ({ id: e.id, nombre: e.nombre })),
       { ruedas: torneo.ruedas },
     );
+
+    // Sprint 15: aplicar constraints (no 3 locales seguidos +
+    // canchas compartidas). canchaPorEquipo se omite aquí porque
+    // todavía no hay relación equipo↔cancha persistida (el campo
+    // sigue siendo asignación manual por partido).
+    const ajustado = aplicarConstraintsFixture({
+      fixture: fixtureBruto,
+      equipos: equipos.map((e) => ({ id: e.id, nombre: e.nombre })),
+      maxLocalesSeguidos: 2,
+    });
+    const fixture = ajustado.fixture;
+    if (ajustado.warnings.length > 0) {
+      // Loguear warnings — el caller los puede ver en logs.
+      // Futuro: devolverlos en la respuesta para que el admin los vea
+      // en la UI.
+      console.warn(
+        `[fixture-gen] tenant=${tenantId} torneo=${torneoId}: ${ajustado.warnings.length} advertencias`,
+        ajustado.warnings,
+      );
+    }
 
     // Crear fechas
     const fechaInicioBase = new Date(input.fechaInicio);
