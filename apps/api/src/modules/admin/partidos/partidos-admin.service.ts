@@ -31,6 +31,7 @@ import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.ent
 import { Partido } from '../../competition/entities/partido.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { PushService } from '../push/push.service';
 
 @Injectable()
 export class PartidosAdminService {
@@ -46,6 +47,7 @@ export class PartidosAdminService {
     @InjectRepository(SancionActiva)
     private readonly sancionRepo: Repository<SancionActiva>,
     @InjectRepository(Cancha) private readonly canchaRepo: Repository<Cancha>,
+    private readonly push: PushService,
   ) {}
 
   /**
@@ -362,6 +364,15 @@ export class PartidosAdminService {
       // decremente sanciones del torneo B.
       await this.decrementarSancionesPendientes(partido.tenantId, fecha.torneoId, fecha.numero);
     }
+
+    // Sprint 14: push notifications best-effort fire-and-forget.
+    void this.push
+      .notifyPartidoCerrado(partido.id)
+      .catch((err) =>
+        console.warn(
+          `[push] partido ${partido.id} cerrado, error en notify: ${(err as Error).message}`,
+        ),
+      );
 
     return this.toDto(partido, fecha.numero, fecha.etiqueta);
   }
@@ -780,6 +791,15 @@ export class PartidosAdminService {
         );
       }
     }
+
+    // Sprint 14: push notif también para walkover.
+    void this.push
+      .notifyPartidoCerrado(partido.id)
+      .catch((err) =>
+        console.warn(
+          `[push] walkover ${partido.id}, error en notify: ${(err as Error).message}`,
+        ),
+      );
 
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     return this.toDto(partido, fecha.numero, fecha.etiqueta);

@@ -34,6 +34,7 @@ import { JugadoresGlobalController } from './jugadores-global/jugadores-global.c
 import { JugadoresGlobalService } from './jugadores-global/jugadores-global.service';
 import { DunningModule } from './dunning/dunning.module';
 import { PagosModule } from './pagos/pagos.module';
+import { PushModule } from './push/push.module';
 import {
   FixtureDetailController,
   PartidosAdminController,
@@ -67,6 +68,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     CompetitionModule,
     PagosModule,
     DunningModule,
+    PushModule,
     // Ajustes necesita Tenant + User + UserRole — los registramos
     // localmente (no se duplican: TypeORM resuelve la metadata).
     TypeOrmModule.forFeature([Tenant, User, UserRole]),

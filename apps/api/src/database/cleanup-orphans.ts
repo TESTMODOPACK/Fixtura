@@ -154,6 +154,9 @@ async function main(): Promise<void> {
     `);
     log('torneos.tabla_tiebreakers asegurada.');
 
+    // Sprint 14: tabla push_subscriptions (notificaciones FCM/WebPush).
+    await ensurePushSubscriptionsTable(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -485,6 +488,64 @@ async function ensureDocumentosTributariosTable(
   );
   await ensureTrigger(client, 'documentos_tributarios');
   log('Documentos tributarios asegurada (idempotente).');
+}
+
+async function ensurePushSubscriptionsTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id     UUID REFERENCES tenants(id) ON DELETE CASCADE,
+      user_id       UUID REFERENCES users(id) ON DELETE CASCADE,
+      scope_type    VARCHAR(20) NOT NULL
+                      CHECK (scope_type IN ('PARTIDO','EQUIPO','TORNEO','GLOBAL')),
+      scope_id      UUID,
+      provider      VARCHAR(20) NOT NULL DEFAULT 'MOCK'
+                      CHECK (provider IN ('MOCK','FCM','WEBPUSH')),
+      endpoint      TEXT NOT NULL,
+      p256dh        TEXT,
+      auth          TEXT,
+      user_agent    VARCHAR(300),
+      last_used_at  TIMESTAMPTZ,
+      revoked_at    TIMESTAMPTZ,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await client.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_push_endpoint_unique ON push_subscriptions(endpoint) WHERE revoked_at IS NULL`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_push_scope ON push_subscriptions(scope_type, scope_id) WHERE revoked_at IS NULL`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id) WHERE user_id IS NOT NULL AND revoked_at IS NULL`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_push_tenant ON push_subscriptions(tenant_id) WHERE tenant_id IS NOT NULL`,
+  );
+  await client.query(`ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY`);
+  await client.query(`ALTER TABLE push_subscriptions FORCE ROW LEVEL SECURITY`);
+  const exists = await client.query(
+    `SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='push_subscriptions' AND policyname='tenant_isolation'`,
+  );
+  if (exists.rowCount === 0) {
+    await client.query(`
+      CREATE POLICY tenant_isolation ON push_subscriptions
+        USING (
+          tenant_id IS NULL
+          OR tenant_id::text = current_setting('app.current_tenant_id', true)
+          OR current_setting('app.current_tenant_id', true) = ''
+        )
+        WITH CHECK (
+          tenant_id IS NULL
+          OR tenant_id::text = current_setting('app.current_tenant_id', true)
+          OR current_setting('app.current_tenant_id', true) = ''
+        )
+    `);
+  }
+  log('push_subscriptions asegurada (idempotente).');
 }
 
 async function ensureMagicLinksTable(
