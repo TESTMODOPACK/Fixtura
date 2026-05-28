@@ -186,9 +186,21 @@ export class PublicService {
         ? torneo.tablaTiebreakers
         : ['pts', 'dg', 'gf', 'nombre'];
 
+    // AUDIT-4: precomputar head-to-head map para tiebreaker 'ed'.
+    // headToHead.get(eqA).get(eqB) = puntos que eqA hizo VS eqB en
+    // todos los partidos entre ellos (suma de ambos si jugaron 2x en
+    // formato ida y vuelta). En desempates 2-equipos resuelve bien; en
+    // grupos de 3+ funciona razonable porque el sort N×N evalúa pares.
+    const headToHead = this.calcularHeadToHead(
+      partidos,
+      torneo.puntosVictoria,
+      torneo.puntosEmpate,
+      torneo.puntosDerrota,
+    );
+
     filasSinOrdenar.sort((a, b) => {
       for (const key of orden) {
-        const cmp = this.compararTiebreaker(a, b, key);
+        const cmp = this.compararTiebreaker(a, b, key, headToHead);
         if (cmp !== 0) return cmp;
       }
       // Fallback determinístico si todo empata.
@@ -205,14 +217,18 @@ export class PublicService {
   }
 
   /**
-   * Sprint 12: compara dos filas según un criterio de tiebreaker.
+   * Sprint 12 + AUDIT-4: compara dos filas según un criterio de tiebreaker.
    * Devuelve >0 si b va antes que a, <0 si a va antes, 0 si empata.
    * Casi todos DESC (mayor es mejor) excepto `gc` y `nombre`.
+   *
+   * `headToHead` se pasa para que el criterio 'ed' (enfrentamiento
+   * directo) pueda comparar puntos en partidos entre los dos equipos.
    */
   private compararTiebreaker(
     a: FilaTabla,
     b: FilaTabla,
     key: string,
+    headToHead: Map<string, Map<string, number>>,
   ): number {
     switch (key) {
       case 'pts':
@@ -226,15 +242,61 @@ export class PublicService {
         return a.gc - b.gc;
       case 'pg':
         return b.pg - a.pg;
-      case 'ed':
-        // TODO v3: enfrentamiento directo. Requiere subset de partidos
-        // entre los equipos empatados. Por ahora delega al siguiente.
-        return 0;
+      case 'ed': {
+        // AUDIT-4: enfrentamiento directo. Comparamos puntos que cada
+        // equipo hizo en los partidos entre ellos. Si A le ganó a B
+        // y B no le ganó a A (en ida y vuelta el agregado puede ser
+        // 6-3, 4-4, etc.), gana A.
+        const ptsAvsB = headToHead.get(a.equipoId)?.get(b.equipoId) ?? 0;
+        const ptsBvsA = headToHead.get(b.equipoId)?.get(a.equipoId) ?? 0;
+        return ptsBvsA - ptsAvsB;
+      }
       case 'nombre':
         return a.equipoNombre.localeCompare(b.equipoNombre);
       default:
         return 0;
     }
+  }
+
+  /**
+   * AUDIT-4: precomputa puntos head-to-head para tiebreaker 'ed'.
+   * Devuelve map[equipoA][equipoB] = pts que equipoA hizo CONTRA equipoB
+   * en todos los partidos entre ellos. Considera FINALIZADO y WALKOVER.
+   *
+   * Para grupos de 3+ equipos empatados, JavaScript Array.sort
+   * (TimSort) compara pares O(N log N); este map cubre todos los pares
+   * relevantes.
+   */
+  private calcularHeadToHead(
+    partidos: Partido[],
+    puntosVictoria: number,
+    puntosEmpate: number,
+    puntosDerrota: number,
+  ): Map<string, Map<string, number>> {
+    const m = new Map<string, Map<string, number>>();
+    const sumar = (de: string, contra: string, pts: number): void => {
+      let inner = m.get(de);
+      if (!inner) {
+        inner = new Map();
+        m.set(de, inner);
+      }
+      inner.set(contra, (inner.get(contra) ?? 0) + pts);
+    };
+    for (const p of partidos) {
+      const gl = p.golesLocal ?? 0;
+      const gv = p.golesVisita ?? 0;
+      if (gl > gv) {
+        sumar(p.equipoLocalId, p.equipoVisitaId, puntosVictoria);
+        sumar(p.equipoVisitaId, p.equipoLocalId, puntosDerrota);
+      } else if (gl < gv) {
+        sumar(p.equipoVisitaId, p.equipoLocalId, puntosVictoria);
+        sumar(p.equipoLocalId, p.equipoVisitaId, puntosDerrota);
+      } else {
+        sumar(p.equipoLocalId, p.equipoVisitaId, puntosEmpate);
+        sumar(p.equipoVisitaId, p.equipoLocalId, puntosEmpate);
+      }
+    }
+    return m;
   }
 
   // ─── Fixture ──────────────────────────────────────────────────────

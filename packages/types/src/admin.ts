@@ -117,17 +117,26 @@ export const EquipoAdminSchema = z.object({
 export type EquipoAdmin = z.infer<typeof EquipoAdminSchema>;
 
 // ─── Jugadores ───────────────────────────────────────────────────────
-export const CreateJugadorSchema = z.object({
-  nombre: z.string().min(2).max(100),
-  apellido: z.string().min(2).max(100),
-  apodo: z.string().max(50).nullable().optional(),
-  rut: z.string().max(20).nullable().optional(),
-  numeroCamiseta: z.number().int().min(0).max(99).nullable().optional(),
-  posicion: z.enum(['ARQUERO', 'DEFENSA', 'MEDIO', 'DELANTERO']).nullable().optional(),
-  pieHabil: z.enum(['IZQUIERDO', 'DERECHO', 'AMBIDIESTRO']).nullable().optional(),
-  fechaNac: z.iso.date().nullable().optional(),
-  capitan: z.boolean().default(false),
-});
+export const CreateJugadorSchema = z
+  .object({
+    nombre: z.string().min(2).max(100),
+    apellido: z.string().min(2).max(100),
+    apodo: z.string().max(50).nullable().optional(),
+    rut: z.string().max(20).nullable().optional(),
+    numeroCamiseta: z.number().int().min(0).max(99).nullable().optional(),
+    posicion: z.enum(['ARQUERO', 'DEFENSA', 'MEDIO', 'DELANTERO']).nullable().optional(),
+    pieHabil: z.enum(['IZQUIERDO', 'DERECHO', 'AMBIDIESTRO']).nullable().optional(),
+    fechaNac: z.iso.date().nullable().optional(),
+    capitan: z.boolean().default(false),
+  })
+  // AUDIT-8: si es capitán, el RUT es obligatorio. Esto garantiza que
+  // las sanciones por RUT × torneo siempre puedan localizar al capitán
+  // (que es la cara visible del equipo en tribunal). Además, los
+  // capitanes suelen ser los firmantes del acta.
+  .refine((data) => !data.capitan || (data.rut && data.rut.trim().length > 0), {
+    message: 'El RUT es obligatorio para capitanes',
+    path: ['rut'],
+  });
 export type CreateJugadorRequest = z.infer<typeof CreateJugadorSchema>;
 
 export const JugadorAdminSchema = z.object({

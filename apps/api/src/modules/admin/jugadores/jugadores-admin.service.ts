@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import type { CreateJugadorRequest, JugadorAdmin } from '@fixtura/types';
 
@@ -34,6 +34,15 @@ export class JugadoresAdminService {
     input: CreateJugadorRequest,
   ): Promise<JugadorAdmin> {
     const equipo = await this.ensureEquipo(equipoId, tenantId);
+
+    // AUDIT-8: capitán requiere RUT. El zod schema lo valida en
+    // frontend, pero el DTO class-validator del API no soporta cross-field
+    // refines fácilmente — duplicamos la regla acá para defensa.
+    if (input.capitan && (!input.rut || input.rut.trim().length === 0)) {
+      throw new BadRequestException(
+        'El RUT es obligatorio para capitanes (firmante del acta).',
+      );
+    }
 
     // AUDIT-3: pre-check de RUT duplicado en el mismo torneo. Si pasa,
     // el UNIQUE INDEX uq_jugador_rut_torneo es la defensa en profundidad.
@@ -80,6 +89,19 @@ export class JugadoresAdminService {
     if (duplicadosInternos.length > 0) {
       throw new BadRequestException(
         `El CSV contiene RUTs duplicados: ${duplicadosInternos.join(', ')}. Revisá y reintentá.`,
+      );
+    }
+
+    // AUDIT-8: capitanes sin RUT — bloquear el batch entero, mensaje claro.
+    const capitanesSinRut = inputs.filter(
+      (i) => i.capitan && (!i.rut || i.rut.trim().length === 0),
+    );
+    if (capitanesSinRut.length > 0) {
+      const nombres = capitanesSinRut
+        .map((c) => `${c.nombre} ${c.apellido}`)
+        .join(', ');
+      throw new BadRequestException(
+        `Capitán requiere RUT (firmante del acta). Faltan en: ${nombres}.`,
       );
     }
 

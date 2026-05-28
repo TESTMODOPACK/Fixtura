@@ -584,15 +584,20 @@ export class PartidosAdminService {
    * Reabrir acta (sólo para corrección manual, requiere LIGA_ADMIN).
    *
    * Si la fecha estaba FINALIZADA (todos los partidos cerrados), se
-   * revierte a EN_CURSO. No tocamos las sanciones decrementadas — eso
-   * sería complejo de revertir limpiamente. El operador puede ajustarlas
-   * manualmente desde Tribunal si es necesario.
+   * revierte a EN_CURSO y se revierte el decremento de sanciones que
+   * había disparado el cierre (AUDIT-9). Todo dentro de la misma
+   * transacción para que no quede estado inconsistente.
    */
+  @Transactional()
   async reabrirActa(partidoId: string, tenantId: string): Promise<PartidoAdmin> {
     const partido = await this.findPartido(partidoId, tenantId);
     if (!partido.actaCerradaAt) {
       throw new BadRequestException('El acta no está cerrada');
     }
+
+    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    const eraFechaFinalizada = fecha.estado === 'FINALIZADA';
+
     partido.actaCerradaAt = null;
     partido.actaCerradaBy = null;
     partido.estado = 'EN_CURSO';
@@ -600,10 +605,39 @@ export class PartidosAdminService {
 
     // Solo cambiar fecha a EN_CURSO si estaba FINALIZADA. Si estaba
     // PROGRAMADA / EN_CURSO, dejarla como estaba.
-    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
-    if (fecha.estado === 'FINALIZADA') {
+    if (eraFechaFinalizada) {
       await this.fechaRepo.update({ id: partido.fechaId }, { estado: 'EN_CURSO' });
       fecha.estado = 'EN_CURSO';
+    }
+
+    // AUDIT-9: si la fecha estaba FINALIZADA (todos los partidos
+    // cerrados), su cierre disparó decremento de sanciones. Al reabrir
+    // este partido, esa fecha vuelve a EN_CURSO y el decremento queda
+    // "adelantado": sanciones que cumplieron por ese decremento ahora
+    // están en estado inconsistente.
+    //
+    // Revertimos: sumamos +1 a fechas_pendientes de las sanciones del
+    // torneo que estaban bajando hasta esta fecha. Marcamos como no
+    // cumplidas si el incremento las saca del cero.
+    if (eraFechaFinalizada) {
+      await this.sancionRepo
+        .createQueryBuilder()
+        .update()
+        .set({ fechasPendientes: () => 'fechas_pendientes + 1' })
+        .where('tenant_id = :tenantId', { tenantId })
+        .andWhere('torneo_id = :torneoId', { torneoId: fecha.torneoId })
+        .andWhere('desde_fecha_numero <= :fechaNumero', { fechaNumero: fecha.numero })
+        .execute();
+      // Marcar no-cumplidas las que volvieron a tener fechas pendientes.
+      await this.sancionRepo
+        .createQueryBuilder()
+        .update()
+        .set({ cumplida: false })
+        .where('tenant_id = :tenantId', { tenantId })
+        .andWhere('torneo_id = :torneoId', { torneoId: fecha.torneoId })
+        .andWhere('cumplida = true')
+        .andWhere('fechas_pendientes > 0')
+        .execute();
     }
 
     return this.toDto(partido, fecha.numero, fecha.etiqueta);

@@ -124,6 +124,15 @@ export class PersonalAdminService {
       throw new NotFoundException('No encontramos el personal asociado al link.');
     }
 
+    // AUDIT-6: defensa en profundidad. El link tiene tenantId firmado;
+    // el personal tiene su propio tenant_id en la tabla. Si no coinciden
+    // (admin malicioso emitió link a personalId de otro tenant), abortar.
+    if (link.tenantId && personal.tenantId !== link.tenantId) {
+      throw new BadRequestException(
+        'El link no es válido para este personal (mismatch de tenant).',
+      );
+    }
+
     await this.magicLinks.marcarUsado(link.id);
 
     return {

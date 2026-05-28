@@ -40,6 +40,12 @@ export class User {
   @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
   lastLoginAt!: Date | null;
 
+  // AUDIT-11: Ley 19.628 — derecho de cancelación. Si está seteado, un
+  // cron borrará/anonimizará la cuenta en esa fecha. El user puede
+  // cancelar el pedido durante la ventana de gracia (30 días).
+  @Column({ name: 'scheduled_deletion_at', type: 'timestamptz', nullable: true })
+  scheduledDeletionAt!: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

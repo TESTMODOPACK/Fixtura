@@ -16,6 +16,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { CompetitionModule } from './modules/competition/competition.module';
 import { EmailModule } from './modules/email/email.module';
 import { HealthModule } from './modules/health/health.module';
+import { MeModule } from './modules/me/me.module';
 import { PublicModule } from './modules/public/public.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
@@ -72,6 +73,7 @@ import { UsersModule } from './modules/users/users.module';
     TenantsModule,
     UsersModule,
     CompetitionModule,
+    MeModule,
     PublicModule,
     AdminModule,
   ],

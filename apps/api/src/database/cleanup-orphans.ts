@@ -160,6 +160,37 @@ async function main(): Promise<void> {
     // AUDIT-3: jugadores_inscritos.torneo_id + UNIQUE (rut, torneo).
     await ensureJugadoresUniqueRutTorneo(client, log);
 
+    // AUDIT-7: índices de performance.
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_partidos_fecha_estado ON partidos(fecha_id, estado)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_partidos_tabla
+         ON partidos(estado, fecha_id)
+         WHERE estado IN ('FINALIZADO','WALKOVER')`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_sanciones_rut_torneo
+         ON sanciones_activas(torneo_id, rut, cumplida)
+         WHERE rut IS NOT NULL`,
+    );
+    log('Índices de performance asegurados.');
+
+    // AUDIT-11: Ley 19.628 — derecho de cancelación.
+    // scheduled_deletion_at: timestamp futuro en el que el cron borra
+    // (o anonimiza) la cuenta del user. Permite ventana de gracia de 30
+    // días configurable en la que el user puede cancelar el pedido.
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS scheduled_deletion_at TIMESTAMPTZ
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_users_scheduled_deletion
+         ON users(scheduled_deletion_at)
+         WHERE scheduled_deletion_at IS NOT NULL`,
+    );
+    log('users.scheduled_deletion_at asegurada (Ley 19.628).');
+
     log('Done.');
   } finally {
     await client.end();

@@ -69,6 +69,21 @@ export class FechasAdminService {
       throw new BadRequestException('La fecha ya está suspendida.');
     }
 
+    // AUDIT-5: si hay partidos EN_CURSO, no suspender. El admin debe
+    // cerrar/reabrir actas en curso primero. Sobrescribir EN_CURSO
+    // con SUSPENDIDO perdería el progreso del partido.
+    const enCurso = await this.partidoRepo
+      .createQueryBuilder('p')
+      .where('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('p.fecha_id = :fechaId', { fechaId })
+      .andWhere(`p.estado = 'EN_CURSO'`)
+      .getCount();
+    if (enCurso > 0) {
+      throw new ConflictException(
+        `No se puede suspender la fecha: hay ${enCurso} partido(s) EN_CURSO. Cerrá o reabrí esos partidos primero.`,
+      );
+    }
+
     // Marcar la fecha como SUSPENDIDA + trazabilidad.
     fecha.estado = 'SUSPENDIDA';
     fecha.motivoSuspension = input.motivo;
