@@ -5,6 +5,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { MagicLinksService } from './magic-links.service';
+import { MagicLink } from './entities/magic-link.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { UsersModule } from '../users/users.module';
 
@@ -17,7 +19,7 @@ import { UsersModule } from '../users/users.module';
 @Global()
 @Module({
   imports: [
-    TypeOrmModule.forFeature([RefreshToken]),
+    TypeOrmModule.forFeature([RefreshToken, MagicLink]),
     UsersModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -32,8 +34,8 @@ import { UsersModule } from '../users/users.module';
       }),
     }),
   ],
-  providers: [AuthService],
+  providers: [AuthService, MagicLinksService],
   controllers: [AuthController],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, MagicLinksService, JwtModule],
 })
 export class AuthModule {}

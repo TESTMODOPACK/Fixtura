@@ -366,6 +366,16 @@ export function useUpdatePersonal(id: string) {
   });
 }
 
+export function useInvitarPersonal() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ enviado: boolean; expira: string; emailDestino: string }>(
+        `/admin/personal/${id}/invitar`,
+        { method: 'POST' },
+      ),
+  });
+}
+
 export function useDeactivatePersonal() {
   const qc = useQueryClient();
   return useMutation({

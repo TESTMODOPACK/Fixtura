@@ -39,7 +39,10 @@ import {
   PartidosAdminController,
 } from './partidos/partidos-admin.controller';
 import { PartidosAdminService } from './partidos/partidos-admin.service';
-import { PersonalAdminController } from './personal/personal-admin.controller';
+import {
+  PersonalAdminController,
+  PersonalPublicController,
+} from './personal/personal-admin.controller';
 import { PersonalAdminService } from './personal/personal-admin.service';
 import { SponsorsAdminController } from './sponsors/sponsors-admin.controller';
 import { SponsorsAdminService } from './sponsors/sponsors-admin.service';
@@ -80,6 +83,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     PartidosAdminController,
     TribunalAdminController,
     PersonalAdminController,
+    PersonalPublicController,
     DesignacionesAdminController,
     DesignacionesRespuestaController,
     ActasAdminController,

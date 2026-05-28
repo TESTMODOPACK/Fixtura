@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   IdCard,
+  Mail,
   Pencil,
   Phone,
   Plus,
@@ -35,6 +36,7 @@ import { PageHead } from '@/components/ui/page-head';
 import {
   useCreatePersonal,
   useDeactivatePersonal,
+  useInvitarPersonal,
   usePersonal,
   useTenantSettings,
   useUpdatePersonal,
@@ -241,6 +243,7 @@ function PersonaRow({
 }): React.ReactElement {
   const deactivate = useDeactivatePersonal();
   const update = useUpdatePersonal(persona.id);
+  const invitar = useInvitarPersonal();
   const [editing, setEditing] = useState(false);
   const status = carnetStatus(persona);
   // Solo mostrar badges de carnet si la liga es ANFA. Para ligas libres,
@@ -323,6 +326,30 @@ function PersonaRow({
         </div>
       </div>
       <div className="flex items-center gap-1">
+        {persona.email && persona.activo && (
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                window.confirm(
+                  `¿Enviar email de activación a ${persona.email}?\nEl link expira en 72hs.`,
+                )
+              ) {
+                invitar
+                  .mutateAsync(persona.id)
+                  .then((r) =>
+                    alert(`Invitación enviada a ${r.emailDestino}. Expira el ${new Date(r.expira).toLocaleString('es-CL')}.`),
+                  )
+                  .catch((err) => alert(`No se pudo enviar: ${(err as Error).message}`));
+              }
+            }}
+            disabled={invitar.isPending}
+            className="p-1 rounded text-ink-mute hover:text-green-bright hover:bg-green-bright/10 disabled:opacity-50"
+            title="Enviar invitación por email (magic link, expira en 72h)"
+          >
+            <Mail size={14} className={invitar.isPending ? 'animate-pulse' : ''} />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setEditing(true)}

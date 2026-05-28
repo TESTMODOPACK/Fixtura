@@ -14,6 +14,7 @@ import {
 import { ROLE, type PersonalAdmin, type UserContext } from '@fixtura/types';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { CreatePersonalDto, UpdatePersonalDto } from './dto';
 import { PersonalAdminService } from './personal-admin.service';
@@ -69,5 +70,34 @@ export class PersonalAdminController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<void> {
     return this.svc.deactivate(id, ensureTenant(user));
+  }
+
+  // ── Sprint 10: Magic Link onboarding ─────────────────────────────
+  @Post(':id/invitar')
+  invitar(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<{ enviado: boolean; expira: string; emailDestino: string }> {
+    return this.svc.invitar(id, ensureTenant(user), user.userId);
+  }
+}
+
+/**
+ * Endpoint público para activar la cuenta vía magic link. Sin auth —
+ * el token es la credencial (no enumerable, 32 bytes random).
+ */
+@Controller('public/personal')
+@Public()
+export class PersonalPublicController {
+  constructor(private readonly svc: PersonalAdminService) {}
+
+  @Post('activar')
+  activar(
+    @Body() body: { token: string },
+  ): Promise<{ personalId: string; tenantId: string | null; nombre: string; rol: string }> {
+    if (!body.token || typeof body.token !== 'string' || body.token.length < 20) {
+      throw new BadRequestException('Token inválido');
+    }
+    return this.svc.activarPorToken(body.token);
   }
 }

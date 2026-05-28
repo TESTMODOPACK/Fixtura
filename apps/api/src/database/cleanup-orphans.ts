@@ -143,6 +143,9 @@ async function main(): Promise<void> {
     // Sprint 8: columnas de suspensión en partidos y fechas.
     await ensureSuspensiones(client, log);
 
+    // Sprint 10: tabla magic_links (onboarding personal + reset password).
+    await ensureMagicLinksTable(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -474,6 +477,61 @@ async function ensureDocumentosTributariosTable(
   );
   await ensureTrigger(client, 'documentos_tributarios');
   log('Documentos tributarios asegurada (idempotente).');
+}
+
+async function ensureMagicLinksTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS magic_links (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id           UUID REFERENCES tenants(id) ON DELETE CASCADE,
+      purpose             VARCHAR(40) NOT NULL
+                            CHECK (purpose IN (
+                              'PERSONAL_ONBOARDING','RESET_PASSWORD','INVITE_USER'
+                            )),
+      token_hash          VARCHAR(128) NOT NULL UNIQUE,
+      email               VARCHAR(150),
+      personal_id         UUID REFERENCES personal(id) ON DELETE CASCADE,
+      user_id             UUID REFERENCES users(id) ON DELETE CASCADE,
+      metadata            JSONB,
+      expires_at          TIMESTAMPTZ NOT NULL,
+      used_at             TIMESTAMPTZ,
+      created_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_magic_links_tenant ON magic_links(tenant_id) WHERE tenant_id IS NOT NULL`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_magic_links_personal ON magic_links(personal_id) WHERE personal_id IS NOT NULL`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_magic_links_email_unused ON magic_links(email) WHERE used_at IS NULL`,
+  );
+  await client.query(`ALTER TABLE magic_links ENABLE ROW LEVEL SECURITY`);
+  await client.query(`ALTER TABLE magic_links FORCE ROW LEVEL SECURITY`);
+  const exists = await client.query(
+    `SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='magic_links' AND policyname='tenant_isolation'`,
+  );
+  if (exists.rowCount === 0) {
+    await client.query(`
+      CREATE POLICY tenant_isolation ON magic_links
+        USING (
+          tenant_id IS NULL
+          OR tenant_id::text = current_setting('app.current_tenant_id', true)
+          OR current_setting('app.current_tenant_id', true) = ''
+        )
+        WITH CHECK (
+          tenant_id IS NULL
+          OR tenant_id::text = current_setting('app.current_tenant_id', true)
+          OR current_setting('app.current_tenant_id', true) = ''
+        )
+    `);
+  }
+  log('magic_links asegurada (idempotente).');
 }
 
 async function ensureSuspensiones(
