@@ -22,7 +22,11 @@ import { DesignacionesRespuestaController } from './designaciones/designaciones-
 import { RecintoAdminService } from './designaciones/recinto-admin.service';
 import { EquiposAdminController } from './equipos/equipos-admin.controller';
 import { EquiposAdminService } from './equipos/equipos-admin.service';
-import { FixtureAdminController } from './fixture/fixture-admin.controller';
+import { FechasAdminService } from './fixture/fechas-admin.service';
+import {
+  FechasAdminController,
+  FixtureAdminController,
+} from './fixture/fixture-admin.controller';
 import { FixtureAdminService } from './fixture/fixture-admin.service';
 import { JugadoresAdminController } from './jugadores/jugadores-admin.controller';
 import { JugadoresAdminService } from './jugadores/jugadores-admin.service';
@@ -70,6 +74,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     EquiposAdminController,
     JugadoresAdminController,
     JugadoresGlobalController,
+    FechasAdminController,
     FixtureAdminController,
     FixtureDetailController,
     PartidosAdminController,
@@ -90,6 +95,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     EquiposAdminService,
     JugadoresAdminService,
     JugadoresGlobalService,
+    FechasAdminService,
     FixtureAdminService,
     PartidosAdminService,
     TribunalAdminService,

@@ -904,3 +904,81 @@ export function useDeleteCobro() {
     },
   });
 }
+
+// ─── Sprint 8: Suspensión / reprogramación de partidos y fechas ────
+import type {
+  ReprogramarPartidoRequest,
+  SuspenderFechaRequest,
+  SuspenderPartidoRequest,
+} from '@fixtura/types';
+
+export function useSuspenderPartido(partidoId: string, torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SuspenderPartidoRequest) =>
+      apiFetch<PartidoAdmin>(`/admin/partidos/${partidoId}/suspender`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partido', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
+    },
+  });
+}
+
+export function useReprogramarPartido(partidoId: string, torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ReprogramarPartidoRequest) =>
+      apiFetch<PartidoAdmin>(`/admin/partidos/${partidoId}/reprogramar`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partido', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
+    },
+  });
+}
+
+export function useReactivarPartido(partidoId: string, torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<PartidoAdmin>(`/admin/partidos/${partidoId}/reactivar`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partido', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
+    },
+  });
+}
+
+export function useSuspenderFecha(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ fechaId, input }: { fechaId: string; input: SuspenderFechaRequest }) =>
+      apiFetch<{ fechasAfectadas: number; nuevaFechaBisId: string | null }>(
+        `/admin/fechas/${fechaId}/suspender`,
+        { method: 'POST', body: input },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
+    },
+  });
+}
+
+export function useReactivarFecha(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (fechaId: string) =>
+      apiFetch<{ ok: boolean }>(`/admin/fechas/${fechaId}/reactivar`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
+    },
+  });
+}

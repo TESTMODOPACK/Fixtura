@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { ESTADO_PARTIDO, type EstadoPartido } from './public';
+import { MOTIVO_SUSPENSION } from './suspensiones';
 
 /**
  * DTOs admin para partidos y actas.
@@ -23,6 +24,10 @@ export const PartidoAdminSchema = z.object({
   golesVisita: z.number().int().nullable(),
   actaCerradaAt: z.iso.datetime().nullable(),
   observaciones: z.string().nullable(),
+  // Sprint 8 — trazabilidad de suspensión
+  motivoSuspension: z.enum(MOTIVO_SUSPENSION).nullable(),
+  suspendidoAt: z.iso.datetime().nullable(),
+  observacionesSuspension: z.string().nullable(),
 });
 export type PartidoAdmin = z.infer<typeof PartidoAdminSchema>;
 
@@ -91,6 +96,10 @@ export const FechaAdminSchema = z.object({
   etiqueta: z.string().nullable(),
   estado: z.enum(['PROGRAMADA', 'EN_CURSO', 'FINALIZADA', 'SUSPENDIDA', 'REPROGRAMADA']),
   partidos: z.array(PartidoAdminSchema),
+  // Sprint 8 — trazabilidad de suspensión de fecha
+  motivoSuspension: z.enum(MOTIVO_SUSPENSION).nullable(),
+  suspendidoAt: z.iso.datetime().nullable(),
+  observacionesSuspension: z.string().nullable(),
 });
 export type FechaAdmin = z.infer<typeof FechaAdminSchema>;
 

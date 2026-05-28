@@ -10,22 +10,35 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import {
+  AlertTriangle,
   ArrowLeft,
   CalendarRange,
   ChevronRight,
+  CloudRain,
   GripVertical,
   Lock,
+  Play,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
-import type { FechaAdmin, PartidoAdmin } from '@fixtura/types';
+import {
+  ESTRATEGIA_LABEL,
+  ESTRATEGIA_SUSPENSION_FECHA,
+  MOTIVO_SUSPENSION,
+  MOTIVO_SUSPENSION_LABEL,
+  type EstrategiaSuspensionFecha,
+  type FechaAdmin,
+  type MotivoSuspension,
+  type PartidoAdmin,
+} from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import { apiFetch, ApiError } from '@/lib/api';
-import { useFixtureDetail } from '@/hooks/use-admin';
+import { useFixtureDetail, useReactivarFecha, useSuspenderFecha } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -146,8 +159,27 @@ function FechaCard({
     (p) => p.estado === 'FINALIZADO' || p.estado === 'WALKOVER',
   ).length;
   const total = fecha.partidos.length;
+  const [suspendiendo, setSuspendiendo] = useState(false);
+  const suspender = useSuspenderFecha(torneoId);
+  const reactivar = useReactivarFecha(torneoId);
+  const susErr =
+    (suspender.error as ApiError | undefined) ?? (reactivar.error as ApiError | undefined);
+  const estaSuspendida = fecha.estado === 'SUSPENDIDA';
 
   const { setNodeRef, isOver } = useDroppable({ id: `fecha-${fecha.id}` });
+
+  const estadoBadgeText = estaSuspendida
+    ? 'Suspendida'
+    : fecha.estado === 'FINALIZADA'
+      ? 'Finalizada'
+      : `${finalizadas}/${total} jugados`;
+  const estadoBadgeClass = estaSuspendida
+    ? 'bg-danger/10 text-danger'
+    : fecha.estado === 'FINALIZADA'
+      ? 'bg-green-bright/10 text-green-bright'
+      : finalizadas > 0
+        ? 'bg-accent/10 text-accent'
+        : 'bg-ink-mute/10 text-ink-mute';
 
   return (
     <div ref={setNodeRef}>
@@ -156,28 +188,80 @@ function FechaCard({
       className={cn(
         'overflow-hidden transition-colors',
         isOver && 'ring-2 ring-accent ring-offset-2 ring-offset-paper',
+        estaSuspendida && 'opacity-90',
       )}
     >
-      <div className="px-5 py-3 bg-paper-dark border-b border-line flex items-center justify-between">
+      <div className="px-5 py-3 bg-paper-dark border-b border-line flex items-center justify-between flex-wrap gap-2">
         <div>
           <CardLabel tone="mute">Fecha {fecha.numero}</CardLabel>
           <div className="font-display text-lg text-green-deep tracking-display">
             {(fecha.etiqueta ?? `Fecha ${fecha.numero}`).toUpperCase()}
           </div>
         </div>
-        <span
-          className={cn(
-            'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
-            fecha.estado === 'FINALIZADA'
-              ? 'bg-green-bright/10 text-green-bright'
-              : finalizadas > 0
-                ? 'bg-accent/10 text-accent'
-                : 'bg-ink-mute/10 text-ink-mute',
+        <div className="flex items-center gap-2 flex-wrap">
+          {fecha.estado !== 'FINALIZADA' && !estaSuspendida && (
+            <button
+              type="button"
+              onClick={() => setSuspendiendo(true)}
+              className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded border border-line text-ink-mute hover:border-danger hover:text-danger transition-colors"
+              title="Suspender la fecha completa"
+            >
+              <CloudRain size={11} className="inline mr-1" /> Suspender
+            </button>
           )}
-        >
-          {fecha.estado === 'FINALIZADA' ? 'Finalizada' : `${finalizadas}/${total} jugados`}
-        </span>
+          {estaSuspendida && (
+            <button
+              type="button"
+              onClick={() => reactivar.mutate(fecha.id)}
+              disabled={reactivar.isPending}
+              className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded border border-line text-ink-mute hover:border-green-bright hover:text-green-bright transition-colors disabled:opacity-50"
+              title="Reactivar la fecha"
+            >
+              <Play size={11} className="inline mr-1" /> Reactivar
+            </button>
+          )}
+          <span
+            className={cn(
+              'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
+              estadoBadgeClass,
+            )}
+          >
+            {estadoBadgeText}
+          </span>
+        </div>
       </div>
+
+      {estaSuspendida && fecha.motivoSuspension && (
+        <div className="px-5 py-2 bg-danger/5 border-b border-danger/20 text-xs flex items-start gap-2">
+          <AlertTriangle size={14} className="text-danger flex-shrink-0 mt-0.5" />
+          <div>
+            <span className="font-semibold text-danger">
+              {MOTIVO_SUSPENSION_LABEL[fecha.motivoSuspension]}
+            </span>
+            {fecha.observacionesSuspension && (
+              <span className="text-ink-mute italic"> · {fecha.observacionesSuspension}</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {susErr && (
+        <div className="px-5 py-2 bg-danger/5 border-b border-danger/20 text-xs text-danger">
+          {susErr.message}
+        </div>
+      )}
+
+      {suspendiendo && (
+        <SuspenderFechaForm
+          fecha={fecha}
+          onSubmit={async (vals) => {
+            await suspender.mutateAsync({ fechaId: fecha.id, input: vals });
+            setSuspendiendo(false);
+          }}
+          onCancel={() => setSuspendiendo(false)}
+          loading={suspender.isPending}
+        />
+      )}
       <div className="divide-y divide-line">
         {fecha.partidos.map((p) => (
           <PartidoRow
@@ -311,6 +395,154 @@ function PartidoRow({
       >
         <ChevronRight size={16} />
       </Link>
+    </div>
+  );
+}
+
+// ─── Sprint 8: Modal suspender fecha completa ──────────────────────
+function SuspenderFechaForm({
+  fecha,
+  onSubmit,
+  onCancel,
+  loading,
+}: {
+  fecha: FechaAdmin;
+  onSubmit: (vals: {
+    motivo: MotivoSuspension;
+    observaciones: string | null;
+    estrategia: EstrategiaSuspensionFecha;
+    diasCorrimiento?: number;
+  }) => Promise<void>;
+  onCancel: () => void;
+  loading: boolean;
+}): React.ReactElement {
+  const [motivo, setMotivo] = useState<MotivoSuspension>('LLUVIA');
+  const [observaciones, setObservaciones] = useState('');
+  const [estrategia, setEstrategia] = useState<EstrategiaSuspensionFecha>('DOMINO');
+  const [diasCorrimiento, setDiasCorrimiento] = useState(7);
+
+  const descripciones: Record<EstrategiaSuspensionFecha, string> = {
+    DOMINO:
+      'Corre TODAS las fechas siguientes N días. Mantiene el orden y separación del calendario. Recomendado si tu liga no admite huecos.',
+    TRASNOCHE:
+      'Crea una "Fecha bis" intercalada inmediatamente después de esta. El resto del calendario NO se mueve. Recomendado para recuperar sin afectar otras fechas.',
+    MANUAL:
+      'Solo marca la fecha como SUSPENDIDA. Vos reprogramás cada partido manualmente a otra fecha existente.',
+  };
+
+  return (
+    <div className="p-5 bg-paper border-b border-line">
+      <div className="flex items-center gap-2 mb-3">
+        <CloudRain size={16} className="text-danger" />
+        <CardLabel className="text-danger">Suspender Fecha {fecha.numero}</CardLabel>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="label">Motivo</label>
+          <select
+            className="input"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value as MotivoSuspension)}
+            disabled={loading}
+          >
+            {MOTIVO_SUSPENSION.map((m) => (
+              <option key={m} value={m}>
+                {MOTIVO_SUSPENSION_LABEL[m]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Observaciones (opcional)</label>
+          <input
+            type="text"
+            className="input"
+            placeholder="Detalle visible para árbitros y delegados"
+            value={observaciones}
+            onChange={(e) => setObservaciones(e.target.value)}
+            disabled={loading}
+            maxLength={1000}
+          />
+        </div>
+      </div>
+
+      <div className="mb-3">
+        <label className="label">Qué hacer con el resto del calendario</label>
+        <div className="space-y-2 mt-2">
+          {ESTRATEGIA_SUSPENSION_FECHA.map((e) => (
+            <label
+              key={e}
+              className={cn(
+                'block p-3 rounded-card border cursor-pointer transition-colors',
+                estrategia === e
+                  ? 'border-accent bg-accent/5'
+                  : 'border-line hover:border-ink-mute',
+              )}
+            >
+              <div className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="estrategia"
+                  value={e}
+                  checked={estrategia === e}
+                  onChange={() => setEstrategia(e)}
+                  disabled={loading}
+                  className="mt-1"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-ink">{ESTRATEGIA_LABEL[e]}</div>
+                  <div className="text-xs text-ink-mute mt-1">{descripciones[e]}</div>
+                  {e === 'DOMINO' && estrategia === 'DOMINO' && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs">Corrimiento:</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        className="input w-20 h-8 text-xs"
+                        value={diasCorrimiento}
+                        onChange={(ev) => setDiasCorrimiento(parseInt(ev.target.value, 10) || 7)}
+                        disabled={loading}
+                      />
+                      <span className="text-xs text-ink-mute">días</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="accent"
+          size="sm"
+          onClick={() => {
+            const msg =
+              estrategia === 'DOMINO'
+                ? `Vas a correr ${diasCorrimiento} días TODAS las fechas desde la ${fecha.numero}. ¿Confirmás?`
+                : estrategia === 'TRASNOCHE'
+                  ? `Vas a crear una Fecha ${fecha.numero + 1} bis y mover los partidos no jugados ahí. ¿Confirmás?`
+                  : 'Vas a marcar esta fecha como suspendida sin mover el calendario. ¿Confirmás?';
+            if (!window.confirm(msg)) return;
+            onSubmit({
+              motivo,
+              observaciones: observaciones.trim() || null,
+              estrategia,
+              ...(estrategia === 'DOMINO' && { diasCorrimiento }),
+            });
+          }}
+          loading={loading}
+        >
+          <CloudRain size={14} /> Confirmar
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={loading}>
+          <X size={14} /> Cancelar
+        </Button>
+      </div>
     </div>
   );
 }

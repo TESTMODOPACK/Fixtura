@@ -21,7 +21,13 @@ import {
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
-import { CerrarActaDto, CreateIncidenciaDto, UpdatePartidoDto } from './dto';
+import {
+  CerrarActaDto,
+  CreateIncidenciaDto,
+  ReprogramarPartidoDto,
+  SuspenderPartidoDto,
+  UpdatePartidoDto,
+} from './dto';
 import { PartidosAdminService } from './partidos-admin.service';
 
 function ensureTenant(user: UserContext): string {
@@ -125,5 +131,43 @@ export class PartidosAdminController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<PartidoAdmin> {
     return this.svc.reabrirActa(id, ensureTenant(user));
+  }
+
+  // ── Sprint 8: Suspensión / reprogramación / reactivación ───────────
+  @Post(':id/suspender')
+  @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
+  suspender(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: SuspenderPartidoDto,
+  ): Promise<PartidoAdmin> {
+    return this.svc.suspenderPartido(id, ensureTenant(user), user.userId, {
+      motivo: dto.motivo,
+      observaciones: dto.observaciones ?? null,
+    });
+  }
+
+  @Post(':id/reprogramar')
+  @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
+  reprogramar(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ReprogramarPartidoDto,
+  ): Promise<PartidoAdmin> {
+    return this.svc.reprogramarPartido(id, ensureTenant(user), {
+      fechaHora: dto.fechaHora,
+      canchaId: dto.canchaId ?? null,
+      canchaNombre: dto.canchaNombre ?? null,
+      mantieneDesignaciones: dto.mantieneDesignaciones,
+    });
+  }
+
+  @Post(':id/reactivar')
+  @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
+  reactivar(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<PartidoAdmin> {
+    return this.svc.reactivarPartido(id, ensureTenant(user));
   }
 }

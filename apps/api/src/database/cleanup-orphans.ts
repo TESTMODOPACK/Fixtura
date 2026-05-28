@@ -140,6 +140,9 @@ async function main(): Promise<void> {
     // Sprint 7C: columnas de dunning en cobros.
     await ensureDunningCobros(client, log);
 
+    // Sprint 8: columnas de suspensión en partidos y fechas.
+    await ensureSuspensiones(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -471,6 +474,37 @@ async function ensureDocumentosTributariosTable(
   );
   await ensureTrigger(client, 'documentos_tributarios');
   log('Documentos tributarios asegurada (idempotente).');
+}
+
+async function ensureSuspensiones(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  for (const tbl of ['partidos', 'fechas']) {
+    await client.query(`
+      ALTER TABLE ${tbl}
+        ADD COLUMN IF NOT EXISTS motivo_suspension VARCHAR(30)
+          CHECK (motivo_suspension IS NULL OR motivo_suspension IN (
+            'LLUVIA','CANCHA_NO_DISPONIBLE','FUERZA_MAYOR','DECISION_LIGA','OTRO'
+          ))
+    `);
+    await client.query(
+      `ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS suspendido_at TIMESTAMPTZ`,
+    );
+    await client.query(
+      `ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS suspendido_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL`,
+    );
+    await client.query(
+      `ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS observaciones_suspension TEXT`,
+    );
+  }
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_partidos_suspendido ON partidos(estado, suspendido_at) WHERE estado IN ('SUSPENDIDO_FUERZA_MAYOR','REPROGRAMADO')`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_fechas_suspendida ON fechas(estado) WHERE estado IN ('SUSPENDIDA','REPROGRAMADA')`,
+  );
+  log('suspensiones (partidos + fechas) aseguradas (idempotente).');
 }
 
 async function ensureDunningCobros(

@@ -87,6 +87,9 @@ export class PartidosAdminService {
         numero: f.numero,
         etiqueta: f.etiqueta,
         estado: f.estado,
+        motivoSuspension: f.motivoSuspension ?? null,
+        suspendidoAt: f.suspendidoAt?.toISOString() ?? null,
+        observacionesSuspension: f.observacionesSuspension ?? null,
         partidos: (partidosPorFecha.get(f.id) ?? []).map((p) => this.toDto(p, f.numero, f.etiqueta)),
       })),
     };
@@ -595,6 +598,129 @@ export class PartidosAdminService {
     return this.toDto(partido, fecha.numero, fecha.etiqueta);
   }
 
+  // ─── Sprint 8: Suspensión y reprogramación ─────────────────────────
+  /**
+   * Suspende un partido individual. No puede tener acta cerrada — para
+   * eso primero se reabre.
+   */
+  async suspenderPartido(
+    partidoId: string,
+    tenantId: string,
+    actorUserId: string | null,
+    input: { motivo: string; observaciones?: string | null },
+  ): Promise<PartidoAdmin> {
+    const partido = await this.findPartido(partidoId, tenantId);
+    if (partido.actaCerradaAt) {
+      throw new ConflictException(
+        'No se puede suspender un partido con acta cerrada. Reabrir primero.',
+      );
+    }
+    if (
+      partido.estado === 'SUSPENDIDO_FUERZA_MAYOR' ||
+      partido.estado === 'WALKOVER'
+    ) {
+      throw new BadRequestException(
+        `El partido ya está en estado ${partido.estado}.`,
+      );
+    }
+    partido.estado = 'SUSPENDIDO_FUERZA_MAYOR';
+    partido.motivoSuspension = input.motivo as Partido['motivoSuspension'];
+    partido.suspendidoAt = new Date();
+    partido.suspendidoByUserId = actorUserId;
+    partido.observacionesSuspension = input.observaciones?.trim() || null;
+    await this.repo.save(partido);
+    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    return this.toDto(partido, fecha.numero, fecha.etiqueta);
+  }
+
+  /**
+   * Reprograma un partido suspendido a una nueva fecha/hora/cancha.
+   * Vuelve a estado PROGRAMADO. Valida choque de cancha en el nuevo
+   * horario (reutiliza validarChoqueCancha).
+   *
+   * Si el partido NO estaba suspendido, igual permite cambiar
+   * fecha/cancha (sirve para reprogramaciones rutinarias).
+   */
+  async reprogramarPartido(
+    partidoId: string,
+    tenantId: string,
+    input: {
+      fechaHora: string;
+      canchaId?: string | null;
+      canchaNombre?: string | null;
+      mantieneDesignaciones?: boolean;
+    },
+  ): Promise<PartidoAdmin> {
+    const partido = await this.findPartido(partidoId, tenantId);
+    if (partido.actaCerradaAt) {
+      throw new ConflictException(
+        'No se puede reprogramar un partido con acta cerrada.',
+      );
+    }
+    partido.fechaHora = new Date(input.fechaHora);
+    if (input.canchaId !== undefined) {
+      if (input.canchaId) {
+        const cancha = await this.canchaRepo.findOne({
+          where: { id: input.canchaId, tenantId },
+        });
+        if (!cancha) {
+          throw new BadRequestException(
+            'La cancha no existe o no pertenece a esta liga.',
+          );
+        }
+        partido.canchaId = cancha.id;
+        partido.canchaNombre = cancha.nombre;
+      } else {
+        partido.canchaId = null;
+        if (input.canchaNombre !== undefined) {
+          partido.canchaNombre = input.canchaNombre;
+        }
+      }
+    } else if (input.canchaNombre !== undefined) {
+      partido.canchaNombre = input.canchaNombre;
+    }
+    partido.estado = 'PROGRAMADO';
+
+    // Si el partido estaba SUSPENDIDO, preservamos motivo y fecha de
+    // suspensión como historia (no las limpiamos). El nuevo estado
+    // PROGRAMADO indica que ya se reprogramó, pero el historial queda.
+    // Si se vuelve a suspender, se sobrescriben.
+
+    await this.validarChoqueCancha(partido);
+    await this.repo.save(partido);
+
+    // Limpieza opcional de designaciones (la idea es que las
+    // designaciones viejas pueden no aplicar al nuevo horario).
+    if (input.mantieneDesignaciones === false) {
+      // TODO v2: borrar designaciones del partido. Por ahora dejamos las
+      // designaciones intactas para que el admin las revise manualmente.
+    }
+
+    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    return this.toDto(partido, fecha.numero, fecha.etiqueta);
+  }
+
+  /**
+   * Reactiva un partido SUSPENDIDO sin cambiar fecha/hora — útil cuando
+   * la suspensión se canceló (mejoró el clima 2hs antes).
+   */
+  async reactivarPartido(partidoId: string, tenantId: string): Promise<PartidoAdmin> {
+    const partido = await this.findPartido(partidoId, tenantId);
+    if (partido.estado !== 'SUSPENDIDO_FUERZA_MAYOR') {
+      throw new BadRequestException(
+        `El partido no está suspendido (estado actual: ${partido.estado}).`,
+      );
+    }
+    partido.estado = 'PROGRAMADO';
+    partido.motivoSuspension = null;
+    partido.suspendidoAt = null;
+    partido.suspendidoByUserId = null;
+    partido.observacionesSuspension = null;
+    await this.repo.save(partido);
+    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    return this.toDto(partido, fecha.numero, fecha.etiqueta);
+  }
+
   // ─── Helpers ────────────────────────────────────────────────────────
   private async findPartido(id: string, tenantId: string): Promise<Partido> {
     const p = await this.repo.findOne({
@@ -642,6 +768,9 @@ export class PartidosAdminService {
       golesVisita: p.golesVisita,
       actaCerradaAt: p.actaCerradaAt?.toISOString() ?? null,
       observaciones: p.observaciones,
+      motivoSuspension: p.motivoSuspension ?? null,
+      suspendidoAt: p.suspendidoAt?.toISOString() ?? null,
+      observacionesSuspension: p.observacionesSuspension ?? null,
     };
   }
 }

@@ -14,6 +14,13 @@ import { Torneo } from './torneo.entity';
 
 export type EstadoFecha = 'PROGRAMADA' | 'EN_CURSO' | 'FINALIZADA' | 'SUSPENDIDA' | 'REPROGRAMADA';
 
+export type MotivoSuspensionFecha =
+  | 'LLUVIA'
+  | 'CANCHA_NO_DISPONIBLE'
+  | 'FUERZA_MAYOR'
+  | 'DECISION_LIGA'
+  | 'OTRO';
+
 @Entity({ name: 'fechas' })
 @Index('idx_fechas_tenant', ['tenantId'])
 @Index('idx_fechas_torneo', ['torneoId'])
@@ -50,6 +57,19 @@ export class Fecha {
 
   @Column({ type: 'varchar', length: 20, default: 'PROGRAMADA' })
   estado!: EstadoFecha;
+
+  // Sprint 8 — Trazabilidad de suspensión.
+  @Column({ name: 'motivo_suspension', type: 'varchar', length: 30, nullable: true })
+  motivoSuspension!: MotivoSuspensionFecha | null;
+
+  @Column({ name: 'suspendido_at', type: 'timestamptz', nullable: true })
+  suspendidoAt!: Date | null;
+
+  @Column({ name: 'suspendido_by_user_id', type: 'uuid', nullable: true })
+  suspendidoByUserId!: string | null;
+
+  @Column({ name: 'observaciones_suspension', type: 'text', nullable: true })
+  observacionesSuspension!: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

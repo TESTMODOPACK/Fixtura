@@ -2,21 +2,30 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  AlertTriangle,
   ArrowLeft,
   Calendar,
+  CloudRain,
   Flag,
   Lock,
   MapPin,
+  Play,
   Save,
   Trash2,
   Unlock,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import type { TipoIncidencia } from '@fixtura/types';
+import {
+  MOTIVO_SUSPENSION,
+  MOTIVO_SUSPENSION_LABEL,
+  type MotivoSuspension,
+  type TipoIncidencia,
+} from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
@@ -31,7 +40,10 @@ import {
   useJugadoresBloqueados,
   usePartido,
   useReabrirActa,
+  useReactivarPartido,
   useRemoveIncidencia,
+  useReprogramarPartido,
+  useSuspenderPartido,
   useUpdatePartido,
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
@@ -132,6 +144,8 @@ export default function PartidoDetallePage({
       </div>
 
       <EditarPartidoCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
+
+      <SuspensionCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
 
       <DesignacionesSection partidoId={partido.id} torneoId={torneoId} />
 
@@ -438,6 +452,277 @@ function EditarPartidoCard({
         </div>
       </form>
     </Card>
+  );
+}
+
+// ─── Sprint 8: Suspensión / reprogramación / reactivación ──────────
+function SuspensionCard({
+  partido,
+  torneoId,
+  cerrada,
+}: {
+  partido: {
+    id: string;
+    estado: string;
+    motivoSuspension: MotivoSuspension | null;
+    suspendidoAt: string | null;
+    observacionesSuspension: string | null;
+    fechaHora: string | null;
+    canchaId: string | null;
+    canchaNombre: string | null;
+  };
+  torneoId: string;
+  cerrada: boolean;
+}): React.ReactElement | null {
+  const [mode, setMode] = useState<'idle' | 'suspender' | 'reprogramar'>('idle');
+  const suspender = useSuspenderPartido(partido.id, torneoId);
+  const reprogramar = useReprogramarPartido(partido.id, torneoId);
+  const reactivar = useReactivarPartido(partido.id, torneoId);
+  const { data: canchas } = useCanchas(true);
+
+  if (cerrada) return null;
+
+  const estaSuspendido = partido.estado === 'SUSPENDIDO_FUERZA_MAYOR';
+  const susErr =
+    (suspender.error as ApiError | undefined) ??
+    (reprogramar.error as ApiError | undefined) ??
+    (reactivar.error as ApiError | undefined);
+
+  return (
+    <Card padding="comfortable" className="mb-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <CardLabel className={estaSuspendido ? 'text-danger' : ''}>
+          {estaSuspendido ? '⚠ Partido suspendido' : 'Suspensión y reprogramación'}
+        </CardLabel>
+        <div className="flex items-center gap-2">
+          {estaSuspendido && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => reactivar.mutate()}
+              loading={reactivar.isPending}
+              title="Reactivar el partido (vuelve a PROGRAMADO)"
+            >
+              <Play size={14} /> Reactivar
+            </Button>
+          )}
+          {!estaSuspendido && mode === 'idle' && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setMode('suspender')}
+            >
+              <CloudRain size={14} /> Suspender
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setMode(mode === 'reprogramar' ? 'idle' : 'reprogramar')}
+          >
+            <Calendar size={14} /> {mode === 'reprogramar' ? 'Cancelar' : 'Reprogramar'}
+          </Button>
+        </div>
+      </div>
+
+      {estaSuspendido && partido.motivoSuspension && (
+        <div className="mt-3 p-3 rounded-card bg-danger/5 border border-danger/20">
+          <div className="flex items-start gap-2 text-sm">
+            <AlertTriangle size={16} className="text-danger flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-danger">
+                Motivo: {MOTIVO_SUSPENSION_LABEL[partido.motivoSuspension]}
+              </div>
+              {partido.suspendidoAt && (
+                <div className="text-xs text-ink-mute mt-1">
+                  Registrado el{' '}
+                  <span className="font-mono">
+                    {new Date(partido.suspendidoAt).toLocaleString('es-CL')}
+                  </span>
+                </div>
+              )}
+              {partido.observacionesSuspension && (
+                <div className="text-xs text-ink mt-2 italic">
+                  &ldquo;{partido.observacionesSuspension}&rdquo;
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mode === 'suspender' && (
+        <SuspenderForm
+          onSubmit={async (vals) => {
+            await suspender.mutateAsync(vals);
+            setMode('idle');
+          }}
+          onCancel={() => setMode('idle')}
+          loading={suspender.isPending}
+        />
+      )}
+
+      {mode === 'reprogramar' && (
+        <ReprogramarForm
+          partido={partido}
+          canchas={canchas ?? []}
+          onSubmit={async (vals) => {
+            await reprogramar.mutateAsync(vals);
+            setMode('idle');
+          }}
+          onCancel={() => setMode('idle')}
+          loading={reprogramar.isPending}
+        />
+      )}
+
+      {susErr && (
+        <div className="mt-3 text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
+          {susErr.message}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function SuspenderForm({
+  onSubmit,
+  onCancel,
+  loading,
+}: {
+  onSubmit: (vals: { motivo: MotivoSuspension; observaciones: string | null }) => Promise<void>;
+  onCancel: () => void;
+  loading: boolean;
+}): React.ReactElement {
+  const [motivo, setMotivo] = useState<MotivoSuspension>('LLUVIA');
+  const [observaciones, setObservaciones] = useState('');
+
+  return (
+    <div className="mt-4 p-4 rounded-card bg-paper border border-line">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="label">Motivo</label>
+          <select
+            className="input"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value as MotivoSuspension)}
+            disabled={loading}
+          >
+            {MOTIVO_SUSPENSION.map((m) => (
+              <option key={m} value={m}>
+                {MOTIVO_SUSPENSION_LABEL[m]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Observaciones (opcional)</label>
+          <input
+            type="text"
+            className="input"
+            placeholder="Detalle visible para árbitros y delegados"
+            value={observaciones}
+            onChange={(e) => setObservaciones(e.target.value)}
+            disabled={loading}
+            maxLength={1000}
+          />
+        </div>
+      </div>
+      <div className="flex gap-2 mt-3">
+        <Button
+          type="button"
+          variant="accent"
+          size="sm"
+          onClick={() => onSubmit({ motivo, observaciones: observaciones.trim() || null })}
+          loading={loading}
+        >
+          <CloudRain size={14} /> Confirmar suspensión
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={loading}>
+          <X size={14} /> Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ReprogramarForm({
+  partido,
+  canchas,
+  onSubmit,
+  onCancel,
+  loading,
+}: {
+  partido: { fechaHora: string | null; canchaId: string | null };
+  canchas: Array<{ id: string; nombre: string }>;
+  onSubmit: (vals: {
+    fechaHora: string;
+    canchaId: string | null;
+  }) => Promise<void>;
+  onCancel: () => void;
+  loading: boolean;
+}): React.ReactElement {
+  const [fechaHora, setFechaHora] = useState(
+    partido.fechaHora ? partido.fechaHora.slice(0, 16) : '',
+  );
+  const [canchaId, setCanchaId] = useState<string>(partido.canchaId ?? '');
+
+  return (
+    <div className="mt-4 p-4 rounded-card bg-paper border border-line">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Input
+          label="Nueva fecha y hora"
+          type="datetime-local"
+          value={fechaHora}
+          onChange={(e) => setFechaHora(e.target.value)}
+          disabled={loading}
+        />
+        <div>
+          <label className="label">Cancha</label>
+          <select
+            className="input"
+            value={canchaId}
+            onChange={(e) => setCanchaId(e.target.value)}
+            disabled={loading}
+          >
+            <option value="">— Mantener / sin cancha del catálogo —</option>
+            {canchas.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="flex gap-2 mt-3">
+        <Button
+          type="button"
+          variant="accent"
+          size="sm"
+          onClick={() => {
+            if (!fechaHora) {
+              alert('Tenés que indicar la nueva fecha y hora.');
+              return;
+            }
+            onSubmit({
+              fechaHora: new Date(fechaHora).toISOString(),
+              canchaId: canchaId || null,
+            });
+          }}
+          loading={loading}
+        >
+          <Calendar size={14} /> Reprogramar
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={loading}>
+          <X size={14} /> Cancelar
+        </Button>
+      </div>
+      <p className="text-xs text-ink-mute italic mt-2">
+        El sistema valida choque de cancha en la nueva hora. Si hay conflicto, vas a ver el error acá.
+      </p>
+    </div>
   );
 }
 

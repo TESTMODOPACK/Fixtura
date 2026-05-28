@@ -19,3 +19,4 @@ export * from './canchas';
 export * from './cobros';
 export * from './transacciones';
 export * from './sii';
+export * from './suspensiones';

@@ -12,7 +12,9 @@ import { ROLE, type FixtureGenerationResult, type UserContext } from '@fixtura/t
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { SuspenderFechaDto } from '../partidos/dto';
 import { GenerarFixtureDto } from './dto';
+import { FechasAdminService } from './fechas-admin.service';
 import { FixtureAdminService } from './fixture-admin.service';
 
 @Controller('admin/torneos/:torneoId/fixture')
@@ -40,6 +42,44 @@ export class FixtureAdminController {
     @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
   ): Promise<{ deleted: number }> {
     return this.svc.reset(torneoId, ensureTenant(user));
+  }
+}
+
+/**
+ * Sprint 8 — Suspensión / reactivación de FECHAS completas.
+ */
+@Controller('admin/fechas')
+@Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
+export class FechasAdminController {
+  constructor(private readonly svc: FechasAdminService) {}
+
+  @Post(':fechaId/suspender')
+  suspender(
+    @CurrentUser() user: UserContext,
+    @Param('fechaId', new ParseUUIDPipe()) fechaId: string,
+    @Body() dto: SuspenderFechaDto,
+  ): Promise<{ fechasAfectadas: number; nuevaFechaBisId: string | null }> {
+    return this.svc
+      .suspenderFecha(fechaId, ensureTenant(user), user.userId, {
+        motivo: dto.motivo,
+        observaciones: dto.observaciones ?? null,
+        estrategia: dto.estrategia,
+        diasCorrimiento: dto.diasCorrimiento,
+        fechaBisDespuesDeNumero: dto.fechaBisDespuesDeNumero,
+      })
+      .then((r) => ({
+        fechasAfectadas: r.fechasAfectadas,
+        nuevaFechaBisId: r.nuevaFechaBisId,
+      }));
+  }
+
+  @Post(':fechaId/reactivar')
+  async reactivar(
+    @CurrentUser() user: UserContext,
+    @Param('fechaId', new ParseUUIDPipe()) fechaId: string,
+  ): Promise<{ ok: boolean }> {
+    await this.svc.reactivarFecha(fechaId, ensureTenant(user));
+    return { ok: true };
   }
 }
 

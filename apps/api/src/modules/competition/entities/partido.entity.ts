@@ -24,6 +24,13 @@ export type EstadoPartido =
   | 'REPROGRAMADO'
   | 'WALKOVER';
 
+export type MotivoSuspension =
+  | 'LLUVIA'
+  | 'CANCHA_NO_DISPONIBLE'
+  | 'FUERZA_MAYOR'
+  | 'DECISION_LIGA'
+  | 'OTRO';
+
 @Entity({ name: 'partidos' })
 @Index('idx_partidos_tenant', ['tenantId'])
 @Index('idx_partidos_fecha', ['fechaId'])
@@ -98,6 +105,19 @@ export class Partido {
 
   @Column({ type: 'text', nullable: true })
   observaciones!: string | null;
+
+  // Sprint 8 — Trazabilidad de suspensión.
+  @Column({ name: 'motivo_suspension', type: 'varchar', length: 30, nullable: true })
+  motivoSuspension!: MotivoSuspension | null;
+
+  @Column({ name: 'suspendido_at', type: 'timestamptz', nullable: true })
+  suspendidoAt!: Date | null;
+
+  @Column({ name: 'suspendido_by_user_id', type: 'uuid', nullable: true })
+  suspendidoByUserId!: string | null;
+
+  @Column({ name: 'observaciones_suspension', type: 'text', nullable: true })
+  observacionesSuspension!: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
