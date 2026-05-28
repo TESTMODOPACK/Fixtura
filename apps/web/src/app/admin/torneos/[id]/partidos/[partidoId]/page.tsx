@@ -35,6 +35,7 @@ import {
   useAddIncidencia,
   useCanchas,
   useCerrarActa,
+  useDeclararWalkover,
   useDesignacionesPorPartido,
   useJugadores,
   useJugadoresBloqueados,
@@ -146,6 +147,8 @@ export default function PartidoDetallePage({
       <EditarPartidoCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
 
       <SuspensionCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
+
+      <WalkoverCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
 
       <DesignacionesSection partidoId={partido.id} torneoId={torneoId} />
 
@@ -723,6 +726,153 @@ function ReprogramarForm({
         El sistema valida choque de cancha en la nueva hora. Si hay conflicto, vas a ver el error acá.
       </p>
     </div>
+  );
+}
+
+// ─── Sprint 9: Declarar walkover (3-0 por inasistencia) ────────────
+function WalkoverCard({
+  partido,
+  torneoId,
+  cerrada,
+}: {
+  partido: {
+    id: string;
+    estado: string;
+    equipoLocalId: string;
+    equipoLocalNombre: string;
+    equipoVisitaId: string;
+    equipoVisitaNombre: string;
+    golesLocal: number | null;
+    golesVisita: number | null;
+    observaciones: string | null;
+  };
+  torneoId: string;
+  cerrada: boolean;
+}): React.ReactElement | null {
+  const [abierto, setAbierto] = useState(false);
+  const [perdedor, setPerdedor] = useState<string>('');
+  const [obs, setObs] = useState('');
+  const walkover = useDeclararWalkover(partido.id, torneoId);
+  const err = walkover.error as ApiError | undefined;
+  const esWalkover = partido.estado === 'WALKOVER';
+
+  // Si ya está cerrada por acta normal, no mostramos walkover.
+  if (cerrada && !esWalkover) return null;
+
+  return (
+    <Card padding="comfortable" className="mb-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <CardLabel className={esWalkover ? 'text-orange-700' : ''}>
+          {esWalkover ? '⚠ Walkover declarado' : 'Walkover (inasistencia)'}
+        </CardLabel>
+        {!esWalkover && !cerrada && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setAbierto((v) => !v)}
+          >
+            <Flag size={14} /> {abierto ? 'Cancelar' : 'Declarar walkover'}
+          </Button>
+        )}
+      </div>
+
+      {esWalkover && (
+        <div className="mt-3 p-3 rounded-card bg-orange-700/5 border border-orange-700/20">
+          <div className="flex items-start gap-2 text-sm">
+            <AlertTriangle size={16} className="text-orange-700 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-orange-700">
+                {partido.equipoLocalNombre} {partido.golesLocal} - {partido.golesVisita} {partido.equipoVisitaNombre}
+              </div>
+              <div className="text-xs text-ink-mute mt-1">
+                Marcador automático por inasistencia. El equipo perdedor no suma puntos.
+              </div>
+              {partido.observaciones && (
+                <div className="text-xs text-ink mt-2 italic">
+                  &ldquo;{partido.observaciones}&rdquo;
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {abierto && !esWalkover && (
+        <div className="mt-4 p-4 rounded-card bg-paper border border-line space-y-3">
+          <div>
+            <label className="label">Equipo NO presentado (pierde 3-0)</label>
+            <select
+              className="input"
+              value={perdedor}
+              onChange={(e) => setPerdedor(e.target.value)}
+              disabled={walkover.isPending}
+            >
+              <option value="">— Elegí el equipo —</option>
+              <option value={partido.equipoLocalId}>{partido.equipoLocalNombre}</option>
+              <option value={partido.equipoVisitaId}>{partido.equipoVisitaNombre}</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Observaciones (opcional)</label>
+            <input
+              type="text"
+              className="input"
+              placeholder="Detalle del incidente (motivo de la inasistencia, hora de llegada, etc.)"
+              value={obs}
+              onChange={(e) => setObs(e.target.value)}
+              disabled={walkover.isPending}
+              maxLength={1000}
+            />
+          </div>
+          <div className="text-xs text-ink-mute italic">
+            Esto cierra el acta automáticamente con marcador 3-0. No genera goleadores
+            individuales. El tribunal puede aplicar sanción adicional al equipo perdedor.
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="accent"
+              size="sm"
+              loading={walkover.isPending}
+              onClick={() => {
+                if (!perdedor) {
+                  alert('Tenés que elegir cuál equipo no se presentó.');
+                  return;
+                }
+                if (
+                  !window.confirm(
+                    `Confirmás declarar walkover 3-0? El acta queda cerrada automáticamente.`,
+                  )
+                )
+                  return;
+                walkover.mutate({
+                  equipoPerdedorId: perdedor,
+                  observaciones: obs.trim() || null,
+                });
+                setAbierto(false);
+              }}
+            >
+              <Flag size={14} /> Confirmar walkover
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setAbierto(false)}
+              disabled={walkover.isPending}
+            >
+              <X size={14} /> Cancelar
+            </Button>
+          </div>
+          {err && (
+            <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
+              {err.message}
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 

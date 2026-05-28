@@ -970,6 +970,21 @@ export function useSuspenderFecha(torneoId: string) {
   });
 }
 
+export function useDeclararWalkover(partidoId: string, torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { equipoPerdedorId: string; observaciones?: string | null }) =>
+      apiFetch<PartidoAdmin>(`/admin/partidos/${partidoId}/walkover`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partido', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
+    },
+  });
+}
+
 export function useReactivarFecha(torneoId: string) {
   const qc = useQueryClient();
   return useMutation({

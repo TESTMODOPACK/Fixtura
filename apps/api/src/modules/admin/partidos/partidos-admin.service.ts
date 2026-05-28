@@ -701,6 +701,91 @@ export class PartidosAdminService {
   }
 
   /**
+   * Declara un walkover (B-01). El equipo NO presentado pierde 3-0 sin
+   * goleadores individuales. El acta queda cerrada automáticamente.
+   *
+   * Reglas estándar ANFA (Chile):
+   *   - Marcador automático 3-0 al equipo presente.
+   *   - El equipo perdedor recibe 0 puntos (los gana el ganador).
+   *   - No se computan goleadores individuales (no hay incidencias GOL).
+   *   - El partido queda como prueba de inasistencia para tribunal.
+   *
+   * Si ya estaba con acta cerrada o ya era WALKOVER, error 409. Si
+   * estaba SUSPENDIDO, primero reactivar.
+   */
+  async declararWalkover(
+    partidoId: string,
+    tenantId: string,
+    actorUserId: string | null,
+    input: { equipoPerdedorId: string; observaciones?: string | null },
+  ): Promise<PartidoAdmin> {
+    const partido = await this.findPartido(partidoId, tenantId);
+
+    if (partido.actaCerradaAt) {
+      throw new ConflictException(
+        'El partido ya tiene acta cerrada — no se puede declarar walkover.',
+      );
+    }
+    if (partido.estado === 'WALKOVER') {
+      throw new ConflictException('El partido ya es WALKOVER.');
+    }
+    if (partido.estado === 'SUSPENDIDO_FUERZA_MAYOR') {
+      throw new BadRequestException(
+        'El partido está suspendido. Reactivalo primero si querés declarar walkover.',
+      );
+    }
+
+    // Validar que el equipo perdedor sea uno de los dos del partido.
+    if (
+      input.equipoPerdedorId !== partido.equipoLocalId &&
+      input.equipoPerdedorId !== partido.equipoVisitaId
+    ) {
+      throw new BadRequestException(
+        'El equipo indicado no pertenece a este partido.',
+      );
+    }
+
+    const perdedorEsLocal = input.equipoPerdedorId === partido.equipoLocalId;
+    partido.estado = 'WALKOVER';
+    partido.golesLocal = perdedorEsLocal ? 0 : 3;
+    partido.golesVisita = perdedorEsLocal ? 3 : 0;
+    partido.actaCerradaAt = new Date();
+    partido.actaCerradaBy = actorUserId;
+
+    const obsBase = input.observaciones?.trim();
+    const perdedorNombre = perdedorEsLocal
+      ? partido.equipoLocal?.nombre ?? 'local'
+      : partido.equipoVisita?.nombre ?? 'visita';
+    partido.observaciones = obsBase
+      ? `[WALKOVER] No se presentó ${perdedorNombre}. ${obsBase}`
+      : `[WALKOVER] No se presentó ${perdedorNombre}.`;
+
+    await this.repo.save(partido);
+
+    // Si todos los partidos de la fecha quedaron FINALIZADO/WALKOVER,
+    // marcamos la fecha como FINALIZADA y disparamos decremento de
+    // sanciones (igual que en cerrarActa).
+    const partidosDeFecha = await this.repo.find({ where: { fechaId: partido.fechaId } });
+    const todosCerrados = partidosDeFecha.every(
+      (p) => p.estado === 'FINALIZADO' || p.estado === 'WALKOVER',
+    );
+    if (todosCerrados) {
+      const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+      if (fecha.estado !== 'FINALIZADA') {
+        await this.fechaRepo.update({ id: partido.fechaId }, { estado: 'FINALIZADA' });
+        await this.decrementarSancionesPendientes(
+          partido.tenantId,
+          fecha.torneoId,
+          fecha.numero,
+        );
+      }
+    }
+
+    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    return this.toDto(partido, fecha.numero, fecha.etiqueta);
+  }
+
+  /**
    * Reactiva un partido SUSPENDIDO sin cambiar fecha/hora — útil cuando
    * la suspensión se canceló (mejoró el clima 2hs antes).
    */

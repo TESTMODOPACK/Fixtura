@@ -135,6 +135,16 @@ export class ReprogramarPartidoDto {
   mantieneDesignaciones?: boolean;
 }
 
+export class DeclararWalkoverDto {
+  @IsUUID()
+  equipoPerdedorId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  observaciones?: string | null;
+}
+
 export class SuspenderFechaDto {
   @IsEnum(MOTIVO_SUSPENSION)
   motivo!: (typeof MOTIVO_SUSPENSION)[number];

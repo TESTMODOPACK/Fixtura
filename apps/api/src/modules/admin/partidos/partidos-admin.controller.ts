@@ -24,6 +24,7 @@ import { Roles } from '../../../common/decorators/roles.decorator';
 import {
   CerrarActaDto,
   CreateIncidenciaDto,
+  DeclararWalkoverDto,
   ReprogramarPartidoDto,
   SuspenderPartidoDto,
   UpdatePartidoDto,
@@ -169,5 +170,19 @@ export class PartidosAdminController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<PartidoAdmin> {
     return this.svc.reactivarPartido(id, ensureTenant(user));
+  }
+
+  // ── Sprint 9: Walkover (3-0 automático por inasistencia) ───────────
+  @Post(':id/walkover')
+  @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
+  declararWalkover(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: DeclararWalkoverDto,
+  ): Promise<PartidoAdmin> {
+    return this.svc.declararWalkover(id, ensureTenant(user), user.userId, {
+      equipoPerdedorId: dto.equipoPerdedorId,
+      observaciones: dto.observaciones ?? null,
+    });
   }
 }
