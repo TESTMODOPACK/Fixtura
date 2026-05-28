@@ -17,6 +17,35 @@ VPS único (Hostinger o Hetzner, 4-8 GB RAM) con Docker Compose. Servicios:
 Nginx termina TLS, hace rate limit (5 req/min en `/auth/login`, 100 req/min en `/api/`)
 y proxea a api/web.
 
+## ⚠️ Reglas críticas (perder de vista cualquiera = incidente)
+
+1. **NUNCA `docker compose down -v` en producción.** La `-v` borra los
+   named volumes (`postgres_data`, `redis_data`). Toda la DB se pierde.
+   Si necesitás recargar containers: `docker compose up -d --build`.
+2. **NUNCA `synchronize: true` en producción.** Está forzado a `false`
+   por código (`database.module.ts` y `datasource.ts`), pero validar
+   en review.
+3. **NUNCA editar schema con SQL directo en prod.** Siempre vía
+   migración formal o `cleanup-orphans.ts` idempotente.
+4. **SIEMPRE backup antes de operación riesgosa.** `./scripts/backup-db.sh`
+   o `./scripts/deploy.sh` (que lo hace solo).
+5. **SIEMPRE `--no-cache` en deploys de código.** Sin esto, Docker
+   reusa layers y aplica cambios a medias (incidente 2026-05-27).
+
+### Wrapper protector de docker compose
+
+Para evitar `down -v` accidental, instalá el wrapper en el VPS:
+
+```bash
+# Como usuario fixtura
+echo "alias dc='~/fixtura/scripts/dc.sh'" >> ~/.bashrc
+source ~/.bashrc
+
+dc up -d              # ← funciona normal
+dc down -v            # ← BLOQUEADO con confirmación obligatoria
+FIXTURA_ALLOW_DESTRUCTIVE=1 dc down -v   # ← bypass de emergencia
+```
+
 ## Deploys
 
 > 🟢 **Recomendado**: usar siempre `./scripts/deploy.sh`. Hace backup defensivo
@@ -82,7 +111,16 @@ docker compose build api && docker compose up -d
 
 # ❌ docker compose down -v (¡destruye volúmenes!):
 docker compose down -v
-# Borra postgres_data — TODA la DB se pierde. Solo válido en dev.
+# Borra postgres_data — TODA la DB se pierde (torneos, equipos,
+# jugadores, partidos con actas cerradas).
+# Incidente 2026-05-28: el usuario corría `down -v` antes de cada
+# deploy creyendo que "limpia el estado", borraba toda la data de
+# prueba sin darse cuenta. Si necesitás recargar la app sin tocar la
+# DB: `docker compose up -d --build` o `docker compose restart api web`.
+#
+# Para protegerte, usá el wrapper que bloquea -v salvo confirmación:
+#   alias dc='~/fixtura/scripts/dc.sh'
+#   dc down -v    # ← aborta con explicación; FIXTURA_ALLOW_DESTRUCTIVE=1 para bypass
 
 # ❌ Reset hard sin pull previo:
 git reset --hard HEAD~5
