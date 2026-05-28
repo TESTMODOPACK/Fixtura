@@ -16,9 +16,31 @@
  *
  * Versión cache — bumpear cuando cambien las estrategias.
  */
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const STATIC_CACHE = `fixtura-static-${CACHE_VERSION}`;
 const API_CACHE = `fixtura-api-${CACHE_VERSION}`;
+const ACTA_CACHE = `fixtura-acta-${CACHE_VERSION}`;
+
+/**
+ * Sprint 13: endpoints del acta que sí cacheamos (stale-while-revalidate)
+ * aunque sean /admin/*. El árbitro en cancha sin señal necesita ver:
+ *   - GET /admin/partidos/:id              (detalle del partido + incidencias)
+ *   - GET /admin/equipos/:id               (plantel del equipo local)
+ *   - GET /admin/equipos/:id/jugadores     (alias plantel)
+ *   - GET /admin/partidos/:id/designaciones-recinto
+ *   - GET /admin/torneos/:id/personal      (para autocompletar)
+ *
+ * Excepción consciente: la regla "admin = network-only" sigue valiendo
+ * por default. Acá hacemos opt-in selectivo para que la PWA del acta
+ * funcione offline sin meter cache a TODO /admin/*.
+ */
+function esEndpointActa(pathname) {
+  return (
+    /^\/api\/v1\/admin\/partidos\/[0-9a-f-]{8,}/i.test(pathname) ||
+    /^\/api\/v1\/admin\/equipos\/[0-9a-f-]{8,}(\/jugadores)?$/i.test(pathname) ||
+    /^\/api\/v1\/admin\/torneos\/[0-9a-f-]{8,}\/personal/i.test(pathname)
+  );
+}
 
 // Assets críticos que pre-cacheamos en el install.
 // Next.js sirve los chunks JS bajo /_next/static/... — esos se cachean
@@ -54,7 +76,14 @@ self.addEventListener('activate', (event) => {
             .map((k) => caches.delete(k)),
         ),
       )
-      .then(() => self.clients.claim()),
+      .then(() => self.clients.claim())
+      // Notificar a clientes que el SW se activó (para recargar la
+      // página si es la primera vez después de un update mayor).
+      .then(() =>
+        self.clients.matchAll().then((clients) =>
+          clients.forEach((c) => c.postMessage({ type: 'SW_ACTIVATED', version: CACHE_VERSION })),
+        ),
+      ),
   );
 });
 
@@ -72,6 +101,13 @@ self.addEventListener('fetch', (event) => {
   // API pública: stale-while-revalidate
   if (url.pathname.startsWith('/api/v1/public/')) {
     event.respondWith(staleWhileRevalidate(request, API_CACHE));
+    return;
+  }
+
+  // API admin del acta: cacheamos selectivamente para soportar acta
+  // offline (el árbitro en cancha sin señal carga partido + plantel).
+  if (url.pathname.startsWith('/api/v1/admin/') && esEndpointActa(url.pathname)) {
+    event.respondWith(staleWhileRevalidate(request, ACTA_CACHE));
     return;
   }
 

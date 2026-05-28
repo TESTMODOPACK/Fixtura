@@ -30,6 +30,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  OfflineActaBanner,
+  OfflineSubmitHint,
+} from '@/components/offline-acta-banner';
 import { PageHead } from '@/components/ui/page-head';
 import {
   useAddIncidencia,
@@ -89,6 +93,8 @@ export default function PartidoDetallePage({
           </Button>
         </Link>
       </PageHead>
+
+      <OfflineActaBanner />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
         <Card padding="comfortable" className="lg:col-span-2">
@@ -252,6 +258,9 @@ function ActaSection({
         <Button type="submit" variant="accent" loading={cerrarActa.isPending} className="w-full">
           <Lock size={14} /> Cerrar acta
         </Button>
+        <div className="text-center">
+          <OfflineSubmitHint />
+        </div>
         {error && (
           <p className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">{error.message}</p>
         )}
@@ -1004,10 +1013,11 @@ function IncidenciasSection({
           {...form.register('minuto', { valueAsNumber: true })}
         />
 
-        <div className="md:col-span-4 flex items-center gap-2">
+        <div className="md:col-span-4 flex items-center gap-2 flex-wrap">
           <Button type="submit" variant="accent" size="sm" loading={addIncidencia.isPending}>
             <Flag size={14} /> Agregar
           </Button>
+          <OfflineSubmitHint />
           {error && <span className="text-xs text-danger">{error.message}</span>}
         </div>
       </form>
