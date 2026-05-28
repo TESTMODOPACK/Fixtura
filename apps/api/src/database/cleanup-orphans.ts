@@ -175,6 +175,9 @@ async function main(): Promise<void> {
     // Sprint 14: tabla push_subscriptions (notificaciones FCM/WebPush).
     await ensurePushSubscriptionsTable(client, log);
 
+    // Sprint 16: tabla dias_no_jugables (RF-13).
+    await ensureDiasNoJugablesTable(client, log);
+
     // AUDIT-3: jugadores_inscritos.torneo_id + UNIQUE (rut, torneo).
     await ensureJugadoresUniqueRutTorneo(client, log);
 
@@ -860,6 +863,75 @@ async function ensurePartidosCanchaId(
        WHERE cancha_id IS NOT NULL AND fecha_hora IS NOT NULL`,
   );
   log('partidos.cancha_id asegurado (con backfill por nombre).');
+}
+
+/**
+ * Sprint 16 — RF-13: días no jugables (feriados, eventos, mantención
+ * de cancha). El fixture generator los respeta corriendo la fecha al
+ * próximo día válido. El admin también recibe warnings si edita un
+ * partido y lo agenda en un día bloqueado.
+ *
+ * scope:
+ *   GLOBAL  → aplica a todos los torneos del tenant.
+ *   TORNEO  → aplica solo al torneo_id referenciado.
+ *
+ * Sin DATE UNIQUE por scope: pueden coexistir un día GLOBAL + un día
+ * TORNEO con la misma fecha (uno con motivo, el otro con override).
+ */
+async function ensureDiasNoJugablesTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS dias_no_jugables (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      fecha           DATE NOT NULL,
+      scope           VARCHAR(10) NOT NULL DEFAULT 'GLOBAL'
+                        CHECK (scope IN ('GLOBAL','TORNEO')),
+      torneo_id       UUID REFERENCES torneos(id) ON DELETE CASCADE,
+      motivo          VARCHAR(150) NOT NULL,
+      origen          VARCHAR(20) NOT NULL DEFAULT 'MANUAL'
+                        CHECK (origen IN ('MANUAL','FERIADO_CHILE','IMPORT')),
+      created_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (scope = 'GLOBAL' OR torneo_id IS NOT NULL)
+    )
+  `);
+  // Auto-cura schema drift (lección 2026-05-28).
+  await client.query(`
+    ALTER TABLE dias_no_jugables
+      ADD COLUMN IF NOT EXISTS tenant_id  UUID REFERENCES tenants(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS fecha      DATE,
+      ADD COLUMN IF NOT EXISTS scope      VARCHAR(10) DEFAULT 'GLOBAL',
+      ADD COLUMN IF NOT EXISTS torneo_id  UUID REFERENCES torneos(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS motivo     VARCHAR(150),
+      ADD COLUMN IF NOT EXISTS origen     VARCHAR(20) DEFAULT 'MANUAL',
+      ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_dias_no_jugables_tenant_fecha
+       ON dias_no_jugables(tenant_id, fecha)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_dias_no_jugables_torneo
+       ON dias_no_jugables(torneo_id)
+       WHERE torneo_id IS NOT NULL`,
+  );
+  // UNIQUE parcial: evita duplicar mismo día con misma fuente (GLOBAL ó por torneo).
+  await client.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_dias_no_jugables_global
+       ON dias_no_jugables(tenant_id, fecha)
+       WHERE scope = 'GLOBAL'`,
+  );
+  await client.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_dias_no_jugables_torneo
+       ON dias_no_jugables(tenant_id, torneo_id, fecha)
+       WHERE scope = 'TORNEO' AND torneo_id IS NOT NULL`,
+  );
+  await ensureRls(client, 'dias_no_jugables');
+  log('dias_no_jugables asegurada (Sprint 16, RF-13).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

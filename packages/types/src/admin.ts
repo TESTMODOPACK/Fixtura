@@ -176,5 +176,17 @@ export const FixtureGenerationResultSchema = z.object({
   fechasCreadas: z.number().int(),
   partidosCreados: z.number().int(),
   equiposLibres: z.array(z.object({ fechaNumero: z.number().int(), equipoId: z.string() })),
+  // Sprint 16 — RF-13: días bloqueados que el generator tuvo que correr.
+  // El frontend los muestra como info para que el admin sepa qué se movió.
+  diasNoJugablesAjustados: z
+    .array(
+      z.object({
+        fechaNumero: z.number().int(),
+        fechaOriginal: z.string(),
+        fechaAjustada: z.string(),
+        motivo: z.string(),
+      }),
+    )
+    .default([]),
 });
 export type FixtureGenerationResult = z.infer<typeof FixtureGenerationResultSchema>;

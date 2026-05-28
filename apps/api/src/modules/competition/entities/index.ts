@@ -2,6 +2,8 @@ export { Cancha } from './cancha.entity';
 export type { SuperficieCancha } from './cancha.entity';
 export { Cobro } from './cobro.entity';
 export type { CategoriaCobro, EstadoDunning, MetodoPago } from './cobro.entity';
+export { DiaNoJugable } from './dia-no-jugable.entity';
+export type { OrigenDiaNoJugable, ScopeDiaNoJugable } from './dia-no-jugable.entity';
 export { Designacion } from './designacion.entity';
 export type { EstadoDesignacion } from './designacion.entity';
 export { DocumentoTributario } from './documento-tributario.entity';

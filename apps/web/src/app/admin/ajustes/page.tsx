@@ -28,6 +28,11 @@ import { Card, CardLabel } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
+  useCrearDiaNoJugable,
+  useDiasNoJugables,
+  useEliminarDiaNoJugable,
+  useFeriadosChile,
+  useImportarFeriados,
   useInvitarMiembro,
   useMiembros,
   useRemoveMiembro,
@@ -37,7 +42,7 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
-type Tab = 'branding' | 'dominio' | 'reglamento' | 'equipo';
+type Tab = 'branding' | 'dominio' | 'reglamento' | 'equipo' | 'calendario';
 
 const ROL_LABEL: Record<RolAdminInvitable, string> = {
   LIGA_ADMIN: 'Administrador',
@@ -127,6 +132,12 @@ export default function AjustesPage(): React.ReactElement {
               <TabButton active={tab === 'equipo'} onClick={() => setTab('equipo')}>
                 Equipo admin
               </TabButton>
+              <TabButton
+                active={tab === 'calendario'}
+                onClick={() => setTab('calendario')}
+              >
+                Calendario
+              </TabButton>
             </nav>
           </div>
 
@@ -134,6 +145,7 @@ export default function AjustesPage(): React.ReactElement {
           {tab === 'dominio' && <DominioTab settings={settings} />}
           {tab === 'reglamento' && <ReglamentoTab settings={settings} />}
           {tab === 'equipo' && <EquipoTab />}
+          {tab === 'calendario' && <CalendarioTab />}
         </>
       )}
     </>
@@ -791,5 +803,201 @@ function InvitarMiembroForm({ onDone }: { onDone: () => void }): React.ReactElem
         </Button>
       </div>
     </form>
+  );
+}
+
+// ─── Tab: Calendario (días no jugables, Sprint 16 / RF-13) ──────────
+function CalendarioTab(): React.ReactElement {
+  const anioActual = new Date().getFullYear();
+  const [anioImport, setAnioImport] = useState(anioActual);
+  const { data: dias, isLoading } = useDiasNoJugables();
+  const { data: feriados } = useFeriadosChile(anioImport);
+  const crear = useCrearDiaNoJugable();
+  const importar = useImportarFeriados();
+  const eliminar = useEliminarDiaNoJugable();
+
+  const Schema = z.object({
+    fecha: z.string().min(10),
+    motivo: z.string().min(2).max(150),
+  });
+  type FormData = z.infer<typeof Schema>;
+  const { register, handleSubmit, reset, formState } = useForm<FormData>({
+    resolver: zodResolver(Schema),
+  });
+
+  const onSubmit = handleSubmit(async (data) => {
+    await crear.mutateAsync({
+      fecha: data.fecha,
+      motivo: data.motivo,
+      scope: 'GLOBAL',
+    });
+    reset();
+  });
+
+  const onImportarFeriados = async (): Promise<void> => {
+    if (!feriados) return;
+    await importar.mutateAsync(
+      feriados.map((f) => ({
+        fecha: f.fecha,
+        motivo: f.motivo,
+        scope: 'GLOBAL' as const,
+        origen: 'FERIADO_CHILE' as const,
+      })),
+    );
+  };
+
+  return (
+    <div className="space-y-8">
+      <Card padding="roomy">
+        <CardLabel>Calendario · Días no jugables (RF-13)</CardLabel>
+        <p className="font-serif italic text-ink-mute mt-2">
+          Los feriados, elecciones, mantención de cancha o cualquier día que la
+          liga no juegue. Cuando generes un fixture, el sistema correrá
+          automáticamente la fecha al próximo día disponible.
+        </p>
+      </Card>
+
+      <Card padding="roomy">
+        <CardLabel>Importar feriados de Chile</CardLabel>
+        <p className="font-serif italic text-ink-mute mt-2 mb-4">
+          Carga en lote los feriados con fecha fija del año
+          (Año Nuevo, Día del Trabajo, 18 sept, Navidad, etc.). Los duplicados
+          se saltan. Feriados móviles (Viernes Santo, etc.) se cargan a mano.
+        </p>
+        <div className="flex items-end gap-3">
+          <div>
+            <label className="block text-xs uppercase tracking-[0.18em] font-semibold text-ink-mute mb-1">
+              Año
+            </label>
+            <Input
+              type="number"
+              min={2000}
+              max={2100}
+              value={anioImport}
+              onChange={(e) => setAnioImport(Number(e.target.value))}
+              className="w-32"
+            />
+          </div>
+          <Button
+            type="button"
+            onClick={onImportarFeriados}
+            disabled={!feriados || importar.isPending}
+          >
+            {importar.isPending
+              ? 'Importando...'
+              : `Importar ${feriados?.length ?? 0} feriados de ${anioImport}`}
+          </Button>
+        </div>
+        {importar.data && (
+          <div className="mt-3 flex items-center gap-2 text-sm text-green-700">
+            <CheckCircle2 size={16} />
+            <span>
+              {importar.data.creados} creados, {importar.data.saltados}{' '}
+              saltados (duplicados).
+            </span>
+          </div>
+        )}
+      </Card>
+
+      <Card padding="roomy">
+        <CardLabel>Agregar día manual</CardLabel>
+        <form onSubmit={onSubmit} className="mt-4 grid grid-cols-1 md:grid-cols-12 gap-3">
+          <div className="md:col-span-3">
+            <label className="block text-xs uppercase tracking-[0.18em] font-semibold text-ink-mute mb-1">
+              Fecha
+            </label>
+            <Input type="date" {...register('fecha')} />
+            {formState.errors.fecha && (
+              <p className="text-xs text-red-600 mt-1">
+                {formState.errors.fecha.message}
+              </p>
+            )}
+          </div>
+          <div className="md:col-span-7">
+            <label className="block text-xs uppercase tracking-[0.18em] font-semibold text-ink-mute mb-1">
+              Motivo
+            </label>
+            <Input
+              placeholder="Elecciones, mantención cancha, vacaciones..."
+              {...register('motivo')}
+            />
+            {formState.errors.motivo && (
+              <p className="text-xs text-red-600 mt-1">
+                {formState.errors.motivo.message}
+              </p>
+            )}
+          </div>
+          <div className="md:col-span-2 flex items-end">
+            <Button type="submit" disabled={crear.isPending} className="w-full">
+              <Plus size={16} />
+              <span className="ml-1">Agregar</span>
+            </Button>
+          </div>
+        </form>
+        {crear.error && (
+          <p className="text-sm text-red-600 mt-2">
+            {(crear.error as ApiError).message}
+          </p>
+        )}
+      </Card>
+
+      <Card padding="roomy">
+        <CardLabel>Días bloqueados ({dias?.length ?? 0})</CardLabel>
+        {isLoading && (
+          <p className="text-sm text-ink-mute mt-2">Cargando...</p>
+        )}
+        {!isLoading && (!dias || dias.length === 0) && (
+          <p className="font-serif italic text-ink-mute mt-2">
+            No hay días bloqueados. Importá feriados o agregá manuales.
+          </p>
+        )}
+        {dias && dias.length > 0 && (
+          <ul className="mt-4 divide-y divide-line">
+            {dias.map((d) => (
+              <li
+                key={d.id}
+                className="py-3 flex items-center justify-between gap-4"
+              >
+                <div>
+                  <div className="font-semibold text-ink">
+                    {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CL', {
+                      weekday: 'long',
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </div>
+                  <div className="text-sm text-ink-mute">
+                    {d.motivo}
+                    {d.scope === 'TORNEO' && d.torneoNombre && (
+                      <span className="ml-2 text-xs uppercase tracking-[0.18em] font-semibold text-accent">
+                        · {d.torneoNombre}
+                      </span>
+                    )}
+                    {d.origen === 'FERIADO_CHILE' && (
+                      <span className="ml-2 text-xs uppercase tracking-[0.18em] font-semibold text-ink-mute">
+                        · Feriado nacional
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Eliminar día bloqueado del ${d.fecha}?`)) {
+                      eliminar.mutate(d.id);
+                    }
+                  }}
+                  className="text-ink-mute hover:text-red-600 transition-colors"
+                  aria-label="Eliminar"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
   );
 }

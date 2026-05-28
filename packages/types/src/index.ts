@@ -20,3 +20,4 @@ export * from './cobros';
 export * from './transacciones';
 export * from './sii';
 export * from './suspensiones';
+export * from './dias-no-jugables';

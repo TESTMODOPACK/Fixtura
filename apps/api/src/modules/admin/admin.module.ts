@@ -20,6 +20,8 @@ import { DesignacionesAdminService } from './designaciones/designaciones-admin.s
 import { DesignacionesEmailService } from './designaciones/designaciones-email.service';
 import { DesignacionesRespuestaController } from './designaciones/designaciones-respuesta.controller';
 import { RecintoAdminService } from './designaciones/recinto-admin.service';
+import { DiasNoJugablesController } from './dias-no-jugables/dias-no-jugables.controller';
+import { DiasNoJugablesService } from './dias-no-jugables/dias-no-jugables.service';
 import { EquiposAdminController } from './equipos/equipos-admin.controller';
 import { EquiposAdminService } from './equipos/equipos-admin.service';
 import { FechasAdminService } from './fixture/fechas-admin.service';
@@ -94,6 +96,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     SponsorsAdminController,
     CanchasAdminController,
     CobrosAdminController,
+    DiasNoJugablesController,
   ],
   providers: [
     TemporadasAdminService,
@@ -115,6 +118,8 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     SponsorsAdminService,
     CanchasAdminService,
     CobrosAdminService,
+    DiasNoJugablesService,
   ],
+  exports: [DiasNoJugablesService],
 })
 export class AdminModule {}

@@ -1007,3 +1007,67 @@ export function useReactivarFecha(torneoId: string) {
     },
   });
 }
+
+// ─── Sprint 16 — Días no jugables (RF-13) ────────────────────────────
+import type {
+  CreateDiaNoJugableRequest,
+  DiaNoJugable,
+  FeriadoChile,
+} from '@fixtura/types';
+
+export function useDiasNoJugables(torneoId?: string) {
+  return useQuery({
+    queryKey: ['admin', 'dias-no-jugables', { torneoId }],
+    queryFn: () =>
+      apiFetch<DiaNoJugable[]>(
+        torneoId
+          ? `/admin/dias-no-jugables?torneoId=${encodeURIComponent(torneoId)}`
+          : '/admin/dias-no-jugables',
+      ),
+  });
+}
+
+export function useFeriadosChile(anio: number) {
+  return useQuery({
+    queryKey: ['admin', 'dias-no-jugables', 'feriados-chile', anio],
+    queryFn: () =>
+      apiFetch<FeriadoChile[]>(`/admin/dias-no-jugables/feriados-chile/${anio}`),
+    staleTime: 60 * 60 * 1000, // los feriados no cambian, cache larga
+  });
+}
+
+export function useCrearDiaNoJugable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateDiaNoJugableRequest) =>
+      apiFetch<DiaNoJugable>('/admin/dias-no-jugables', { method: 'POST', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'dias-no-jugables'] });
+    },
+  });
+}
+
+export function useImportarFeriados() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dias: CreateDiaNoJugableRequest[]) =>
+      apiFetch<{ creados: number; saltados: number; items: DiaNoJugable[] }>(
+        '/admin/dias-no-jugables/bulk',
+        { method: 'POST', body: { dias } },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'dias-no-jugables'] });
+    },
+  });
+}
+
+export function useEliminarDiaNoJugable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/dias-no-jugables/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'dias-no-jugables'] });
+    },
+  });
+}

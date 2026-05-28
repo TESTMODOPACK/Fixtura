@@ -15,15 +15,25 @@ import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { DiasNoJugablesService } from '../dias-no-jugables/dias-no-jugables.service';
 
 @Injectable()
 export class FixtureAdminService {
+  /**
+   * Sprint 16 — RF-13: si una fecha calculada cae en un día no jugable,
+   * intentamos correrla. Este es el máximo de saltos consecutivos antes
+   * de rendirnos y dejar la fecha en su día original (con warning).
+   * Cubre feriados que se concatenan (18-19 sept) sin entrar en loop.
+   */
+  private static readonly MAX_SALTOS_DIA_NO_JUGABLE = 14;
+
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
     @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
+    private readonly diasNoJugables: DiasNoJugablesService,
   ) {}
 
   /**
@@ -90,10 +100,69 @@ export class FixtureAdminService {
     // Crear fechas
     const fechaInicioBase = new Date(input.fechaInicio);
     const fechaIdByNumero = new Map<number, string>();
+    // Sprint 16 — RF-13: las fechas calculadas se pueden correr si caen
+    // en día no jugable. Guardamos el corrimiento por fecha (numero →
+    // díasOffset extra) para que los horarios de partidos también lo
+    // tomen en cuenta.
+    const offsetExtraPorFecha = new Map<number, number>();
+    const diasNoJugablesAjustados: FixtureGenerationResult['diasNoJugablesAjustados'] = [];
+
+    // Precalcular ventana de fechas bloqueadas en el rango que vamos a usar.
+    // Pedimos +60d de margen sobre el cálculo natural para cubrir
+    // corrimientos por feriados encadenados sin tener que reconsultar.
+    const ultimaFechaNatural = new Date(fechaInicioBase);
+    ultimaFechaNatural.setDate(
+      fechaInicioBase.getDate() + (fixture.fechas - 1) * input.diasEntreFechas + 60,
+    );
+    const bloqueadas = await this.diasNoJugables.fechasBloqueadasEnRango(
+      tenantId,
+      torneoId,
+      fechaInicioBase.toISOString().slice(0, 10),
+      ultimaFechaNatural.toISOString().slice(0, 10),
+    );
 
     for (let n = 1; n <= fixture.fechas; n++) {
-      const fechaInicio = new Date(fechaInicioBase);
-      fechaInicio.setDate(fechaInicioBase.getDate() + (n - 1) * input.diasEntreFechas);
+      const fechaNatural = new Date(fechaInicioBase);
+      fechaNatural.setDate(fechaInicioBase.getDate() + (n - 1) * input.diasEntreFechas);
+      const fechaNaturalIso = fechaNatural.toISOString().slice(0, 10);
+
+      // Buscar el próximo día válido dentro del límite máximo.
+      let candidato = new Date(fechaNatural);
+      let saltos = 0;
+      while (
+        bloqueadas.has(candidato.toISOString().slice(0, 10)) &&
+        saltos < FixtureAdminService.MAX_SALTOS_DIA_NO_JUGABLE
+      ) {
+        candidato.setDate(candidato.getDate() + 1);
+        saltos++;
+      }
+      // Si tras N saltos seguimos en día bloqueado, dejamos la natural.
+      // El operador podrá moverla manualmente. Es defensa anti-loop.
+      const sigueBloqueada = bloqueadas.has(candidato.toISOString().slice(0, 10));
+      if (sigueBloqueada) {
+        console.warn(
+          `[fixture-gen] tenant=${tenantId} torneo=${torneoId} fecha=${n}: ` +
+            `${FixtureAdminService.MAX_SALTOS_DIA_NO_JUGABLE} días consecutivos bloqueados ` +
+            `desde ${fechaNaturalIso}. Dejando la fecha original — el admin la moverá a mano.`,
+        );
+      }
+      const fechaInicio = sigueBloqueada ? fechaNatural : candidato;
+      const fechaInicioIso = fechaInicio.toISOString().slice(0, 10);
+
+      if (fechaInicioIso !== fechaNaturalIso) {
+        const motivo = bloqueadas.get(fechaNaturalIso) ?? 'Día no jugable';
+        diasNoJugablesAjustados.push({
+          fechaNumero: n,
+          fechaOriginal: fechaNaturalIso,
+          fechaAjustada: fechaInicioIso,
+          motivo,
+        });
+        const offsetDias = Math.round(
+          (fechaInicio.getTime() - fechaNatural.getTime()) / (24 * 60 * 60 * 1000),
+        );
+        offsetExtraPorFecha.set(n, offsetDias);
+      }
+
       const fechaFin = new Date(fechaInicio);
       fechaFin.setDate(fechaInicio.getDate() + 1);
 
@@ -108,7 +177,7 @@ export class FixtureAdminService {
           torneoId,
           numero: n,
           etiqueta,
-          fechaInicio: fechaInicio.toISOString().slice(0, 10),
+          fechaInicio: fechaInicioIso,
           fechaFin: fechaFin.toISOString().slice(0, 10),
           estado: 'PROGRAMADA',
         }),
@@ -132,6 +201,12 @@ export class FixtureAdminService {
 
       const baseFecha = new Date(fechaInicioBase);
       baseFecha.setDate(fechaInicioBase.getDate() + (p.fechaNumero - 1) * input.diasEntreFechas);
+      // Sprint 16 — RF-13: si la fecha fue corrida por día no jugable,
+      // los partidos heredan el offset para que fecha_hora coincida.
+      const offsetExtra = offsetExtraPorFecha.get(p.fechaNumero) ?? 0;
+      if (offsetExtra > 0) {
+        baseFecha.setDate(baseFecha.getDate() + offsetExtra);
+      }
       const [h, m] = horario.split(':').map(Number);
       baseFecha.setHours(h!, m!, 0, 0);
 
@@ -160,6 +235,7 @@ export class FixtureAdminService {
       fechasCreadas: fixture.fechas,
       partidosCreados,
       equiposLibres,
+      diasNoJugablesAjustados,
     };
   }
 

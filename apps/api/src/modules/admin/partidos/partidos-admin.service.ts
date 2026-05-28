@@ -24,6 +24,7 @@ import type {
 } from '@fixtura/types';
 
 import { Cancha } from '../../competition/entities/cancha.entity';
+import { DiaNoJugable } from '../../competition/entities/dia-no-jugable.entity';
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
@@ -47,6 +48,8 @@ export class PartidosAdminService {
     @InjectRepository(SancionActiva)
     private readonly sancionRepo: Repository<SancionActiva>,
     @InjectRepository(Cancha) private readonly canchaRepo: Repository<Cancha>,
+    @InjectRepository(DiaNoJugable)
+    private readonly diaNoJugableRepo: Repository<DiaNoJugable>,
     private readonly push: PushService,
   ) {}
 
@@ -170,6 +173,31 @@ export class PartidosAdminService {
     }
     if (input.fechaHora !== undefined) {
       partido.fechaHora = input.fechaHora ? new Date(input.fechaHora) : null;
+    }
+
+    // Sprint 16 — RF-13: si el partido queda agendado en un día no
+    // jugable, dejamos un warning en el log. No bloqueamos: el admin
+    // puede tener razones para programar excepcionalmente ese día
+    // (ej. amistoso, recuperación pactada). El frontend valida y
+    // muestra confirmación antes del submit.
+    if (partido.fechaHora) {
+      const fechaIso = partido.fechaHora.toISOString().slice(0, 10);
+      const fechaTorneo = await this.fechaRepo.findOneOrFail({
+        where: { id: partido.fechaId },
+      });
+      const bloqueada = await this.diaNoJugableRepo
+        .createQueryBuilder('d')
+        .where('d.tenant_id = :tenantId', { tenantId })
+        .andWhere('d.fecha = :fecha', { fecha: fechaIso })
+        .andWhere(`(d.scope = 'GLOBAL' OR d.torneo_id = :torneoId)`, {
+          torneoId: fechaTorneo.torneoId,
+        })
+        .getOne();
+      if (bloqueada) {
+        console.warn(
+          `[partidos] partido ${partidoId} agendado en día no jugable ${fechaIso} (motivo: ${bloqueada.motivo}). Tenant: ${tenantId}.`,
+        );
+      }
     }
     if (input.estado !== undefined) partido.estado = input.estado;
     if (input.observaciones !== undefined) partido.observaciones = input.observaciones;
