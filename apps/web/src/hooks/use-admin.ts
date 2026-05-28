@@ -981,7 +981,10 @@ export function useSuspenderFecha(torneoId: string) {
         { method: 'POST', body: input },
       ),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
+      // El key correcto del useFixtureDetail es ['admin','torneos',torneoId,'fixture-detail'].
+      // El key viejo ['admin','fixture',torneoId] no existe — el invalidate no hacía nada.
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
     },
   });
 }
@@ -1009,7 +1012,8 @@ export function useReactivarFecha(torneoId: string) {
         method: 'POST',
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
     },
   });
 }

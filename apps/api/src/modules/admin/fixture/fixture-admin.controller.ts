@@ -65,7 +65,8 @@ export class FechasAdminController {
         observaciones: dto.observaciones ?? null,
         estrategia: dto.estrategia,
         diasCorrimiento: dto.diasCorrimiento,
-        fechaBisDespuesDeNumero: dto.fechaBisDespuesDeNumero,
+        fechaDestinoId: dto.fechaDestinoId,
+        fechaInicioReprogramada: dto.fechaInicioReprogramada,
       })
       .then((r) => ({
         fechasAfectadas: r.fechasAfectadas,

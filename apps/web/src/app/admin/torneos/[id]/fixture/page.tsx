@@ -136,6 +136,7 @@ export default function FixtureAdminPage({
                 key={fecha.id}
                 torneoId={torneoId}
                 fecha={fecha}
+                todasLasFechas={data.fechas}
                 movingId={movingId}
               />
             ))}
@@ -149,10 +150,12 @@ export default function FixtureAdminPage({
 function FechaCard({
   torneoId,
   fecha,
+  todasLasFechas,
   movingId,
 }: {
   torneoId: string;
   fecha: FechaAdmin;
+  todasLasFechas: FechaAdmin[];
   movingId: string | null;
 }): React.ReactElement {
   const finalizadas = fecha.partidos.filter(
@@ -193,7 +196,19 @@ function FechaCard({
     >
       <div className="px-5 py-3 bg-paper-dark border-b border-line flex items-center justify-between flex-wrap gap-2">
         <div>
-          <CardLabel tone="mute">Fecha {fecha.numero}</CardLabel>
+          <CardLabel tone="mute">
+            Fecha {fecha.numero}
+            {fecha.tipoReprogramacion === 'REPROGRAMADA' && (
+              <span className="ml-2 text-[9px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded bg-accent/20 text-accent">
+                Reprogramada
+              </span>
+            )}
+            {fecha.tipoReprogramacion === 'ORIGINAL' && estaSuspendida && (
+              <span className="ml-2 text-[9px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded bg-ink-mute/20 text-ink-mute">
+                Original
+              </span>
+            )}
+          </CardLabel>
           <div className="font-display text-lg text-green-deep tracking-display">
             {(fecha.etiqueta ?? `Fecha ${fecha.numero}`).toUpperCase()}
           </div>
@@ -254,6 +269,7 @@ function FechaCard({
       {suspendiendo && (
         <SuspenderFechaForm
           fecha={fecha}
+          fechasDisponibles={todasLasFechas}
           onSubmit={async (vals) => {
             await suspender.mutateAsync({ fechaId: fecha.id, input: vals });
             setSuspendiendo(false);
@@ -399,35 +415,52 @@ function PartidoRow({
   );
 }
 
-// ─── Sprint 8: Modal suspender fecha completa ──────────────────────
+// ─── Sprint 19: Modal suspender fecha v2 ──────────────────────────
 function SuspenderFechaForm({
   fecha,
+  fechasDisponibles,
   onSubmit,
   onCancel,
   loading,
 }: {
   fecha: FechaAdmin;
+  fechasDisponibles: FechaAdmin[];
   onSubmit: (vals: {
     motivo: MotivoSuspension;
     observaciones: string | null;
     estrategia: EstrategiaSuspensionFecha;
     diasCorrimiento?: number;
+    fechaDestinoId?: string;
+    fechaInicioReprogramada?: string;
   }) => Promise<void>;
   onCancel: () => void;
   loading: boolean;
 }): React.ReactElement {
   const [motivo, setMotivo] = useState<MotivoSuspension>('LLUVIA');
   const [observaciones, setObservaciones] = useState('');
-  const [estrategia, setEstrategia] = useState<EstrategiaSuspensionFecha>('DOMINO');
+  const [estrategia, setEstrategia] = useState<EstrategiaSuspensionFecha>('AL_FINAL');
   const [diasCorrimiento, setDiasCorrimiento] = useState(7);
+  const [fechaInicioReprogramada, setFechaInicioReprogramada] = useState('');
+  const [fechaDestinoId, setFechaDestinoId] = useState('');
+
+  // Candidatas para REUSAR_EXISTENTE: distintas de la actual, no
+  // SUSPENDIDA/FINALIZADA, mismo torneo. Para el v1 mostramos todas las
+  // PROGRAMADAS / EN_CURSO. El service valida el resto.
+  const candidatasReusar = fechasDisponibles.filter(
+    (f) =>
+      f.id !== fecha.id &&
+      (f.estado === 'PROGRAMADA' || f.estado === 'EN_CURSO'),
+  );
 
   const descripciones: Record<EstrategiaSuspensionFecha, string> = {
-    DOMINO:
-      'Corre TODAS las fechas siguientes N días. Mantiene el orden y separación del calendario. Recomendado si tu liga no admite huecos.',
-    TRASNOCHE:
-      'Crea una "Fecha bis" intercalada inmediatamente después de esta. El resto del calendario NO se mueve. Recomendado para recuperar sin afectar otras fechas.',
+    AL_FINAL:
+      'Crea una nueva fecha "REPROGRAMADA" después de la última del calendario. La fecha original queda como SUSPENDIDA pero mantiene su número (ej. Fecha 3 SUSPENDIDA + Fecha 3 REPROGRAMADA).',
+    TRASNOCHE_DOMINO:
+      'Intercala una nueva fecha REPROGRAMADA inmediatamente después y corre las siguientes N días para hacer espacio. Las afectadas quedan marcadas como REPROGRAMADAS.',
+    REUSAR_EXISTENTE:
+      'No crea fecha nueva. Mueve los partidos no jugados a una fecha existente que vos elijas. Esa fecha pasa a quedar marcada REPROGRAMADA.',
     MANUAL:
-      'Solo marca la fecha como SUSPENDIDA. Vos reprogramás cada partido manualmente a otra fecha existente.',
+      'Solo marca la fecha como SUSPENDIDA. Vos reprogramás cada partido a mano desde el detalle. No crea fecha nueva.',
   };
 
   return (
@@ -468,7 +501,7 @@ function SuspenderFechaForm({
       </div>
 
       <div className="mb-3">
-        <label className="label">Qué hacer con el resto del calendario</label>
+        <label className="label">Estrategia de reprogramación</label>
         <div className="space-y-2 mt-2">
           {ESTRATEGIA_SUSPENSION_FECHA.map((e) => (
             <label
@@ -493,8 +526,22 @@ function SuspenderFechaForm({
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-ink">{ESTRATEGIA_LABEL[e]}</div>
                   <div className="text-xs text-ink-mute mt-1">{descripciones[e]}</div>
-                  {e === 'DOMINO' && estrategia === 'DOMINO' && (
+
+                  {e === 'AL_FINAL' && estrategia === 'AL_FINAL' && (
                     <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs">Fecha de inicio (opcional):</span>
+                      <input
+                        type="date"
+                        className="input h-8 text-xs"
+                        value={fechaInicioReprogramada}
+                        onChange={(ev) => setFechaInicioReprogramada(ev.target.value)}
+                        disabled={loading}
+                      />
+                    </div>
+                  )}
+
+                  {e === 'TRASNOCHE_DOMINO' && estrategia === 'TRASNOCHE_DOMINO' && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
                       <span className="text-xs">Corrimiento:</span>
                       <input
                         type="number"
@@ -502,10 +549,48 @@ function SuspenderFechaForm({
                         max={60}
                         className="input w-20 h-8 text-xs"
                         value={diasCorrimiento}
-                        onChange={(ev) => setDiasCorrimiento(parseInt(ev.target.value, 10) || 7)}
+                        onChange={(ev) =>
+                          setDiasCorrimiento(parseInt(ev.target.value, 10) || 7)
+                        }
                         disabled={loading}
                       />
                       <span className="text-xs text-ink-mute">días</span>
+                      <span className="text-xs ml-2">Inicio nueva fecha (opcional):</span>
+                      <input
+                        type="date"
+                        className="input h-8 text-xs"
+                        value={fechaInicioReprogramada}
+                        onChange={(ev) => setFechaInicioReprogramada(ev.target.value)}
+                        disabled={loading}
+                      />
+                    </div>
+                  )}
+
+                  {e === 'REUSAR_EXISTENTE' && estrategia === 'REUSAR_EXISTENTE' && (
+                    <div className="mt-2">
+                      <label className="text-xs block mb-1">
+                        Fecha destino:
+                      </label>
+                      <select
+                        className="input h-8 text-xs w-full"
+                        value={fechaDestinoId}
+                        onChange={(ev) => setFechaDestinoId(ev.target.value)}
+                        disabled={loading || candidatasReusar.length === 0}
+                      >
+                        <option value="">Elegí una fecha…</option>
+                        {candidatasReusar.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            Fecha {f.numero}
+                            {f.fechaInicio ? ` · ${f.fechaInicio}` : ''}
+                            {f.etiqueta ? ` (${f.etiqueta})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {candidatasReusar.length === 0 && (
+                        <p className="text-xs text-ink-mute italic mt-1">
+                          No hay fechas existentes disponibles para reusar.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -521,18 +606,29 @@ function SuspenderFechaForm({
           variant="accent"
           size="sm"
           onClick={() => {
+            if (estrategia === 'REUSAR_EXISTENTE' && !fechaDestinoId) {
+              alert('Tenés que elegir una fecha destino.');
+              return;
+            }
             const msg =
-              estrategia === 'DOMINO'
-                ? `Vas a correr ${diasCorrimiento} días TODAS las fechas desde la ${fecha.numero}. ¿Confirmás?`
-                : estrategia === 'TRASNOCHE'
-                  ? `Vas a crear una Fecha ${fecha.numero + 1} bis y mover los partidos no jugados ahí. ¿Confirmás?`
-                  : 'Vas a marcar esta fecha como suspendida sin mover el calendario. ¿Confirmás?';
+              estrategia === 'AL_FINAL'
+                ? `Vas a crear una NUEVA fecha ${fecha.numero} REPROGRAMADA al final del calendario. ¿Confirmás?`
+                : estrategia === 'TRASNOCHE_DOMINO'
+                  ? `Vas a crear una NUEVA fecha ${fecha.numero} REPROGRAMADA intercalada y correr ${diasCorrimiento} días las siguientes. ¿Confirmás?`
+                  : estrategia === 'REUSAR_EXISTENTE'
+                    ? `Vas a mover los partidos a la fecha destino seleccionada. La fecha actual queda SUSPENDIDA. ¿Confirmás?`
+                    : 'Vas a marcar esta fecha como SUSPENDIDA sin crear nueva. Vos reprogramás partido por partido. ¿Confirmás?';
             if (!window.confirm(msg)) return;
             onSubmit({
               motivo,
               observaciones: observaciones.trim() || null,
               estrategia,
-              ...(estrategia === 'DOMINO' && { diasCorrimiento }),
+              ...(estrategia === 'TRASNOCHE_DOMINO' && { diasCorrimiento }),
+              ...(estrategia === 'REUSAR_EXISTENTE' && { fechaDestinoId }),
+              ...((estrategia === 'AL_FINAL' || estrategia === 'TRASNOCHE_DOMINO') &&
+                fechaInicioReprogramada && {
+                  fechaInicioReprogramada,
+                }),
             });
           }}
           loading={loading}

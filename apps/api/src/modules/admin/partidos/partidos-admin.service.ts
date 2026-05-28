@@ -91,10 +91,13 @@ export class PartidosAdminService {
         id: f.id,
         numero: f.numero,
         etiqueta: f.etiqueta,
+        fechaInicio: f.fechaInicio ?? null,
         estado: f.estado,
         motivoSuspension: f.motivoSuspension ?? null,
         suspendidoAt: f.suspendidoAt?.toISOString() ?? null,
         observacionesSuspension: f.observacionesSuspension ?? null,
+        tipoReprogramacion: f.tipoReprogramacion,
+        reemplazaFechaId: f.reemplazaFechaId,
         partidos: (partidosPorFecha.get(f.id) ?? []).map((p) => this.toDto(p, f.numero, f.etiqueta)),
       })),
     };

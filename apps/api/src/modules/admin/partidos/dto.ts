@@ -20,7 +20,12 @@ const MOTIVO_SUSPENSION = [
   'OTRO',
 ] as const;
 
-const ESTRATEGIA_SUSPENSION_FECHA = ['DOMINO', 'TRASNOCHE', 'MANUAL'] as const;
+const ESTRATEGIA_SUSPENSION_FECHA = [
+  'AL_FINAL',
+  'TRASNOCHE_DOMINO',
+  'REUSAR_EXISTENTE',
+  'MANUAL',
+] as const;
 
 const ESTADO_PARTIDO = [
   'PROGRAMADO',
@@ -165,7 +170,10 @@ export class SuspenderFechaDto {
   diasCorrimiento?: number;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  fechaBisDespuesDeNumero?: number;
+  @IsString()
+  fechaDestinoId?: string;
+
+  @IsOptional()
+  @IsString()
+  fechaInicioReprogramada?: string;
 }

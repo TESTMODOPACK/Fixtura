@@ -94,12 +94,17 @@ export const FechaAdminSchema = z.object({
   id: z.uuid(),
   numero: z.number().int(),
   etiqueta: z.string().nullable(),
+  fechaInicio: z.string().nullable().optional(),
   estado: z.enum(['PROGRAMADA', 'EN_CURSO', 'FINALIZADA', 'SUSPENDIDA', 'REPROGRAMADA']),
   partidos: z.array(PartidoAdminSchema),
   // Sprint 8 — trazabilidad de suspensión de fecha
   motivoSuspension: z.enum(MOTIVO_SUSPENSION).nullable(),
   suspendidoAt: z.iso.datetime().nullable(),
   observacionesSuspension: z.string().nullable(),
+  // Sprint 19 — diferencia ORIGINAL vs REPROGRAMADA para coexistencia
+  // de Fecha N suspendida + Fecha N reprogramada con mismo número.
+  tipoReprogramacion: z.enum(['ORIGINAL', 'REPROGRAMADA']).default('ORIGINAL'),
+  reemplazaFechaId: z.uuid().nullable().optional(),
 });
 export type FechaAdmin = z.infer<typeof FechaAdminSchema>;
 

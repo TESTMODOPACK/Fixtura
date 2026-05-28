@@ -21,10 +21,22 @@ export type MotivoSuspensionFecha =
   | 'DECISION_LIGA'
   | 'OTRO';
 
+/**
+ * Tipo de fecha respecto al calendario original del torneo:
+ *   ORIGINAL     → la fecha tal como se generó al crear el fixture.
+ *   REPROGRAMADA → fecha nueva creada como reemplazo de una SUSPENDIDA.
+ *                   Conserva el `numero` de la original para preservar la
+ *                   referencia ("Fecha 3 reprogramada").
+ *
+ * UNIQUE (torneoId, numero, tipoReprogramacion) → permite que coexistan
+ *   Fecha 3 ORIGINAL (SUSPENDIDA) y Fecha 3 REPROGRAMADA (PROGRAMADA).
+ */
+export type TipoReprogramacionFecha = 'ORIGINAL' | 'REPROGRAMADA';
+
 @Entity({ name: 'fechas' })
 @Index('idx_fechas_tenant', ['tenantId'])
 @Index('idx_fechas_torneo', ['torneoId'])
-@Unique(['torneoId', 'numero'])
+@Unique(['torneoId', 'numero', 'tipoReprogramacion'])
 export class Fecha {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -70,6 +82,29 @@ export class Fecha {
 
   @Column({ name: 'observaciones_suspension', type: 'text', nullable: true })
   observacionesSuspension!: string | null;
+
+  /**
+   * Sprint 19 (suspensión v2):
+   *   ORIGINAL → fecha del fixture original.
+   *   REPROGRAMADA → reemplazo creado al suspender una ORIGINAL.
+   * Si una fecha está SUSPENDIDA + ORIGINAL, debe existir (o crearse)
+   * una REPROGRAMADA con el mismo numero. La REPROGRAMADA referencia
+   * a la ORIGINAL via reemplazaFechaId para trazabilidad.
+   */
+  @Column({
+    name: 'tipo_reprogramacion',
+    type: 'varchar',
+    length: 20,
+    default: 'ORIGINAL',
+  })
+  tipoReprogramacion!: TipoReprogramacionFecha;
+
+  @Column({ name: 'reemplaza_fecha_id', type: 'uuid', nullable: true })
+  reemplazaFechaId!: string | null;
+
+  @ManyToOne(() => Fecha, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'reemplaza_fecha_id' })
+  reemplazaFecha?: Fecha | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

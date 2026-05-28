@@ -178,6 +178,39 @@ async function main(): Promise<void> {
     // Sprint 16: tabla dias_no_jugables (RF-13).
     await ensureDiasNoJugablesTable(client, log);
 
+    // Sprint 19 (suspensión v2): tipo_reprogramacion + UNIQUE compuesto.
+    // Permite coexistencia de Fecha 3 ORIGINAL (SUSPENDIDA) + Fecha 3 REPROGRAMADA.
+    await client.query(`
+      ALTER TABLE fechas
+        ADD COLUMN IF NOT EXISTS tipo_reprogramacion VARCHAR(20) NOT NULL DEFAULT 'ORIGINAL'
+          CHECK (tipo_reprogramacion IN ('ORIGINAL','REPROGRAMADA')),
+        ADD COLUMN IF NOT EXISTS reemplaza_fecha_id UUID REFERENCES fechas(id) ON DELETE SET NULL
+    `);
+    // Migrar UNIQUE: drop el viejo (torneo_id, numero) si existe y crear
+    // el nuevo (torneo_id, numero, tipo_reprogramacion). Postgres permite
+    // DROP CONSTRAINT IF EXISTS — seguro de correr varias veces.
+    // Busco el nombre del constraint generado por TypeORM (suele ser UQ_...)
+    const fechasUnique = await client.query(`
+      SELECT conname FROM pg_constraint
+       WHERE conrelid = 'fechas'::regclass
+         AND contype = 'u'
+         AND pg_get_constraintdef(oid) LIKE '%(torneo_id, numero)%'
+    `);
+    for (const row of fechasUnique.rows as Array<{ conname: string }>) {
+      await client.query(`ALTER TABLE fechas DROP CONSTRAINT IF EXISTS "${row.conname}"`);
+      log(`Drop UNIQUE viejo: ${row.conname}`);
+    }
+    await client.query(`
+      ALTER TABLE fechas
+        ADD CONSTRAINT uq_fechas_torneo_numero_tipo
+          UNIQUE (torneo_id, numero, tipo_reprogramacion)
+    `).catch((err: Error) => {
+      // Si ya existe, ignorar. ADD CONSTRAINT no soporta IF NOT EXISTS antes
+      // de PG 16 pero el error de duplicado es benigno aquí.
+      if (!/already exists/i.test(err.message)) throw err;
+    });
+    log('fechas.tipo_reprogramacion + UNIQUE compuesto asegurados (Sprint 19).');
+
     // Sprint 18 (RF-17): cronómetro persistente de Match Center.
     // Mantenemos el estado por partido para sobrevivir reinicios del API.
     await client.query(`

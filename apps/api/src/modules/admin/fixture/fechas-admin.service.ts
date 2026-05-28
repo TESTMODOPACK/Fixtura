@@ -18,17 +18,27 @@ import { Fecha } from '../../competition/entities/fecha.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 
 /**
- * Service de suspensión / reactivación de FECHAS completas.
+ * Sprint 19 — Suspensión v2 de fechas completas.
  *
- * 3 estrategias:
- *   DOMINO    → corre N días todas las fechas siguientes en transacción.
- *   TRASNOCHE → crea una "fecha bis" intercalada (numero conserva, etiqueta "bis").
- *   MANUAL    → solo marca la fecha como SUSPENDIDA, sin tocar el resto.
+ * Cambio de modelo: cuando una fecha N se suspende, queda en estado
+ * SUSPENDIDA con tipo_reprogramacion='ORIGINAL'. Si la estrategia no
+ * es MANUAL, se crea una fecha nueva con el mismo `numero`=N pero
+ * tipo_reprogramacion='REPROGRAMADA' que toma los partidos no
+ * cerrados. El UNIQUE compuesto permite que ambas coexistan.
  *
- * En todas las estrategias, los partidos de la fecha suspendida pasan
- * a estado SUSPENDIDO_FUERZA_MAYOR con el mismo motivo. Si tenían acta
- * cerrada, NO se suspenden (la suspensión es a futuro, no destruye
- * resultados pasados).
+ * Estrategias:
+ *   AL_FINAL          → la REPROGRAMADA se ubica después de la última
+ *                       fecha del torneo. El resto NO se mueve.
+ *   TRASNOCHE_DOMINO  → la REPROGRAMADA se intercala entre la suspendida
+ *                       y la siguiente. Las posteriores se corren N días
+ *                       y quedan marcadas REPROGRAMADAS.
+ *   REUSAR_EXISTENTE  → no se crea fecha nueva. Los partidos se mueven a
+ *                       una fecha existente del torneo (fechaDestinoId)
+ *                       que pasa a tipo REPROGRAMADA.
+ *   MANUAL            → solo marca SUSPENDIDA. Sin fecha nueva.
+ *
+ * Si la fecha original tenía acta cerrada en algún partido, esos partidos
+ * NO se tocan (la suspensión es a futuro, no destruye historial).
  */
 @Injectable()
 export class FechasAdminService {
@@ -39,9 +49,6 @@ export class FechasAdminService {
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
   ) {}
 
-  /**
-   * Suspende una fecha y aplica la estrategia elegida.
-   */
   @Transactional()
   async suspenderFecha(
     fechaId: string,
@@ -52,9 +59,14 @@ export class FechasAdminService {
       observaciones?: string | null;
       estrategia: EstrategiaSuspensionFecha;
       diasCorrimiento?: number;
-      fechaBisDespuesDeNumero?: number;
+      fechaDestinoId?: string;
+      fechaInicioReprogramada?: string;
     },
-  ): Promise<{ fechaSuspendida: Fecha; fechasAfectadas: number; nuevaFechaBisId: string | null }> {
+  ): Promise<{
+    fechaSuspendida: Fecha;
+    fechasAfectadas: number;
+    nuevaFechaBisId: string | null;
+  }> {
     const fecha = await this.fechaRepo.findOne({
       where: { id: fechaId, tenantId },
     });
@@ -69,9 +81,7 @@ export class FechasAdminService {
       throw new BadRequestException('La fecha ya está suspendida.');
     }
 
-    // AUDIT-5: si hay partidos EN_CURSO, no suspender. El admin debe
-    // cerrar/reabrir actas en curso primero. Sobrescribir EN_CURSO
-    // con SUSPENDIDO perdería el progreso del partido.
+    // AUDIT-5: si hay partidos EN_CURSO, no suspender.
     const enCurso = await this.partidoRepo
       .createQueryBuilder('p')
       .where('p.tenant_id = :tenantId', { tenantId })
@@ -84,15 +94,17 @@ export class FechasAdminService {
       );
     }
 
-    // Marcar la fecha como SUSPENDIDA + trazabilidad.
+    // 1. Marcar la fecha original como SUSPENDIDA.
     fecha.estado = 'SUSPENDIDA';
     fecha.motivoSuspension = input.motivo;
     fecha.suspendidoAt = new Date();
     fecha.suspendidoByUserId = actorUserId;
     fecha.observacionesSuspension = input.observaciones?.trim() || null;
+    fecha.tipoReprogramacion = 'ORIGINAL';
     await this.fechaRepo.save(fecha);
 
-    // Marcar los partidos no cerrados como SUSPENDIDO_FUERZA_MAYOR.
+    // 2. Marcar los partidos no cerrados como SUSPENDIDO_FUERZA_MAYOR
+    // (después los movemos si la estrategia crea/reusa una fecha).
     await this.partidoRepo
       .createQueryBuilder()
       .update()
@@ -109,33 +121,87 @@ export class FechasAdminService {
       .andWhere(`estado NOT IN ('FINALIZADO','WALKOVER','SUSPENDIDO_FUERZA_MAYOR')`)
       .execute();
 
+    // 3. Aplicar estrategia. Si la estrategia crea fecha nueva (todas
+    // salvo MANUAL y REUSAR_EXISTENTE), validar que no exista YA otra
+    // REPROGRAMADA con mismo número — el UNIQUE solo permite una por
+    // número y la colisión daría un 500 feo.
+    if (
+      input.estrategia === 'AL_FINAL' ||
+      input.estrategia === 'TRASNOCHE_DOMINO'
+    ) {
+      const existeRepro = await this.fechaRepo.findOne({
+        where: {
+          tenantId,
+          torneoId: fecha.torneoId,
+          numero: fecha.numero,
+          tipoReprogramacion: 'REPROGRAMADA',
+        },
+      });
+      if (existeRepro) {
+        throw new ConflictException(
+          `Ya existe una fecha REPROGRAMADA para la fecha ${fecha.numero}. ` +
+            'Eliminala o reactivala antes de crear otra (o usá la estrategia REUSAR_EXISTENTE apuntando a ella).',
+        );
+      }
+    }
+
     let fechasAfectadas = 0;
     let nuevaFechaBisId: string | null = null;
 
-    if (input.estrategia === 'DOMINO') {
-      const dias = input.diasCorrimiento ?? 7;
-      fechasAfectadas = await this.aplicarDomino(tenantId, fecha, dias);
-    } else if (input.estrategia === 'TRASNOCHE') {
-      nuevaFechaBisId = await this.aplicarTrasnoche(
-        tenantId,
-        fecha,
-        input.fechaBisDespuesDeNumero,
-      );
+    switch (input.estrategia) {
+      case 'AL_FINAL':
+        nuevaFechaBisId = await this.aplicarAlFinal(
+          tenantId,
+          fecha,
+          input.fechaInicioReprogramada,
+        );
+        fechasAfectadas = 1;
+        break;
+      case 'TRASNOCHE_DOMINO':
+        {
+          const res = await this.aplicarTrasnocheDomino(
+            tenantId,
+            fecha,
+            input.diasCorrimiento ?? 7,
+            input.fechaInicioReprogramada,
+          );
+          nuevaFechaBisId = res.nuevaId;
+          fechasAfectadas = res.fechasCorridas + 1;
+        }
+        break;
+      case 'REUSAR_EXISTENTE':
+        if (!input.fechaDestinoId) {
+          throw new BadRequestException(
+            'Estrategia REUSAR_EXISTENTE requiere fechaDestinoId.',
+          );
+        }
+        nuevaFechaBisId = await this.aplicarReusarExistente(
+          tenantId,
+          fecha,
+          input.fechaDestinoId,
+        );
+        fechasAfectadas = 1;
+        break;
+      case 'MANUAL':
+      default:
+        // Solo marca SUSPENDIDA. Los partidos quedan en SUSPENDIDO_FUERZA_MAYOR
+        // y el admin los reprograma de a uno desde el detalle.
+        break;
     }
-    // MANUAL: no hace nada adicional.
 
     this.log.log(
-      `Fecha ${fechaId} suspendida estrategia=${input.estrategia} motivo=${input.motivo} afectadas=${fechasAfectadas}`,
+      `Fecha ${fechaId} suspendida estrategia=${input.estrategia} motivo=${input.motivo} ` +
+        `nueva=${nuevaFechaBisId ?? '—'} afectadas=${fechasAfectadas}`,
     );
 
     return { fechaSuspendida: fecha, fechasAfectadas, nuevaFechaBisId };
   }
 
   /**
-   * Reactiva una fecha SUSPENDIDA. Sus partidos vuelven a PROGRAMADO si
-   * estaban SUSPENDIDO_FUERZA_MAYOR. No revierte el corrimiento de
-   * Dominó ni borra la fecha bis del Trasnoche — eso sería complejo y
-   * el admin puede hacerlo manualmente si lo necesita.
+   * Reactiva una fecha SUSPENDIDA. Vuelve a PROGRAMADA y los partidos
+   * en SUSPENDIDO_FUERZA_MAYOR vuelven a PROGRAMADO. Si existía una
+   * REPROGRAMADA asociada, NO se borra automáticamente — el admin
+   * decide qué hacer con ella (eliminarla o quedársela como N bis).
    */
   async reactivarFecha(fechaId: string, tenantId: string): Promise<Fecha> {
     const fecha = await this.fechaRepo.findOne({ where: { id: fechaId, tenantId } });
@@ -172,40 +238,97 @@ export class FechasAdminService {
   }
 
   /**
-   * DOMINO: suma `dias` a fecha_inicio/fin de la fecha suspendida y de
-   * todas las fechas posteriores del mismo torneo. También suma a
-   * `fecha_hora` de los partidos no finalizados de esas fechas.
+   * AL_FINAL — crea una nueva fecha REPROGRAMADA al final del calendario
+   * del torneo. Si no se pasó fechaInicioReprogramada, se calcula como
+   * (fechaInicio de la última fecha + diasEntreFechas estimados).
    */
-  private async aplicarDomino(
+  private async aplicarAlFinal(
+    tenantId: string,
+    fechaSuspendida: Fecha,
+    fechaInicioInput?: string,
+  ): Promise<string> {
+    const ultima = await this.fechaRepo
+      .createQueryBuilder('f')
+      .where('f.tenant_id = :tenantId', { tenantId })
+      .andWhere('f.torneo_id = :torneoId', {
+        torneoId: fechaSuspendida.torneoId,
+      })
+      .orderBy('f.numero', 'DESC')
+      .addOrderBy(
+        `CASE WHEN f.tipo_reprogramacion = 'REPROGRAMADA' THEN 0 ELSE 1 END`,
+      )
+      .getOne();
+
+    const fechaInicio =
+      fechaInicioInput ??
+      (ultima?.fechaInicio ? this.sumarDias(ultima.fechaInicio, 7) : null);
+
+    const nueva = this.fechaRepo.create({
+      tenantId,
+      torneoId: fechaSuspendida.torneoId,
+      numero: fechaSuspendida.numero,
+      etiqueta: `Fecha ${fechaSuspendida.numero} · Reprogramada`,
+      fechaInicio,
+      fechaFin: fechaInicio ? this.sumarDias(fechaInicio, 1) : null,
+      estado: 'PROGRAMADA',
+      tipoReprogramacion: 'REPROGRAMADA',
+      reemplazaFechaId: fechaSuspendida.id,
+    });
+    const saved = await this.fechaRepo.save(nueva);
+
+    await this.moverPartidosSuspendidosA(
+      tenantId,
+      fechaSuspendida.id,
+      saved.id,
+      fechaInicio,
+    );
+    return saved.id;
+  }
+
+  /**
+   * TRASNOCHE_DOMINO — crea una REPROGRAMADA intercalada justo después
+   * de la suspendida y corre las posteriores N días para hacer espacio.
+   * Las posteriores corridas se marcan como REPROGRAMADAS también para
+   * trazabilidad ("esta fecha se movió por una reprogramación").
+   *
+   * No renumeramos (a diferencia del flujo viejo): la nueva fecha N va
+   * después de la suspendida N, pero conserva numero=N porque el
+   * UNIQUE compuesto lo permite (la suspendida es ORIGINAL, la nueva es
+   * REPROGRAMADA).
+   */
+  private async aplicarTrasnocheDomino(
     tenantId: string,
     fechaSuspendida: Fecha,
     dias: number,
-  ): Promise<number> {
-    const fechasDesdeAqui = await this.fechaRepo
+    fechaInicioInput?: string,
+  ): Promise<{ nuevaId: string; fechasCorridas: number }> {
+    // Correr las posteriores (numero > N) en N días.
+    const posteriores = await this.fechaRepo
       .createQueryBuilder('f')
       .where('f.tenant_id = :tenantId', { tenantId })
-      .andWhere('f.torneo_id = :torneoId', { torneoId: fechaSuspendida.torneoId })
-      .andWhere('f.numero >= :n', { n: fechaSuspendida.numero })
+      .andWhere('f.torneo_id = :torneoId', {
+        torneoId: fechaSuspendida.torneoId,
+      })
+      .andWhere('f.numero > :n', { n: fechaSuspendida.numero })
       .getMany();
 
-    for (const f of fechasDesdeAqui) {
-      if (f.fechaInicio) {
-        f.fechaInicio = this.sumarDias(f.fechaInicio, dias);
-      }
-      if (f.fechaFin) {
-        f.fechaFin = this.sumarDias(f.fechaFin, dias);
+    for (const f of posteriores) {
+      if (f.fechaInicio) f.fechaInicio = this.sumarDias(f.fechaInicio, dias);
+      if (f.fechaFin) f.fechaFin = this.sumarDias(f.fechaFin, dias);
+      // Marcar como REPROGRAMADA para visibilidad (no se duplica el
+      // registro — solo cambia el tipo).
+      if (f.tipoReprogramacion === 'ORIGINAL') {
+        f.tipoReprogramacion = 'REPROGRAMADA';
       }
     }
-    await this.fechaRepo.save(fechasDesdeAqui);
+    if (posteriores.length > 0) await this.fechaRepo.save(posteriores);
 
-    const fechaIds = fechasDesdeAqui.map((f) => f.id);
+    const fechaIds = posteriores.map((f) => f.id);
     if (fechaIds.length > 0) {
       await this.partidoRepo
         .createQueryBuilder()
         .update()
-        .set({
-          fechaHora: () => `fecha_hora + INTERVAL '${dias} days'`,
-        })
+        .set({ fechaHora: () => `fecha_hora + INTERVAL '${dias} days'` })
         .where('tenant_id = :tenantId', { tenantId })
         .andWhere('fecha_id IN (:...fechaIds)', { fechaIds })
         .andWhere('fecha_hora IS NOT NULL')
@@ -213,79 +336,117 @@ export class FechasAdminService {
         .execute();
     }
 
-    return fechasDesdeAqui.length;
+    // Crear nueva REPROGRAMADA con numero = N.
+    const fechaInicio =
+      fechaInicioInput ??
+      (fechaSuspendida.fechaInicio
+        ? this.sumarDias(fechaSuspendida.fechaInicio, dias)
+        : null);
+
+    const nueva = this.fechaRepo.create({
+      tenantId,
+      torneoId: fechaSuspendida.torneoId,
+      numero: fechaSuspendida.numero,
+      etiqueta: `Fecha ${fechaSuspendida.numero} · Reprogramada`,
+      fechaInicio,
+      fechaFin: fechaInicio ? this.sumarDias(fechaInicio, 1) : null,
+      estado: 'PROGRAMADA',
+      tipoReprogramacion: 'REPROGRAMADA',
+      reemplazaFechaId: fechaSuspendida.id,
+    });
+    const saved = await this.fechaRepo.save(nueva);
+
+    await this.moverPartidosSuspendidosA(
+      tenantId,
+      fechaSuspendida.id,
+      saved.id,
+      fechaInicio,
+    );
+    return { nuevaId: saved.id, fechasCorridas: posteriores.length };
   }
 
   /**
-   * TRASNOCHE: crea una nueva fecha "bis" inmediatamente después de la
-   * suspendida. Mueve los partidos de la fecha suspendida a esa fecha
-   * bis. El resto del calendario NO se altera.
-   *
-   * Si la liga ya tenía una fecha N+1, la nueva se inserta entre N y
-   * N+1 con numero = N (manteniendo el unique constraint torneoId/numero
-   * no es posible — usamos numero = N pero etiqueta "bis"). En la
-   * práctica esto va a fallar el UNIQUE en torneoId+numero, así que:
-   *
-   *   1. Renumeramos las fechas N+1 en adelante a N+2, N+3, ...
-   *   2. La nueva fecha bis toma numero = N+1.
-   *
-   * Esto preserva el orden visual sin romper constraints.
+   * REUSAR_EXISTENTE — no crea fecha nueva. Mueve los partidos de la
+   * suspendida a `fechaDestinoId`. Esa fecha destino se marca REPROGRAMADA
+   * y referencia a la suspendida vía reemplaza_fecha_id (si no tenía
+   * referencia previa).
    */
-  private async aplicarTrasnoche(
+  private async aplicarReusarExistente(
     tenantId: string,
     fechaSuspendida: Fecha,
-    _despuesDeNumero?: number,
+    fechaDestinoId: string,
   ): Promise<string> {
-    const nuevoNumero = fechaSuspendida.numero + 1;
-
-    // Renumerar fechas posteriores hacia adelante para hacer espacio.
-    // OJO: debemos ir de la última a la primera para no chocar con el
-    // UNIQUE constraint mientras avanzamos.
-    const posteriores = await this.fechaRepo
-      .createQueryBuilder('f')
-      .where('f.tenant_id = :tenantId', { tenantId })
-      .andWhere('f.torneo_id = :torneoId', { torneoId: fechaSuspendida.torneoId })
-      .andWhere('f.numero >= :n', { n: nuevoNumero })
-      .orderBy('f.numero', 'DESC')
-      .getMany();
-
-    for (const f of posteriores) {
-      f.numero = f.numero + 1;
-      await this.fechaRepo.save(f);
+    if (fechaDestinoId === fechaSuspendida.id) {
+      throw new BadRequestException(
+        'La fecha destino no puede ser la misma que se está suspendiendo.',
+      );
+    }
+    const destino = await this.fechaRepo.findOne({
+      where: { id: fechaDestinoId, tenantId },
+    });
+    if (!destino) throw new NotFoundException('Fecha destino no encontrada.');
+    if (destino.torneoId !== fechaSuspendida.torneoId) {
+      throw new BadRequestException(
+        'La fecha destino pertenece a otro torneo.',
+      );
+    }
+    if (destino.estado === 'SUSPENDIDA' || destino.estado === 'FINALIZADA') {
+      throw new BadRequestException(
+        `La fecha destino está ${destino.estado}, no puede recibir partidos.`,
+      );
     }
 
-    // Crear la fecha bis.
-    const fechaBis = this.fechaRepo.create({
+    destino.tipoReprogramacion = 'REPROGRAMADA';
+    if (!destino.reemplazaFechaId) {
+      destino.reemplazaFechaId = fechaSuspendida.id;
+    }
+    await this.fechaRepo.save(destino);
+
+    await this.moverPartidosSuspendidosA(
       tenantId,
-      torneoId: fechaSuspendida.torneoId,
-      numero: nuevoNumero,
-      etiqueta: `${fechaSuspendida.etiqueta ?? `Fecha ${fechaSuspendida.numero}`} (bis)`,
-      estado: 'PROGRAMADA',
-      // No copiamos fechaInicio/fin — el admin las edita después según
-      // cuándo se pueda jugar.
-    });
-    const saved = await this.fechaRepo.save(fechaBis);
+      fechaSuspendida.id,
+      destino.id,
+      destino.fechaInicio,
+    );
+    return destino.id;
+  }
 
-    // Mover los partidos no cerrados de la fecha suspendida a la bis.
-    // Vuelven a PROGRAMADO porque pasaron a una fecha nueva.
-    await this.partidoRepo
-      .createQueryBuilder()
-      .update()
-      .set({
-        fechaId: saved.id,
-        estado: 'PROGRAMADO',
-        motivoSuspension: null,
-        // Conservamos suspendidoAt como historial — el partido recuerda
-        // que fue suspendido aunque ahora esté re-programado.
-      })
-      .where('tenant_id = :tenantId', { tenantId })
-      .andWhere('fecha_id = :fechaId', { fechaId: fechaSuspendida.id })
-      .andWhere('acta_cerrada_at IS NULL')
-      .execute();
+  /**
+   * Mueve los partidos que quedaron en SUSPENDIDO_FUERZA_MAYOR de la
+   * fecha origen a la fecha destino. Los vuelve a PROGRAMADO y ajusta
+   * fecha_hora si la fecha destino tiene fechaInicio (mantiene la hora,
+   * cambia el día).
+   */
+  private async moverPartidosSuspendidosA(
+    tenantId: string,
+    origenId: string,
+    destinoId: string,
+    fechaInicioDestino: string | null,
+  ): Promise<void> {
+    const partidos = await this.partidoRepo
+      .createQueryBuilder('p')
+      .where('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('p.fecha_id = :origenId', { origenId })
+      .andWhere('p.acta_cerrada_at IS NULL')
+      .getMany();
 
-    // La fecha original queda SUSPENDIDA pero sin partidos activos. Es
-    // el "registro histórico" de que esa fecha no se jugó.
-    return saved.id;
+    for (const p of partidos) {
+      p.fechaId = destinoId;
+      p.estado = 'PROGRAMADO';
+      p.motivoSuspension = null;
+      if (fechaInicioDestino && p.fechaHora) {
+        const horaOrig = new Date(p.fechaHora);
+        const nuevo = new Date(`${fechaInicioDestino}T00:00:00Z`);
+        nuevo.setUTCHours(
+          horaOrig.getUTCHours(),
+          horaOrig.getUTCMinutes(),
+          0,
+          0,
+        );
+        p.fechaHora = nuevo;
+      }
+    }
+    if (partidos.length > 0) await this.partidoRepo.save(partidos);
   }
 
   private sumarDias(fechaIso: string, dias: number): string {
