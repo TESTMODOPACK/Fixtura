@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsIn,
@@ -19,6 +21,10 @@ type TipoFormato = (typeof TIPO_FORMATO)[number];
 
 const ESTADO_TORNEO = ['DRAFT', 'ACTIVO', 'CERRADO'] as const;
 type EstadoTorneo = (typeof ESTADO_TORNEO)[number];
+
+// Sprint 12: keys válidas para tiebreakers. Sincronizado con
+// PublicService.compararTiebreaker — agregar acá si se suma criterio.
+const TIEBREAKER_KEYS = ['pts', 'dg', 'gf', 'gc', 'pg', 'ed', 'nombre'] as const;
 
 export class CreateTorneoDto {
   @IsUUID()
@@ -75,7 +81,12 @@ export class CreateTorneoDto {
   @IsUrl()
   reglamentoUrl?: string | null;
 
+  // Sprint 12: orden de tiebreakers en la tabla. Solo keys conocidas.
   @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @IsIn(TIEBREAKER_KEYS, { each: true })
   tablaTiebreakers?: string[];
 }
 
@@ -136,4 +147,11 @@ export class UpdateTorneoDto {
   @IsOptional()
   @IsUrl()
   reglamentoUrl?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @IsIn(TIEBREAKER_KEYS, { each: true })
+  tablaTiebreakers?: string[];
 }
