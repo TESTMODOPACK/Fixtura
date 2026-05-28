@@ -9,6 +9,7 @@ import { DatabaseModule } from './database/database.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TenantContextInterceptor } from './common/interceptors/tenant-context.interceptor';
+import { RlsModule } from './common/rls/rls.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CompetitionModule } from './modules/competition/competition.module';
@@ -48,6 +49,11 @@ import { UsersModule } from './modules/users/users.module';
     ScheduleModule.forRoot(),
 
     DatabaseModule,
+    // RlsModule debe registrarse antes que AdminModule (lo usan los
+    // crons de Dunning y SII). Es @Global pero NestJS solo lo registra
+    // si está en algún imports — sin esto, TenantCronRunner no se
+    // resuelve y los crons crashean al bootstrap (incidente 2026-05-28).
+    RlsModule,
     EmailModule,
     HealthModule,
     AuthModule,
