@@ -188,9 +188,190 @@ CREATE TABLE IF NOT EXISTS designaciones_recinto (
 
 \echo '[6/7] designaciones_recinto verificada'
 
--- ── 7. Conteos finales para verificar ───────────────────────────────
+-- ── 7. Sprint 7A: transacciones (pagos online) ───────────────────────
+CREATE TABLE IF NOT EXISTS transacciones (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  cobro_id            UUID,
+  provider            VARCHAR(20) NOT NULL DEFAULT 'MOCK',
+  provider_order_id   VARCHAR(100),
+  provider_token      VARCHAR(255),
+  monto               INT NOT NULL,
+  estado              VARCHAR(20) NOT NULL DEFAULT 'INICIADA',
+  payload_request     JSONB,
+  payload_response    JSONB,
+  retorno_url         VARCHAR(500),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_transacciones_tenant ON transacciones(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_transacciones_estado ON transacciones(estado);
+
+\echo '[7] transacciones verificada'
+
+-- ── 8. Sprint 7B: documentos_tributarios (SII) ───────────────────────
+CREATE TABLE IF NOT EXISTS documentos_tributarios (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  cobro_id            UUID,
+  transaccion_id      UUID,
+  tipo                VARCHAR(30) NOT NULL,
+  folio               VARCHAR(50),
+  provider            VARCHAR(30) NOT NULL DEFAULT 'MOCK',
+  provider_doc_id     VARCHAR(100),
+  pdf_url             VARCHAR(500),
+  xml_url             VARCHAR(500),
+  monto               INT NOT NULL,
+  estado              VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE',
+  emitido_at          TIMESTAMPTZ,
+  metadata            JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_docs_tributarios_tenant ON documentos_tributarios(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_docs_tributarios_estado ON documentos_tributarios(estado);
+
+\echo '[8] documentos_tributarios verificada'
+
+-- ── 9. Sprint 7C: cobros.estado_dunning ──────────────────────────────
+ALTER TABLE cobros
+  ADD COLUMN IF NOT EXISTS estado_dunning VARCHAR(20),
+  ADD COLUMN IF NOT EXISTS ultimo_recordatorio_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS cantidad_recordatorios INT NOT NULL DEFAULT 0;
+
+\echo '[9] cobros.estado_dunning + recordatorios asegurados'
+
+-- ── 10. Sprint 8: suspensión de partidos y fechas ───────────────────
+ALTER TABLE partidos
+  ADD COLUMN IF NOT EXISTS motivo_suspension VARCHAR(30),
+  ADD COLUMN IF NOT EXISTS suspendido_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS suspendido_by_user_id UUID,
+  ADD COLUMN IF NOT EXISTS observaciones_suspension TEXT;
+
+ALTER TABLE fechas
+  ADD COLUMN IF NOT EXISTS motivo_suspension VARCHAR(30),
+  ADD COLUMN IF NOT EXISTS suspendido_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS suspendido_by_user_id UUID,
+  ADD COLUMN IF NOT EXISTS observaciones_suspension TEXT;
+
+\echo '[10] columnas de suspensión en partidos+fechas aseguradas'
+
+-- ── 11. Sprint 10: magic_links (onboarding + reset password) ─────────
+-- magic_links debería existir desde InitialSchema, pero si por algún
+-- motivo no, lo creamos. Las columnas de payload se aseguran ADD IF.
+CREATE TABLE IF NOT EXISTS magic_links (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id       UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  purpose         VARCHAR(30) NOT NULL,
+  token_hash      VARCHAR(64) NOT NULL UNIQUE,
+  email           VARCHAR(150),
+  phone           VARCHAR(20),
+  personal_id     UUID,
+  user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
+  metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  expires_at      TIMESTAMPTZ NOT NULL,
+  used_at         TIMESTAMPTZ,
+  created_by      UUID REFERENCES users(id),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (email IS NOT NULL OR phone IS NOT NULL OR personal_id IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_magic_links_token ON magic_links(token_hash);
+
+\echo '[11] magic_links verificada'
+
+-- ── 12. Sprint 12: torneos.tabla_tiebreakers (CAUSA DEL INCIDENTE) ───
+ALTER TABLE torneos
+  ADD COLUMN IF NOT EXISTS tabla_tiebreakers JSONB
+    NOT NULL DEFAULT '["pts","dg","gf","nombre"]'::jsonb;
+
+\echo '[12] torneos.tabla_tiebreakers asegurada (Sprint 12)'
+
+-- ── 13. Sprint 14: push_subscriptions ────────────────────────────────
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id       UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
+  scope_type      VARCHAR(20) NOT NULL,
+  scope_id        UUID,
+  provider        VARCHAR(20) NOT NULL DEFAULT 'MOCK',
+  endpoint        TEXT NOT NULL,
+  p256dh          TEXT,
+  auth            TEXT,
+  user_agent      VARCHAR(300),
+  last_used_at    TIMESTAMPTZ,
+  revoked_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_push_tenant ON push_subscriptions(tenant_id);
+
+\echo '[13] push_subscriptions verificada'
+
+-- ── 14. AUDIT-3: jugadores_inscritos.torneo_id + UNIQUE rut×torneo ───
+ALTER TABLE jugadores_inscritos
+  ADD COLUMN IF NOT EXISTS torneo_id UUID;
+
+-- Backfill desde equipo si quedó NULL
+UPDATE jugadores_inscritos j
+   SET torneo_id = e.torneo_id
+  FROM equipos e
+ WHERE j.equipo_id = e.id AND j.torneo_id IS NULL;
+
+-- Hacer NOT NULL una vez backfilled (si la columna sigue NULL es porque
+-- el equipo no existe — caso anómalo que el operador debe limpiar a mano)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM jugadores_inscritos WHERE torneo_id IS NULL) THEN
+    RAISE NOTICE 'WARN: jugadores_inscritos con torneo_id NULL — revisar a mano antes de aplicar NOT NULL.';
+  ELSE
+    ALTER TABLE jugadores_inscritos ALTER COLUMN torneo_id SET NOT NULL;
+  END IF;
+END$$;
+
+CREATE INDEX IF NOT EXISTS idx_jugadores_torneo ON jugadores_inscritos(torneo_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_jugador_rut_torneo
+  ON jugadores_inscritos(rut, torneo_id)
+  WHERE rut IS NOT NULL AND activo = TRUE;
+
+\echo '[14] jugadores_inscritos.torneo_id + UNIQUE asegurados (AUDIT-3)'
+
+-- ── 15. AUDIT-7: índices de performance ──────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_partidos_fecha_estado ON partidos(fecha_id, estado);
+CREATE INDEX IF NOT EXISTS idx_partidos_tabla
+  ON partidos(estado, fecha_id)
+  WHERE estado IN ('FINALIZADO','WALKOVER');
+CREATE INDEX IF NOT EXISTS idx_sanciones_rut_torneo
+  ON sanciones_activas(torneo_id, rut, cumplida)
+  WHERE rut IS NOT NULL;
+
+\echo '[15] índices de performance asegurados (AUDIT-7)'
+
+-- ── 16. AUDIT-11: users.scheduled_deletion_at (Ley 19.628) ──────────
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS scheduled_deletion_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_users_scheduled_deletion
+  ON users(scheduled_deletion_at)
+  WHERE scheduled_deletion_at IS NOT NULL;
+
+\echo '[16] users.scheduled_deletion_at asegurada (AUDIT-11)'
+
+-- ── 17. Conteos finales para verificar ───────────────────────────────
 \echo ''
 \echo '──── VERIFICACIÓN POST-HEAL ────'
+
+-- Confirmar columnas críticas del incidente 2026-05-28
+SELECT
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='torneos' AND column_name='tabla_tiebreakers')
+       THEN '✅' ELSE '❌' END || ' torneos.tabla_tiebreakers' AS check
+UNION ALL SELECT
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='users' AND column_name='scheduled_deletion_at')
+       THEN '✅' ELSE '❌' END || ' users.scheduled_deletion_at'
+UNION ALL SELECT
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='jugadores_inscritos' AND column_name='torneo_id')
+       THEN '✅' ELSE '❌' END || ' jugadores_inscritos.torneo_id';
+
 
 SELECT 'partidos' AS tabla, COUNT(*) AS filas FROM partidos
 UNION ALL SELECT 'torneos',  COUNT(*) FROM torneos

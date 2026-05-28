@@ -40,9 +40,27 @@ async function main(): Promise<void> {
   // fallar si el usuario no tiene CREATEROLE.
   // En prod, sí queremos el rol separado (FORCE RLS muerde sobre dueños),
   // y este script corre antes de `node dist/main`.
+  //
+  // Incidente 2026-05-28: el .env de prod tenía SKIP_CLEANUP_ORPHANS=true
+  // heredado de la config de dev. cleanup-orphans nunca corrió, así que
+  // las columnas que dependen de él (tabla_tiebreakers, scheduled_deletion_at,
+  // torneo_id en jugadores_inscritos, etc.) quedaron sin aplicar. El portal
+  // público revienta con `column t.tabla_tiebreakers does not exist`.
+  //
+  // Para evitar que vuelva a pasar, IGNORAMOS el skip en producción —
+  // mejor que el container falle al arrancar (loud failure) que servir
+  // requests con schema corrupto (silent corruption).
   if (process.env.SKIP_CLEANUP_ORPHANS === 'true') {
-    log('SKIP_CLEANUP_ORPHANS=true — saltando.');
-    return;
+    if (process.env.NODE_ENV === 'production') {
+      log(
+        'SKIP_CLEANUP_ORPHANS=true detectado en NODE_ENV=production — IGNORANDO. ' +
+          'En prod, cleanup-orphans es necesario para aplicar cambios aditivos de schema. ' +
+          'Si querés realmente saltarlo, seteá NODE_ENV distinto (no recomendado).',
+      );
+    } else {
+      log('SKIP_CLEANUP_ORPHANS=true — saltando.');
+      return;
+    }
   }
 
   const client = new Client({ connectionString: url });
