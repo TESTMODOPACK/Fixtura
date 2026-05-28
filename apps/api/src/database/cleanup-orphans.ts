@@ -477,6 +477,25 @@ async function ensureTransaccionesTable(
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  // Auto-cura schema drift (incidente 2026-05-28).
+  await client.query(`
+    ALTER TABLE transacciones
+      ADD COLUMN IF NOT EXISTS tenant_id           UUID REFERENCES tenants(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS cobro_id            UUID REFERENCES cobros(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS monto               INTEGER,
+      ADD COLUMN IF NOT EXISTS pasarela            VARCHAR(30),
+      ADD COLUMN IF NOT EXISTS estado              VARCHAR(30) DEFAULT 'PENDIENTE',
+      ADD COLUMN IF NOT EXISTS idempotency_key     VARCHAR(150),
+      ADD COLUMN IF NOT EXISTS token_pasarela      VARCHAR(200),
+      ADD COLUMN IF NOT EXISTS url_redireccion     VARCHAR(500),
+      ADD COLUMN IF NOT EXISTS respuesta_pasarela  JSONB,
+      ADD COLUMN IF NOT EXISTS user_pagador_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS pagado_at           TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS expira_at           TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS notas               TEXT,
+      ADD COLUMN IF NOT EXISTS created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
   await ensureRls(client, 'transacciones');
   await client.query(
     `CREATE INDEX IF NOT EXISTS idx_transacciones_tenant ON transacciones(tenant_id)`,
@@ -524,6 +543,28 @@ async function ensureDocumentosTributariosTable(
       created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+  // Auto-cura schema drift.
+  await client.query(`
+    ALTER TABLE documentos_tributarios
+      ADD COLUMN IF NOT EXISTS tenant_id           UUID REFERENCES tenants(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS transaccion_id      UUID REFERENCES transacciones(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS cobro_id            UUID REFERENCES cobros(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS tipo                VARCHAR(30) DEFAULT 'BOLETA',
+      ADD COLUMN IF NOT EXISTS monto               INTEGER,
+      ADD COLUMN IF NOT EXISTS rut_receptor        VARCHAR(20),
+      ADD COLUMN IF NOT EXISTS razon_social        VARCHAR(200),
+      ADD COLUMN IF NOT EXISTS folio_sii           BIGINT,
+      ADD COLUMN IF NOT EXISTS url_pdf             VARCHAR(500),
+      ADD COLUMN IF NOT EXISTS url_xml             VARCHAR(500),
+      ADD COLUMN IF NOT EXISTS estado              VARCHAR(30) DEFAULT 'PENDIENTE_EMISION',
+      ADD COLUMN IF NOT EXISTS intentos            SMALLINT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS respuesta_sii       JSONB,
+      ADD COLUMN IF NOT EXISTS emitido_at          TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS ultimo_error        TEXT,
+      ADD COLUMN IF NOT EXISTS ultimo_intento_at   TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
   `);
   await ensureRls(client, 'documentos_tributarios');
   await client.query(
@@ -612,6 +653,22 @@ async function ensurePushSubscriptionsTable(
       created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  // Auto-cura schema drift (mismo motivo que en magic_links).
+  await client.query(`
+    ALTER TABLE push_subscriptions
+      ADD COLUMN IF NOT EXISTS tenant_id    UUID REFERENCES tenants(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS user_id      UUID REFERENCES users(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS scope_type   VARCHAR(20),
+      ADD COLUMN IF NOT EXISTS scope_id     UUID,
+      ADD COLUMN IF NOT EXISTS provider     VARCHAR(20) DEFAULT 'MOCK',
+      ADD COLUMN IF NOT EXISTS endpoint     TEXT,
+      ADD COLUMN IF NOT EXISTS p256dh       TEXT,
+      ADD COLUMN IF NOT EXISTS auth         TEXT,
+      ADD COLUMN IF NOT EXISTS user_agent   VARCHAR(300),
+      ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS revoked_at   TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
   await client.query(
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_push_endpoint_unique ON push_subscriptions(endpoint) WHERE revoked_at IS NULL`,
   );
@@ -669,6 +726,25 @@ async function ensureMagicLinksTable(
       created_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
       created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+  // Auto-cura schema drift: si la tabla magic_links ya existía con un
+  // schema viejo (ej. InitialSchema o un heal-prod-schema previo que
+  // omitió columnas), agregamos las faltantes con ADD COLUMN IF NOT
+  // EXISTS. Incidente 2026-05-28: prod tenía magic_links sin personal_id,
+  // CREATE INDEX ... ON magic_links(personal_id) crashaba el bootstrap.
+  await client.query(`
+    ALTER TABLE magic_links
+      ADD COLUMN IF NOT EXISTS tenant_id           UUID REFERENCES tenants(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS purpose             VARCHAR(40),
+      ADD COLUMN IF NOT EXISTS token_hash          VARCHAR(128),
+      ADD COLUMN IF NOT EXISTS email               VARCHAR(150),
+      ADD COLUMN IF NOT EXISTS personal_id         UUID REFERENCES personal(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS user_id             UUID REFERENCES users(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS metadata            JSONB,
+      ADD COLUMN IF NOT EXISTS expires_at          TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS used_at             TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS created_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
   `);
   await client.query(
     `CREATE INDEX IF NOT EXISTS idx_magic_links_tenant ON magic_links(tenant_id) WHERE tenant_id IS NOT NULL`,
