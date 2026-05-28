@@ -35,6 +35,11 @@ export class JugadorInscrito {
   @JoinColumn({ name: 'equipo_id' })
   equipo?: Equipo;
 
+  // AUDIT-3: denormalizado desde equipo.torneoId para soportar UNIQUE
+  // (tenant, torneo, rut) a nivel DB. Se sincroniza en create/bulkCreate.
+  @Column({ name: 'torneo_id', type: 'uuid' })
+  torneoId!: string;
+
   @Column({ name: 'user_id', type: 'uuid', nullable: true })
   userId!: string | null;
 

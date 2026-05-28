@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, Post, Req } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
 import type { Request } from 'express';
 
@@ -31,6 +32,9 @@ class ResetPasswordDto {
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  // AUDIT-2: rate limit estricto contra brute force. 5 intentos por
+  // ventana de 15 min por IP. Si pasa, 429 Too Many Requests.
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
   @Post('login')
   @Public()
   @HttpCode(200)
@@ -61,6 +65,10 @@ export class AuthController {
   }
 
   // ── Sprint 11: Recuperación de contraseña (RF-03) ──────────────────
+  // AUDIT-2: rate limit anti spam de emails. 3 solicitudes por IP cada
+  // 15 min. Si un atacante quiere spammear a una víctima, el cap es 3
+  // emails cada 15 min por IP — molesto pero no DoS al sistema.
+  @Throttle({ default: { limit: 3, ttl: 15 * 60_000 } })
   @Post('forgot-password')
   @Public()
   @HttpCode(200)
@@ -68,6 +76,9 @@ export class AuthController {
     return this.auth.solicitarResetPassword(dto.email);
   }
 
+  // 10 intentos por 15min: si el atacante adivina el token, igual está
+  // limitado por la entropía del token (32 bytes random).
+  @Throttle({ default: { limit: 10, ttl: 15 * 60_000 } })
   @Post('reset-password')
   @Public()
   @HttpCode(200)

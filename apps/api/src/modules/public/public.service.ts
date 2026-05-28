@@ -116,11 +116,15 @@ export class PublicService {
     const torneoDto = await this.buildTorneoPublico(torneo);
 
     const equipos = await this.equipoRepo.find({ where: { torneoId: torneo.id } });
+    // AUDIT-1 fix: incluir WALKOVER. `declararWalkover()` ya persiste
+    // golesLocal=3 / golesVisita=0 (o inverso), así que la suma de stats
+    // funciona idéntica a un partido normal. Antes solo se contaban
+    // FINALIZADO → equipos ganadores por inasistencia no sumaban puntos.
     const partidos = await this.partidoRepo
       .createQueryBuilder('p')
       .innerJoin('p.fecha', 'f')
       .where('f.torneo_id = :torneoId', { torneoId: torneo.id })
-      .andWhere('p.estado = :estado', { estado: 'FINALIZADO' })
+      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
       .getMany();
 
     // Calcular stats por equipo en JS — simple y suficiente para volúmenes

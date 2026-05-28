@@ -157,6 +157,9 @@ async function main(): Promise<void> {
     // Sprint 14: tabla push_subscriptions (notificaciones FCM/WebPush).
     await ensurePushSubscriptionsTable(client, log);
 
+    // AUDIT-3: jugadores_inscritos.torneo_id + UNIQUE (rut, torneo).
+    await ensureJugadoresUniqueRutTorneo(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -488,6 +491,53 @@ async function ensureDocumentosTributariosTable(
   );
   await ensureTrigger(client, 'documentos_tributarios');
   log('Documentos tributarios asegurada (idempotente).');
+}
+
+async function ensureJugadoresUniqueRutTorneo(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    ALTER TABLE jugadores_inscritos
+      ADD COLUMN IF NOT EXISTS torneo_id UUID
+        REFERENCES torneos(id) ON DELETE CASCADE
+  `);
+  // Backfill desde equipo (idempotente, solo NULLs)
+  await client.query(`
+    UPDATE jugadores_inscritos j
+       SET torneo_id = e.torneo_id
+      FROM equipos e
+     WHERE j.equipo_id = e.id
+       AND j.torneo_id IS NULL
+  `);
+  // No forzamos NOT NULL en cleanup-orphans (la migración formal lo
+  // hace después de validar). Aquí es best-effort.
+
+  // Resolver duplicados existentes (más antiguo gana)
+  await client.query(`
+    WITH duplicados AS (
+      SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY tenant_id, torneo_id, rut
+               ORDER BY created_at ASC, id ASC
+             ) AS rn
+        FROM jugadores_inscritos
+       WHERE rut IS NOT NULL AND activo = TRUE AND torneo_id IS NOT NULL
+    )
+    UPDATE jugadores_inscritos
+       SET activo = FALSE
+     WHERE id IN (SELECT id FROM duplicados WHERE rn > 1)
+  `);
+
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_jugador_rut_torneo
+      ON jugadores_inscritos (tenant_id, torneo_id, rut)
+      WHERE rut IS NOT NULL AND activo = TRUE
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_jugadores_torneo ON jugadores_inscritos (torneo_id)`,
+  );
+  log('jugadores_inscritos: torneo_id + UNIQUE(rut, torneo) asegurado.');
 }
 
 async function ensurePushSubscriptionsTable(

@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 
 import { DatabaseModule } from './database/database.module';
@@ -48,6 +49,17 @@ import { UsersModule } from './modules/users/users.module';
     EventEmitterModule.forRoot({ wildcard: true, maxListeners: 50 }),
     ScheduleModule.forRoot(),
 
+    // AUDIT-2: rate limiting global. Default 60 req/min por IP, con
+    // límites más estrictos por endpoint vía @Throttle() (login,
+    // forgot-password). Sin esto, vulnerable a brute force y spam.
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60_000,
+        limit: 60,
+      },
+    ]),
+
     DatabaseModule,
     // RlsModule debe registrarse antes que AdminModule (lo usan los
     // crons de Dunning y SII). Es @Global pero NestJS solo lo registra
@@ -65,6 +77,9 @@ import { UsersModule } from './modules/users/users.module';
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
+    // ThrottlerGuard primero — corta tráfico abusivo antes de validar JWT
+    // (que es más caro que un counter en memoria).
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
