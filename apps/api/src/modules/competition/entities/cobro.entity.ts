@@ -27,6 +27,8 @@ export type MetodoPago =
   | 'MERCADOPAGO'
   | 'OTRO';
 
+export type EstadoDunning = 'AL_DIA' | 'MOROSO' | 'SUSPENDIDO';
+
 @Entity({ name: 'cobros' })
 @Index('idx_cobros_tenant', ['tenantId'])
 export class Cobro {
@@ -74,6 +76,16 @@ export class Cobro {
 
   @Column({ type: 'text', nullable: true })
   notas!: string | null;
+
+  // Sprint 7C — Dunning. Recalculado por el cron diario.
+  @Column({ name: 'estado_dunning', type: 'varchar', length: 20, default: 'AL_DIA' })
+  estadoDunning!: EstadoDunning;
+
+  @Column({ name: 'dunning_avisos_enviados', type: 'smallint', default: 0 })
+  dunningAvisosEnviados!: number;
+
+  @Column({ name: 'dunning_ultimo_aviso_at', type: 'timestamptz', nullable: true })
+  dunningUltimoAvisoAt!: Date | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

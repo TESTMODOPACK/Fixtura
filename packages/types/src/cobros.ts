@@ -42,6 +42,23 @@ export const METODO_LABEL: Record<MetodoPago, string> = {
   OTRO: 'Otro',
 };
 
+/**
+ * Estado de cobranza (dunning). Recalculado por cron diario en base al
+ * vencimiento del cobro.
+ *
+ *   AL_DIA      → vencimiento >= hoy o pagado
+ *   MOROSO      → vencido hace 1..30 días
+ *   SUSPENDIDO  → vencido hace más de 30 días
+ */
+export const ESTADO_DUNNING = ['AL_DIA', 'MOROSO', 'SUSPENDIDO'] as const;
+export type EstadoDunning = (typeof ESTADO_DUNNING)[number];
+
+export const ESTADO_DUNNING_LABEL: Record<EstadoDunning, string> = {
+  AL_DIA: 'Al día',
+  MOROSO: 'Moroso',
+  SUSPENDIDO: 'Suspendido',
+};
+
 export const CobroAdminSchema = z.object({
   id: z.uuid(),
   equipoId: z.uuid().nullable(),
@@ -57,6 +74,11 @@ export const CobroAdminSchema = z.object({
   notas: z.string().nullable(),
   // Estado derivado para UI (no se persiste)
   estado: z.enum(['PENDIENTE', 'VENCIDO', 'PAGADO', 'CANCELADO']),
+  // Dunning (Sprint 7C): estado_dunning persistido, días_morosidad calculado
+  estadoDunning: z.enum(ESTADO_DUNNING),
+  diasMorosidad: z.number().int(),
+  dunningAvisosEnviados: z.number().int(),
+  dunningUltimoAvisoAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
 });
 export type CobroAdmin = z.infer<typeof CobroAdminSchema>;

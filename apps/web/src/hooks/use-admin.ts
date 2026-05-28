@@ -726,6 +726,45 @@ export function useDeactivateCancha() {
   });
 }
 
+// ─── Dunning (cobranza automática) ──────────────────────────────────
+export function useDunningRecalcular() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ actualizados: number }>('/admin/dunning/recalcular', { method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'cobros'] });
+    },
+  });
+}
+
+export function useDunningEnviarAvisos() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ enviados: number; saltados: number }>('/admin/dunning/enviar-avisos', {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'cobros'] });
+    },
+  });
+}
+
+export function useDunningAvisarUno() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (cobroId: string) =>
+      apiFetch<{ enviado: boolean; razon?: string }>(
+        `/admin/dunning/cobros/${cobroId}/avisar`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'cobros'] });
+    },
+  });
+}
+
 // ─── Documentos tributarios (SII) ───────────────────────────────────
 import type { DocumentoTributarioAdmin } from '@fixtura/types';
 

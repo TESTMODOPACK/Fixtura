@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   AlertTriangle,
+  Bell,
   CheckCircle2,
   Coins,
   CreditCard,
@@ -14,6 +15,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Send,
   Trash2,
   X,
 } from 'lucide-react';
@@ -25,12 +27,14 @@ import {
   CATEGORIA_COBRO,
   CATEGORIA_LABEL,
   ESTADO_DOCUMENTO_LABEL,
+  ESTADO_DUNNING_LABEL,
   METODO_LABEL,
   METODO_PAGO,
   type CategoriaCobro,
   type CobroAdmin,
   type DocumentoTributarioAdmin,
   type EstadoDocumentoTributario,
+  type EstadoDunning,
   type MetodoPago,
 } from '@fixtura/types';
 
@@ -43,6 +47,9 @@ import {
   useCreateCobro,
   useDeleteCobro,
   useDocumentosTributarios,
+  useDunningAvisarUno,
+  useDunningEnviarAvisos,
+  useDunningRecalcular,
   useIniciarPago,
   useMarcarPagado,
   useReintentarBoleta,
@@ -246,6 +253,8 @@ function CobrosTab({
             </FiltroChip>
           ),
         )}
+
+        {filtro === 'vencidos' && <DunningActions />}
       </div>
 
       {apiError && (
@@ -289,6 +298,12 @@ const ESTADO_DOC_BADGE: Record<EstadoDocumentoTributario, string> = {
   EMITIDO: 'bg-green-bright/15 text-green-bright',
   RECHAZADO_SII: 'bg-danger/15 text-danger',
   FALLIDO: 'bg-danger/20 text-danger',
+};
+
+const ESTADO_DUNNING_BADGE: Record<EstadoDunning, string> = {
+  AL_DIA: 'bg-green-bright/10 text-green-bright',
+  MOROSO: 'bg-orange-700/15 text-orange-700',
+  SUSPENDIDO: 'bg-danger/15 text-danger',
 };
 
 function BoletasTab(): React.ReactElement {
@@ -495,6 +510,53 @@ function BoletaRow({ doc }: { doc: DocumentoTributarioAdmin }): React.ReactEleme
   );
 }
 
+function DunningActions(): React.ReactElement {
+  const recalcular = useDunningRecalcular();
+  const enviar = useDunningEnviarAvisos();
+  const enviarResult = enviar.data;
+  const enviarErr = enviar.error as ApiError | undefined;
+
+  return (
+    <div className="ml-auto flex items-center gap-2 flex-wrap">
+      <button
+        type="button"
+        onClick={() => recalcular.mutate()}
+        disabled={recalcular.isPending}
+        className="px-3 py-1.5 rounded-card text-xs uppercase tracking-wider font-semibold border border-line text-ink hover:border-green-deep hover:text-green-deep disabled:opacity-50 inline-flex items-center gap-1"
+        title="Recalcular estados AL_DIA/MOROSO/SUSPENDIDO según vencimientos"
+      >
+        <RefreshCw size={12} className={recalcular.isPending ? 'animate-spin' : ''} />
+        Recalcular estados
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (
+            window.confirm(
+              'Enviar avisos por email a todos los equipos con cobros vencidos (respeta throttle de 7 días)?',
+            )
+          ) {
+            enviar.mutate();
+          }
+        }}
+        disabled={enviar.isPending}
+        className="px-3 py-1.5 rounded-card text-xs uppercase tracking-wider font-semibold bg-orange-700 text-chalk hover:bg-orange-700/90 disabled:opacity-50 inline-flex items-center gap-1"
+        title="Disparar el cron de dunning ahora"
+      >
+        <Send size={12} />
+        {enviar.isPending ? 'Enviando…' : 'Avisos masivos'}
+      </button>
+      {enviarResult && (
+        <span className="text-xs text-ink-mute">
+          Enviados: <strong>{enviarResult.enviados}</strong> · Saltados:{' '}
+          <strong>{enviarResult.saltados}</strong>
+        </span>
+      )}
+      {enviarErr && <span className="text-xs text-danger">{enviarErr.message}</span>}
+    </div>
+  );
+}
+
 function FiltroChip({
   active,
   onClick,
@@ -524,8 +586,12 @@ function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
   const remove = useDeleteCobro();
   const revertir = useRevertirPago();
   const iniciarPago = useIniciarPago();
+  const avisarUno = useDunningAvisarUno();
   const [pagando, setPagando] = useState(false);
   const iniciarError = iniciarPago.error as ApiError | undefined;
+  const avisarError = avisarUno.error as ApiError | undefined;
+  const mostrarDunning =
+    cobro.estado === 'VENCIDO' && cobro.estadoDunning !== 'AL_DIA';
 
   const onPagarOnline = async (): Promise<void> => {
     const res = await iniciarPago.mutateAsync({ cobroId: cobro.id });
@@ -551,6 +617,17 @@ function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
             >
               {ESTADO_LABEL[cobro.estado]}
             </span>
+            {mostrarDunning && (
+              <span
+                className={cn(
+                  'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
+                  ESTADO_DUNNING_BADGE[cobro.estadoDunning],
+                )}
+                title={`${cobro.diasMorosidad} días de mora`}
+              >
+                {ESTADO_DUNNING_LABEL[cobro.estadoDunning]} · {cobro.diasMorosidad}d
+              </span>
+            )}
             <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-mute">
               {CATEGORIA_LABEL[cobro.categoria]}
             </span>
@@ -580,6 +657,27 @@ function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
             <div className="mt-1 text-xs text-ink-mute font-serif italic truncate">
               {cobro.notas}
             </div>
+          )}
+
+          {mostrarDunning && cobro.dunningAvisosEnviados > 0 && (
+            <div className="mt-1 text-xs text-ink-mute flex items-center gap-2">
+              <Bell size={12} className="text-orange-700" />
+              <span>
+                {cobro.dunningAvisosEnviados} aviso{cobro.dunningAvisosEnviados === 1 ? '' : 's'} enviado{cobro.dunningAvisosEnviados === 1 ? '' : 's'}
+                {cobro.dunningUltimoAvisoAt && (
+                  <>
+                    {' '}· último el{' '}
+                    <span className="font-mono">
+                      {new Date(cobro.dunningUltimoAvisoAt).toLocaleDateString('es-CL')}
+                    </span>
+                  </>
+                )}
+              </span>
+            </div>
+          )}
+
+          {avisarError && (
+            <div className="mt-1 text-xs text-danger">{avisarError.message}</div>
           )}
 
           {pagando && (
@@ -619,6 +717,25 @@ function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
               >
                 <Coins size={12} className="inline mr-1" /> Manual
               </button>
+              {cobro.estado === 'VENCIDO' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Enviar aviso de cobranza al equipo por "${cobro.concepto}"?`,
+                      )
+                    ) {
+                      avisarUno.mutate(cobro.id);
+                    }
+                  }}
+                  disabled={avisarUno.isPending}
+                  className="p-1 rounded text-orange-700 hover:bg-orange-700/10 disabled:opacity-50"
+                  title="Enviar aviso de cobranza ahora"
+                >
+                  <Send size={14} className={avisarUno.isPending ? 'animate-pulse' : ''} />
+                </button>
+              )}
             </>
           ) : null}
           {cobro.estado === 'PAGADO' && (

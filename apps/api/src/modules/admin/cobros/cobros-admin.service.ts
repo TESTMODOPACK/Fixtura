@@ -6,6 +6,7 @@ import type { CobroAdmin } from '@fixtura/types';
 
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { Equipo } from '../../competition/entities/equipo.entity';
+import { DunningService } from '../dunning/dunning.service';
 import type { CreateCobroDto, MarcarPagadoDto, UpdateCobroDto } from './dto';
 
 @Injectable()
@@ -13,7 +14,20 @@ export class CobrosAdminService {
   constructor(
     @InjectRepository(Cobro) private readonly repo: Repository<Cobro>,
     @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
+    private readonly dunning: DunningService,
   ) {}
+
+  /**
+   * Sincroniza estado_dunning después de cualquier cambio que afecte el
+   * estado pagado/cancelado/vencimiento. No-throw: si falla, log-only.
+   */
+  private async syncDunning(cobroId: string, tenantId: string): Promise<void> {
+    try {
+      await this.dunning.actualizarEstadoCobro(cobroId, tenantId);
+    } catch {
+      // best-effort: el cron diario va a corregirlo si esto falla.
+    }
+  }
 
   async list(
     tenantId: string,
@@ -109,6 +123,7 @@ export class CobrosAdminService {
     if (input.cancelado !== undefined) c.cancelado = input.cancelado;
 
     await this.repo.save(c);
+    await this.syncDunning(c.id, tenantId);
     return this.findOne(c.id, tenantId);
   }
 
@@ -129,6 +144,7 @@ export class CobrosAdminService {
     c.pagadoMetodo = input.metodo;
     c.pagadoReferencia = input.referencia?.trim() || null;
     await this.repo.save(c);
+    await this.syncDunning(c.id, tenantId);
     return this.findOne(c.id, tenantId);
   }
 
@@ -142,6 +158,7 @@ export class CobrosAdminService {
     c.pagadoMetodo = null;
     c.pagadoReferencia = null;
     await this.repo.save(c);
+    await this.syncDunning(c.id, tenantId);
     return this.findOne(c.id, tenantId);
   }
 
@@ -156,6 +173,7 @@ export class CobrosAdminService {
     // VENCIDO requiere que la fecha sea ESTRICTAMENTE anterior a hoy
     // (mismo criterio que el SQL: `c.vencimiento < CURRENT_DATE`).
     let estado: CobroAdmin['estado'] = 'PENDIENTE';
+    let diasMorosidad = 0;
     if (c.pagadoAt) {
       estado = 'PAGADO';
     } else if (c.cancelado) {
@@ -165,6 +183,13 @@ export class CobrosAdminService {
       const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
       if (c.vencimiento < hoyStr) {
         estado = 'VENCIDO';
+        // Calcular días de mora — diferencia en días calendario.
+        const venc = new Date(c.vencimiento + 'T00:00:00Z');
+        const hoyMidUTC = new Date(`${hoyStr}T00:00:00Z`);
+        diasMorosidad = Math.max(
+          0,
+          Math.floor((hoyMidUTC.getTime() - venc.getTime()) / (24 * 60 * 60 * 1000)),
+        );
       }
     }
     return {
@@ -181,6 +206,12 @@ export class CobrosAdminService {
       cancelado: c.cancelado,
       notas: c.notas,
       estado,
+      estadoDunning: c.estadoDunning ?? 'AL_DIA',
+      diasMorosidad,
+      dunningAvisosEnviados: c.dunningAvisosEnviados ?? 0,
+      dunningUltimoAvisoAt: c.dunningUltimoAvisoAt
+        ? c.dunningUltimoAvisoAt.toISOString()
+        : null,
       createdAt: c.createdAt.toISOString(),
     };
   }

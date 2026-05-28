@@ -1,7 +1,7 @@
 export { Cancha } from './cancha.entity';
 export type { SuperficieCancha } from './cancha.entity';
 export { Cobro } from './cobro.entity';
-export type { CategoriaCobro, MetodoPago } from './cobro.entity';
+export type { CategoriaCobro, EstadoDunning, MetodoPago } from './cobro.entity';
 export { Designacion } from './designacion.entity';
 export type { EstadoDesignacion } from './designacion.entity';
 export { DocumentoTributario } from './documento-tributario.entity';

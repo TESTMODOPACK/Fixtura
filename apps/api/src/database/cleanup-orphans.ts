@@ -137,6 +137,9 @@ async function main(): Promise<void> {
     // Sprint 7B: tabla documentos_tributarios (boletas/facturas SII).
     await ensureDocumentosTributariosTable(client, log);
 
+    // Sprint 7C: columnas de dunning en cobros.
+    await ensureDunningCobros(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -468,6 +471,30 @@ async function ensureDocumentosTributariosTable(
   );
   await ensureTrigger(client, 'documentos_tributarios');
   log('Documentos tributarios asegurada (idempotente).');
+}
+
+async function ensureDunningCobros(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    ALTER TABLE cobros
+      ADD COLUMN IF NOT EXISTS estado_dunning VARCHAR(20)
+        NOT NULL DEFAULT 'AL_DIA'
+        CHECK (estado_dunning IN ('AL_DIA','MOROSO','SUSPENDIDO'))
+  `);
+  await client.query(`
+    ALTER TABLE cobros
+      ADD COLUMN IF NOT EXISTS dunning_avisos_enviados SMALLINT NOT NULL DEFAULT 0
+  `);
+  await client.query(`
+    ALTER TABLE cobros
+      ADD COLUMN IF NOT EXISTS dunning_ultimo_aviso_at TIMESTAMPTZ
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_cobros_dunning ON cobros(estado_dunning) WHERE estado_dunning <> 'AL_DIA'`,
+  );
+  log('cobros dunning columns aseguradas (idempotente).');
 }
 
 async function ensurePartidosCanchaId(
