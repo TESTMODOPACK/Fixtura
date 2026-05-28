@@ -362,6 +362,24 @@ En <https://github.com/TESTMODOPACK/Fixtura/actions> debería arrancar el workfl
 
 ## Operación diaria
 
+### Deploy manual (si por algún motivo el de GitHub Actions no corrió)
+
+```bash
+ssh fixtura@<IP-VPS>
+cd ~/fixtura
+./scripts/deploy.sh          # standard (default)
+./scripts/deploy.sh rolling  # rolling (solo api + web, --no-deps)
+./scripts/deploy.sh quick    # quick: SIN rebuild — solo si NO cambió código
+```
+
+El script hace backup `pg_dump` defensivo previo, `--no-cache` en el build,
+espera healthy, verifica que `cleanup-orphans` corrió. Ver detalle completo
+en [OPS_RUNBOOK.md](OPS_RUNBOOK.md#deploys).
+
+> ⚠️  **NUNCA** hacer `git pull && docker compose up -d` sin rebuild. Ese
+> atajo provoca el bug del 2026-05-27 (cleanup-orphans queda viejo y las
+> tablas/columnas nuevas no se crean).
+
 ### Ver logs
 
 ```bash

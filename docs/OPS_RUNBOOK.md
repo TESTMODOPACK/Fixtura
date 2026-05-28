@@ -19,34 +19,86 @@ y proxea a api/web.
 
 ## Deploys
 
-### Deploy estándar (downtime ~30-60s)
+> 🟢 **Recomendado**: usar siempre `./scripts/deploy.sh`. Hace backup defensivo
+> previo, build con `--no-cache`, espera healthy, verifica `cleanup-orphans` y
+> corre smoke tests. Evita el incidente del 2026-05-27 donde un
+> `git pull + docker compose up -d` manual dejó la imagen del API con
+> `cleanup-orphans` desactualizado → 4 migraciones sin aplicar → API crashea
+> con `column "cancha_id" does not exist`.
+
+### Deploy estándar (downtime ~30-60s) — recomendado
 
 ```bash
-ssh prod
+ssh fixtura@prod
 cd ~/fixtura
-git fetch && git reset --hard origin/main
-export GIT_SHA=$(git rev-parse --short HEAD)
-docker compose build --no-cache api web
-docker compose up -d
-docker image prune -f
+./scripts/deploy.sh          # modo standard (default)
 ```
 
+Pasos que ejecuta automáticamente:
+
+1. `pg_dump` defensivo a `/var/backups/fixtura/pre-deploy-<TS>.sql.gz`
+2. `git fetch && git reset --hard origin/main`
+3. `docker compose build --no-cache api web` — **NUNCA omitir `--no-cache`**
+4. `docker compose up -d`
+5. Esperar `fixtura_api healthy` (timeout 120s)
+6. Verificar logs de `cleanup-orphans` (debe decir "Done.")
+7. Smoke tests `/api/health/live` + `/api/health/version`
+8. `docker image prune -f`
+
 Impacto: requests en vuelo durante el rollover reciben 502. Aceptable para features
-no críticas. Para cambios que tocan pagos o webhooks usar deploy rolling.
+no críticas. Para cambios que tocan pagos o webhooks usar el modo rolling.
 
 ### Deploy rolling (~10s gap, requests reintentados por nginx)
+
+```bash
+./scripts/deploy.sh rolling
+```
+
+Equivalente manual (sólo si necesitás debugear el script):
 
 ```bash
 export GIT_SHA=$(git rev-parse --short HEAD)
 docker compose build --no-cache api
 docker compose up -d --no-deps api
 
-# Esperar a que el nuevo container pase healthcheck
 timeout 120 bash -c 'until docker inspect fixtura_api --format "{{.State.Health.Status}}" | grep -q healthy; do sleep 5; done'
 
 docker compose logs --tail=20 api | grep -iE 'running|error'
 docker image prune -f
 ```
+
+### ❌ Errores comunes — NO hacer
+
+```bash
+# ❌ Saltarse el rebuild:
+git pull && docker compose up -d
+# Esto NO actualiza la imagen del API. cleanup-orphans queda viejo,
+# migraciones no se aplican, tabla "cancha_id does not exist" 500s.
+
+# ❌ Rebuild con cache:
+docker compose build api && docker compose up -d
+# Sin --no-cache, Docker puede reusar layers desactualizadas (en
+# especial pnpm-lock o packages/) y dejar dependencias viejas.
+
+# ❌ docker compose down -v (¡destruye volúmenes!):
+docker compose down -v
+# Borra postgres_data — TODA la DB se pierde. Solo válido en dev.
+
+# ❌ Reset hard sin pull previo:
+git reset --hard HEAD~5
+# Si el VPS quedó atrás, ese HEAD ya es antiguo. Hacer git fetch primero.
+```
+
+Si por error hiciste un `up -d` sin rebuild y la app crashea con errores de
+columna/tabla no existente, ejecutar el script de recuperación:
+
+```bash
+docker compose cp scripts/heal-prod-schema.sql db:/tmp/heal.sql
+docker compose exec db psql -U fixtura -d fixtura -f /tmp/heal.sql
+docker compose restart api
+```
+
+(Ver `scripts/heal-prod-schema.sql` — idempotente, no toca datos.)
 
 ### Smoke tests post-deploy
 
@@ -143,11 +195,32 @@ docker image prune -af       # solo imágenes
 
 ## Backups
 
-Ver `docs/BACKUPS_RUNBOOK.md` (TODO en este sprint).
+Ver `docs/BACKUPS_RUNBOOK.md` para detalle. Setup mínimo en el VPS:
+
+```bash
+# Copiar script al lugar canónico
+sudo mkdir -p /opt/fixtura/scripts
+sudo cp /home/fixtura/fixtura/scripts/backup-db.sh /opt/fixtura/scripts/
+sudo chmod +x /opt/fixtura/scripts/backup-db.sh
+
+# Test manual
+/opt/fixtura/scripts/backup-db.sh
+ls -lah /var/backups/fixtura/
+
+# Agendar en cron del host (no del container)
+sudo crontab -e
+# Agregar:
+0 3 * * * /opt/fixtura/scripts/backup-db.sh >> /var/log/fixtura-backup.log 2>&1
+```
+
+Además, **cada `./scripts/deploy.sh` hace un backup defensivo previo** a
+`/var/backups/fixtura/pre-deploy-<TS>.sql.gz` — útil si el deploy rompe algo
+inesperado y querés restaurar al estado anterior.
 
 Mínimo recomendado:
-- `pg_dump` rotativo diario, retención 30 días, encriptado con `gpg`.
-- Restore mensual verificado — backup que no se restaura es ficción.
+- `pg_dump` rotativo diario, retención 30 días (default del script).
+- Verificación mensual: bajar el último dump y restaurarlo en un container
+  de test. Un backup que no se restaura es ficción.
 
 ## Troubleshooting
 
