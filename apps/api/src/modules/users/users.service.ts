@@ -36,4 +36,12 @@ export class UsersService {
   async updateLastLogin(userId: string): Promise<void> {
     await this.userRepo.update({ id: userId }, { lastLoginAt: new Date() });
   }
+
+  /**
+   * Setea el password hash. Usado por reset password y por flujos de
+   * onboarding que requieran crear credenciales.
+   */
+  async setPasswordHash(userId: string, passwordHash: string): Promise<void> {
+    await this.userRepo.update({ id: userId }, { passwordHash });
+  }
 }

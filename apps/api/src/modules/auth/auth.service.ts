@@ -1,6 +1,6 @@
 import { randomBytes, createHash } from 'node:crypto';
 
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -9,19 +9,115 @@ import { IsNull, MoreThan, Repository } from 'typeorm';
 
 import type { AuthTokens, UserContext } from '@fixtura/types';
 
+import { EmailService } from '../email/email.service';
 import { UsersService } from '../users/users.service';
+import { MagicLinksService } from './magic-links.service';
 import { RefreshToken } from './entities/refresh-token.entity';
 
 const BCRYPT_COST = 12;
 
 @Injectable()
 export class AuthService {
+  private readonly log = new Logger(AuthService.name);
+
+  /** TTL del link de reset (corto por seguridad). */
+  static readonly TTL_RESET_PASSWORD_MIN = 30;
+
   constructor(
     private readonly users: UsersService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     @InjectRepository(RefreshToken) private readonly refreshRepo: Repository<RefreshToken>,
+    private readonly magicLinks: MagicLinksService,
+    private readonly email: EmailService,
   ) {}
+
+  /**
+   * Sprint 11: solicita un reset de password. Por seguridad, SIEMPRE
+   * devuelve OK (no revela si el email existe). Si existe el user,
+   * genera magic link 30min y envía email. Si no existe, simulamos
+   * el delay y log-only.
+   */
+  async solicitarResetPassword(email: string): Promise<{ ok: boolean }> {
+    const normalizado = email.trim().toLowerCase();
+    const user = await this.users.findByEmail(normalizado);
+
+    if (!user) {
+      this.log.log(`Reset solicitado para email inexistente: ${normalizado} (log-only)`);
+      return { ok: true };
+    }
+
+    const { token } = await this.magicLinks.crear({
+      purpose: 'RESET_PASSWORD',
+      tenantId: null,
+      email: normalizado,
+      userId: user.id,
+      ttlMinutos: AuthService.TTL_RESET_PASSWORD_MIN,
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+    const link = `${frontendUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+    await this.email.send({
+      to: normalizado,
+      subject: 'Recuperación de contraseña — Fixtura',
+      html: `
+        <h2 style="color:#15803d">Recuperación de contraseña</h2>
+        <p>Hola,</p>
+        <p>Recibimos una solicitud para recuperar tu contraseña en Fixtura.
+        Si fuiste vos, hacé click en este botón para crear una nueva:</p>
+        <p style="margin: 20px 0">
+          <a href="${link}"
+             style="background:#15803d;color:#fff;padding:12px 24px;
+                    border-radius:6px;text-decoration:none;font-weight:bold">
+            Recuperar contraseña
+          </a>
+        </p>
+        <p style="color:#666;font-size:13px">
+          Este link expira en 30 minutos. Si no fuiste vos, ignorá este email —
+          tu contraseña actual sigue siendo válida.
+        </p>
+        <p>Saludos,<br/>Fixtura</p>
+      `,
+      text: `Recuperación de contraseña Fixtura. Link (expira en 30min): ${link}`,
+    });
+
+    return { ok: true };
+  }
+
+  /**
+   * Aplica el reset: valida token, hashea password nuevo, invalida
+   * refresh tokens previos del usuario (forzar re-login en otros
+   * dispositivos por seguridad).
+   */
+  async aplicarResetPassword(token: string, nuevaPassword: string): Promise<{ ok: boolean }> {
+    if (nuevaPassword.length < 8) {
+      throw new BadRequestException('La contraseña debe tener al menos 8 caracteres.');
+    }
+    if (nuevaPassword.length > 200) {
+      throw new BadRequestException('La contraseña es demasiado larga.');
+    }
+
+    const link = await this.magicLinks.resolver(token, 'RESET_PASSWORD');
+    if (!link.userId) {
+      throw new BadRequestException('El link no apunta a un usuario válido.');
+    }
+
+    const hash = await bcrypt.hash(nuevaPassword, BCRYPT_COST);
+    await this.users.setPasswordHash(link.userId, hash);
+
+    // Invalidar TODOS los refresh tokens vigentes del usuario por
+    // seguridad — si alguien tenía sesión activa en otro dispositivo,
+    // queda forzado a re-login.
+    await this.refreshRepo.update(
+      { userId: link.userId, revokedAt: IsNull() },
+      { revokedAt: new Date() },
+    );
+
+    await this.magicLinks.marcarUsado(link.id);
+    this.log.log(`Reset de password aplicado para user=${link.userId}`);
+    return { ok: true };
+  }
 
   async login(
     email: string,
