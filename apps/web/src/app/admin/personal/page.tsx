@@ -8,10 +8,12 @@ import {
   CheckCircle2,
   IdCard,
   Mail,
+  MessageCircle,
   Pencil,
   Phone,
   Plus,
   RotateCcw,
+  Send,
   Trash2,
   UserCog,
   X,
@@ -326,29 +328,8 @@ function PersonaRow({
         </div>
       </div>
       <div className="flex items-center gap-1">
-        {persona.email && persona.activo && (
-          <button
-            type="button"
-            onClick={() => {
-              if (
-                window.confirm(
-                  `¿Enviar email de activación a ${persona.email}?\nEl link expira en 72hs.`,
-                )
-              ) {
-                invitar
-                  .mutateAsync(persona.id)
-                  .then((r) =>
-                    alert(`Invitación enviada a ${r.emailDestino}. Expira el ${new Date(r.expira).toLocaleString('es-CL')}.`),
-                  )
-                  .catch((err) => alert(`No se pudo enviar: ${(err as Error).message}`));
-              }
-            }}
-            disabled={invitar.isPending}
-            className="p-1 rounded text-ink-mute hover:text-green-bright hover:bg-green-bright/10 disabled:opacity-50"
-            title="Enviar invitación por email (magic link, expira en 72h)"
-          >
-            <Mail size={14} className={invitar.isPending ? 'animate-pulse' : ''} />
-          </button>
+        {(persona.email || persona.telefono) && persona.activo && (
+          <InvitarMenu persona={persona} invitar={invitar} />
         )}
         <button
           type="button"
@@ -715,4 +696,91 @@ function carnetStatus(p: PersonalAdmin): 'VENCIDO' | 'POR_VENCER' | 'OK' | 'NO_A
   if (diff < 0) return 'VENCIDO';
   if (diff < 30 * 24 * 60 * 60 * 1000) return 'POR_VENCER';
   return 'OK';
+}
+
+// ─── Sprint 17: menú de invitar con selección de canal ──────────────
+function InvitarMenu({
+  persona,
+  invitar,
+}: {
+  persona: PersonalAdmin;
+  invitar: ReturnType<typeof useInvitarPersonal>;
+}): React.ReactElement {
+  const [abierto, setAbierto] = useState(false);
+  const tieneEmail = !!persona.email;
+  const tieneTelefono = !!persona.telefono;
+
+  const enviar = async (canal: 'EMAIL' | 'WHATSAPP' | 'AMBOS'): Promise<void> => {
+    setAbierto(false);
+    const destinos: string[] = [];
+    if (canal !== 'WHATSAPP' && persona.email) destinos.push(`email ${persona.email}`);
+    if (canal !== 'EMAIL' && persona.telefono) destinos.push(`WhatsApp ${persona.telefono}`);
+    if (!window.confirm(`¿Enviar invitación por ${destinos.join(' + ')}?\nEl link expira en 72hs.`)) {
+      return;
+    }
+    try {
+      const r = await invitar.mutateAsync({ id: persona.id, canal });
+      const partes: string[] = [];
+      if (r.emailDestino) partes.push(`email ${r.emailDestino}`);
+      if (r.telefonoDestino) partes.push(`WhatsApp ${r.telefonoDestino}`);
+      let msg = `Invitación enviada por ${partes.join(' + ')}.\nExpira el ${new Date(r.expira).toLocaleString('es-CL')}.`;
+      if (r.errores.length > 0) {
+        msg += `\n\nAdvertencias parciales:\n- ${r.errores.join('\n- ')}`;
+      }
+      alert(msg);
+    } catch (err) {
+      alert(`No se pudo enviar: ${(err as Error).message}`);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setAbierto((s) => !s)}
+        disabled={invitar.isPending}
+        className="p-1 rounded text-ink-mute hover:text-green-bright hover:bg-green-bright/10 disabled:opacity-50"
+        title="Enviar invitación (email y/o WhatsApp)"
+      >
+        <Send size={14} className={invitar.isPending ? 'animate-pulse' : ''} />
+      </button>
+      {abierto && (
+        <div
+          className="absolute right-0 mt-1 z-10 bg-paper border border-line rounded shadow-lg overflow-hidden min-w-[180px]"
+          onMouseLeave={() => setAbierto(false)}
+        >
+          {tieneEmail && (
+            <button
+              type="button"
+              onClick={() => enviar('EMAIL')}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-paper-dark flex items-center gap-2"
+            >
+              <Mail size={14} className="text-ink-mute" />
+              <span>Solo email</span>
+            </button>
+          )}
+          {tieneTelefono && (
+            <button
+              type="button"
+              onClick={() => enviar('WHATSAPP')}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-paper-dark flex items-center gap-2"
+            >
+              <MessageCircle size={14} className="text-green-600" />
+              <span>Solo WhatsApp</span>
+            </button>
+          )}
+          {tieneEmail && tieneTelefono && (
+            <button
+              type="button"
+              onClick={() => enviar('AMBOS')}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-paper-dark flex items-center gap-2 border-t border-line"
+            >
+              <Send size={14} className="text-accent" />
+              <span>Email + WhatsApp</span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }

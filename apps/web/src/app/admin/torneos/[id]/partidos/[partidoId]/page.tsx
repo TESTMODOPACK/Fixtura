@@ -92,6 +92,13 @@ export default function PartidoDetallePage({
             <ArrowLeft size={14} /> Fixture
           </Button>
         </Link>
+        {!partido.actaCerradaAt && (
+          <Link href={`/admin/torneos/${torneoId}/partidos/${partidoId}/centro`}>
+            <Button variant="accent" size="sm">
+              Match Center
+            </Button>
+          </Link>
+        )}
       </PageHead>
 
       <OfflineActaBanner />

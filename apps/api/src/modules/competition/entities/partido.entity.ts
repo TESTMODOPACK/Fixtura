@@ -119,6 +119,26 @@ export class Partido {
   @Column({ name: 'observaciones_suspension', type: 'text', nullable: true })
   observacionesSuspension!: string | null;
 
+  // Sprint 18 (RF-17): cronómetro Match Center en vivo. Persistido para
+  // sobrevivir restarts del API. El gateway reanuda timers desde DB en boot.
+  @Column({ name: 'centro_estado', type: 'varchar', length: 20, default: 'IDLE' })
+  centroEstado!: 'IDLE' | 'EN_VIVO' | 'PAUSADO' | 'FINALIZADO_CENTRO';
+
+  @Column({ name: 'centro_arrancado_at', type: 'timestamptz', nullable: true })
+  centroArrancadoAt!: Date | null;
+
+  @Column({ name: 'centro_pausado_at', type: 'timestamptz', nullable: true })
+  centroPausadoAt!: Date | null;
+
+  @Column({ name: 'centro_segundos_acumulados', type: 'int', default: 0 })
+  centroSegundosAcumulados!: number;
+
+  @Column({ name: 'centro_periodo', type: 'smallint', default: 0 })
+  centroPeriodo!: number;
+
+  @Column({ name: 'centro_minutos_por_periodo', type: 'smallint', default: 45 })
+  centroMinutosPorPeriodo!: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

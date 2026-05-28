@@ -11,12 +11,17 @@ import {
   Query,
 } from '@nestjs/common';
 
-import { ROLE, type PersonalAdmin, type UserContext } from '@fixtura/types';
+import {
+  ROLE,
+  type InvitarPersonalResponse,
+  type PersonalAdmin,
+  type UserContext,
+} from '@fixtura/types';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
-import { CreatePersonalDto, UpdatePersonalDto } from './dto';
+import { CreatePersonalDto, InvitarPersonalDto, UpdatePersonalDto } from './dto';
 import { PersonalAdminService } from './personal-admin.service';
 
 function ensureTenant(user: UserContext): string {
@@ -72,13 +77,14 @@ export class PersonalAdminController {
     return this.svc.deactivate(id, ensureTenant(user));
   }
 
-  // ── Sprint 10: Magic Link onboarding ─────────────────────────────
+  // ── Sprint 10/17: Magic Link onboarding (email + WhatsApp) ───────
   @Post(':id/invitar')
   invitar(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
-  ): Promise<{ enviado: boolean; expira: string; emailDestino: string }> {
-    return this.svc.invitar(id, ensureTenant(user), user.userId);
+    @Body() dto: InvitarPersonalDto,
+  ): Promise<InvitarPersonalResponse> {
+    return this.svc.invitar(id, ensureTenant(user), user.userId, dto.canal ?? 'EMAIL');
   }
 }
 

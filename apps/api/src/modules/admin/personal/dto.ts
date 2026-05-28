@@ -124,3 +124,14 @@ export class UpdatePersonalDto {
   @MaxLength(2000)
   notas?: string | null;
 }
+
+// ─── Sprint 17: invitar con canal ──────────────────────────────────
+import { IsEnum } from 'class-validator';
+
+const CANALES = ['EMAIL', 'WHATSAPP', 'AMBOS'] as const;
+
+export class InvitarPersonalDto {
+  @IsOptional()
+  @IsEnum(CANALES)
+  canal?: 'EMAIL' | 'WHATSAPP' | 'AMBOS';
+}

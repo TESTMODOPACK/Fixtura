@@ -16,10 +16,12 @@ import { AuthModule } from './modules/auth/auth.module';
 import { CompetitionModule } from './modules/competition/competition.module';
 import { EmailModule } from './modules/email/email.module';
 import { HealthModule } from './modules/health/health.module';
+import { MatchCenterModule } from './modules/match-center/match-center.module';
 import { MeModule } from './modules/me/me.module';
 import { PublicModule } from './modules/public/public.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
+import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -68,6 +70,7 @@ import { UsersModule } from './modules/users/users.module';
     // resuelve y los crons crashean al bootstrap (incidente 2026-05-28).
     RlsModule,
     EmailModule,
+    WhatsAppModule,
     HealthModule,
     AuthModule,
     TenantsModule,
@@ -76,6 +79,7 @@ import { UsersModule } from './modules/users/users.module';
     MeModule,
     PublicModule,
     AdminModule,
+    MatchCenterModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },

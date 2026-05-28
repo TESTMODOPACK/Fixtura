@@ -178,6 +178,20 @@ async function main(): Promise<void> {
     // Sprint 16: tabla dias_no_jugables (RF-13).
     await ensureDiasNoJugablesTable(client, log);
 
+    // Sprint 18 (RF-17): cronómetro persistente de Match Center.
+    // Mantenemos el estado por partido para sobrevivir reinicios del API.
+    await client.query(`
+      ALTER TABLE partidos
+        ADD COLUMN IF NOT EXISTS centro_estado VARCHAR(20) DEFAULT 'IDLE'
+          CHECK (centro_estado IN ('IDLE','EN_VIVO','PAUSADO','FINALIZADO_CENTRO')),
+        ADD COLUMN IF NOT EXISTS centro_arrancado_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS centro_pausado_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS centro_segundos_acumulados INT NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS centro_periodo SMALLINT NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS centro_minutos_por_periodo SMALLINT NOT NULL DEFAULT 45
+    `);
+    log('partidos.centro_* asegurado (Sprint 18, RF-17).');
+
     // AUDIT-3: jugadores_inscritos.torneo_id + UNIQUE (rut, torneo).
     await ensureJugadoresUniqueRutTorneo(client, log);
 

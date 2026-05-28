@@ -2,12 +2,13 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import type { PersonalAdmin } from '@fixtura/types';
+import type { CanalInvitacion, InvitarPersonalResponse, PersonalAdmin } from '@fixtura/types';
 
 import { MagicLinksService } from '../../auth/magic-links.service';
 import { EmailService } from '../../email/email.service';
 import { Personal } from '../../competition/entities/personal.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { WhatsAppService } from '../../whatsapp/whatsapp.service';
 import type { CreatePersonalDto, UpdatePersonalDto } from './dto';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class PersonalAdminService {
     @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
     private readonly magicLinks: MagicLinksService,
     private readonly email: EmailService,
+    private readonly whatsapp: WhatsAppService,
   ) {}
 
   /**
@@ -34,12 +36,22 @@ export class PersonalAdminService {
     personalId: string,
     tenantId: string,
     actorUserId: string | null,
-  ): Promise<{ enviado: boolean; expira: string; emailDestino: string }> {
+    canal: CanalInvitacion = 'EMAIL',
+  ): Promise<InvitarPersonalResponse> {
     const personal = await this.repo.findOne({ where: { id: personalId, tenantId } });
     if (!personal) throw new NotFoundException(`Personal ${personalId} no encontrado`);
-    if (!personal.email) {
+
+    // Validar pre-requisitos por canal antes de gastar token / enviar.
+    const usaEmail = canal === 'EMAIL' || canal === 'AMBOS';
+    const usaWhatsapp = canal === 'WHATSAPP' || canal === 'AMBOS';
+    if (usaEmail && !personal.email) {
       throw new BadRequestException(
-        'Este personal no tiene email registrado. Editá el perfil primero.',
+        'Este personal no tiene email registrado. Editá el perfil o cambiá a canal WhatsApp.',
+      );
+    }
+    if (usaWhatsapp && !personal.telefono) {
+      throw new BadRequestException(
+        'Este personal no tiene teléfono registrado. Editá el perfil o cambiá a canal Email.',
       );
     }
 
@@ -56,42 +68,79 @@ export class PersonalAdminService {
       metadata: {
         nombre: `${personal.nombre} ${personal.apellido}`,
         rol: personal.rol,
+        canal,
       },
     });
 
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
     const link = `${frontendUrl}/personal/activar?token=${encodeURIComponent(token)}`;
+    const rolHumano = personal.rol.replace('_', ' ').toLowerCase();
+    const errores: string[] = [];
+    let algunEnviado = false;
 
-    await this.email.send({
-      to: personal.email,
-      subject: `[${tenantName}] Activación de cuenta — Fixtura`,
-      html: `
-        <h2 style="color:#15803d">¡Hola, ${personal.nombre}!</h2>
-        <p><strong>${tenantName}</strong> te dio de alta como
-        <strong>${personal.rol.replace('_', ' ').toLowerCase()}</strong> en Fixtura.</p>
-        <p>Para activar tu cuenta y poder ver tus designaciones, hacé click en este
-        botón:</p>
-        <p style="margin: 20px 0">
-          <a href="${link}"
-             style="background:#15803d;color:#fff;padding:12px 24px;
-                    border-radius:6px;text-decoration:none;font-weight:bold">
-            Activar mi cuenta
-          </a>
-        </p>
-        <p style="color:#666;font-size:13px">
-          Este link expira en 72 horas. Si no fuiste vos, ignorá este email.
-        </p>
-        <p>Saludos,<br/>${tenantName}</p>
-      `,
-      text: `Hola ${personal.nombre}, ${tenantName} te invitó a Fixtura. Activá tu cuenta en: ${link} (expira en 72h).`,
-    });
+    if (usaEmail && personal.email) {
+      try {
+        await this.email.send({
+          to: personal.email,
+          subject: `[${tenantName}] Activación de cuenta — Fixtura`,
+          html: `
+            <h2 style="color:#15803d">¡Hola, ${personal.nombre}!</h2>
+            <p><strong>${tenantName}</strong> te dio de alta como
+            <strong>${rolHumano}</strong> en Fixtura.</p>
+            <p>Para activar tu cuenta y poder ver tus designaciones, hacé click en este
+            botón:</p>
+            <p style="margin: 20px 0">
+              <a href="${link}"
+                 style="background:#15803d;color:#fff;padding:12px 24px;
+                        border-radius:6px;text-decoration:none;font-weight:bold">
+                Activar mi cuenta
+              </a>
+            </p>
+            <p style="color:#666;font-size:13px">
+              Este link expira en 72 horas. Si no fuiste vos, ignorá este email.
+            </p>
+            <p>Saludos,<br/>${tenantName}</p>
+          `,
+          text: `Hola ${personal.nombre}, ${tenantName} te invitó a Fixtura. Activá tu cuenta en: ${link} (expira en 72h).`,
+        });
+        algunEnviado = true;
+      } catch (err) {
+        errores.push(`Email: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    if (usaWhatsapp && personal.telefono) {
+      const result = await this.whatsapp.enviarInvitacionPersonal({
+        telefono: personal.telefono,
+        nombre: personal.nombre,
+        tenantName,
+        rol: rolHumano,
+        link,
+      });
+      if (result.enviado) {
+        algunEnviado = true;
+      } else {
+        errores.push(`WhatsApp: ${result.error ?? 'falló sin error explícito'}`);
+      }
+    }
+
+    // En modo AMBOS, basta con que UNO de los dos haya salido para no
+    // bloquear el flujo. El admin ve los errores parciales en la respuesta.
+    if (!algunEnviado) {
+      throw new BadRequestException(
+        `No se pudo enviar la invitación por ningún canal. Errores: ${errores.join(' | ')}`,
+      );
+    }
 
     return {
       enviado: true,
+      canal,
+      emailDestino: usaEmail ? personal.email : null,
+      telefonoDestino: usaWhatsapp ? personal.telefono : null,
       expira: new Date(
         Date.now() + PersonalAdminService.TTL_INVITACION_MIN * 60 * 1000,
       ).toISOString(),
-      emailDestino: personal.email,
+      errores,
     };
   }
 

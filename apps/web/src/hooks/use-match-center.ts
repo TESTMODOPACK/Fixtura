@@ -1,0 +1,176 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { io, type Socket } from 'socket.io-client';
+
+import type { MatchCenterSnapshot } from '@fixtura/types';
+
+import { apiFetch } from '@/lib/api';
+
+/**
+ * Sprint 18 — RF-17. Hook reactivo del Match Center.
+ *
+ * Estrategia:
+ *   1. Snapshot inicial via HTTP (rápido, SSR-friendly).
+ *   2. Conexión websocket al namespace /match-center.
+ *   3. Subscribe a `partido:<id>` — el server emite snapshot cada 1s.
+ *   4. Si la conexión cae, hace polling HTTP cada 5s como fallback.
+ *
+ * Devuelve el snapshot actualizado en tiempo real. Lectura — las
+ * mutaciones (arrancar/sumar gol) las hace el panel cronista via
+ * mutations REST autenticadas separadas.
+ */
+export function useMatchCenter(partidoId: string): {
+  snapshot: MatchCenterSnapshot | null;
+  conectado: boolean;
+  error: string | null;
+} {
+  const [snapshot, setSnapshot] = useState<MatchCenterSnapshot | null>(null);
+  const [conectado, setConectado] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!partidoId) return;
+
+    // Snapshot inicial HTTP — no espera al WS.
+    let cancelado = false;
+    apiFetch<MatchCenterSnapshot>(`/public/match-center/${partidoId}`)
+      .then((s) => {
+        if (!cancelado) setSnapshot(s);
+      })
+      .catch((err) => {
+        if (!cancelado) setError(`Snapshot inicial: ${(err as Error).message}`);
+      });
+
+    // WebSocket — base URL del API quitando el /api final.
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '/api';
+    const baseUrl = apiUrl.replace(/\/api\/?$/, '') || window.location.origin;
+
+    const socket: Socket = io(`${baseUrl}/match-center`, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
+    });
+
+    socket.on('connect', () => {
+      setConectado(true);
+      setError(null);
+      socket.emit('subscribe', { partidoId });
+    });
+
+    socket.on('snapshot', (snap: MatchCenterSnapshot) => {
+      if (snap.partidoId === partidoId) {
+        setSnapshot(snap);
+      }
+    });
+
+    socket.on('error', (err: { message: string }) => {
+      setError(err.message);
+    });
+
+    socket.on('disconnect', () => {
+      setConectado(false);
+    });
+
+    socket.on('connect_error', (err) => {
+      setError(`WS: ${err.message}`);
+      setConectado(false);
+    });
+
+    // Fallback HTTP — cuando WS no esté conectado, refrescamos cada 5s.
+    const interval = setInterval(() => {
+      if (socket.connected) return;
+      apiFetch<MatchCenterSnapshot>(`/public/match-center/${partidoId}`)
+        .then((s) => {
+          if (!cancelado) setSnapshot(s);
+        })
+        .catch(() => {
+          // silencioso en polling — el error principal ya está visible
+        });
+    }, 5000);
+
+    return () => {
+      cancelado = true;
+      clearInterval(interval);
+      socket.emit('unsubscribe', { partidoId });
+      socket.disconnect();
+    };
+  }, [partidoId]);
+
+  return { snapshot, conectado, error };
+}
+
+/**
+ * Mutaciones REST del Match Center para uso del cronista.
+ * Cada acción golpea su endpoint correspondiente; el broadcast WS se
+ * dispara desde el backend → la UI se refresca via el hook anterior.
+ */
+export function useArrancarCentro(partidoId: string) {
+  return useMutation({
+    mutationFn: (input: { minutosPorPeriodo?: number }) =>
+      apiFetch<MatchCenterSnapshot>(`/admin/match-center/${partidoId}/arrancar`, {
+        method: 'POST',
+        body: input,
+      }),
+  });
+}
+
+export function usePausarCentro(partidoId: string) {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<MatchCenterSnapshot>(`/admin/match-center/${partidoId}/pausar`, {
+        method: 'POST',
+      }),
+  });
+}
+
+export function useReanudarCentro(partidoId: string) {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<MatchCenterSnapshot>(`/admin/match-center/${partidoId}/reanudar`, {
+        method: 'POST',
+      }),
+  });
+}
+
+export function useSumarGolCentro(partidoId: string) {
+  return useMutation({
+    mutationFn: (equipo: 'LOCAL' | 'VISITA') =>
+      apiFetch<MatchCenterSnapshot>(`/admin/match-center/${partidoId}/sumar-gol`, {
+        method: 'POST',
+        body: { equipo },
+      }),
+  });
+}
+
+export function useAjustarGolesCentro(partidoId: string) {
+  return useMutation({
+    mutationFn: (input: { golesLocal: number; golesVisita: number }) =>
+      apiFetch<MatchCenterSnapshot>(
+        `/admin/match-center/${partidoId}/ajustar-goles`,
+        { method: 'POST', body: input },
+      ),
+  });
+}
+
+export function useSiguientePeriodoCentro(partidoId: string) {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<MatchCenterSnapshot>(
+        `/admin/match-center/${partidoId}/siguiente-periodo`,
+        { method: 'POST' },
+      ),
+  });
+}
+
+export function useFinalizarCentro(partidoId: string) {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<MatchCenterSnapshot>(
+        `/admin/match-center/${partidoId}/finalizar`,
+        { method: 'POST' },
+      ),
+  });
+}

@@ -368,10 +368,16 @@ export function useUpdatePersonal(id: string) {
 
 export function useInvitarPersonal() {
   return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<{ enviado: boolean; expira: string; emailDestino: string }>(
+    mutationFn: ({
+      id,
+      canal,
+    }: {
+      id: string;
+      canal?: 'EMAIL' | 'WHATSAPP' | 'AMBOS';
+    }) =>
+      apiFetch<import('@fixtura/types').InvitarPersonalResponse>(
         `/admin/personal/${id}/invitar`,
-        { method: 'POST' },
+        { method: 'POST', body: { canal: canal ?? 'EMAIL' } },
       ),
   });
 }
