@@ -134,6 +134,9 @@ async function main(): Promise<void> {
     // Sprint 7A: tabla transacciones (Webpay + integraciones futuras).
     await ensureTransaccionesTable(client, log);
 
+    // Sprint 7B: tabla documentos_tributarios (boletas/facturas SII).
+    await ensureDocumentosTributariosTable(client, log);
+
     log('Done.');
   } finally {
     await client.end();
@@ -417,6 +420,54 @@ async function ensureTransaccionesTable(
   );
   await ensureTrigger(client, 'transacciones');
   log('Transacciones asegurada (idempotente).');
+}
+
+async function ensureDocumentosTributariosTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS documentos_tributarios (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      transaccion_id      UUID REFERENCES transacciones(id) ON DELETE SET NULL,
+      cobro_id            UUID REFERENCES cobros(id) ON DELETE SET NULL,
+      tipo                VARCHAR(30) NOT NULL DEFAULT 'BOLETA'
+                            CHECK (tipo IN ('BOLETA','FACTURA','NOTA_CREDITO','NOTA_DEBITO')),
+      monto               INTEGER NOT NULL CHECK (monto >= 0),
+      rut_receptor        VARCHAR(20),
+      razon_social        VARCHAR(200),
+      folio_sii           BIGINT,
+      url_pdf             VARCHAR(500),
+      url_xml             VARCHAR(500),
+      estado              VARCHAR(30) NOT NULL DEFAULT 'PENDIENTE_EMISION'
+                            CHECK (estado IN (
+                              'PENDIENTE_EMISION','EMITIDO','RECHAZADO_SII','FALLIDO'
+                            )),
+      intentos            SMALLINT NOT NULL DEFAULT 0,
+      respuesta_sii       JSONB,
+      emitido_at          TIMESTAMPTZ,
+      ultimo_error        TEXT,
+      ultimo_intento_at   TIMESTAMPTZ,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await ensureRls(client, 'documentos_tributarios');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_documentos_tributarios_tenant ON documentos_tributarios(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_doctrib_transaccion ON documentos_tributarios(transaccion_id) WHERE transaccion_id IS NOT NULL`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_doctrib_pendientes ON documentos_tributarios(estado, ultimo_intento_at) WHERE estado IN ('PENDIENTE_EMISION','RECHAZADO_SII')`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_doctrib_folio ON documentos_tributarios(folio_sii) WHERE folio_sii IS NOT NULL`,
+  );
+  await ensureTrigger(client, 'documentos_tributarios');
+  log('Documentos tributarios asegurada (idempotente).');
 }
 
 async function ensurePartidosCanchaId(

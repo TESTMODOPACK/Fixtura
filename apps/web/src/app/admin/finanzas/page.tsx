@@ -7,9 +7,12 @@ import {
   Coins,
   CreditCard,
   DollarSign,
+  Download,
+  FileText,
   Filter,
   PiggyBank,
   Plus,
+  RefreshCw,
   RotateCcw,
   Trash2,
   X,
@@ -21,10 +24,13 @@ import { z } from 'zod';
 import {
   CATEGORIA_COBRO,
   CATEGORIA_LABEL,
+  ESTADO_DOCUMENTO_LABEL,
   METODO_LABEL,
   METODO_PAGO,
   type CategoriaCobro,
   type CobroAdmin,
+  type DocumentoTributarioAdmin,
+  type EstadoDocumentoTributario,
   type MetodoPago,
 } from '@fixtura/types';
 
@@ -36,8 +42,10 @@ import {
   useCobros,
   useCreateCobro,
   useDeleteCobro,
+  useDocumentosTributarios,
   useIniciarPago,
   useMarcarPagado,
+  useReintentarBoleta,
   useRevertirPago,
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
@@ -63,7 +71,10 @@ function formatCLP(n: number): string {
   return `$${n.toLocaleString('es-CL')}`;
 }
 
+type Tab = 'cobros' | 'boletas';
+
 export default function FinanzasPage(): React.ReactElement {
+  const [tab, setTab] = useState<Tab>('cobros');
   const [filtro, setFiltro] = useState<Filtro>('pendientes');
   const [adding, setAdding] = useState(false);
   const { data: cobros, isLoading, error } = useCobros(filtro === 'todos' ? undefined : filtro);
@@ -95,12 +106,92 @@ export default function FinanzasPage(): React.ReactElement {
       <PageHead
         eyebrow="Operaciones"
         title="Finanzas & cobros"
-        sub="Registro manual de inscripciones, cuotas, multas y alquileres. Cuando llegue el pago, lo marcás aquí para mantener trazabilidad."
+        sub="Cobros manuales, pagos online y boletas SII en un solo lugar."
       >
-        <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
-          <Plus size={14} /> {adding ? 'Cancelar' : 'Nuevo cobro'}
-        </Button>
+        {tab === 'cobros' && (
+          <Button variant="accent" size="sm" onClick={() => setAdding((v: boolean) => !v)}>
+            <Plus size={14} /> {adding ? 'Cancelar' : 'Nuevo cobro'}
+          </Button>
+        )}
       </PageHead>
+
+      <div className="flex gap-2 mb-5 border-b border-line">
+        <TabButton active={tab === 'cobros'} onClick={() => setTab('cobros')}>
+          <DollarSign size={14} className="inline mr-1" />
+          Cobros
+        </TabButton>
+        <TabButton active={tab === 'boletas'} onClick={() => setTab('boletas')}>
+          <FileText size={14} className="inline mr-1" />
+          Boletas SII
+        </TabButton>
+      </div>
+
+      {tab === 'boletas' ? (
+        <BoletasTab />
+      ) : (
+        <CobrosTab
+          cobros={cobros}
+          stats={stats}
+          isLoading={isLoading}
+          apiError={apiError}
+          filtro={filtro}
+          setFiltro={setFiltro}
+          adding={adding}
+          setAdding={setAdding}
+        />
+      )}
+    </>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'px-4 py-2 text-sm font-semibold tracking-wide border-b-2 -mb-px transition-colors',
+        active
+          ? 'border-accent text-accent'
+          : 'border-transparent text-ink-mute hover:text-ink hover:border-line',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+interface CobrosTabProps {
+  cobros: CobroAdmin[] | undefined;
+  stats: { total: number; cobradoMes: number; pendienteTotal: number; morosos: number };
+  isLoading: boolean;
+  apiError: ApiError | undefined;
+  filtro: Filtro;
+  setFiltro: React.Dispatch<React.SetStateAction<Filtro>>;
+  adding: boolean;
+  setAdding: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+function CobrosTab({
+  cobros,
+  stats,
+  isLoading,
+  apiError,
+  filtro,
+  setFiltro,
+  adding,
+  setAdding,
+}: CobrosTabProps): React.ReactElement {
+  return (
+    <>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <Card padding="comfortable">
@@ -190,6 +281,217 @@ export default function FinanzasPage(): React.ReactElement {
         )}
       </Card>
     </>
+  );
+}
+
+const ESTADO_DOC_BADGE: Record<EstadoDocumentoTributario, string> = {
+  PENDIENTE_EMISION: 'bg-orange-700/15 text-orange-700',
+  EMITIDO: 'bg-green-bright/15 text-green-bright',
+  RECHAZADO_SII: 'bg-danger/15 text-danger',
+  FALLIDO: 'bg-danger/20 text-danger',
+};
+
+function BoletasTab(): React.ReactElement {
+  const [estadoFiltro, setEstadoFiltro] = useState<string | undefined>(undefined);
+  const { data: docs, isLoading, error } = useDocumentosTributarios(estadoFiltro);
+  const apiError = error as ApiError | undefined;
+
+  const stats = useMemo(() => {
+    const all = docs ?? [];
+    const emitidos = all.filter((d) => d.estado === 'EMITIDO').length;
+    const pendientes = all.filter(
+      (d) => d.estado === 'PENDIENTE_EMISION' || d.estado === 'RECHAZADO_SII',
+    ).length;
+    const fallidos = all.filter((d) => d.estado === 'FALLIDO').length;
+    const totalFacturado = all
+      .filter((d) => d.estado === 'EMITIDO')
+      .reduce((acc, d) => acc + d.monto, 0);
+    return { emitidos, pendientes, fallidos, totalFacturado };
+  }, [docs]);
+
+  const estados: Array<{ key: string | undefined; label: string }> = [
+    { key: undefined, label: 'Todos' },
+    { key: 'EMITIDO', label: 'Emitidos' },
+    { key: 'PENDIENTE_EMISION', label: 'Pendientes' },
+    { key: 'RECHAZADO_SII', label: 'Rechazados' },
+    { key: 'FALLIDO', label: 'Fallidos' },
+  ];
+
+  return (
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <Card padding="comfortable">
+          <CardLabel>Boletas emitidas</CardLabel>
+          <div className="font-display text-3xl text-green-bright tracking-display">
+            {isLoading ? '…' : stats.emitidos}
+          </div>
+        </Card>
+        <Card padding="comfortable">
+          <CardLabel>Total facturado</CardLabel>
+          <div className="font-display text-3xl text-green-deep tracking-display">
+            {isLoading ? '…' : formatCLP(stats.totalFacturado)}
+          </div>
+        </Card>
+        <Card padding="comfortable">
+          <CardLabel>Pendientes</CardLabel>
+          <div
+            className={cn(
+              'font-display text-3xl tracking-display',
+              stats.pendientes > 0 ? 'text-orange-700' : 'text-green-bright',
+            )}
+          >
+            {isLoading ? '…' : stats.pendientes}
+          </div>
+          <div className="text-xs text-ink-mute font-serif italic mt-1">Cron reintenta cada 30min</div>
+        </Card>
+        <Card padding="comfortable">
+          <CardLabel>Fallidos</CardLabel>
+          <div
+            className={cn(
+              'font-display text-3xl tracking-display',
+              stats.fallidos > 0 ? 'text-danger' : 'text-green-bright',
+            )}
+          >
+            {isLoading ? '…' : stats.fallidos}
+          </div>
+          <div className="text-xs text-ink-mute font-serif italic mt-1">Revisión manual</div>
+        </Card>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <Filter size={14} className="text-ink-mute" />
+        {estados.map((e) => (
+          <FiltroChip
+            key={e.key ?? 'todos'}
+            active={estadoFiltro === e.key}
+            onClick={() => setEstadoFiltro(e.key)}
+          >
+            {e.label}
+          </FiltroChip>
+        ))}
+      </div>
+
+      {apiError && (
+        <Card padding="comfortable" className="border-2 border-danger/40 bg-danger/5 mb-4">
+          <div className="flex items-start gap-3 text-danger">
+            <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="font-semibold">No pudimos cargar las boletas</div>
+              <div className="text-sm mt-1">{apiError.message}</div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <Card padding="none" className="overflow-hidden">
+        {isLoading && (
+          <div className="p-8 text-center font-serif italic text-ink-mute">Cargando…</div>
+        )}
+        {!isLoading && !apiError && (docs?.length ?? 0) === 0 && (
+          <div className="p-12 text-center">
+            <FileText size={36} className="mx-auto text-line mb-3" />
+            <p className="font-serif italic text-ink-mute">
+              No hay boletas{estadoFiltro ? ` en estado "${ESTADO_DOCUMENTO_LABEL[estadoFiltro as EstadoDocumentoTributario]}"` : ''}.
+              <br />
+              Las boletas se emiten automáticamente cuando se aprueba un pago online.
+            </p>
+          </div>
+        )}
+        {!isLoading && docs && docs.length > 0 && (
+          <div className="divide-y divide-line">
+            {docs.map((d) => (
+              <BoletaRow key={d.id} doc={d} />
+            ))}
+          </div>
+        )}
+      </Card>
+    </>
+  );
+}
+
+function BoletaRow({ doc }: { doc: DocumentoTributarioAdmin }): React.ReactElement {
+  const reintentar = useReintentarBoleta();
+  const reintentarError = reintentar.error as ApiError | undefined;
+
+  return (
+    <div className="p-5">
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className="font-semibold text-ink">
+              {doc.cobroConcepto ?? 'Sin cobro asociado'}
+            </span>
+            <span
+              className={cn(
+                'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
+                ESTADO_DOC_BADGE[doc.estado],
+              )}
+            >
+              {ESTADO_DOCUMENTO_LABEL[doc.estado]}
+            </span>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-ink-mute flex-wrap">
+            <span className="font-display tracking-display text-xl text-green-deep">
+              {formatCLP(doc.monto)}
+            </span>
+            {doc.folioSii && (
+              <span>
+                Folio: <span className="font-mono">{doc.folioSii}</span>
+              </span>
+            )}
+            {doc.emitidoAt && (
+              <span className="text-green-bright">
+                Emitida el{' '}
+                <span className="font-mono">
+                  {new Date(doc.emitidoAt).toLocaleDateString('es-CL')}
+                </span>
+              </span>
+            )}
+            {doc.intentos > 0 && doc.estado !== 'EMITIDO' && (
+              <span>
+                Intentos: <span className="font-mono">{doc.intentos}</span>
+              </span>
+            )}
+          </div>
+          {doc.ultimoError && doc.estado !== 'EMITIDO' && (
+            <div className="mt-1 text-xs text-danger font-serif italic">
+              Último error: {doc.ultimoError}
+            </div>
+          )}
+          {reintentarError && (
+            <div className="mt-1 text-xs text-danger">
+              {reintentarError.message}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {doc.estado === 'EMITIDO' && doc.urlPdf && (
+            <a
+              href={doc.urlPdf}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2 py-1 rounded text-xs uppercase tracking-wider font-semibold bg-green-deep text-chalk hover:bg-green-deep/90 inline-flex items-center gap-1"
+              title="Descargar boleta PDF"
+            >
+              <Download size={12} /> PDF
+            </a>
+          )}
+          {(doc.estado === 'PENDIENTE_EMISION' || doc.estado === 'RECHAZADO_SII') && (
+            <button
+              type="button"
+              onClick={() => reintentar.mutate(doc.id)}
+              disabled={reintentar.isPending}
+              className="px-2 py-1 rounded text-xs uppercase tracking-wider font-semibold bg-accent text-chalk hover:bg-accent/90 disabled:opacity-50 inline-flex items-center gap-1"
+              title="Reintentar emisión ahora"
+            >
+              <RefreshCw size={12} className={reintentar.isPending ? 'animate-spin' : ''} />
+              Reintentar
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

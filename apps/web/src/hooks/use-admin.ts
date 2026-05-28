@@ -726,6 +726,34 @@ export function useDeactivateCancha() {
   });
 }
 
+// ─── Documentos tributarios (SII) ───────────────────────────────────
+import type { DocumentoTributarioAdmin } from '@fixtura/types';
+
+export function useDocumentosTributarios(estado?: string) {
+  const qs = estado ? `?estado=${estado}` : '';
+  return useQuery({
+    queryKey: ['admin', 'documentos-tributarios', { estado: estado ?? null }],
+    queryFn: () =>
+      apiFetch<DocumentoTributarioAdmin[]>(`/admin/documentos-tributarios${qs}`),
+    // Refresh cada 30s para mostrar cambios de estado cuando el cron emite
+    refetchInterval: 30_000,
+  });
+}
+
+export function useReintentarBoleta() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<DocumentoTributarioAdmin>(
+        `/admin/documentos-tributarios/${id}/reintentar`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'documentos-tributarios'] });
+    },
+  });
+}
+
 // ─── Pagos online (Webpay) ──────────────────────────────────────────
 import type { IniciarPagoResponse } from '@fixtura/types';
 

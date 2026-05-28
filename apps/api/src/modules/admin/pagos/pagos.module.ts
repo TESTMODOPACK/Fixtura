@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { CompetitionModule } from '../../competition/competition.module';
+import { SIIModule } from '../sii/sii.module';
 import {
   PagosAdminController,
   PagosPublicController,
@@ -22,7 +23,7 @@ import {
  * Transacción → pasarela y mantiene la idempotencia.
  */
 @Module({
-  imports: [CompetitionModule],
+  imports: [CompetitionModule, SIIModule],
   controllers: [PagosAdminController, PagosPublicController],
   providers: [
     PagosService,

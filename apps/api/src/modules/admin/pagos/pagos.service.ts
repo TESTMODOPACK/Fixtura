@@ -15,6 +15,7 @@ import type { ConfirmarPagoResponse, IniciarPagoResponse } from '@fixtura/types'
 
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { Transaccion } from '../../competition/entities/transaccion.entity';
+import { SIIService } from '../sii/sii.service';
 import { WEBPAY_PROVIDER, WebpayProvider } from './webpay-provider';
 
 /**
@@ -56,6 +57,7 @@ export class PagosService {
     private readonly cobroRepo: Repository<Cobro>,
     @Inject(WEBPAY_PROVIDER)
     private readonly webpay: WebpayProvider,
+    private readonly sii: SIIService,
   ) {}
 
   @Transactional()
@@ -226,6 +228,17 @@ export class PagosService {
             );
           }
         }
+
+        // Disparar emisión SII en background. NO await — si Open Factura
+        // está caído, el cron lo va a reintentar más tarde. El user no
+        // espera por esto.
+        void this.sii
+          .crearYEmitirAsync(tx.id)
+          .catch((err) =>
+            this.log.warn(
+              `Emisión SII inicial falló para tx=${tx.id}: ${(err as Error).message}`,
+            ),
+          );
       } else {
         tx.estado = 'RECHAZADO';
         await this.txRepo.save(tx);

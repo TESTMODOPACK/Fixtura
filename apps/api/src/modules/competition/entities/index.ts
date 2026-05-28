@@ -4,6 +4,11 @@ export { Cobro } from './cobro.entity';
 export type { CategoriaCobro, MetodoPago } from './cobro.entity';
 export { Designacion } from './designacion.entity';
 export type { EstadoDesignacion } from './designacion.entity';
+export { DocumentoTributario } from './documento-tributario.entity';
+export type {
+  EstadoDocumentoTributario,
+  TipoDocumentoTributario,
+} from './documento-tributario.entity';
 export { DesignacionRecinto } from './designacion-recinto.entity';
 export type { RolRecinto } from './designacion-recinto.entity';
 export { Equipo } from './equipo.entity';
