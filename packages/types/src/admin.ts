@@ -47,6 +47,7 @@ export const CreateTorneoSchema = z.object({
   fechaInicio: z.iso.date().nullable().optional(),
   fechaFin: z.iso.date().nullable().optional(),
   reglamentoUrl: z.url().nullable().optional(),
+  tablaTiebreakers: z.array(z.string()).optional(),
 });
 export type CreateTorneoRequest = z.infer<typeof CreateTorneoSchema>;
 
@@ -66,6 +67,7 @@ export const TorneoAdminSchema = z.object({
   puntosVictoria: z.number().int(),
   puntosEmpate: z.number().int(),
   puntosDerrota: z.number().int(),
+  tablaTiebreakers: z.array(z.string()),
   estado: EstadoTorneoSchema,
   fechaInicio: z.string().nullable(),
   fechaFin: z.string().nullable(),

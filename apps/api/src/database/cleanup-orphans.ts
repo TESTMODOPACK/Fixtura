@@ -146,6 +146,14 @@ async function main(): Promise<void> {
     // Sprint 10: tabla magic_links (onboarding personal + reset password).
     await ensureMagicLinksTable(client, log);
 
+    // Sprint 12: tiebreakers configurables por torneo.
+    await client.query(`
+      ALTER TABLE torneos
+        ADD COLUMN IF NOT EXISTS tabla_tiebreakers JSONB
+          NOT NULL DEFAULT '["pts","dg","gf","nombre"]'::jsonb
+    `);
+    log('torneos.tabla_tiebreakers asegurada.');
+
     log('Done.');
   } finally {
     await client.end();

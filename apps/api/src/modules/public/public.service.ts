@@ -174,10 +174,20 @@ export class PublicService {
       };
     });
 
+    // Sprint 12: orden configurable de tiebreakers.
+    // Default: ["pts","dg","gf","nombre"]. Cada key compara DESC excepto
+    // "gc" (menos goles en contra es mejor) y "nombre" (ASC, último recurso).
+    const orden =
+      Array.isArray(torneo.tablaTiebreakers) && torneo.tablaTiebreakers.length > 0
+        ? torneo.tablaTiebreakers
+        : ['pts', 'dg', 'gf', 'nombre'];
+
     filasSinOrdenar.sort((a, b) => {
-      if (b.pts !== a.pts) return b.pts - a.pts;
-      if (b.dg !== a.dg) return b.dg - a.dg;
-      if (b.gf !== a.gf) return b.gf - a.gf;
+      for (const key of orden) {
+        const cmp = this.compararTiebreaker(a, b, key);
+        if (cmp !== 0) return cmp;
+      }
+      // Fallback determinístico si todo empata.
       return a.equipoNombre.localeCompare(b.equipoNombre);
     });
 
@@ -188,6 +198,39 @@ export class PublicService {
       filas,
       actualizadaAt: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Sprint 12: compara dos filas según un criterio de tiebreaker.
+   * Devuelve >0 si b va antes que a, <0 si a va antes, 0 si empata.
+   * Casi todos DESC (mayor es mejor) excepto `gc` y `nombre`.
+   */
+  private compararTiebreaker(
+    a: FilaTabla,
+    b: FilaTabla,
+    key: string,
+  ): number {
+    switch (key) {
+      case 'pts':
+        return b.pts - a.pts;
+      case 'dg':
+        return b.dg - a.dg;
+      case 'gf':
+        return b.gf - a.gf;
+      case 'gc':
+        // Menos goles en contra es mejor.
+        return a.gc - b.gc;
+      case 'pg':
+        return b.pg - a.pg;
+      case 'ed':
+        // TODO v3: enfrentamiento directo. Requiere subset de partidos
+        // entre los equipos empatados. Por ahora delega al siguiente.
+        return 0;
+      case 'nombre':
+        return a.equipoNombre.localeCompare(b.equipoNombre);
+      default:
+        return 0;
+    }
   }
 
   // ─── Fixture ──────────────────────────────────────────────────────

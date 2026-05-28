@@ -74,6 +74,9 @@ export class CreateTorneoDto {
   @IsOptional()
   @IsUrl()
   reglamentoUrl?: string | null;
+
+  @IsOptional()
+  tablaTiebreakers?: string[];
 }
 
 export class UpdateTorneoDto {

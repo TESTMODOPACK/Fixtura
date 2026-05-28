@@ -63,6 +63,7 @@ export class TorneosAdminService {
       puntosVictoria: input.puntosVictoria,
       puntosEmpate: input.puntosEmpate,
       puntosDerrota: input.puntosDerrota,
+      tablaTiebreakers: input.tablaTiebreakers ?? ['pts', 'dg', 'gf', 'nombre'],
       estado: 'DRAFT',
       fechaInicio: input.fechaInicio ?? null,
       fechaFin: input.fechaFin ?? null,
@@ -97,6 +98,9 @@ export class TorneosAdminService {
       ...(input.fechaInicio !== undefined && { fechaInicio: input.fechaInicio }),
       ...(input.fechaFin !== undefined && { fechaFin: input.fechaFin }),
       ...(input.reglamentoUrl !== undefined && { reglamentoUrl: input.reglamentoUrl }),
+      ...(input.tablaTiebreakers !== undefined && {
+        tablaTiebreakers: input.tablaTiebreakers,
+      }),
     });
     await this.repo.save(existing);
     return this.findOne(id, tenantId);
@@ -119,6 +123,10 @@ export class TorneosAdminService {
       puntosVictoria: t.puntosVictoria,
       puntosEmpate: t.puntosEmpate,
       puntosDerrota: t.puntosDerrota,
+      tablaTiebreakers:
+        Array.isArray(t.tablaTiebreakers) && t.tablaTiebreakers.length > 0
+          ? t.tablaTiebreakers
+          : ['pts', 'dg', 'gf', 'nombre'],
       estado: t.estado,
       fechaInicio: t.fechaInicio,
       fechaFin: t.fechaFin,

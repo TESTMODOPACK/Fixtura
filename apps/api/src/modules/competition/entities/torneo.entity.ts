@@ -60,6 +60,11 @@ export class Torneo {
   @Column({ name: 'puntos_derrota', type: 'smallint', default: 0 })
   puntosDerrota!: number;
 
+  // Sprint 12 — orden de tiebreakers configurable por torneo.
+  // Default: ["pts","dg","gf","nombre"]. Otras keys: gc, pg, ed.
+  @Column({ name: 'tabla_tiebreakers', type: 'jsonb', default: () => `'["pts","dg","gf","nombre"]'::jsonb` })
+  tablaTiebreakers!: string[];
+
   @Column({ type: 'varchar', length: 20, default: 'DRAFT' })
   estado!: EstadoTorneo;
 
