@@ -8,7 +8,7 @@ import type { Role, UserContext } from '@fixtura/types';
  * mismo hostname desde donde se hizo login.
  *
  * Reglas (prioridad de mayor a menor):
- *   1. SUPER_ADMIN → /super-admin (visible solo desde fixtura.cl)
+ *   1. SUPER_ADMIN → /admin/super (Sprint 23: ruta del panel plataforma)
  *   2. Roles de gestión de liga → /admin
  *   3. TRIBUNAL_DISCIPLINA → /admin/tribunal
  *   4. DELEGADO_EQUIPO → /club
@@ -30,7 +30,9 @@ const PERSONAL_ROLES: Role[] = ['ARBITRO', 'PLANILLERO', 'PARAMEDICO', 'SEGURIDA
 export function resolveLandingByRole(user: UserContext): string {
   const roles = new Set(user.roles.map((r) => r.role));
 
-  if (roles.has('SUPER_ADMIN')) return '/super-admin';
+  // Bug 2026-05-29: antes redirigía a /super-admin que no existe en
+  // Next (404). La ruta real del panel super admin es /admin/super.
+  if (roles.has('SUPER_ADMIN')) return '/admin/super';
   if (ADMIN_ROLES.some((r) => roles.has(r))) return '/admin';
   if (roles.has('TRIBUNAL_DISCIPLINA')) return '/admin/tribunal';
   if (roles.has('DELEGADO_EQUIPO')) return '/club';
