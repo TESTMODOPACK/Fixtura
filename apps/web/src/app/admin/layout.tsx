@@ -20,6 +20,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+import { ImpersonationBanner } from '@/components/impersonation-banner';
+
 import { FixturaLockup } from '@/components/ui/logo';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth-store';
@@ -94,7 +96,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen bg-paper flex">
+    <div className="min-h-screen bg-paper">
+      <ImpersonationBanner />
+      <div className="flex">
       <aside className="hidden md:flex w-64 flex-col bg-green-deep text-chalk">
         <div className="px-5 py-6 border-b border-green-mid">
           <Link href="/">
@@ -169,6 +173,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       <div className="flex-1 min-w-0">
         <main className="px-6 md:px-10 py-8 max-w-7xl">{children}</main>
+      </div>
       </div>
     </div>
   );

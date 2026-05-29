@@ -20,6 +20,7 @@ import { MatchCenterModule } from './modules/match-center/match-center.module';
 import { MeModule } from './modules/me/me.module';
 import { PublicModule } from './modules/public/public.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { ImpersonationModule } from './modules/impersonation/impersonation.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
@@ -73,6 +74,7 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
     EmailModule,
     WhatsAppModule,
     AuditModule,
+    ImpersonationModule,
     HealthModule,
     AuthModule,
     TenantsModule,

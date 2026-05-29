@@ -1118,3 +1118,42 @@ export function useAuditActions() {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+// ─── Sprint 21 — Impersonación (RF-06) ──────────────────────────────
+import type { AuthTokens } from '@fixtura/types';
+
+export interface ImpersonationCandidate {
+  id: string;
+  email: string;
+  roles: string[];
+}
+
+export function useImpersonationCandidates(emailFilter: string) {
+  const qs = emailFilter ? `?email=${encodeURIComponent(emailFilter)}` : '';
+  return useQuery({
+    queryKey: ['admin', 'impersonate', { emailFilter }],
+    queryFn: () =>
+      apiFetch<ImpersonationCandidate[]>(`/admin/impersonate${qs}`),
+    staleTime: 30_000,
+  });
+}
+
+export function useStartImpersonation() {
+  return useMutation({
+    mutationFn: (userId: string) =>
+      apiFetch<AuthTokens & { targetEmail: string; targetUserId: string }>(
+        `/admin/impersonate/${userId}/start`,
+        { method: 'POST', body: {} },
+      ),
+  });
+}
+
+export function useEndImpersonation() {
+  return useMutation({
+    mutationFn: (targetUserId: string) =>
+      apiFetch<{ ok: boolean }>(`/admin/impersonate/${targetUserId}/end`, {
+        method: 'POST',
+        body: {},
+      }),
+  });
+}

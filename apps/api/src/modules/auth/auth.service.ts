@@ -191,7 +191,12 @@ export class AuthService {
     await this.refreshRepo.update({ tokenHash, revokedAt: IsNull() }, { revokedAt: new Date() });
   }
 
-  private async issueTokens(
+  /**
+   * Genera access + refresh para un UserContext arbitrario.
+   * Público porque ImpersonationService lo invoca para emitir tokens
+   * con `impersonatorId` distinto a null.
+   */
+  async issueTokens(
     ctx: UserContext,
     meta: { userAgent?: string; ipAddress?: string } = {},
   ): Promise<AuthTokens> {

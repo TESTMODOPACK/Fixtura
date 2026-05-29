@@ -11,6 +11,8 @@ import type { Request, Response } from 'express';
 
 import type { UserContext } from '@fixtura/types';
 
+import { Audited } from '../audit';
+import { NoImpersonation } from '../impersonation';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { MeService } from './me.service';
 
@@ -30,6 +32,7 @@ export class MeController {
    * Content-Disposition: attachment fuerza descarga en el browser.
    */
   @Get('data')
+  @Audited('me.data_exported')
   async getData(
     @CurrentUser() user: UserContext,
     @Req() req: Request,
@@ -53,6 +56,8 @@ export class MeController {
    */
   @Post('delete-request')
   @HttpCode(200)
+  @NoImpersonation()
+  @Audited('me.deletion_requested')
   async requestDeletion(
     @CurrentUser() user: UserContext,
     @Req() req: Request,
@@ -70,6 +75,8 @@ export class MeController {
    */
   @Delete('delete-request')
   @HttpCode(200)
+  @NoImpersonation()
+  @Audited('me.deletion_cancelled')
   async cancelDeletion(
     @CurrentUser() user: UserContext,
     @Req() req: Request,
