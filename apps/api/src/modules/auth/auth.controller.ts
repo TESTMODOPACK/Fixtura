@@ -5,6 +5,7 @@ import type { Request } from 'express';
 
 import type { AuthTokens, UserContext } from '@fixtura/types';
 
+import { Audited } from '../audit';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { AuthService } from './auth.service';
@@ -38,6 +39,8 @@ export class AuthController {
   @Post('login')
   @Public()
   @HttpCode(200)
+  // Loguea TANTO éxito como fallo para detectar ataques de fuerza bruta.
+  @Audited({ action: 'auth.login', onlyOnSuccess: false })
   async login(@Body() dto: LoginDto, @Req() req: Request): Promise<AuthTokens> {
     return this.auth.login(dto.email, dto.password, {
       userAgent: req.headers['user-agent'],
@@ -54,6 +57,7 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(204)
+  @Audited('auth.logout')
   async logout(@Body() dto: RefreshDto): Promise<void> {
     await this.auth.logout(dto.refreshToken);
   }
@@ -72,6 +76,7 @@ export class AuthController {
   @Post('forgot-password')
   @Public()
   @HttpCode(200)
+  @Audited('auth.forgot_password')
   async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<{ ok: boolean }> {
     return this.auth.solicitarResetPassword(dto.email);
   }
@@ -82,6 +87,7 @@ export class AuthController {
   @Post('reset-password')
   @Public()
   @HttpCode(200)
+  @Audited({ action: 'auth.reset_password', onlyOnSuccess: false })
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ ok: boolean }> {
     return this.auth.aplicarResetPassword(dto.token, dto.password);
   }

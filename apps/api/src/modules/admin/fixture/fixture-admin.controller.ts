@@ -10,6 +10,7 @@ import {
 
 import { ROLE, type FixtureGenerationResult, type UserContext } from '@fixtura/types';
 
+import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { SuspenderFechaDto } from '../partidos/dto';
@@ -23,6 +24,7 @@ export class FixtureAdminController {
   constructor(private readonly svc: FixtureAdminService) {}
 
   @Post('generar')
+  @Audited({ action: 'fixture.generado', entityType: 'Torneo', entityIdFrom: 'params.torneoId' })
   generar(
     @CurrentUser() user: UserContext,
     @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
@@ -54,6 +56,7 @@ export class FechasAdminController {
   constructor(private readonly svc: FechasAdminService) {}
 
   @Post(':fechaId/suspender')
+  @Audited({ action: 'fecha.suspendida', entityType: 'Fecha', entityIdFrom: 'params.fechaId' })
   suspender(
     @CurrentUser() user: UserContext,
     @Param('fechaId', new ParseUUIDPipe()) fechaId: string,
@@ -75,6 +78,7 @@ export class FechasAdminController {
   }
 
   @Post(':fechaId/reactivar')
+  @Audited({ action: 'fecha.reactivada', entityType: 'Fecha', entityIdFrom: 'params.fechaId' })
   async reactivar(
     @CurrentUser() user: UserContext,
     @Param('fechaId', new ParseUUIDPipe()) fechaId: string,

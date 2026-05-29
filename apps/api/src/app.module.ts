@@ -19,6 +19,7 @@ import { HealthModule } from './modules/health/health.module';
 import { MatchCenterModule } from './modules/match-center/match-center.module';
 import { MeModule } from './modules/me/me.module';
 import { PublicModule } from './modules/public/public.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
@@ -71,6 +72,7 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
     RlsModule,
     EmailModule,
     WhatsAppModule,
+    AuditModule,
     HealthModule,
     AuthModule,
     TenantsModule,

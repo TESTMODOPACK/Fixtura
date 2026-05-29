@@ -19,6 +19,7 @@ import {
   type UserContext,
 } from '@fixtura/types';
 
+import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import {
@@ -113,6 +114,7 @@ export class PartidosAdminController {
   }
 
   @Post(':id/cerrar-acta')
+  @Audited({ action: 'partido.acta_cerrada', entityType: 'Partido', entityIdFrom: 'params.id' })
   cerrarActa(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -127,6 +129,7 @@ export class PartidosAdminController {
 
   @Post(':id/reabrir-acta')
   @Roles(ROLE.LIGA_ADMIN, ROLE.SUPER_ADMIN)
+  @Audited({ action: 'partido.acta_reabierta', entityType: 'Partido', entityIdFrom: 'params.id' })
   reabrirActa(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -137,6 +140,7 @@ export class PartidosAdminController {
   // ── Sprint 8: Suspensión / reprogramación / reactivación ───────────
   @Post(':id/suspender')
   @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
+  @Audited({ action: 'partido.suspendido', entityType: 'Partido', entityIdFrom: 'params.id' })
   suspender(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -175,6 +179,7 @@ export class PartidosAdminController {
   // ── Sprint 9: Walkover (3-0 automático por inasistencia) ───────────
   @Post(':id/walkover')
   @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
+  @Audited({ action: 'partido.walkover_declarado', entityType: 'Partido', entityIdFrom: 'params.id' })
   declararWalkover(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,

@@ -15,6 +15,7 @@ import {
   type UserContext,
 } from '@fixtura/types';
 
+import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -52,6 +53,7 @@ export class PagosAdminController {
    *    token. Si no se pasa, asume FRONTEND_URL/pago/retorno (config).
    */
   @Post('iniciar')
+  @Audited({ action: 'pago.iniciado', entityType: 'Cobro' })
   iniciar(
     @CurrentUser() user: UserContext,
     @Body() dto: IniciarPagoDto,
@@ -82,6 +84,7 @@ export class PagosPublicController {
    * en estado final, devuelve el estado guardado sin volver a llamar.
    */
   @Post(':transaccionId/confirmar')
+  @Audited({ action: 'pago.confirmado', entityType: 'Transaccion', entityIdFrom: 'params.transaccionId' })
   confirmar(
     @Param('transaccionId', new ParseUUIDPipe()) transaccionId: string,
   ): Promise<ConfirmarPagoResponse> {

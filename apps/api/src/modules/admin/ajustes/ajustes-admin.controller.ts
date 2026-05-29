@@ -17,6 +17,7 @@ import {
   type UserContext,
 } from '@fixtura/types';
 
+import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { AjustesAdminService } from './ajustes-admin.service';
@@ -49,6 +50,7 @@ export class AjustesAdminController {
   }
 
   @Patch()
+  @Audited({ action: 'tenant.settings_updated', entityType: 'Tenant' })
   update(
     @CurrentUser() user: UserContext,
     @Body() dto: UpdateTenantSettingsDto,
@@ -62,6 +64,7 @@ export class AjustesAdminController {
   }
 
   @Post('miembros')
+  @Audited({ action: 'tenant.member_invited', entityType: 'User' })
   invitarMiembro(
     @CurrentUser() user: UserContext,
     @Body() dto: InvitarMiembroDto,
@@ -70,6 +73,7 @@ export class AjustesAdminController {
   }
 
   @Delete('miembros/:userRoleId')
+  @Audited({ action: 'tenant.member_removed', entityType: 'UserRole', entityIdFrom: 'params.userRoleId' })
   removeMiembro(
     @CurrentUser() user: UserContext,
     @Param('userRoleId', new ParseUUIDPipe()) userRoleId: string,

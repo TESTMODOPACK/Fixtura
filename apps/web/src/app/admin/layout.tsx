@@ -10,6 +10,7 @@ import {
   type LucideIcon,
   Megaphone,
   PiggyBank,
+  ScrollText,
   Settings,
   Trophy,
   UserCog,
@@ -72,6 +73,7 @@ const NAV: NavSection[] = [
     items: [
       { href: '/admin/personal', label: 'Personal & roles', icon: UserCog },
       { href: '/admin/ajustes', label: 'Ajustes', icon: Settings },
+      { href: '/admin/audit-log', label: 'Audit log', icon: ScrollText },
     ],
   },
 ];

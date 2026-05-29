@@ -1081,3 +1081,40 @@ export function useEliminarDiaNoJugable() {
     },
   });
 }
+
+// ─── Sprint 20 — Audit log (RF-07) ──────────────────────────────────
+import type { AuditLogPage } from '@fixtura/types';
+
+export interface AuditLogQueryParams {
+  action?: string;
+  actionPrefix?: string;
+  userId?: string;
+  entityType?: string;
+  entityId?: string;
+  ipAddress?: string;
+  desde?: string;
+  hasta?: string;
+  page?: number;
+  limit?: number;
+}
+
+export function useAuditLog(params: AuditLogQueryParams = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+  }
+  const query = qs.toString();
+  return useQuery({
+    queryKey: ['admin', 'audit-log', params],
+    queryFn: () =>
+      apiFetch<AuditLogPage>(`/admin/audit-log${query ? `?${query}` : ''}`),
+  });
+}
+
+export function useAuditActions() {
+  return useQuery({
+    queryKey: ['admin', 'audit-log', 'actions'],
+    queryFn: () => apiFetch<string[]>('/admin/audit-log/actions'),
+    staleTime: 5 * 60 * 1000,
+  });
+}
