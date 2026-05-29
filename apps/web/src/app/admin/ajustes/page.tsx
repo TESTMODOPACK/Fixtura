@@ -17,9 +17,12 @@ import { z } from 'zod';
 
 import {
   ROLES_ADMIN_INVITABLES,
+  ROLE_DESCRIPTION,
+  ROLE_LABEL as ROLE_LABEL_FULL,
   type Branding,
   type MiembroAdmin,
   type RolAdminInvitable,
+  type Role,
   type TenantSettings,
 } from '@fixtura/types';
 
@@ -44,13 +47,14 @@ import { cn } from '@/lib/cn';
 
 type Tab = 'branding' | 'dominio' | 'reglamento' | 'equipo' | 'calendario';
 
+// Sprint 22: labels canónicos desde @fixtura/types — 16 roles.
 const ROL_LABEL: Record<RolAdminInvitable, string> = {
-  LIGA_ADMIN: 'Administrador',
-  LIGA_COORDINADOR: 'Coordinador',
-  LIGA_COORDINADOR_ARBITROS: 'Coord. árbitros',
-  LIGA_CONTADOR: 'Contador',
-  LIGA_COMERCIAL: 'Comercial',
-  TRIBUNAL_DISCIPLINA: 'Tribunal',
+  LIGA_ADMIN: ROLE_LABEL_FULL.LIGA_ADMIN,
+  LIGA_COORDINADOR: ROLE_LABEL_FULL.LIGA_COORDINADOR,
+  LIGA_COORDINADOR_ARBITROS: ROLE_LABEL_FULL.LIGA_COORDINADOR_ARBITROS,
+  LIGA_CONTADOR: ROLE_LABEL_FULL.LIGA_CONTADOR,
+  LIGA_COMERCIAL: ROLE_LABEL_FULL.LIGA_COMERCIAL,
+  TRIBUNAL_DISCIPLINA: ROLE_LABEL_FULL.TRIBUNAL_DISCIPLINA,
 };
 
 export default function AjustesPage(): React.ReactElement {
@@ -776,6 +780,10 @@ function InvitarMiembroForm({ onDone }: { onDone: () => void }): React.ReactElem
             </option>
           ))}
         </select>
+        <p className="text-xs text-ink-mute font-serif italic mt-1">
+          {ROLE_DESCRIPTION[form.watch('rol') as Role] ??
+            'Elegí un rol para ver qué permisos otorga.'}
+        </p>
       </div>
       <div className="md:col-span-2">
         <Input

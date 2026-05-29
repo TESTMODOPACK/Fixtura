@@ -1,12 +1,27 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
-import type { Role } from '@fixtura/types';
+import { ROLE_SCOPE, type Role } from '@fixtura/types';
 
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import type { AuthenticatedRequest } from '../types/authenticated-request';
 
+/**
+ * Sprint 22 — RF-05. RolesGuard con validación de scope.
+ *
+ * Validación en dos pasadas:
+ *   1. ¿Tiene al menos uno de los roles requeridos?
+ *   2. Para roles tenant-scoped (LIGA_*, RECINTO_*, TRIBUNAL_*), el
+ *      user_role debe tener scope_id = tenantId del request actual.
+ *      Como JWT solo carga un tenantId y RLS lo refuerza, en la práctica
+ *      este check es defensa en profundidad.
+ *
+ * Roles PLATFORM (SUPER_ADMIN) pasan cualquier tenant.
+ * Roles TEAM/PERSONAL no se validan acá — su scope se verifica en la
+ * lógica de cada service (ej. PartidoService verifica que el equipoId
+ * del partido coincida con el equipo del delegado).
+ */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
@@ -28,11 +43,37 @@ export class RolesGuard implements CanActivate {
     const user = req.user;
     if (!user) return false;
 
-    const userRoles = new Set(user.roles.map((r) => r.role));
-    const ok = requiredRoles.some((r) => userRoles.has(r));
+    // SUPER_ADMIN bypassa todo el check (incluyendo cross-tenant).
+    const isSuperAdmin = user.roles.some((r) => r.role === 'SUPER_ADMIN');
+    if (isSuperAdmin && requiredRoles.includes('SUPER_ADMIN' as Role)) {
+      return true;
+    }
+
+    // Verificar coincidencia de rol + scope.
+    const ok = requiredRoles.some((requiredRole) => {
+      const expectedScope = ROLE_SCOPE[requiredRole];
+      return user.roles.some((userRole) => {
+        if (userRole.role !== requiredRole) return false;
+
+        // Para roles TENANT, scope_id debe coincidir con tenantId del JWT.
+        if (expectedScope === 'TENANT') {
+          if (!user.tenantId) return false;
+          return userRole.scopeId === user.tenantId;
+        }
+
+        // PLATFORM, TEAM, PERSONAL: el rol con scope correcto basta;
+        // la validación granular vive en el service de cada feature.
+        return true;
+      });
+    });
+
     if (!ok) {
+      const userRoleSummary = user.roles
+        .map((r) => `${r.role}@${r.scope}${r.scopeId ? `(${r.scopeId.slice(0, 8)})` : ''}`)
+        .join(', ');
       throw new ForbiddenException(
-        `Requires one of roles: ${requiredRoles.join(', ')}. Has: ${[...userRoles].join(', ')}`,
+        `Requires one of roles: ${requiredRoles.join(', ')}. ` +
+          `Tu sesión tiene: ${userRoleSummary || '(sin roles)'} tenant=${user.tenantId ?? 'null'}.`,
       );
     }
     return true;

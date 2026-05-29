@@ -48,6 +48,46 @@ export const SCOPE = {
 export type Scope = (typeof SCOPE)[keyof typeof SCOPE];
 export const ScopeSchema = z.enum(['PLATFORM', 'TENANT', 'TEAM', 'PERSONAL']);
 
+/** Etiqueta humana de cada rol (para UI). */
+export const ROLE_LABEL: Record<Role, string> = {
+  SUPER_ADMIN: 'Super Admin (plataforma)',
+  LIGA_ADMIN: 'Administrador de liga',
+  LIGA_COORDINADOR: 'Coordinador deportivo',
+  LIGA_COORDINADOR_ARBITROS: 'Coordinador de árbitros',
+  LIGA_CONTADOR: 'Contador',
+  LIGA_COMERCIAL: 'Comercial / Sponsors',
+  RECINTO_ADMIN: 'Admin de recinto',
+  TRIBUNAL_DISCIPLINA: 'Tribunal de disciplina',
+  DELEGADO_EQUIPO: 'Delegado de equipo',
+  ARBITRO: 'Árbitro',
+  PLANILLERO: 'Planillero',
+  PARAMEDICO: 'Paramédico',
+  SEGURIDAD: 'Seguridad',
+  MANTENIMIENTO: 'Mantenimiento',
+  JUGADOR: 'Jugador',
+  HINCHA: 'Hincha',
+};
+
+/** Descripción de permisos por rol (para tooltips en UI de gestión). */
+export const ROLE_DESCRIPTION: Record<Role, string> = {
+  SUPER_ADMIN: 'Acceso total a la plataforma. Puede impersonar a cualquier usuario (excepto otro super admin).',
+  LIGA_ADMIN: 'Todo dentro de la liga: usuarios, finanzas, configuración, fixture, designaciones, sponsors.',
+  LIGA_COORDINADOR: 'Operación deportiva: torneos, fixture, actas, suspensiones. NO finanzas ni sponsors.',
+  LIGA_COORDINADOR_ARBITROS: 'Designaciones de personal y catálogo de árbitros. NO finanzas.',
+  LIGA_CONTADOR: 'Módulo financiero, boletas SII, dunning, reportes financieros.',
+  LIGA_COMERCIAL: 'Módulo de sponsors y métricas publicitarias. Solo lectura del resto.',
+  RECINTO_ADMIN: 'Canchas, reservas, ocupación, precios dinámicos.',
+  TRIBUNAL_DISCIPLINA: 'Casos disciplinarios, fallos. Solo lectura del resto.',
+  DELEGADO_EQUIPO: 'Roster, pagos y comunicación de su equipo. Scope: equipo.',
+  ARBITRO: 'Sus designaciones y planillas digitales. Scope: personal.',
+  PLANILLERO: 'Cargar planillas en cancha. Scope: personal.',
+  PARAMEDICO: 'Registrar incidentes médicos. Scope: personal.',
+  SEGURIDAD: 'Bitácora de incidentes de seguridad. Scope: personal.',
+  MANTENIMIENTO: 'Órdenes de trabajo asignadas. Scope: personal.',
+  JUGADOR: 'Su perfil, stats, próximos partidos. Scope: personal.',
+  HINCHA: 'Lectura del portal público + Fantasy/Polla. Scope: personal.',
+};
+
 /** Scope canónico de cada rol — usado para validaciones de runtime. */
 export const ROLE_SCOPE: Record<Role, Scope> = {
   SUPER_ADMIN: 'PLATFORM',
