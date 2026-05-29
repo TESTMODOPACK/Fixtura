@@ -94,13 +94,18 @@ export class FechasAdminService {
       );
     }
 
-    // 1. Marcar la fecha original como SUSPENDIDA.
+    // Snapshot del tipo ANTES de tocar el estado (TS infiere literal
+    // tras el assignment y rompe las validaciones que vienen abajo).
+    const tipoAntes: 'ORIGINAL' | 'REPROGRAMADA' = fecha.tipoReprogramacion;
+
+    // 1. Marcar la fecha original como SUSPENDIDA. NO tocamos
+    // tipoReprogramacion — si era REPROGRAMADA queda REPROGRAMADA
+    // suspendida (caso de cancelar la reprogramación misma).
     fecha.estado = 'SUSPENDIDA';
     fecha.motivoSuspension = input.motivo;
     fecha.suspendidoAt = new Date();
     fecha.suspendidoByUserId = actorUserId;
     fecha.observacionesSuspension = input.observaciones?.trim() || null;
-    fecha.tipoReprogramacion = 'ORIGINAL';
     await this.fechaRepo.save(fecha);
 
     // 2. Marcar los partidos no cerrados como SUSPENDIDO_FUERZA_MAYOR
@@ -121,14 +126,31 @@ export class FechasAdminService {
       .andWhere(`estado NOT IN ('FINALIZADO','WALKOVER','SUSPENDIDO_FUERZA_MAYOR')`)
       .execute();
 
-    // 3. Aplicar estrategia. Si la estrategia crea fecha nueva (todas
-    // salvo MANUAL y REUSAR_EXISTENTE), validar que no exista YA otra
-    // REPROGRAMADA con mismo número — el UNIQUE solo permite una por
-    // número y la colisión daría un 500 feo.
+    // Sanear input: el frontend manda "" si el campo opcional está vacío
+    // — eso pasa la validación de class-validator pero rompe los
+    // cálculos de fecha más abajo. Convertir a undefined para que el
+    // ?? funcione bien.
+    const fechaInicioReprogramada =
+      input.fechaInicioReprogramada && input.fechaInicioReprogramada.trim()
+        ? input.fechaInicioReprogramada
+        : undefined;
+
+    // 3. Validar combinaciones que crearían colisiones UNIQUE.
     if (
       input.estrategia === 'AL_FINAL' ||
       input.estrategia === 'TRASNOCHE_DOMINO'
     ) {
+      // Si la fecha que se suspende YA es REPROGRAMADA, no podemos
+      // crear otra REPROGRAMADA con el mismo número (UNIQUE compuesto).
+      // En ese caso obligar a REUSAR_EXISTENTE o MANUAL.
+      if (tipoAntes === 'REPROGRAMADA') {
+        throw new ConflictException(
+          `La fecha ${fecha.numero} ya es una REPROGRAMADA. ` +
+            'No se puede crear otra REPROGRAMADA encima. ' +
+            'Usá la estrategia REUSAR_EXISTENTE apuntando a otra fecha, o MANUAL.',
+        );
+      }
+      // Si ya existe una REPROGRAMADA paralela, idem.
       const existeRepro = await this.fechaRepo.findOne({
         where: {
           tenantId,
@@ -139,7 +161,7 @@ export class FechasAdminService {
       });
       if (existeRepro) {
         throw new ConflictException(
-          `Ya existe una fecha REPROGRAMADA para la fecha ${fecha.numero}. ` +
+          `Ya existe una fecha ${fecha.numero} REPROGRAMADA. ` +
             'Eliminala o reactivala antes de crear otra (o usá la estrategia REUSAR_EXISTENTE apuntando a ella).',
         );
       }
@@ -153,7 +175,7 @@ export class FechasAdminService {
         nuevaFechaBisId = await this.aplicarAlFinal(
           tenantId,
           fecha,
-          input.fechaInicioReprogramada,
+          fechaInicioReprogramada,
         );
         fechasAfectadas = 1;
         break;
@@ -163,7 +185,7 @@ export class FechasAdminService {
             tenantId,
             fecha,
             input.diasCorrimiento ?? 7,
-            input.fechaInicioReprogramada,
+            fechaInicioReprogramada,
           );
           nuevaFechaBisId = res.nuevaId;
           fechasAfectadas = res.fechasCorridas + 1;
@@ -276,12 +298,11 @@ export class FechasAdminService {
     });
     const saved = await this.fechaRepo.save(nueva);
 
-    await this.moverPartidosSuspendidosA(
-      tenantId,
-      fechaSuspendida.id,
-      saved.id,
-      fechaInicio,
-    );
+    // NOTA: NO movemos los partidos a la nueva fecha. Los partidos
+    // originales quedan en la fecha SUSPENDIDA con estado
+    // SUSPENDIDO_FUERZA_MAYOR (historial preservado). El admin puede
+    // moverlos manualmente con drag & drop a la fecha REPROGRAMADA o
+    // crear partidos nuevos ahí.
     return saved.id;
   }
 
@@ -356,12 +377,7 @@ export class FechasAdminService {
     });
     const saved = await this.fechaRepo.save(nueva);
 
-    await this.moverPartidosSuspendidosA(
-      tenantId,
-      fechaSuspendida.id,
-      saved.id,
-      fechaInicio,
-    );
+    // NOTA: NO movemos los partidos automáticamente (ver aplicarAlFinal).
     return { nuevaId: saved.id, fechasCorridas: posteriores.length };
   }
 

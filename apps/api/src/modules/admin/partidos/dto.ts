@@ -173,7 +173,11 @@ export class SuspenderFechaDto {
   @IsString()
   fechaDestinoId?: string;
 
+  // Acepta string vacío (frontend) o omitido. El service lo trata.
   @IsOptional()
   @IsString()
   fechaInicioReprogramada?: string;
 }
+
+// El service hace el trim. El DTO acepta empty string para no rechazar
+// requests donde el campo está pero vacío (lo manda el form HTML).

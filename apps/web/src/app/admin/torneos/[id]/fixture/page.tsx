@@ -212,6 +212,16 @@ function FechaCard({
           <div className="font-display text-lg text-green-deep tracking-display">
             {(fecha.etiqueta ?? `Fecha ${fecha.numero}`).toUpperCase()}
           </div>
+          {fecha.fechaInicio && (
+            <div className="text-xs text-ink-mute mt-0.5">
+              {new Date(fecha.fechaInicio + 'T12:00:00').toLocaleDateString('es-CL', {
+                weekday: 'long',
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {fecha.estado !== 'FINALIZADA' && !estaSuspendida && (
@@ -271,8 +281,13 @@ function FechaCard({
           fecha={fecha}
           fechasDisponibles={todasLasFechas}
           onSubmit={async (vals) => {
-            await suspender.mutateAsync({ fechaId: fecha.id, input: vals });
-            setSuspendiendo(false);
+            try {
+              await suspender.mutateAsync({ fechaId: fecha.id, input: vals });
+              setSuspendiendo(false);
+            } catch {
+              // Mantener el form abierto si falla, el error se muestra
+              // arriba via susErr — el usuario puede ajustar y reintentar.
+            }
           }}
           onCancel={() => setSuspendiendo(false)}
           loading={suspender.isPending}

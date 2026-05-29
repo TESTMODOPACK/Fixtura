@@ -148,6 +148,20 @@ export class PartidosAdminService {
         );
       }
       partido.fechaId = input.fechaId;
+
+      // Si el partido venía SUSPENDIDO_FUERZA_MAYOR (porque su fecha
+      // original fue suspendida) y se mueve a una fecha PROGRAMADA o
+      // REPROGRAMADA, lo reactivamos automáticamente. Sin esto el
+      // partido queda invisible en la nueva fecha como "suspendido".
+      if (
+        partido.estado === 'SUSPENDIDO_FUERZA_MAYOR' &&
+        fechaDestino.estado !== 'SUSPENDIDA'
+      ) {
+        partido.estado = 'PROGRAMADO';
+        partido.motivoSuspension = null;
+        // suspendidoAt y suspendidoByUserId los conservamos como
+        // historial (el partido recuerda que estuvo suspendido).
+      }
     }
 
     // canchaId tiene prioridad sobre canchaNombre. Si llega canchaId
