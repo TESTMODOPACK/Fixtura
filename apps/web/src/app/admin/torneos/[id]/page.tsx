@@ -104,7 +104,7 @@ export default function TorneoDetailPage({
         </nav>
       </div>
 
-      {tab === 'equipos' && <EquiposTab torneoId={id} />}
+      {tab === 'equipos' && <EquiposTab torneoId={id} estadoTorneo={torneo.estado} />}
       {tab === 'fixture' && (
         <FixtureTab
           torneoId={id}
@@ -179,21 +179,38 @@ function TabButton({
   );
 }
 
-function EquiposTab({ torneoId }: { torneoId: string }): React.ReactElement {
+function EquiposTab({
+  torneoId,
+  estadoTorneo,
+}: {
+  torneoId: string;
+  estadoTorneo: 'DRAFT' | 'ACTIVO' | 'CERRADO';
+}): React.ReactElement {
   const { data: equipos, isLoading } = useEquipos(torneoId);
   const [adding, setAdding] = useState(false);
+  // Solo se pueden inscribir equipos en DRAFT. Después el fixture está
+  // generado y agregar un equipo rompe la consistencia (cantidad de
+  // partidos/fechas). Si el admin necesita agregar, primero debe
+  // resetear el fixture.
+  const puedeInscribir = estadoTorneo === 'DRAFT';
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <Card padding="none" className="lg:col-span-2 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-line">
           <CardLabel>Equipos inscritos</CardLabel>
-          <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
-            <Plus size={14} /> {adding ? 'Cancelar' : 'Inscribir equipo'}
-          </Button>
+          {puedeInscribir ? (
+            <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
+              <Plus size={14} /> {adding ? 'Cancelar' : 'Inscribir equipo'}
+            </Button>
+          ) : (
+            <span className="text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded bg-ink-mute/10 text-ink-mute">
+              Torneo {estadoTorneo.toLowerCase()} · inscripciones cerradas
+            </span>
+          )}
         </div>
 
-        {adding && (
+        {adding && puedeInscribir && (
           <div className="px-5 py-4 bg-paper-dark border-b border-line">
             <NuevoEquipoForm torneoId={torneoId} onDone={() => setAdding(false)} />
           </div>

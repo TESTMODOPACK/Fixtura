@@ -37,7 +37,17 @@ export class EquiposAdminService {
     tenantId: string,
     input: CreateEquipoRequest,
   ): Promise<EquipoAdmin> {
-    await this.ensureTorneo(torneoId, tenantId);
+    const torneo = await this.ensureTorneo(torneoId, tenantId);
+
+    // No se pueden inscribir equipos en un torneo ya iniciado o cerrado.
+    // Si la liga necesita agregar un equipo después de arrancar, primero
+    // tiene que volver el torneo a DRAFT (resetea fixture).
+    if (torneo.estado !== 'DRAFT') {
+      throw new ConflictException(
+        `No se pueden inscribir equipos en un torneo ${torneo.estado}. ` +
+          'Para agregar equipos, el torneo debe estar en DRAFT (sin fixture generado).',
+      );
+    }
 
     const dup = await this.repo.findOne({ where: { torneoId, slug: input.slug } });
     if (dup) {
@@ -59,9 +69,13 @@ export class EquiposAdminService {
     return this.findOne(saved.id, tenantId);
   }
 
-  private async ensureTorneo(torneoId: string, tenantId: string): Promise<void> {
-    const exists = await this.torneoRepo.findOne({ where: { id: torneoId, tenantId } });
-    if (!exists) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);
+  private async ensureTorneo(
+    torneoId: string,
+    tenantId: string,
+  ): Promise<{ id: string; estado: 'DRAFT' | 'ACTIVO' | 'CERRADO' }> {
+    const torneo = await this.torneoRepo.findOne({ where: { id: torneoId, tenantId } });
+    if (!torneo) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);
+    return { id: torneo.id, estado: torneo.estado };
   }
 
   private async toDto(e: Equipo): Promise<EquipoAdmin> {
