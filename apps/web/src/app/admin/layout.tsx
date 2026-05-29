@@ -102,13 +102,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
   const isSuperAdmin = useIsSuperAdmin();
-  const sections: NavSection[] = isSuperAdmin ? [...NAV, NAV_SUPER] : NAV;
+
+  // SUPER_ADMIN ve SOLO el menú de plataforma — no opera ligas directamente.
+  // Para ver/editar datos de una liga, usa el flujo Impersonar (Sprint 21):
+  // entra como un LIGA_ADMIN de esa liga, opera, y sale del modo soporte.
+  // Esto separa responsabilidades:
+  //   - Super Admin = plataforma (tenants, planes, métricas, health).
+  //   - Liga Admin  = competición / operaciones / personal / ajustes.
+  // Cuando un super admin está impersonando, el JWT que tiene es el del
+  // user impersonado (LIGA_ADMIN), así que `isSuperAdmin` es false y ve
+  // el NAV de liga normal + el banner naranja de impersonación.
+  const sections: NavSection[] = isSuperAdmin ? [NAV_SUPER] : NAV;
 
   useEffect(() => {
     if (!accessToken) {
       router.replace('/');
+      return;
     }
-  }, [accessToken, router]);
+    // Super admin que entra a /admin (panel de liga) lo mandamos al
+    // panel de plataforma. Si querés ver una liga, usá Impersonar.
+    if (isSuperAdmin && pathname === '/admin') {
+      router.replace('/admin/super');
+    }
+  }, [accessToken, isSuperAdmin, pathname, router]);
 
   if (!accessToken) {
     return null;
