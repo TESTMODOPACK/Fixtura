@@ -178,6 +178,20 @@ async function main(): Promise<void> {
     // Sprint 16: tabla dias_no_jugables (RF-13).
     await ensureDiasNoJugablesTable(client, log);
 
+    // Sprint 23 (Super Admin): planes_suscripcion + flags en tenants.
+    await ensurePlanesSuscripcionTable(client, log);
+    await client.query(`
+      ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES planes_suscripcion(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS estado_suscripcion VARCHAR(20) NOT NULL DEFAULT 'TRIAL'
+          CHECK (estado_suscripcion IN ('TRIAL','ACTIVO','SUSPENDIDO','CANCELADO')),
+        ADD COLUMN IF NOT EXISTS trial_expira_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS suspendido_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS suspendido_motivo TEXT,
+        ADD COLUMN IF NOT EXISTS feature_flags JSONB NOT NULL DEFAULT '{}'::jsonb
+    `);
+    log('tenants.plan_id + estado_suscripcion + feature_flags asegurados (Sprint 23).');
+
     // Sprint 19 (suspensión v2): tipo_reprogramacion + UNIQUE compuesto.
     // Permite coexistencia de Fecha 3 ORIGINAL (SUSPENDIDA) + Fecha 3 REPROGRAMADA.
     await client.query(`
@@ -979,6 +993,78 @@ async function ensureDiasNoJugablesTable(
   );
   await ensureRls(client, 'dias_no_jugables');
   log('dias_no_jugables asegurada (Sprint 16, RF-13).');
+}
+
+/**
+ * Sprint 23 — Tabla de planes de suscripción (Starter / Growth / Pro / Enterprise).
+ *
+ * Sin RLS — es catálogo de plataforma. Solo SUPER_ADMIN puede mutarlos.
+ * Cada plan declara sus límites en JSONB (max_torneos, max_equipos,
+ * max_partidos_mes, features habilitadas).
+ *
+ * Seed: si no hay planes, crear 4 niveles base.
+ */
+async function ensurePlanesSuscripcionTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS planes_suscripcion (
+      id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      nombre            VARCHAR(100) NOT NULL,
+      slug              VARCHAR(50) NOT NULL UNIQUE,
+      precio_mensual_clp INT NOT NULL DEFAULT 0 CHECK (precio_mensual_clp >= 0),
+      orden             SMALLINT NOT NULL DEFAULT 0,
+      activo            BOOLEAN NOT NULL DEFAULT TRUE,
+      limites           JSONB NOT NULL DEFAULT '{}'::jsonb,
+      features          JSONB NOT NULL DEFAULT '{}'::jsonb,
+      descripcion       TEXT,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await client.query(`
+    ALTER TABLE planes_suscripcion
+      ADD COLUMN IF NOT EXISTS nombre             VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS slug               VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS precio_mensual_clp INT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS orden              SMALLINT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS activo             BOOLEAN NOT NULL DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS limites            JSONB NOT NULL DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS features           JSONB NOT NULL DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS descripcion        TEXT,
+      ADD COLUMN IF NOT EXISTS created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
+  await ensureTrigger(client, 'planes_suscripcion');
+
+  // Seed inicial — solo si la tabla está vacía. Precios CLP/mes según
+  // CLAUDE.md decisión D-11. Limites son orientativos para v1.
+  const count = await client.query(`SELECT COUNT(*)::int AS n FROM planes_suscripcion`);
+  if (Number((count.rows[0] as { n: number }).n) === 0) {
+    await client.query(`
+      INSERT INTO planes_suscripcion (nombre, slug, precio_mensual_clp, orden, limites, features, descripcion)
+      VALUES
+        ('Starter',    'starter',    19900, 1,
+          '{"maxTorneos":1,"maxEquipos":12,"maxPartidosMes":50}'::jsonb,
+          '{"matchCenter":false,"sponsors":false,"sii":false}'::jsonb,
+          'Para ligas chicas que arrancan'),
+        ('Growth',     'growth',     39900, 2,
+          '{"maxTorneos":3,"maxEquipos":40,"maxPartidosMes":200}'::jsonb,
+          '{"matchCenter":true,"sponsors":true,"sii":false}'::jsonb,
+          'Para ligas establecidas con varias categorías'),
+        ('Pro',        'pro',        69900, 3,
+          '{"maxTorneos":10,"maxEquipos":200,"maxPartidosMes":1000}'::jsonb,
+          '{"matchCenter":true,"sponsors":true,"sii":true,"reservas":true}'::jsonb,
+          'Federaciones y recintos profesionales'),
+        ('Enterprise', 'enterprise', 99900, 4,
+          '{"maxTorneos":null,"maxEquipos":null,"maxPartidosMes":null}'::jsonb,
+          '{"matchCenter":true,"sponsors":true,"sii":true,"reservas":true,"fantasy":true,"prioritySupport":true}'::jsonb,
+          'Sin límites, soporte prioritario, SLA')
+    `);
+    log('planes_suscripcion seed: 4 planes base cargados.');
+  }
+  log('planes_suscripcion asegurada (Sprint 23).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

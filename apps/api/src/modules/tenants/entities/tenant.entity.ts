@@ -43,6 +43,30 @@ export class Tenant {
   @Column({ name: 'requiere_carnet_anfa', type: 'boolean', default: false })
   requiereCarnetAnfa!: boolean;
 
+  // ── Sprint 23: Super Admin / planes ───────────────────────────────
+  @Column({ name: 'plan_id', type: 'uuid', nullable: true })
+  planId!: string | null;
+
+  @Column({
+    name: 'estado_suscripcion',
+    type: 'varchar',
+    length: 20,
+    default: 'TRIAL',
+  })
+  estadoSuscripcion!: 'TRIAL' | 'ACTIVO' | 'SUSPENDIDO' | 'CANCELADO';
+
+  @Column({ name: 'trial_expira_at', type: 'timestamptz', nullable: true })
+  trialExpiraAt!: Date | null;
+
+  @Column({ name: 'suspendido_at', type: 'timestamptz', nullable: true })
+  suspendidoAt!: Date | null;
+
+  @Column({ name: 'suspendido_motivo', type: 'text', nullable: true })
+  suspendidoMotivo!: string | null;
+
+  @Column({ name: 'feature_flags', type: 'jsonb', default: () => "'{}'::jsonb" })
+  featureFlags!: Record<string, boolean>;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

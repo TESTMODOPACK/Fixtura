@@ -1157,3 +1157,175 @@ export function useEndImpersonation() {
       }),
   });
 }
+
+// ─── Sprint 23 — Super Admin (RF plataforma) ────────────────────────
+import type {
+  CreatePlanRequest,
+  CreateTenantPlatformRequest,
+  EstadoSuscripcion,
+  MetricasPlataforma,
+  PlanSuscripcion,
+  SystemHealth,
+  TenantPlatform,
+  UpdatePlanRequest,
+  UpdateTenantPlatformRequest,
+} from '@fixtura/types';
+
+// Tenants (plataforma)
+export function useTenantsPlataforma(filter?: {
+  estado?: EstadoSuscripcion;
+  search?: string;
+}) {
+  const qs = new URLSearchParams();
+  if (filter?.estado) qs.set('estado', filter.estado);
+  if (filter?.search) qs.set('search', filter.search);
+  const q = qs.toString();
+  return useQuery({
+    queryKey: ['super-admin', 'tenants', filter],
+    queryFn: () =>
+      apiFetch<TenantPlatform[]>(`/super-admin/tenants${q ? `?${q}` : ''}`),
+  });
+}
+
+export function useTenantPlataforma(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ['super-admin', 'tenants', id],
+    queryFn: () => apiFetch<TenantPlatform>(`/super-admin/tenants/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCrearTenantPlataforma() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTenantPlatformRequest) =>
+      apiFetch<TenantPlatform>('/super-admin/tenants', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['super-admin', 'tenants'] });
+      qc.invalidateQueries({ queryKey: ['super-admin', 'metricas'] });
+    },
+  });
+}
+
+export function useUpdateTenantPlataforma(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateTenantPlatformRequest) =>
+      apiFetch<TenantPlatform>(`/super-admin/tenants/${id}`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['super-admin', 'tenants'] });
+    },
+  });
+}
+
+export function useSuspenderTenant(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (motivo: string) =>
+      apiFetch<TenantPlatform>(`/super-admin/tenants/${id}/suspender`, {
+        method: 'POST',
+        body: { motivo },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['super-admin', 'tenants'] });
+    },
+  });
+}
+
+export function useReactivarTenant(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<TenantPlatform>(`/super-admin/tenants/${id}/reactivar`, {
+        method: 'POST',
+        body: {},
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['super-admin', 'tenants'] });
+    },
+  });
+}
+
+// Planes
+export function usePlanesSuscripcion() {
+  return useQuery({
+    queryKey: ['super-admin', 'planes'],
+    queryFn: () => apiFetch<PlanSuscripcion[]>('/super-admin/planes'),
+  });
+}
+
+export function useCrearPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreatePlanRequest) =>
+      apiFetch<PlanSuscripcion>('/super-admin/planes', { method: 'POST', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['super-admin', 'planes'] });
+    },
+  });
+}
+
+export function useUpdatePlan(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdatePlanRequest) =>
+      apiFetch<PlanSuscripcion>(`/super-admin/planes/${id}`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['super-admin', 'planes'] });
+    },
+  });
+}
+
+export function useDeactivarPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/super-admin/planes/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['super-admin', 'planes'] });
+    },
+  });
+}
+
+// Métricas + Health
+export function useMetricasPlataforma() {
+  return useQuery({
+    queryKey: ['super-admin', 'metricas'],
+    queryFn: () => apiFetch<MetricasPlataforma>('/super-admin/metricas'),
+    staleTime: 30_000,
+  });
+}
+
+export function useSystemHealth() {
+  return useQuery({
+    queryKey: ['super-admin', 'health'],
+    queryFn: () => apiFetch<SystemHealth>('/super-admin/metricas/health'),
+    refetchInterval: 30_000,
+  });
+}
+
+// ─── User context (auto-poll del JWT actual) ────────────────────────
+import type { UserContext } from '@fixtura/types';
+
+export function useMe() {
+  return useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: () => apiFetch<UserContext>('/auth/me', { method: 'POST', body: {} }),
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+export function useIsSuperAdmin(): boolean {
+  const { data } = useMe();
+  return data?.roles.some((r) => r.role === 'SUPER_ADMIN') ?? false;
+}

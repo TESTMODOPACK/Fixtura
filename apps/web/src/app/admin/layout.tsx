@@ -8,10 +8,13 @@ import {
   Gavel,
   LayoutDashboard,
   type LucideIcon,
+  Building2,
+  Heart,
   Megaphone,
   PiggyBank,
   ScrollText,
   Settings,
+  ShieldCheck,
   Trophy,
   UserCog,
   Users,
@@ -21,6 +24,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 import { ImpersonationBanner } from '@/components/impersonation-banner';
+import { useIsSuperAdmin } from '@/hooks/use-admin';
 
 import { FixturaLockup } from '@/components/ui/logo';
 import { cn } from '@/lib/cn';
@@ -80,10 +84,25 @@ const NAV: NavSection[] = [
   },
 ];
 
+// Sección visible solo para SUPER_ADMIN (Sprint 23). Se monta condicional
+// abajo según `useIsSuperAdmin()`.
+const NAV_SUPER: NavSection = {
+  title: 'Plataforma',
+  items: [
+    { href: '/admin/super', label: 'Panel super admin', icon: ShieldCheck },
+    { href: '/admin/super/tenants', label: 'Tenants', icon: Building2 },
+    { href: '/admin/super/planes', label: 'Planes', icon: PiggyBank },
+    { href: '/admin/super/impersonate', label: 'Impersonar', icon: UserCog },
+    { href: '/admin/super/health', label: 'Health', icon: Heart },
+  ],
+};
+
 export default function AdminLayout({ children }: { children: React.ReactNode }): React.ReactElement | null {
   const pathname = usePathname();
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const isSuperAdmin = useIsSuperAdmin();
+  const sections: NavSection[] = isSuperAdmin ? [...NAV, NAV_SUPER] : NAV;
 
   useEffect(() => {
     if (!accessToken) {
@@ -106,7 +125,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Link>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-          {NAV.map((section) => (
+          {sections.map((section) => (
             <div key={section.title}>
               <div className="px-2 mb-2 text-[10px] uppercase tracking-[0.18em] text-green-lime font-semibold">
                 → {section.title}

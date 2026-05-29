@@ -24,3 +24,4 @@ export * from './dias-no-jugables';
 export * from './whatsapp';
 export * from './match-center';
 export * from './audit-log';
+export * from './super-admin';

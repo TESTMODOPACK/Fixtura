@@ -21,6 +21,7 @@ import { MeModule } from './modules/me/me.module';
 import { PublicModule } from './modules/public/public.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ImpersonationModule } from './modules/impersonation/impersonation.module';
+import { SuperAdminModule } from './modules/super-admin/super-admin.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
@@ -75,6 +76,7 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
     WhatsAppModule,
     AuditModule,
     ImpersonationModule,
+    SuperAdminModule,
     HealthModule,
     AuthModule,
     TenantsModule,
