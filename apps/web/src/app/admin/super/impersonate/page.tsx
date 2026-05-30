@@ -60,9 +60,9 @@ export default function ImpersonatePage(): React.ReactElement {
   return (
     <>
       <PageHead
-        eyebrow="Super admin"
-        title="Impersonación de usuarios"
-        sub="Soporte: entrá como otro usuario para ver lo que él ve. Toda acción queda registrada."
+        eyebrow="Plataforma"
+        title="Entrar como otro usuario"
+        sub="Modo soporte. Ingresá como otro usuario para ver lo mismo que él ve. Todo lo que hagas queda registrado en el historial de auditoría."
       >
         <Link href="/admin">
           <Button variant="default" size="sm">
@@ -75,11 +75,11 @@ export default function ImpersonatePage(): React.ReactElement {
         <div className="flex items-start gap-2">
           <ShieldAlert size={18} className="text-orange-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-orange-900">
-            <strong>Modo soporte sensible.</strong> Mientras estés en una sesión
-            impersonada, NO podrás cambiar contraseñas, eliminar cuentas ni
-            transferir titularidad. Toda otra acción (crear/editar entidades,
-            cerrar actas, etc.) sí queda registrada en el audit log con tu id
-            como `impersonator`.
+            <strong>Atención: modo soporte sensible.</strong> Mientras estés viendo la
+            cuenta de otro usuario NO podrás cambiar contraseñas, eliminar
+            cuentas ni transferir titularidad. Cualquier otra acción (crear o
+            editar datos, cerrar actas, etc.) queda registrada en el historial
+            de auditoría a tu nombre.
           </div>
         </div>
       </Card>

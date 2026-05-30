@@ -41,8 +41,8 @@ export default function SuperAdminPanel(): React.ReactElement {
         <Link href="/admin/super/tenants">
           <Card padding="comfortable" className="hover:shadow-md transition-shadow cursor-pointer">
             <Building2 size={20} className="text-accent mb-2" />
-            <CardLabel>Tenants</CardLabel>
-            <div className="text-sm text-ink-mute mt-1">Ligas y recintos</div>
+            <CardLabel>Ligas</CardLabel>
+            <div className="text-sm text-ink-mute mt-1">Gestionar ligas y recintos</div>
           </Card>
         </Link>
         <Link href="/admin/super/planes">
@@ -55,15 +55,15 @@ export default function SuperAdminPanel(): React.ReactElement {
         <Link href="/admin/super/impersonate">
           <Card padding="comfortable" className="hover:shadow-md transition-shadow cursor-pointer">
             <UserCheck size={20} className="text-accent mb-2" />
-            <CardLabel>Impersonar</CardLabel>
+            <CardLabel>Entrar como…</CardLabel>
             <div className="text-sm text-ink-mute mt-1">Modo soporte</div>
           </Card>
         </Link>
         <Link href="/admin/super/health">
           <Card padding="comfortable" className="hover:shadow-md transition-shadow cursor-pointer">
             <Heart size={20} className="text-accent mb-2" />
-            <CardLabel>Health</CardLabel>
-            <div className="text-sm text-ink-mute mt-1">Estado del sistema</div>
+            <CardLabel>Estado del sistema</CardLabel>
+            <div className="text-sm text-ink-mute mt-1">Servicios y salud</div>
           </Card>
         </Link>
       </div>
@@ -82,7 +82,7 @@ export default function SuperAdminPanel(): React.ReactElement {
         </Card>
       )}
 
-      {/* Health quick view */}
+      {/* Estado rápido del sistema */}
       {health && (
         <Card padding="comfortable" className="mb-6">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -113,22 +113,22 @@ export default function SuperAdminPanel(): React.ReactElement {
       {metricas && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-            <Stat label="Tenants" value={Number(metricas.tenants.total)} icon={Building2} />
+            <Stat label="Ligas (total)" value={Number(metricas.tenants.total)} icon={Building2} />
             <Stat
-              label="Activos"
+              label="Activas"
               value={Number(metricas.tenants.activos)}
               icon={Building2}
               highlight
             />
-            <Stat label="Trial" value={Number(metricas.tenants.trial)} icon={Building2} />
+            <Stat label="En prueba" value={Number(metricas.tenants.trial)} icon={Building2} />
             <Stat
-              label="Suspendidos"
+              label="Suspendidas"
               value={Number(metricas.tenants.suspendidos)}
               icon={Building2}
               danger={Number(metricas.tenants.suspendidos) > 0}
             />
             <Stat
-              label="Cancelados"
+              label="Canceladas"
               value={Number(metricas.tenants.cancelados)}
               icon={Building2}
             />

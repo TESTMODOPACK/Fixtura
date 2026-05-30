@@ -44,8 +44,8 @@ export default function TenantsPlataformaPage(): React.ReactElement {
     <>
       <PageHead
         eyebrow="Plataforma"
-        title="Tenants (ligas y recintos)"
-        sub="Todos los tenants registrados. Acciones cross-tenant solo super admin."
+        title="Ligas registradas"
+        sub="Listado de todas las ligas y recintos que usan Fixtura. Acciones solo para el administrador del sistema."
       >
         <Link href="/admin/super">
           <Button variant="default" size="sm">
@@ -54,7 +54,7 @@ export default function TenantsPlataformaPage(): React.ReactElement {
         </Link>
         <Link href="/admin/super/tenants/nuevo">
           <Button variant="accent" size="sm">
-            <Plus size={14} /> Crear tenant
+            <Plus size={14} /> Nueva liga
           </Button>
         </Link>
       </PageHead>
@@ -85,10 +85,10 @@ export default function TenantsPlataformaPage(): React.ReactElement {
               onChange={(e) => setEstado(e.target.value as EstadoSuscripcion | 'TODOS')}
             >
               <option value="TODOS">Todos</option>
-              <option value="TRIAL">Trial</option>
-              <option value="ACTIVO">Activos</option>
-              <option value="SUSPENDIDO">Suspendidos</option>
-              <option value="CANCELADO">Cancelados</option>
+              <option value="TRIAL">En prueba</option>
+              <option value="ACTIVO">Activas</option>
+              <option value="SUSPENDIDO">Suspendidas</option>
+              <option value="CANCELADO">Canceladas</option>
             </select>
           </div>
         </div>
@@ -108,12 +108,14 @@ export default function TenantsPlataformaPage(): React.ReactElement {
       {tenants && (
         <Card padding="none" className="overflow-hidden">
           <div className="px-5 py-3 bg-paper-dark border-b border-line">
-            <CardLabel>{tenants.length} tenant{tenants.length === 1 ? '' : 's'}</CardLabel>
+            <CardLabel>
+              {tenants.length} {tenants.length === 1 ? 'liga' : 'ligas'}
+            </CardLabel>
           </div>
           {tenants.length === 0 ? (
             <div className="p-12 text-center text-sm text-ink-mute font-serif italic">
               <Building2 size={32} className="mx-auto mb-3 text-line" />
-              Sin tenants para esos filtros.
+              No hay ligas que coincidan con esos filtros.
             </div>
           ) : (
             <ul className="divide-y divide-line">

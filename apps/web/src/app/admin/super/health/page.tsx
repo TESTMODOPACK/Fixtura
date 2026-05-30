@@ -17,8 +17,8 @@ export default function HealthPage(): React.ReactElement {
     <>
       <PageHead
         eyebrow="Plataforma"
-        title="System health"
-        sub="Estado de DB, cache, uptime. Auto-refresca cada 30 segundos."
+        title="Estado del sistema"
+        sub="Salud de la base de datos, caché y tiempo en línea. Se actualiza solo cada 30 segundos."
       >
         <Link href="/admin/super">
           <Button variant="default" size="sm">
@@ -53,10 +53,10 @@ export default function HealthPage(): React.ReactElement {
             error={data.redis.error}
           />
           <Card padding="comfortable">
-            <CardLabel>Runtime</CardLabel>
+            <CardLabel>Servidor</CardLabel>
             <div className="mt-3 space-y-1 text-sm">
               <div>
-                <span className="text-ink-mute">Uptime:</span>{' '}
+                <span className="text-ink-mute">Tiempo en línea:</span>{' '}
                 <span className="font-mono">
                   {Math.floor(data.uptimeSec / 3600)}h{' '}
                   {Math.floor((data.uptimeSec % 3600) / 60)}m{' '}
@@ -64,15 +64,15 @@ export default function HealthPage(): React.ReactElement {
                 </span>
               </div>
               <div>
-                <span className="text-ink-mute">Node:</span>{' '}
+                <span className="text-ink-mute">Versión de Node:</span>{' '}
                 <span className="font-mono">{data.nodeVersion}</span>
               </div>
               <div>
-                <span className="text-ink-mute">Git SHA:</span>{' '}
+                <span className="text-ink-mute">Versión del código:</span>{' '}
                 <span className="font-mono">{data.gitSha ?? '—'}</span>
               </div>
               <div>
-                <span className="text-ink-mute">Timestamp:</span>{' '}
+                <span className="text-ink-mute">Última lectura:</span>{' '}
                 <span className="font-mono">
                   {new Date(data.timestamp).toLocaleString('es-CL')}
                 </span>

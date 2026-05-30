@@ -74,19 +74,19 @@ export default function NuevoTenantPage(): React.ReactElement {
     <>
       <PageHead
         eyebrow="Plataforma"
-        title="Crear nuevo tenant"
-        sub="Onboarding de una liga / recinto / federación. Opcional: usuario admin inicial."
+        title="Registrar nueva liga"
+        sub="Alta de una liga, recinto o federación. Opcionalmente podés crear el usuario administrador inicial."
       >
         <Link href="/admin/super/tenants">
           <Button variant="default" size="sm">
-            <ArrowLeft size={14} /> Tenants
+            <ArrowLeft size={14} /> Listado de ligas
           </Button>
         </Link>
       </PageHead>
 
       <form onSubmit={onSubmit} className="space-y-5">
         <Card padding="comfortable">
-          <CardLabel>Datos del tenant</CardLabel>
+          <CardLabel>Datos de la liga</CardLabel>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
             <div>
               <label className="label">Slug (URL: fixtura.cl/&lt;slug&gt;)</label>
@@ -122,20 +122,21 @@ export default function NuevoTenantPage(): React.ReactElement {
               </select>
             </div>
             <div>
-              <label className="label">Trial (días)</label>
+              <label className="label">Días de prueba</label>
               <Input type="number" min={0} max={365} {...form.register('trialDias')} />
               <p className="text-xs text-ink-mute italic mt-1">
-                0 = sin trial, activar de inmediato. 30 = un mes de prueba.
+                0 = sin período de prueba, activar de inmediato. 30 = un mes de prueba.
               </p>
             </div>
           </div>
         </Card>
 
         <Card padding="comfortable">
-          <CardLabel>Admin inicial (opcional)</CardLabel>
+          <CardLabel>Administrador inicial (opcional)</CardLabel>
           <p className="text-xs text-ink-mute italic mt-1 mb-3">
-            Si lo dejás vacío, el tenant queda creado sin usuario asociado y vos lo agregás
-            después. Si llenás, se crea el user con rol LIGA_ADMIN de este tenant.
+            Si lo dejás vacío, la liga queda creada sin usuario asociado y lo agregás
+            después. Si completás los datos, se crea el usuario con rol de
+            Administrador de Liga sobre esta liga.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
@@ -165,7 +166,7 @@ export default function NuevoTenantPage(): React.ReactElement {
 
         <div className="flex gap-3">
           <Button type="submit" variant="accent" disabled={crear.isPending}>
-            <Building2 size={14} /> {crear.isPending ? 'Creando…' : 'Crear tenant'}
+            <Building2 size={14} /> {crear.isPending ? 'Creando…' : 'Crear liga'}
           </Button>
           <Link href="/admin/super/tenants">
             <Button type="button" variant="default">

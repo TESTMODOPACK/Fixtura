@@ -1,0 +1,434 @@
+'use client';
+
+import { zodResolver } from '@hookform/resolvers/zod';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Building2,
+  CheckCircle2,
+  Pause,
+  Play,
+  Save,
+} from 'lucide-react';
+import Link from 'next/link';
+import { use, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+
+import type { EstadoSuscripcion } from '@fixtura/types';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardLabel } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { PageHead } from '@/components/ui/page-head';
+import {
+  usePlanesSuscripcion,
+  useReactivarTenant,
+  useSuspenderTenant,
+  useTenantPlataforma,
+  useUpdateTenantPlataforma,
+} from '@/hooks/use-admin';
+import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
+
+const BADGE_ESTADO: Record<EstadoSuscripcion, string> = {
+  TRIAL: 'bg-orange-700/15 text-orange-700',
+  ACTIVO: 'bg-green-bright/15 text-green-bright',
+  SUSPENDIDO: 'bg-danger/15 text-danger',
+  CANCELADO: 'bg-ink-mute/15 text-ink-mute',
+};
+
+const ESTADO_LABEL: Record<EstadoSuscripcion, string> = {
+  TRIAL: 'En prueba',
+  ACTIVO: 'Activo',
+  SUSPENDIDO: 'Suspendido',
+  CANCELADO: 'Cancelado',
+};
+
+const Schema = z.object({
+  nombre: z.string().min(2).max(200),
+  customDomain: z.string().max(255).optional().or(z.literal('')),
+  planId: z.string().optional(),
+  estadoSuscripcion: z.enum(['TRIAL', 'ACTIVO', 'SUSPENDIDO', 'CANCELADO']),
+});
+type FormData = z.infer<typeof Schema>;
+
+export default function DetalleTenantPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): React.ReactElement {
+  const { id } = use(params);
+  const { data: tenant, isLoading, error } = useTenantPlataforma(id);
+  const { data: planes } = usePlanesSuscripcion();
+  const update = useUpdateTenantPlataforma(id);
+  const suspender = useSuspenderTenant(id);
+  const reactivar = useReactivarTenant(id);
+  const apiError = error as ApiError | undefined;
+
+  const form = useForm<FormData>({
+    resolver: zodResolver(Schema),
+    defaultValues: {
+      nombre: '',
+      customDomain: '',
+      planId: '',
+      estadoSuscripcion: 'TRIAL',
+    },
+  });
+
+  // Cargar valores en el form cuando llegan los datos.
+  useEffect(() => {
+    if (tenant) {
+      form.reset({
+        nombre: tenant.nombre,
+        customDomain: tenant.customDomain ?? '',
+        planId: tenant.planId ?? '',
+        estadoSuscripcion: tenant.estadoSuscripcion,
+      });
+    }
+  }, [tenant, form]);
+
+  const onSubmit = form.handleSubmit(async (data) => {
+    try {
+      await update.mutateAsync({
+        nombre: data.nombre,
+        customDomain: data.customDomain || null,
+        planId: data.planId || null,
+        estadoSuscripcion: data.estadoSuscripcion,
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
+  const onSuspender = async (): Promise<void> => {
+    const motivo = window.prompt(
+      `Motivo de suspensión para "${tenant?.nombre}":`,
+      'Falta de pago',
+    );
+    if (!motivo || motivo.trim().length < 2) return;
+    try {
+      await suspender.mutateAsync(motivo);
+    } catch (err) {
+      alert(`Error: ${(err as Error).message}`);
+    }
+  };
+
+  const onReactivar = async (): Promise<void> => {
+    if (!window.confirm(`¿Reactivar el tenant "${tenant?.nombre}"?`)) return;
+    try {
+      await reactivar.mutateAsync();
+    } catch (err) {
+      alert(`Error: ${(err as Error).message}`);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <>
+        <PageHead eyebrow="Plataforma" title="Cargando tenant…" />
+        <div className="font-serif italic text-ink-mute">Un momento…</div>
+      </>
+    );
+  }
+
+  if (apiError) {
+    return (
+      <>
+        <PageHead eyebrow="Plataforma" title="Tenant" />
+        <Card padding="roomy" className="border-2 border-danger/40 bg-danger/5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={20} className="text-danger flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="font-display tracking-display text-xl text-danger mb-1">
+                NO PUDIMOS CARGAR EL TENANT
+              </div>
+              <div className="text-sm text-danger">{apiError.message}</div>
+              <Link href="/admin/super/tenants">
+                <Button variant="default" size="sm" className="mt-3">
+                  <ArrowLeft size={14} /> Volver al listado
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      </>
+    );
+  }
+
+  if (!tenant) {
+    return (
+      <>
+        <PageHead eyebrow="Plataforma" title="Tenant no encontrado" />
+        <Card padding="roomy">
+          <p className="font-serif italic text-ink-mute">
+            No existe un tenant con ese identificador.
+          </p>
+          <Link href="/admin/super/tenants">
+            <Button variant="default" size="sm" className="mt-3">
+              <ArrowLeft size={14} /> Volver al listado
+            </Button>
+          </Link>
+        </Card>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <PageHead
+        eyebrow="Plataforma"
+        title={tenant.nombre}
+        sub={`Detalle del tenant · slug: ${tenant.slug}`}
+      >
+        <Link href="/admin/super/tenants">
+          <Button variant="default" size="sm">
+            <ArrowLeft size={14} /> Listado
+          </Button>
+        </Link>
+        {tenant.estadoSuscripcion === 'SUSPENDIDO' ? (
+          <Button
+            variant="accent"
+            size="sm"
+            onClick={onReactivar}
+            disabled={reactivar.isPending}
+          >
+            <Play size={14} /> Reactivar
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onSuspender}
+            disabled={suspender.isPending}
+          >
+            <Pause size={14} /> Suspender
+          </Button>
+        )}
+      </PageHead>
+
+      {/* Resumen */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+        <Card padding="comfortable">
+          <CardLabel tone="mute">Estado</CardLabel>
+          <div className="mt-2">
+            <span
+              className={cn(
+                'text-xs uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
+                BADGE_ESTADO[tenant.estadoSuscripcion],
+              )}
+            >
+              {ESTADO_LABEL[tenant.estadoSuscripcion]}
+            </span>
+          </div>
+        </Card>
+        <Card padding="comfortable">
+          <CardLabel tone="mute">Plan</CardLabel>
+          <div className="font-display text-2xl text-green-deep tracking-display mt-1">
+            {tenant.planNombre ?? 'Sin plan'}
+          </div>
+        </Card>
+        <Card padding="comfortable">
+          <CardLabel tone="mute">Torneos</CardLabel>
+          <div className="font-display text-2xl text-green-deep tracking-display mt-1">
+            {tenant.torneos}
+          </div>
+        </Card>
+        <Card padding="comfortable">
+          <CardLabel tone="mute">Equipos</CardLabel>
+          <div className="font-display text-2xl text-green-deep tracking-display mt-1">
+            {tenant.equipos}
+          </div>
+        </Card>
+        <Card padding="comfortable">
+          <CardLabel tone="mute">Miembros</CardLabel>
+          <div className="font-display text-2xl text-green-deep tracking-display mt-1">
+            {tenant.miembros}
+          </div>
+        </Card>
+      </div>
+
+      {tenant.estadoSuscripcion === 'SUSPENDIDO' && tenant.suspendidoMotivo && (
+        <Card
+          padding="comfortable"
+          className="mb-5 border-2 border-danger/40 bg-danger/5"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={20} className="text-danger flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <strong className="text-danger">Tenant suspendido.</strong>{' '}
+              <span className="text-ink-mute italic">
+                Motivo: {tenant.suspendidoMotivo}
+              </span>
+              {tenant.suspendidoAt && (
+                <div className="text-xs text-ink-mute mt-1">
+                  Suspendido el{' '}
+                  {new Date(tenant.suspendidoAt).toLocaleString('es-CL')}
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Formulario de edición */}
+      <form onSubmit={onSubmit} className="space-y-5">
+        <Card padding="comfortable">
+          <CardLabel>Datos editables</CardLabel>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            <div>
+              <label className="label">Nombre comercial</label>
+              <Input {...form.register('nombre')} />
+              {form.formState.errors.nombre && (
+                <p className="text-xs text-danger mt-1">
+                  {form.formState.errors.nombre.message}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="label">Dominio propio (opcional)</label>
+              <Input
+                placeholder="liganunoa.cl"
+                {...form.register('customDomain')}
+              />
+              <p className="text-xs text-ink-mute italic mt-1">
+                Debe apuntar al servidor via CNAME. Vacío = solo subdominio
+                fixtura.cl/{tenant.slug}.
+              </p>
+            </div>
+            <div>
+              <label className="label">Plan</label>
+              <select className="input" {...form.register('planId')}>
+                <option value="">— Sin plan asignado —</option>
+                {planes?.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} (${p.precioMensualClp.toLocaleString('es-CL')}/mes)
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Estado de suscripción</label>
+              <select className="input" {...form.register('estadoSuscripcion')}>
+                <option value="TRIAL">En prueba</option>
+                <option value="ACTIVO">Activo</option>
+                <option value="SUSPENDIDO">Suspendido</option>
+                <option value="CANCELADO">Cancelado</option>
+              </select>
+              <p className="text-xs text-ink-mute italic mt-1">
+                Cambiar a &quot;Suspendido&quot; desde acá NO registra motivo. Para suspensión
+                trazable usá el botón &quot;Suspender&quot; del encabezado.
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <Card padding="comfortable">
+          <CardLabel>Información de solo lectura</CardLabel>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 text-sm">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-ink-mute font-semibold">
+                Identificador
+              </div>
+              <div className="font-mono mt-1">{tenant.id}</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-ink-mute font-semibold">
+                Slug
+              </div>
+              <div className="font-mono mt-1">{tenant.slug}</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-ink-mute font-semibold">
+                Tipo
+              </div>
+              <div className="mt-1">{tenant.tipo}</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-ink-mute font-semibold">
+                Fin del trial
+              </div>
+              <div className="mt-1">
+                {tenant.trialExpiraAt
+                  ? new Date(tenant.trialExpiraAt).toLocaleString('es-CL')
+                  : '—'}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-ink-mute font-semibold">
+                Creado el
+              </div>
+              <div className="mt-1">
+                {new Date(tenant.createdAt).toLocaleString('es-CL')}
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {update.error && (
+          <Card padding="comfortable" className="border-2 border-danger/40 bg-danger/5">
+            <div className="text-sm text-danger">
+              {(update.error as ApiError).message}
+            </div>
+          </Card>
+        )}
+        {update.isSuccess && (
+          <Card padding="comfortable" className="border-2 border-green-bright/40 bg-green-bright/5">
+            <div className="flex items-center gap-2 text-sm text-green-bright">
+              <CheckCircle2 size={16} /> Cambios guardados correctamente.
+            </div>
+          </Card>
+        )}
+
+        <div className="flex gap-3">
+          <Button type="submit" variant="accent" disabled={update.isPending}>
+            <Save size={14} /> {update.isPending ? 'Guardando…' : 'Guardar cambios'}
+          </Button>
+          <Link href="/admin/super/tenants">
+            <Button type="button" variant="default">
+              Volver
+            </Button>
+          </Link>
+        </div>
+      </form>
+
+      {/* Banderas de funciones (feature flags) */}
+      {Object.keys(tenant.featureFlags).length > 0 && (
+        <Card padding="comfortable" className="mt-5">
+          <CardLabel>Funciones habilitadas (overrides)</CardLabel>
+          <div className="flex flex-wrap gap-1 mt-3">
+            {Object.entries(tenant.featureFlags).map(([k, v]) => (
+              <span
+                key={k}
+                className={cn(
+                  'text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded',
+                  v
+                    ? 'bg-green-bright/15 text-green-bright'
+                    : 'bg-ink-mute/15 text-ink-mute line-through',
+                )}
+              >
+                {k}
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-ink-mute italic mt-3">
+            Estas funciones sobrescriben las del plan. Para editarlas usá el API o
+            la próxima versión (Sprint 24).
+          </p>
+        </Card>
+      )}
+
+      <div className="mt-6 flex items-start gap-2 p-4 rounded-card bg-orange-50 text-orange-900 text-xs">
+        <Building2 size={16} className="flex-shrink-0 mt-0.5" />
+        <div>
+          Recordá: para <strong>ver u operar</strong> los datos internos de esta
+          liga (torneos, partidos, actas, etc.) usá el flujo de{' '}
+          <Link href="/admin/super/impersonate" className="underline font-semibold">
+            Impersonar
+          </Link>
+          . Toda acción queda registrada en el audit log.
+        </div>
+      </div>
+    </>
+  );
+}

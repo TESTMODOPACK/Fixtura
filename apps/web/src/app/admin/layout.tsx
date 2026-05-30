@@ -89,11 +89,11 @@ const NAV: NavSection[] = [
 const NAV_SUPER: NavSection = {
   title: 'Plataforma',
   items: [
-    { href: '/admin/super', label: 'Panel super admin', icon: ShieldCheck },
-    { href: '/admin/super/tenants', label: 'Tenants', icon: Building2 },
-    { href: '/admin/super/planes', label: 'Planes', icon: PiggyBank },
-    { href: '/admin/super/impersonate', label: 'Impersonar', icon: UserCog },
-    { href: '/admin/super/health', label: 'Health', icon: Heart },
+    { href: '/admin/super', label: 'Panel principal', icon: ShieldCheck },
+    { href: '/admin/super/tenants', label: 'Ligas (tenants)', icon: Building2 },
+    { href: '/admin/super/planes', label: 'Planes de suscripción', icon: PiggyBank },
+    { href: '/admin/super/impersonate', label: 'Entrar como…', icon: UserCog },
+    { href: '/admin/super/health', label: 'Estado del sistema', icon: Heart },
   ],
 };
 
