@@ -105,7 +105,7 @@ export default function TenantsPlataformaPage(): React.ReactElement {
 
       {isLoading && <p className="font-serif italic text-ink-mute">Cargando…</p>}
 
-      {tenants && (
+      {tenants && Array.isArray(tenants) && (
         <Card padding="none" className="overflow-hidden">
           <div className="px-5 py-3 bg-paper-dark border-b border-line">
             <CardLabel>
@@ -188,13 +188,13 @@ function TenantRow({ tenant }: { tenant: TenantPlatform }): React.ReactElement {
       </div>
       <div className="col-span-6 md:col-span-3 text-xs text-ink-mute">
         <div>
-          <span className="font-mono text-sm text-ink">{tenant.torneos}</span> torneos
+          <span className="font-mono text-sm text-ink">{tenant.torneos ?? 0}</span> torneos
         </div>
         <div>
-          <span className="font-mono text-sm text-ink">{tenant.equipos}</span> equipos
+          <span className="font-mono text-sm text-ink">{tenant.equipos ?? 0}</span> equipos
         </div>
         <div>
-          <span className="font-mono text-sm text-ink">{tenant.miembros}</span> miembros
+          <span className="font-mono text-sm text-ink">{tenant.miembros ?? 0}</span> miembros
         </div>
       </div>
       <div className="col-span-6 md:col-span-4 flex justify-end gap-2 flex-wrap">

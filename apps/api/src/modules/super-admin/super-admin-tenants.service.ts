@@ -43,11 +43,14 @@ export class SuperAdminTenantsService {
     @InjectRepository(UserRole) private readonly userRoleRepo: Repository<UserRole>,
   ) {}
 
+  @Transactional()
   async list(filter?: {
     estado?: EstadoSuscripcion;
     search?: string;
   }): Promise<TenantPlatform[]> {
     // Bypass RLS: setear contexto vacío para ver todos los tenants.
+    // Debe correr dentro de una transacción para que set_config con LOCAL
+    // (3er param=true) afecte la misma conexión que la query siguiente.
     await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
 
     const qb = this.tenantRepo
@@ -97,6 +100,7 @@ export class SuperAdminTenantsService {
     return tenants.map((t) => this.toDto(t, t.plan ?? null, countsMap.get(t.id)));
   }
 
+  @Transactional()
   async findOne(id: string): Promise<TenantPlatform> {
     await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
     const t = (await this.tenantRepo
@@ -199,6 +203,7 @@ export class SuperAdminTenantsService {
     return this.findOne(savedTenant.id);
   }
 
+  @Transactional()
   async update(
     id: string,
     input: UpdateTenantPlatformRequest,
@@ -229,6 +234,7 @@ export class SuperAdminTenantsService {
     return this.findOne(id);
   }
 
+  @Transactional()
   async suspender(id: string, motivo: string): Promise<TenantPlatform> {
     await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
     const t = await this.tenantRepo.findOne({ where: { id } });
@@ -244,6 +250,7 @@ export class SuperAdminTenantsService {
     return this.findOne(id);
   }
 
+  @Transactional()
   async reactivar(id: string): Promise<TenantPlatform> {
     await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
     const t = await this.tenantRepo.findOne({ where: { id } });

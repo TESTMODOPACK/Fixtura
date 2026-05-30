@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { Transactional } from 'typeorm-transactional';
 
 import type { MetricasPlataforma, SystemHealth } from '@fixtura/types';
 
@@ -13,8 +14,10 @@ export class SuperAdminMetricsService {
 
   constructor(@InjectDataSource() private readonly ds: DataSource) {}
 
+  @Transactional()
   async getMetricas(): Promise<MetricasPlataforma> {
-    // Bypass RLS para ver todos los tenants.
+    // Bypass RLS para ver todos los tenants. @Transactional garantiza
+    // misma conexión del pool para que el SET LOCAL aplique a las queries.
     await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
 
     const tenantsRows: Array<{

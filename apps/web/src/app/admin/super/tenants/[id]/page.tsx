@@ -393,7 +393,7 @@ export default function DetalleTenantPage({
       </form>
 
       {/* Banderas de funciones (feature flags) */}
-      {Object.keys(tenant.featureFlags).length > 0 && (
+      {tenant.featureFlags && Object.keys(tenant.featureFlags).length > 0 && (
         <Card padding="comfortable" className="mt-5">
           <CardLabel>Funciones habilitadas (overrides)</CardLabel>
           <div className="flex flex-wrap gap-1 mt-3">
