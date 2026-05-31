@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { AuthTokens } from '@fixtura/types';
 
@@ -75,6 +75,14 @@ export const useAuthStore = create<AuthState>()(
         return restored;
       },
     }),
-    { name: 'fixtura-auth' },
+    {
+      name: 'fixtura-auth',
+      // sessionStorage: la sesión muere al cerrar la pestaña/navegador.
+      // Si el usuario vuelve a abrir el sitio, tiene que loggearse de nuevo.
+      // Más seguro que localStorage para una app con datos sensibles.
+      storage: createJSONStorage(() =>
+        typeof window !== 'undefined' ? window.sessionStorage : (undefined as never),
+      ),
+    },
   ),
 );

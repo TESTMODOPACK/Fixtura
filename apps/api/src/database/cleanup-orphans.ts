@@ -183,6 +183,9 @@ async function main(): Promise<void> {
 
     // Sprint 24A (Facturación plataforma): facturas que cobra Fixtura a sus ligas.
     await ensureFacturasPlataformaTable(client, log);
+    // FK transacciones → facturas_plataforma. Se hace acá porque transacciones
+    // se crea más arriba pero la tabla destino se crea recién acá.
+    await ensureFkTransaccionesFacturaPlataforma(client, log);
     await client.query(`
       ALTER TABLE tenants
         ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES planes_suscripcion(id) ON DELETE SET NULL,
@@ -564,19 +567,9 @@ async function ensureTransaccionesTable(
       ADD COLUMN IF NOT EXISTS created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       ADD COLUMN IF NOT EXISTS updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
   `);
-  // FK separada porque facturas_plataforma se crea más arriba — corre después de ensureFacturasPlataformaTable.
-  await client.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'fk_transacciones_factura_plataforma'
-      ) THEN
-        ALTER TABLE transacciones
-          ADD CONSTRAINT fk_transacciones_factura_plataforma
-          FOREIGN KEY (factura_plataforma_id) REFERENCES facturas_plataforma(id) ON DELETE SET NULL;
-      END IF;
-    END $$;
-  `);
+  // La FK transacciones.factura_plataforma_id → facturas_plataforma(id) se
+  // agrega en ensureFkTransaccionesFacturaPlataforma() — corre DESPUÉS de
+  // crear ambas tablas para no depender del orden de invocación.
   await ensureRls(client, 'transacciones');
   await client.query(
     `CREATE INDEX IF NOT EXISTS idx_transacciones_tenant ON transacciones(tenant_id)`,
@@ -1093,6 +1086,25 @@ async function ensurePlanesSuscripcionTable(
  *
  * UNIQUE (tenant_id, periodo_mes, periodo_anio) evita duplicar facturas.
  */
+async function ensureFkTransaccionesFacturaPlataforma(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_transacciones_factura_plataforma'
+      ) THEN
+        ALTER TABLE transacciones
+          ADD CONSTRAINT fk_transacciones_factura_plataforma
+          FOREIGN KEY (factura_plataforma_id) REFERENCES facturas_plataforma(id) ON DELETE SET NULL;
+      END IF;
+    END $$;
+  `);
+  log('FK transacciones.factura_plataforma_id → facturas_plataforma asegurada.');
+}
+
 async function ensureFacturasPlataformaTable(
   client: Client,
   log: (msg: string) => void,

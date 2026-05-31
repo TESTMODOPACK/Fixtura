@@ -204,7 +204,9 @@ export default function NuevoTorneoPage(): React.ReactElement {
                   <button
                     type="button"
                     onClick={() => {
-                      // Limpiamos auth en localStorage y redirigimos a /
+                      // Limpiamos auth y redirigimos a /. Borramos ambos
+                      // por compatibilidad — auth migró a sessionStorage.
+                      window.sessionStorage.removeItem('fixtura-auth');
                       window.localStorage.removeItem('fixtura-auth');
                       window.location.href = '/';
                     }}
