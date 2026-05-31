@@ -31,6 +31,14 @@ const BADGE_ESTADO: Record<EstadoSuscripcion, string> = {
   CANCELADO: 'bg-ink-mute/15 text-ink-mute',
 };
 
+/** Fallback seguro si el backend devuelve un estado fuera del enum. */
+function badgeFor(estado: string | null | undefined): string {
+  if (estado && estado in BADGE_ESTADO) {
+    return BADGE_ESTADO[estado as EstadoSuscripcion];
+  }
+  return 'bg-ink-mute/15 text-ink-mute';
+}
+
 export default function TenantsPlataformaPage(): React.ReactElement {
   const [search, setSearch] = useState('');
   const [estado, setEstado] = useState<EstadoSuscripcion | 'TODOS'>('TODOS');
@@ -136,7 +144,7 @@ function TenantRow({ tenant }: { tenant: TenantPlatform }): React.ReactElement {
 
   const onSuspender = async (): Promise<void> => {
     const motivo = window.prompt(
-      `Motivo de suspensión para "${tenant.nombre}":`,
+      `Motivo de suspensión para "${tenant.nombre ?? 'esta liga'}":`,
       'Falta de pago',
     );
     if (!motivo || motivo.trim().length < 2) return;
@@ -148,7 +156,7 @@ function TenantRow({ tenant }: { tenant: TenantPlatform }): React.ReactElement {
   };
 
   const onReactivar = async (): Promise<void> => {
-    if (!window.confirm(`¿Reactivar tenant "${tenant.nombre}"?`)) return;
+    if (!window.confirm(`¿Reactivar tenant "${tenant.nombre ?? 'esta liga'}"?`)) return;
     try {
       await reactivar.mutateAsync();
     } catch (err) {
@@ -160,23 +168,23 @@ function TenantRow({ tenant }: { tenant: TenantPlatform }): React.ReactElement {
     <li className="px-5 py-4 grid grid-cols-12 items-center gap-3">
       <div className="col-span-12 md:col-span-5">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-ink">{tenant.nombre}</span>
+          <span className="font-semibold text-ink">{tenant.nombre ?? '(sin nombre)'}</span>
           <span
             className={cn(
               'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-0.5 rounded',
-              BADGE_ESTADO[tenant.estadoSuscripcion],
+              badgeFor(tenant.estadoSuscripcion),
             )}
           >
-            {tenant.estadoSuscripcion}
+            {tenant.estadoSuscripcion ?? 'DESCONOCIDO'}
           </span>
-          {!tenant.isActive && (
+          {tenant.isActive === false && (
             <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-ink-mute/15 text-ink-mute">
               inactivo
             </span>
           )}
         </div>
         <div className="text-xs text-ink-mute mt-0.5">
-          <span className="font-mono">{tenant.slug}</span>
+          <span className="font-mono">{tenant.slug ?? '—'}</span>
           {tenant.customDomain && (
             <>
               {' · '}

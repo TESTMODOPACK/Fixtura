@@ -45,6 +45,20 @@ const ESTADO_LABEL: Record<EstadoSuscripcion, string> = {
   CANCELADO: 'Cancelado',
 };
 
+/** Lookup seguro si el backend devuelve un estado fuera del enum. */
+function badgeFor(estado: string | null | undefined): string {
+  if (estado && estado in BADGE_ESTADO) {
+    return BADGE_ESTADO[estado as EstadoSuscripcion];
+  }
+  return 'bg-ink-mute/15 text-ink-mute';
+}
+function labelFor(estado: string | null | undefined): string {
+  if (estado && estado in ESTADO_LABEL) {
+    return ESTADO_LABEL[estado as EstadoSuscripcion];
+  }
+  return estado ?? 'Desconocido';
+}
+
 const Schema = z.object({
   nombre: z.string().min(2).max(200),
   customDomain: z.string().max(255).optional().or(z.literal('')),
@@ -215,10 +229,10 @@ export default function DetalleTenantPage({
             <span
               className={cn(
                 'text-xs uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
-                BADGE_ESTADO[tenant.estadoSuscripcion],
+                badgeFor(tenant.estadoSuscripcion),
               )}
             >
-              {ESTADO_LABEL[tenant.estadoSuscripcion]}
+              {labelFor(tenant.estadoSuscripcion)}
             </span>
           </div>
         </Card>
@@ -231,19 +245,19 @@ export default function DetalleTenantPage({
         <Card padding="comfortable">
           <CardLabel tone="mute">Torneos</CardLabel>
           <div className="font-display text-2xl text-green-deep tracking-display mt-1">
-            {tenant.torneos}
+            {tenant.torneos ?? 0}
           </div>
         </Card>
         <Card padding="comfortable">
           <CardLabel tone="mute">Equipos</CardLabel>
           <div className="font-display text-2xl text-green-deep tracking-display mt-1">
-            {tenant.equipos}
+            {tenant.equipos ?? 0}
           </div>
         </Card>
         <Card padding="comfortable">
           <CardLabel tone="mute">Miembros</CardLabel>
           <div className="font-display text-2xl text-green-deep tracking-display mt-1">
-            {tenant.miembros}
+            {tenant.miembros ?? 0}
           </div>
         </Card>
       </div>
