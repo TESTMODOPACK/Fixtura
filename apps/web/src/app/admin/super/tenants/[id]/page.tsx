@@ -59,6 +59,56 @@ function labelFor(estado: string | null | undefined): string {
   return estado ?? 'Desconocido';
 }
 
+/**
+ * Coerce a valor renderizable. Previene React error #438 (objects are
+ * not valid as a React child) cuando el backend devuelve por error un
+ * objeto en un campo que esperamos string/number.
+ *
+ * Caso real: si `feature_flags` en DB está mal tipado (TEXT en lugar
+ * de JSONB), TypeORM devuelve string que JSON.parse falla; o si el
+ * backend retorna la entity cruda en vez del DTO, vienen objetos
+ * anidados como `plan` u `brandingJson`.
+ */
+function safe(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  // Object o array — no debería pasar, pero no rompemos el render.
+  return '[dato inválido]';
+}
+
+/** Parsea featureFlags a Record<string, boolean> independiente de cómo venga. */
+function parseFeatureFlags(value: unknown): Record<string, boolean> {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, boolean>)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, boolean>;
+  }
+  return {};
+}
+
+/** Convierte timestamp (string ISO o Date) a fecha local formateada. */
+function fmtDate(value: unknown): string {
+  if (!value) return '—';
+  try {
+    if (typeof value === 'string' || value instanceof Date) {
+      return new Date(value).toLocaleString('es-CL');
+    }
+    return '—';
+  } catch {
+    return '—';
+  }
+}
+
 const Schema = z.object({
   nombre: z.string().min(2).max(200),
   customDomain: z.string().max(255).optional().or(z.literal('')),
@@ -93,11 +143,15 @@ export default function DetalleTenantPage({
   // Cargar valores en el form cuando llegan los datos.
   useEffect(() => {
     if (tenant) {
+      // safe() coerciona a string si el backend manda objeto por error.
       form.reset({
-        nombre: tenant.nombre,
-        customDomain: tenant.customDomain ?? '',
-        planId: tenant.planId ?? '',
-        estadoSuscripcion: tenant.estadoSuscripcion,
+        nombre: safe(tenant.nombre),
+        customDomain: safe(tenant.customDomain),
+        planId: safe(tenant.planId),
+        estadoSuscripcion:
+          tenant.estadoSuscripcion && tenant.estadoSuscripcion in ESTADO_LABEL
+            ? tenant.estadoSuscripcion
+            : 'TRIAL',
       });
     }
   }, [tenant, form]);
@@ -192,8 +246,8 @@ export default function DetalleTenantPage({
     <>
       <PageHead
         eyebrow="Plataforma"
-        title={tenant.nombre}
-        sub={`Detalle del tenant · slug: ${tenant.slug}`}
+        title={safe(tenant.nombre) || '(sin nombre)'}
+        sub={`Detalle del tenant · slug: ${safe(tenant.slug)}`}
       >
         <Link href="/admin/super/tenants">
           <Button variant="default" size="sm">
@@ -239,7 +293,7 @@ export default function DetalleTenantPage({
         <Card padding="comfortable">
           <CardLabel tone="mute">Plan</CardLabel>
           <div className="font-display text-2xl text-green-deep tracking-display mt-1">
-            {tenant.planNombre ?? 'Sin plan'}
+            {safe(tenant.planNombre) || 'Sin plan'}
           </div>
         </Card>
         <Card padding="comfortable">
@@ -272,12 +326,11 @@ export default function DetalleTenantPage({
             <div className="text-sm">
               <strong className="text-danger">Tenant suspendido.</strong>{' '}
               <span className="text-ink-mute italic">
-                Motivo: {tenant.suspendidoMotivo}
+                Motivo: {safe(tenant.suspendidoMotivo)}
               </span>
               {tenant.suspendidoAt && (
                 <div className="text-xs text-ink-mute mt-1">
-                  Suspendido el{' '}
-                  {new Date(tenant.suspendidoAt).toLocaleString('es-CL')}
+                  Suspendido el {fmtDate(tenant.suspendidoAt)}
                 </div>
               )}
             </div>
@@ -307,7 +360,7 @@ export default function DetalleTenantPage({
               />
               <p className="text-xs text-ink-mute italic mt-1">
                 Debe apuntar al servidor via CNAME. Vacío = solo subdominio
-                fixtura.cl/{tenant.slug}.
+                fixtura.cl/{safe(tenant.slug)}.
               </p>
             </div>
             <div>
@@ -344,37 +397,31 @@ export default function DetalleTenantPage({
               <div className="text-xs uppercase tracking-wider text-ink-mute font-semibold">
                 Identificador
               </div>
-              <div className="font-mono mt-1">{tenant.id}</div>
+              <div className="font-mono mt-1">{safe(tenant.id)}</div>
             </div>
             <div>
               <div className="text-xs uppercase tracking-wider text-ink-mute font-semibold">
                 Slug
               </div>
-              <div className="font-mono mt-1">{tenant.slug}</div>
+              <div className="font-mono mt-1">{safe(tenant.slug)}</div>
             </div>
             <div>
               <div className="text-xs uppercase tracking-wider text-ink-mute font-semibold">
                 Tipo
               </div>
-              <div className="mt-1">{tenant.tipo}</div>
+              <div className="mt-1">{safe(tenant.tipo)}</div>
             </div>
             <div>
               <div className="text-xs uppercase tracking-wider text-ink-mute font-semibold">
                 Fin del trial
               </div>
-              <div className="mt-1">
-                {tenant.trialExpiraAt
-                  ? new Date(tenant.trialExpiraAt).toLocaleString('es-CL')
-                  : '—'}
-              </div>
+              <div className="mt-1">{fmtDate(tenant.trialExpiraAt)}</div>
             </div>
             <div>
               <div className="text-xs uppercase tracking-wider text-ink-mute font-semibold">
                 Creado el
               </div>
-              <div className="mt-1">
-                {new Date(tenant.createdAt).toLocaleString('es-CL')}
-              </div>
+              <div className="mt-1">{fmtDate(tenant.createdAt)}</div>
             </div>
           </div>
         </Card>
@@ -382,7 +429,7 @@ export default function DetalleTenantPage({
         {update.error && (
           <Card padding="comfortable" className="border-2 border-danger/40 bg-danger/5">
             <div className="text-sm text-danger">
-              {(update.error as ApiError).message}
+              {safe((update.error as ApiError).message) || 'Error al guardar'}
             </div>
           </Card>
         )}
@@ -407,30 +454,34 @@ export default function DetalleTenantPage({
       </form>
 
       {/* Banderas de funciones (feature flags) */}
-      {tenant.featureFlags && Object.keys(tenant.featureFlags).length > 0 && (
-        <Card padding="comfortable" className="mt-5">
-          <CardLabel>Funciones habilitadas (overrides)</CardLabel>
-          <div className="flex flex-wrap gap-1 mt-3">
-            {Object.entries(tenant.featureFlags).map(([k, v]) => (
-              <span
-                key={k}
-                className={cn(
-                  'text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded',
-                  v
-                    ? 'bg-green-bright/15 text-green-bright'
-                    : 'bg-ink-mute/15 text-ink-mute line-through',
-                )}
-              >
-                {k}
-              </span>
-            ))}
-          </div>
-          <p className="text-xs text-ink-mute italic mt-3">
-            Estas funciones sobrescriben las del plan. Para editarlas usá el API o
-            la próxima versión (Sprint 24).
-          </p>
-        </Card>
-      )}
+      {(() => {
+        const flags = parseFeatureFlags(tenant.featureFlags);
+        const entries = Object.entries(flags);
+        if (entries.length === 0) return null;
+        return (
+          <Card padding="comfortable" className="mt-5">
+            <CardLabel>Funciones habilitadas (overrides)</CardLabel>
+            <div className="flex flex-wrap gap-1 mt-3">
+              {entries.map(([k, v]) => (
+                <span
+                  key={k}
+                  className={cn(
+                    'text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded',
+                    v === true
+                      ? 'bg-green-bright/15 text-green-bright'
+                      : 'bg-ink-mute/15 text-ink-mute line-through',
+                  )}
+                >
+                  {String(k)}
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-ink-mute italic mt-3">
+              Estas funciones sobrescriben las del plan. Para editarlas usá el API.
+            </p>
+          </Card>
+        );
+      })()}
 
       <div className="mt-6 flex items-start gap-2 p-4 rounded-card bg-orange-50 text-orange-900 text-xs">
         <Building2 size={16} className="flex-shrink-0 mt-0.5" />
