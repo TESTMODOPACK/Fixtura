@@ -1313,6 +1313,142 @@ export function useSystemHealth() {
   });
 }
 
+// ─── Sprint 24A: Facturación plataforma (super admin) ───────────────
+import type {
+  AnularFacturaRequest,
+  EstadoCuentaLiga,
+  EstadoFacturaPlataforma,
+  FacturaPlataforma,
+  RegistrarPagoManualRequest,
+} from '@fixtura/types';
+
+export function useFacturasPlataforma(filter?: {
+  tenantId?: string;
+  estado?: EstadoFacturaPlataforma;
+  anio?: number;
+  mes?: number;
+}) {
+  return useQuery({
+    queryKey: ['super-admin', 'facturas', filter ?? {}],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (filter?.tenantId) params.set('tenantId', filter.tenantId);
+      if (filter?.estado) params.set('estado', filter.estado);
+      if (filter?.anio) params.set('anio', String(filter.anio));
+      if (filter?.mes) params.set('mes', String(filter.mes));
+      const qs = params.toString();
+      return apiFetch<FacturaPlataforma[]>(
+        `/super-admin/facturas${qs ? `?${qs}` : ''}`,
+      );
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useFacturaPlataforma(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ['super-admin', 'facturas', id],
+    queryFn: () => apiFetch<FacturaPlataforma>(`/super-admin/facturas/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useEstadoCuentaLiga(tenantId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['super-admin', 'facturas', 'estado-cuenta', tenantId],
+    queryFn: () =>
+      apiFetch<EstadoCuentaLiga>(
+        `/super-admin/facturas/estado-cuenta/${tenantId}`,
+      ),
+    enabled: !!tenantId,
+  });
+}
+
+export function useRegistrarPagoManual() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      facturaId,
+      input,
+    }: {
+      facturaId: string;
+      input: RegistrarPagoManualRequest;
+    }) =>
+      apiFetch<FacturaPlataforma>(
+        `/super-admin/facturas/${facturaId}/pago-manual`,
+        { method: 'POST', body: input },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['super-admin', 'facturas'] });
+    },
+  });
+}
+
+export function useAnularFactura() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      facturaId,
+      input,
+    }: {
+      facturaId: string;
+      input: AnularFacturaRequest;
+    }) =>
+      apiFetch<FacturaPlataforma>(
+        `/super-admin/facturas/${facturaId}/anular`,
+        { method: 'POST', body: input },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['super-admin', 'facturas'] });
+    },
+  });
+}
+
+export function useGenerarFacturasMes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ creadas: number; saltadas: number }>(
+        `/super-admin/facturas/generar-mes`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['super-admin', 'facturas'] });
+    },
+  });
+}
+
+// ─── Sprint 24A: Mi suscripción (LIGA_ADMIN) ────────────────────────
+export function useMiSuscripcion() {
+  return useQuery({
+    queryKey: ['mi-suscripcion'],
+    queryFn: () => apiFetch<EstadoCuentaLiga>('/admin/mi-suscripcion'),
+    staleTime: 30_000,
+  });
+}
+
+export function useMisFacturas() {
+  return useQuery({
+    queryKey: ['mi-suscripcion', 'facturas'],
+    queryFn: () =>
+      apiFetch<FacturaPlataforma[]>('/admin/mi-suscripcion/facturas'),
+    staleTime: 30_000,
+  });
+}
+
+export function usePagarFacturaWebpay() {
+  return useMutation({
+    mutationFn: (facturaId: string) =>
+      apiFetch<{ url: string; token: string; transaccionId: string }>(
+        `/admin/mi-suscripcion/pagar/${facturaId}`,
+        {
+          method: 'POST',
+          body: { baseUrlFrontend: window.location.origin },
+        },
+      ),
+  });
+}
+
 // ─── User context (auto-poll del JWT actual) ────────────────────────
 import type { UserContext } from '@fixtura/types';
 

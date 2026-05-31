@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Building2,
+  FileText,
   Heart,
   Megaphone,
   PiggyBank,
@@ -64,6 +65,7 @@ const NAV: NavSection[] = [
     items: [
       { href: '/admin/finanzas', label: 'Finanzas & cobros', icon: PiggyBank },
       { href: '/admin/canchas', label: 'Ocupación canchas', icon: Calendar },
+      { href: '/admin/mi-suscripcion', label: 'Mi suscripción', icon: FileText },
       { href: '/admin/analytics', label: 'Analytics & NPS', icon: BarChart3, comingSoon: true },
     ],
   },
@@ -92,6 +94,7 @@ const NAV_SUPER: NavSection = {
     { href: '/admin/super', label: 'Panel principal', icon: ShieldCheck },
     { href: '/admin/super/tenants', label: 'Ligas (tenants)', icon: Building2 },
     { href: '/admin/super/planes', label: 'Planes de suscripción', icon: PiggyBank },
+    { href: '/admin/super/facturas', label: 'Facturas a ligas', icon: FileText },
     { href: '/admin/super/impersonate', label: 'Entrar como…', icon: UserCog },
     { href: '/admin/super/health', label: 'Estado del sistema', icon: Heart },
   ],

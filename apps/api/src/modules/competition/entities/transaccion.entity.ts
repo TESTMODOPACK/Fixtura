@@ -43,6 +43,15 @@ export class Transaccion {
   @JoinColumn({ name: 'cobro_id' })
   cobro?: Cobro | null;
 
+  /**
+   * Sprint 24A — vínculo opcional con factura plataforma cuando la
+   * transacción corresponde al pago de la liga a Fixtura (no a un
+   * cobro equipo→liga). Mutuamente excluyente con cobroId en la
+   * práctica, pero no lo enforcamos a nivel DB para mantener flexibilidad.
+   */
+  @Column({ name: 'factura_plataforma_id', type: 'uuid', nullable: true })
+  facturaPlataformaId!: string | null;
+
   @Column({ type: 'int' })
   monto!: number;
 

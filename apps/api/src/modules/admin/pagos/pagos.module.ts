@@ -41,6 +41,6 @@ import {
       },
     },
   ],
-  exports: [PagosService],
+  exports: [PagosService, WEBPAY_PROVIDER],
 })
 export class PagosModule {}

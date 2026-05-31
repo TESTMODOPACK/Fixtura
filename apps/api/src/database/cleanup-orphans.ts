@@ -180,6 +180,9 @@ async function main(): Promise<void> {
 
     // Sprint 23 (Super Admin): planes_suscripcion + flags en tenants.
     await ensurePlanesSuscripcionTable(client, log);
+
+    // Sprint 24A (Facturación plataforma): facturas que cobra Fixtura a sus ligas.
+    await ensureFacturasPlataformaTable(client, log);
     await client.query(`
       ALTER TABLE tenants
         ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES planes_suscripcion(id) ON DELETE SET NULL,
@@ -557,8 +560,22 @@ async function ensureTransaccionesTable(
       ADD COLUMN IF NOT EXISTS pagado_at           TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS expira_at           TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS notas               TEXT,
+      ADD COLUMN IF NOT EXISTS factura_plataforma_id UUID,
       ADD COLUMN IF NOT EXISTS created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       ADD COLUMN IF NOT EXISTS updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
+  // FK separada porque facturas_plataforma se crea más arriba — corre después de ensureFacturasPlataformaTable.
+  await client.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_transacciones_factura_plataforma'
+      ) THEN
+        ALTER TABLE transacciones
+          ADD CONSTRAINT fk_transacciones_factura_plataforma
+          FOREIGN KEY (factura_plataforma_id) REFERENCES facturas_plataforma(id) ON DELETE SET NULL;
+      END IF;
+    END $$;
   `);
   await ensureRls(client, 'transacciones');
   await client.query(
@@ -1065,6 +1082,86 @@ async function ensurePlanesSuscripcionTable(
     log('planes_suscripcion seed: 4 planes base cargados.');
   }
   log('planes_suscripcion asegurada (Sprint 23).');
+}
+
+/**
+ * Sprint 24A — Facturas que Fixtura cobra a las ligas.
+ *
+ * Sin RLS — datos de plataforma. Solo SUPER_ADMIN puede crear/anular.
+ * El LIGA_ADMIN puede ver SUS facturas (filtro por tenant_id explícito
+ * en el service, sin RLS).
+ *
+ * UNIQUE (tenant_id, periodo_mes, periodo_anio) evita duplicar facturas.
+ */
+async function ensureFacturasPlataformaTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS facturas_plataforma (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      plan_id             UUID REFERENCES planes_suscripcion(id) ON DELETE SET NULL,
+      periodo_mes         SMALLINT NOT NULL CHECK (periodo_mes BETWEEN 1 AND 12),
+      periodo_anio        SMALLINT NOT NULL CHECK (periodo_anio BETWEEN 2000 AND 2100),
+      monto               INT NOT NULL CHECK (monto >= 0),
+      fecha_emision       DATE NOT NULL DEFAULT CURRENT_DATE,
+      fecha_vencimiento   DATE NOT NULL,
+      fecha_pago          TIMESTAMPTZ,
+      estado              VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE'
+                            CHECK (estado IN ('PENDIENTE','PAGADA','VENCIDA','ANULADA')),
+      metodo_pago         VARCHAR(20)
+                            CHECK (metodo_pago IS NULL OR metodo_pago IN (
+                              'WEBPAY','MERCADOPAGO','TRANSFERENCIA','MANUAL','ONECLICK'
+                            )),
+      transaccion_id      UUID REFERENCES transacciones(id) ON DELETE SET NULL,
+      doc_tributario_id   UUID REFERENCES documentos_tributarios(id) ON DELETE SET NULL,
+      observaciones       TEXT,
+      anulada_motivo      TEXT,
+      anulada_at          TIMESTAMPTZ,
+      anulada_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (tenant_id, periodo_mes, periodo_anio)
+    )
+  `);
+  // Auto-cura schema drift (patrón Sprint 19).
+  await client.query(`
+    ALTER TABLE facturas_plataforma
+      ADD COLUMN IF NOT EXISTS tenant_id          UUID REFERENCES tenants(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS plan_id            UUID REFERENCES planes_suscripcion(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS periodo_mes        SMALLINT,
+      ADD COLUMN IF NOT EXISTS periodo_anio       SMALLINT,
+      ADD COLUMN IF NOT EXISTS monto              INT,
+      ADD COLUMN IF NOT EXISTS fecha_emision      DATE NOT NULL DEFAULT CURRENT_DATE,
+      ADD COLUMN IF NOT EXISTS fecha_vencimiento  DATE,
+      ADD COLUMN IF NOT EXISTS fecha_pago         TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS estado             VARCHAR(20) DEFAULT 'PENDIENTE',
+      ADD COLUMN IF NOT EXISTS metodo_pago        VARCHAR(20),
+      ADD COLUMN IF NOT EXISTS transaccion_id     UUID REFERENCES transacciones(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS doc_tributario_id  UUID REFERENCES documentos_tributarios(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS observaciones      TEXT,
+      ADD COLUMN IF NOT EXISTS anulada_motivo     TEXT,
+      ADD COLUMN IF NOT EXISTS anulada_at         TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS anulada_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_facturas_plataforma_tenant_estado
+       ON facturas_plataforma(tenant_id, estado)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_facturas_plataforma_periodo
+       ON facturas_plataforma(periodo_anio DESC, periodo_mes DESC)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_facturas_plataforma_vencimiento
+       ON facturas_plataforma(fecha_vencimiento)
+       WHERE estado = 'PENDIENTE'`,
+  );
+  await ensureTrigger(client, 'facturas_plataforma');
+  log('facturas_plataforma asegurada (Sprint 24A).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

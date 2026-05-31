@@ -39,6 +39,6 @@ import {
       },
     },
   ],
-  exports: [SIIService],
+  exports: [SIIService, SII_PROVIDER],
 })
 export class SIIModule {}

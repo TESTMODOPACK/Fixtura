@@ -15,7 +15,10 @@ import {
   ROLE,
   type CreatePlanRequest,
   type CreateTenantPlatformRequest,
+  type EstadoCuentaLiga,
+  type EstadoFacturaPlataforma,
   type EstadoSuscripcion,
+  type FacturaPlataforma as FacturaPlataformaDto,
   type MetricasPlataforma,
   type PlanSuscripcion,
   type SuspenderTenantRequest,
@@ -29,6 +32,11 @@ import {
 import { Audited } from '../audit';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import {
+  AnularFacturaDto,
+  RegistrarPagoManualDto,
+} from './dto/facturacion-plataforma.dto';
+import { FacturacionPlataformaService } from './facturacion-plataforma.service';
 import { SuperAdminMetricsService } from './super-admin-metrics.service';
 import { SuperAdminPlanesService } from './super-admin-planes.service';
 import { SuperAdminTenantsService } from './super-admin-tenants.service';
@@ -142,5 +150,88 @@ export class SuperAdminMetricsController {
   @Get('health')
   getHealth(): Promise<SystemHealth> {
     return this.svc.getHealth();
+  }
+}
+
+/**
+ * Sprint 24A — Facturación plataforma. Endpoints super admin.
+ *
+ *  GET    /super-admin/facturas                   Lista todas (filtros opcionales).
+ *  GET    /super-admin/facturas/:id               Detalle.
+ *  GET    /super-admin/facturas/estado-cuenta/:tid Estado de cuenta de una liga.
+ *  POST   /super-admin/facturas/:id/pago-manual   Marcar como pagada.
+ *  POST   /super-admin/facturas/:id/anular        Anular con motivo.
+ *  POST   /super-admin/facturas/generar-mes       Fuerza generación del mes actual.
+ */
+@Controller('super-admin/facturas')
+@Roles(ROLE.SUPER_ADMIN)
+export class SuperAdminFacturasController {
+  constructor(private readonly svc: FacturacionPlataformaService) {}
+
+  @Get()
+  list(
+    @Query('tenantId') tenantId?: string,
+    @Query('estado') estado?: EstadoFacturaPlataforma,
+    @Query('anio') anio?: string,
+    @Query('mes') mes?: string,
+  ): Promise<FacturaPlataformaDto[]> {
+    return this.svc.list({
+      tenantId,
+      estado,
+      anio: anio ? Number(anio) : undefined,
+      mes: mes ? Number(mes) : undefined,
+    });
+  }
+
+  @Get('estado-cuenta/:tenantId')
+  estadoCuenta(
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+  ): Promise<EstadoCuentaLiga> {
+    return this.svc.estadoCuenta(tenantId);
+  }
+
+  @Get(':id')
+  findOne(@Param('id', new ParseUUIDPipe()) id: string): Promise<FacturaPlataformaDto> {
+    return this.svc.findOne(id);
+  }
+
+  @Post(':id/pago-manual')
+  @HttpCode(200)
+  @Audited({
+    action: 'platform.factura_pago_manual',
+    entityType: 'FacturaPlataforma',
+    entityIdFrom: 'params.id',
+  })
+  pagoManual(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: RegistrarPagoManualDto,
+  ): Promise<FacturaPlataformaDto> {
+    return this.svc.marcarPagada(id, dto.metodoPago, {
+      observaciones: dto.observaciones,
+      fechaPago: dto.fechaPago ? new Date(dto.fechaPago) : undefined,
+    });
+  }
+
+  @Post(':id/anular')
+  @HttpCode(200)
+  @Audited({
+    action: 'platform.factura_anulada',
+    entityType: 'FacturaPlataforma',
+    entityIdFrom: 'params.id',
+  })
+  anular(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AnularFacturaDto,
+  ): Promise<FacturaPlataformaDto> {
+    return this.svc.anular(id, dto.motivo, user.userId);
+  }
+
+  @Post('generar-mes')
+  @HttpCode(200)
+  @Audited({ action: 'platform.facturas_generadas_manual' })
+  generarMesActual(): Promise<{ creadas: number; saltadas: number }> {
+    const hoy = new Date();
+    return this.svc.generarFacturasMes(hoy.getMonth() + 1, hoy.getFullYear());
   }
 }
