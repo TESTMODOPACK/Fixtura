@@ -28,17 +28,25 @@ import { Partido } from '../../competition/entities/partido.entity';
  *
  * Estrategias:
  *   AL_FINAL          → la REPROGRAMADA se ubica después de la última
- *                       fecha del torneo. El resto NO se mueve.
+ *                       fecha del torneo. Los partidos suspendidos se
+ *                       CLONAN en estado PROGRAMADO (los originales
+ *                       quedan en SUSPENDIDO_FUERZA_MAYOR como historial).
  *   TRASNOCHE_DOMINO  → la REPROGRAMADA se intercala entre la suspendida
  *                       y la siguiente. Las posteriores se corren N días
- *                       y quedan marcadas REPROGRAMADAS.
- *   REUSAR_EXISTENTE  → no se crea fecha nueva. Los partidos se mueven a
+ *                       y quedan marcadas REPROGRAMADAS. Partidos
+ *                       clonados igual que AL_FINAL.
+ *   REUSAR_EXISTENTE  → no se crea fecha nueva. Los partidos se MUEVEN a
  *                       una fecha existente del torneo (fechaDestinoId)
- *                       que pasa a tipo REPROGRAMADA.
+ *                       que pasa a tipo REPROGRAMADA. (No clona — la
+ *                       fecha destino puede tener partidos previos.)
  *   MANUAL            → solo marca SUSPENDIDA. Sin fecha nueva.
  *
  * Si la fecha original tenía acta cerrada en algún partido, esos partidos
  * NO se tocan (la suspensión es a futuro, no destruye historial).
+ *
+ * Reactivar (volver de SUSPENDIDA a PROGRAMADA) se bloquea si existe una
+ * REPROGRAMADA con clones vivos — para evitar partidos duplicados. El
+ * admin debe limpiar la REPROGRAMADA primero o dejar la original suspendida.
  */
 @Injectable()
 export class FechasAdminService {
@@ -221,10 +229,16 @@ export class FechasAdminService {
 
   /**
    * Reactiva una fecha SUSPENDIDA. Vuelve a PROGRAMADA y los partidos
-   * en SUSPENDIDO_FUERZA_MAYOR vuelven a PROGRAMADO. Si existía una
-   * REPROGRAMADA asociada, NO se borra automáticamente — el admin
-   * decide qué hacer con ella (eliminarla o quedársela como N bis).
+   * en SUSPENDIDO_FUERZA_MAYOR vuelven a PROGRAMADO.
+   *
+   * Si al suspender se creó una fecha REPROGRAMADA con partidos clonados,
+   * BLOQUEAMOS la reactivación porque permitirla generaría partidos
+   * duplicados jugando el mismo torneo (los originales reactivados + los
+   * clones todavía vivos en la REPROGRAMADA). El admin debe eliminar
+   * primero la fecha REPROGRAMADA, o aceptar que esa es el calendario
+   * vigente y dejar la original suspendida.
    */
+  @Transactional()
   async reactivarFecha(fechaId: string, tenantId: string): Promise<Fecha> {
     const fecha = await this.fechaRepo.findOne({ where: { id: fechaId, tenantId } });
     if (!fecha) throw new NotFoundException(`Fecha ${fechaId} no encontrada`);
@@ -233,6 +247,31 @@ export class FechasAdminService {
         `La fecha no está suspendida (estado: ${fecha.estado}).`,
       );
     }
+
+    // Detectar REPROGRAMADA asociada que ya tenga partidos clonados.
+    // Si los partidos están en otra fecha y vivos, reactivar acá generaría
+    // duplicados.
+    const reprogramadaAsociada = await this.fechaRepo
+      .createQueryBuilder('f')
+      .where('f.tenant_id = :tenantId', { tenantId })
+      .andWhere('f.reemplaza_fecha_id = :fechaId', { fechaId })
+      .andWhere(`f.tipo_reprogramacion = 'REPROGRAMADA'`)
+      .andWhere(`f.estado <> 'SUSPENDIDA'`)
+      .getOne();
+
+    if (reprogramadaAsociada) {
+      const partidosEnRepro = await this.partidoRepo.count({
+        where: { tenantId, fechaId: reprogramadaAsociada.id },
+      });
+      if (partidosEnRepro > 0) {
+        throw new ConflictException(
+          `No se puede reactivar: existe una fecha REPROGRAMADA (id=${reprogramadaAsociada.id}) ` +
+            `con ${partidosEnRepro} partido(s) clonados. ` +
+            'Eliminá primero la fecha reprogramada (o sus partidos), después podés reactivar la original.',
+        );
+      }
+    }
+
     fecha.estado = 'PROGRAMADA';
     fecha.motivoSuspension = null;
     fecha.suspendidoAt = null;
@@ -298,11 +337,9 @@ export class FechasAdminService {
     });
     const saved = await this.fechaRepo.save(nueva);
 
-    // NOTA: NO movemos los partidos a la nueva fecha. Los partidos
-    // originales quedan en la fecha SUSPENDIDA con estado
-    // SUSPENDIDO_FUERZA_MAYOR (historial preservado). El admin puede
-    // moverlos manualmente con drag & drop a la fecha REPROGRAMADA o
-    // crear partidos nuevos ahí.
+    // Clonar los partidos suspendidos a la nueva fecha (en PROGRAMADO).
+    // Los originales quedan en la SUSPENDIDA como historial.
+    await this.clonarPartidosA(tenantId, fechaSuspendida.id, saved.id, fechaInicio);
     return saved.id;
   }
 
@@ -377,7 +414,8 @@ export class FechasAdminService {
     });
     const saved = await this.fechaRepo.save(nueva);
 
-    // NOTA: NO movemos los partidos automáticamente (ver aplicarAlFinal).
+    // Clonar partidos suspendidos a la nueva fecha — ver aplicarAlFinal.
+    await this.clonarPartidosA(tenantId, fechaSuspendida.id, saved.id, fechaInicio);
     return { nuevaId: saved.id, fechasCorridas: posteriores.length };
   }
 
@@ -425,6 +463,86 @@ export class FechasAdminService {
       destino.fechaInicio,
     );
     return destino.id;
+  }
+
+  /**
+   * Clona los partidos suspendidos de la fecha origen a la fecha destino,
+   * en estado PROGRAMADO. Los partidos originales quedan intactos en la
+   * fecha SUSPENDIDA (historial preservado). Los clones nacen "limpios":
+   *
+   *   Hereda: equipos, cancha, hora del día (ajustada a fechaInicioDestino),
+   *           observaciones libres (no las de suspensión).
+   *   Resetea: goles, acta, motivo/observaciones de suspensión, cronómetro
+   *            del Match Center, todo lo que sea historia del partido viejo.
+   *
+   * Por seguridad solo clona los partidos que quedaron como
+   * SUSPENDIDO_FUERZA_MAYOR — los que ya tenían acta cerrada o estaban
+   * en WALKOVER/FINALIZADO no se duplican (no se reprograman partidos
+   * jugados o resueltos por escritorio).
+   */
+  private async clonarPartidosA(
+    tenantId: string,
+    origenId: string,
+    destinoId: string,
+    fechaInicioDestino: string | null,
+  ): Promise<void> {
+    const partidos = await this.partidoRepo
+      .createQueryBuilder('p')
+      .where('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('p.fecha_id = :origenId', { origenId })
+      .andWhere(`p.estado = 'SUSPENDIDO_FUERZA_MAYOR'`)
+      .andWhere('p.acta_cerrada_at IS NULL')
+      .getMany();
+
+    if (partidos.length === 0) return;
+
+    const nuevos = partidos.map((p) => {
+      let fechaHora: Date | null = null;
+      if (fechaInicioDestino && p.fechaHora) {
+        const horaOrig = new Date(p.fechaHora);
+        const base = new Date(`${fechaInicioDestino}T00:00:00Z`);
+        base.setUTCHours(
+          horaOrig.getUTCHours(),
+          horaOrig.getUTCMinutes(),
+          0,
+          0,
+        );
+        fechaHora = base;
+      } else if (p.fechaHora) {
+        fechaHora = p.fechaHora;
+      }
+
+      return this.partidoRepo.create({
+        tenantId,
+        fechaId: destinoId,
+        equipoLocalId: p.equipoLocalId,
+        equipoVisitaId: p.equipoVisitaId,
+        canchaId: p.canchaId,
+        canchaNombre: p.canchaNombre,
+        fechaHora,
+        estado: 'PROGRAMADO' as const,
+        // Reset explícito de todo el historial del partido original.
+        golesLocal: null,
+        golesVisita: null,
+        actaCerradaAt: null,
+        actaCerradaBy: null,
+        observaciones: null,
+        motivoSuspension: null,
+        suspendidoAt: null,
+        suspendidoByUserId: null,
+        observacionesSuspension: null,
+        centroEstado: 'IDLE' as const,
+        centroArrancadoAt: null,
+        centroPausadoAt: null,
+        centroSegundosAcumulados: 0,
+        centroPeriodo: 0,
+        centroMinutosPorPeriodo: p.centroMinutosPorPeriodo,
+      });
+    });
+    await this.partidoRepo.save(nuevos);
+    this.log.log(
+      `Clonados ${nuevos.length} partidos de fecha=${origenId} a fecha=${destinoId}`,
+    );
   }
 
   /**
