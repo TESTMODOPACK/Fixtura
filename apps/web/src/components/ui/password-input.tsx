@@ -1,7 +1,7 @@
 'use client';
 
 import { Eye, EyeOff } from 'lucide-react';
-import { forwardRef, useState } from 'react';
+import { forwardRef, useId, useState } from 'react';
 
 import { cn } from '@/lib/cn';
 
@@ -24,7 +24,11 @@ export interface PasswordInputProps
 export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
   function PasswordInput({ label, error, className, id, ...rest }, ref) {
     const [visible, setVisible] = useState(false);
-    const autoId = id ?? `input-${rest.name ?? 'password'}`;
+    // useId garantiza un ID único por instancia incluso cuando hay
+    // múltiples PasswordInput en la misma página sin `name` distinto
+    // (caso real: /reset-password tiene "Nueva contraseña" + "Repetir").
+    const generatedId = useId();
+    const autoId = id ?? `${generatedId}-${rest.name ?? 'password'}`;
     return (
       <div className="space-y-1">
         {label && (
@@ -47,11 +51,13 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           <button
             type="button"
             onClick={() => setVisible((v) => !v)}
+            disabled={rest.disabled}
             tabIndex={-1}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-ink-mute hover:text-ink rounded transition-colors"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-ink-mute hover:text-ink rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            aria-pressed={visible}
           >
-            {visible ? <EyeOff size={16} /> : <Eye size={16} />}
+            {visible ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
           </button>
         </div>
         {error && <p className="text-xs text-danger mt-1">{error}</p>}
