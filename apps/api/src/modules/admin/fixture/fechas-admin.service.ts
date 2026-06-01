@@ -496,7 +496,10 @@ export class FechasAdminService {
 
     if (partidos.length === 0) return;
 
-    const nuevos = partidos.map((p) => {
+    // Calculamos las nuevas fecha_hora primero, después validamos choques
+    // de cancha contra el resto del calendario ANTES de guardar nada
+    // (atómico — si hay choque, no se guarda ningún clone).
+    const candidatos = partidos.map((p) => {
       let fechaHora: Date | null = null;
       if (fechaInicioDestino && p.fechaHora) {
         const horaOrig = new Date(p.fechaHora);
@@ -511,8 +514,13 @@ export class FechasAdminService {
       } else if (p.fechaHora) {
         fechaHora = p.fechaHora;
       }
+      return { original: p, fechaHora };
+    });
 
-      return this.partidoRepo.create({
+    await this.validarSinChoqueDeCancha(tenantId, candidatos);
+
+    const nuevos = candidatos.map(({ original: p, fechaHora }) =>
+      this.partidoRepo.create({
         tenantId,
         fechaId: destinoId,
         equipoLocalId: p.equipoLocalId,
@@ -537,12 +545,76 @@ export class FechasAdminService {
         centroSegundosAcumulados: 0,
         centroPeriodo: 0,
         centroMinutosPorPeriodo: p.centroMinutosPorPeriodo,
-      });
-    });
-    await this.partidoRepo.save(nuevos);
-    this.log.log(
-      `Clonados ${nuevos.length} partidos de fecha=${origenId} a fecha=${destinoId}`,
+      }),
     );
+    await this.partidoRepo.save(nuevos);
+
+    // Aviso si los partidos originales tenían designaciones — el admin
+    // las pierde y debe re-designar para el día nuevo. (Decisión:
+    // NO clonamos designaciones porque el árbitro confirmó para el día
+    // viejo; tiene que volver a aceptar el nuevo.)
+    const cantDesignaciones: { c: string }[] = await this.partidoRepo.query(
+      `SELECT COUNT(*)::text AS c FROM designaciones WHERE partido_id = ANY($1::uuid[])`,
+      [partidos.map((p) => p.id)],
+    );
+    const total = parseInt(cantDesignaciones[0]?.c ?? '0', 10);
+    if (total > 0) {
+      this.log.warn(
+        `Clonados ${nuevos.length} partidos a fecha=${destinoId}. ${total} designaciones quedaron ` +
+          `en los partidos originales (estado SUSPENDIDO_FUERZA_MAYOR). El admin debe re-designar ` +
+          `árbitros/personal en los clones nuevos.`,
+      );
+    } else {
+      this.log.log(
+        `Clonados ${nuevos.length} partidos de fecha=${origenId} a fecha=${destinoId}`,
+      );
+    }
+  }
+
+  /**
+   * Pre-valida en BATCH que los partidos a clonar no choquen con otros
+   * partidos del torneo en la misma cancha + ventana horaria. Replica la
+   * lógica de PartidosAdminService.validarChoqueCancha pero permite
+   * validar varios partidos juntos antes de guardarlos.
+   *
+   * Lanza ConflictException si hay choque. No guarda nada en ese caso —
+   * la transacción de suspender se revierte y el admin recibe el error.
+   */
+  private async validarSinChoqueDeCancha(
+    tenantId: string,
+    candidatos: Array<{ original: Partido; fechaHora: Date | null }>,
+  ): Promise<void> {
+    const VENTANA_MIN = 120;
+    const ventanaMs = VENTANA_MIN * 60 * 1000;
+
+    for (const { original, fechaHora } of candidatos) {
+      if (!original.canchaId || !fechaHora) continue;
+      const desde = new Date(fechaHora.getTime() - ventanaMs);
+      const hasta = new Date(fechaHora.getTime() + ventanaMs);
+      const choque = await this.partidoRepo
+        .createQueryBuilder('p')
+        .leftJoinAndSelect('p.equipoLocal', 'el')
+        .leftJoinAndSelect('p.equipoVisita', 'ev')
+        .where('p.tenant_id = :tenantId', { tenantId })
+        .andWhere('p.cancha_id = :canchaId', { canchaId: original.canchaId })
+        .andWhere('p.fecha_hora IS NOT NULL')
+        .andWhere('p.fecha_hora >= :desde', { desde })
+        .andWhere('p.fecha_hora <= :hasta', { hasta })
+        .andWhere(`p.estado NOT IN ('SUSPENDIDO_FUERZA_MAYOR','WALKOVER')`)
+        .getOne();
+      if (choque) {
+        const hora = choque.fechaHora
+          ? new Date(choque.fechaHora).toLocaleString('es-CL')
+          : 'sin hora';
+        const local = choque.equipoLocal?.nombre ?? '—';
+        const visita = choque.equipoVisita?.nombre ?? '—';
+        throw new ConflictException(
+          `No se puede clonar el partido a la nueva fecha: la cancha ya tiene "${local} vs ${visita}" ` +
+            `el ${hora}. Las citas deben separarse al menos ${VENTANA_MIN} min. ` +
+            `Cambiá el día de inicio de la fecha reprogramada o moveelo de cancha primero.`,
+        );
+      }
+    }
   }
 
   /**
