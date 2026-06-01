@@ -13,6 +13,7 @@ import type { AuthTokens, UserContext } from '@fixtura/types';
 import { Button } from '@/components/ui/button';
 import { CardLabel } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { ApiError, apiFetch } from '@/lib/api';
 import { resolveLandingByRole } from '@/lib/resolve-landing';
 import { useAuthStore } from '@/store/auth-store';
@@ -108,9 +109,8 @@ export function LoginModal({ open, onClose }: LoginModalProps): React.ReactEleme
             {...form.register('email')}
             error={form.formState.errors.email?.message}
           />
-          <Input
+          <PasswordInput
             label="Contraseña"
-            type="password"
             autoComplete="current-password"
             {...form.register('password')}
             error={form.formState.errors.password?.message}

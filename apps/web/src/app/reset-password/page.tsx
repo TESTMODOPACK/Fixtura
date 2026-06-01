@@ -7,7 +7,7 @@ import { Suspense, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { API_URL } from '@/lib/api';
 
 /**
@@ -115,25 +115,25 @@ function ResetContent(): React.ReactElement {
       </div>
 
       <form onSubmit={onSubmit} className="space-y-3">
-        <Input
+        <PasswordInput
           label="Nueva contraseña"
-          type="password"
           value={pwd}
           onChange={(e) => setPwd(e.target.value)}
           required
           minLength={8}
           maxLength={200}
           disabled={enviando}
+          autoComplete="new-password"
         />
-        <Input
+        <PasswordInput
           label="Repetir contraseña"
-          type="password"
           value={pwd2}
           onChange={(e) => setPwd2(e.target.value)}
           required
           minLength={8}
           maxLength={200}
           disabled={enviando}
+          autoComplete="new-password"
         />
         {error && (
           <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
