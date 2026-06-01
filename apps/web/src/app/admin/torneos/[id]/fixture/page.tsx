@@ -453,7 +453,6 @@ function SuspenderFechaForm({
 }): React.ReactElement {
   const [motivo, setMotivo] = useState<MotivoSuspension>('LLUVIA');
   const [observaciones, setObservaciones] = useState('');
-  const [estrategia, setEstrategia] = useState<EstrategiaSuspensionFecha>('AL_FINAL');
   const [diasCorrimiento, setDiasCorrimiento] = useState(7);
   const [fechaInicioReprogramada, setFechaInicioReprogramada] = useState('');
   const [fechaDestinoId, setFechaDestinoId] = useState('');
@@ -466,6 +465,42 @@ function SuspenderFechaForm({
       f.id !== fecha.id &&
       (f.estado === 'PROGRAMADA' || f.estado === 'EN_CURSO'),
   );
+
+  // ─── Cálculo de estrategias inválidas (espejo de las validaciones
+  // del backend, ver FechasAdminService.suspenderFecha). Si no podemos
+  // crear una REPROGRAMADA encima, deshabilitamos AL_FINAL y
+  // TRASNOCHE_DOMINO desde el front para que el admin no llegue a
+  // confirmar y luego reciba un 409.
+  const yaEsReprogramada = fecha.tipoReprogramacion === 'REPROGRAMADA';
+  const existeReproParalela = fechasDisponibles.some(
+    (f) =>
+      f.id !== fecha.id &&
+      f.numero === fecha.numero &&
+      f.tipoReprogramacion === 'REPROGRAMADA',
+  );
+  const bloquearCrearRepro = yaEsReprogramada || existeReproParalela;
+
+  const razonBloqueo = yaEsReprogramada
+    ? 'Esta fecha ya es una reprogramación previa. No se puede crear otra reprogramación encima.'
+    : existeReproParalela
+      ? `Ya existe una Fecha ${fecha.numero} reprogramada en este torneo. Eliminala primero o usá "Reusar una fecha existente".`
+      : null;
+
+  const estrategiaInvalida = (e: EstrategiaSuspensionFecha): string | null => {
+    if (e === 'AL_FINAL' || e === 'TRASNOCHE_DOMINO') {
+      return razonBloqueo;
+    }
+    if (e === 'REUSAR_EXISTENTE' && candidatasReusar.length === 0) {
+      return 'No hay fechas existentes disponibles para reusar en este torneo.';
+    }
+    return null; // válida
+  };
+
+  // Default: primera estrategia válida (para que el form arranque "limpio"
+  // y no en una opción que va a fallar al confirmar).
+  const primeraValida =
+    ESTRATEGIA_SUSPENSION_FECHA.find((e) => !estrategiaInvalida(e)) ?? 'MANUAL';
+  const [estrategia, setEstrategia] = useState<EstrategiaSuspensionFecha>(primeraValida);
 
   const descripciones: Record<EstrategiaSuspensionFecha, string> = {
     AL_FINAL:
@@ -484,6 +519,13 @@ function SuspenderFechaForm({
         <CloudRain size={16} className="text-danger" />
         <CardLabel className="text-danger">Suspender Fecha {fecha.numero}</CardLabel>
       </div>
+
+      {razonBloqueo && (
+        <div className="mb-3 p-3 rounded-card border border-orange-700/40 bg-orange-700/5 text-xs text-orange-700 flex items-start gap-2">
+          <span className="font-semibold">Aviso:</span>
+          <span>{razonBloqueo} Las estrategias que crean fecha nueva quedan deshabilitadas.</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
         <div>
@@ -518,14 +560,20 @@ function SuspenderFechaForm({
       <div className="mb-3">
         <label className="label">Estrategia de reprogramación</label>
         <div className="space-y-2 mt-2">
-          {ESTRATEGIA_SUSPENSION_FECHA.map((e) => (
+          {ESTRATEGIA_SUSPENSION_FECHA.map((e) => {
+            const razon = estrategiaInvalida(e);
+            const disabled = loading || !!razon;
+            return (
             <label
               key={e}
               className={cn(
-                'block p-3 rounded-card border cursor-pointer transition-colors',
-                estrategia === e
+                'block p-3 rounded-card border transition-colors',
+                disabled
+                  ? 'cursor-not-allowed opacity-60 bg-paper-dark/40 border-line'
+                  : 'cursor-pointer',
+                !disabled && estrategia === e
                   ? 'border-accent bg-accent/5'
-                  : 'border-line hover:border-ink-mute',
+                  : !disabled && 'border-line hover:border-ink-mute',
               )}
             >
               <div className="flex items-start gap-2">
@@ -534,13 +582,22 @@ function SuspenderFechaForm({
                   name="estrategia"
                   value={e}
                   checked={estrategia === e}
-                  onChange={() => setEstrategia(e)}
-                  disabled={loading}
+                  onChange={() => !razon && setEstrategia(e)}
+                  disabled={disabled}
                   className="mt-1"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink">{ESTRATEGIA_LABEL[e]}</div>
-                  <div className="text-xs text-ink-mute mt-1">{descripciones[e]}</div>
+                  <div className="font-semibold text-ink flex items-center gap-2 flex-wrap">
+                    {ESTRATEGIA_LABEL[e]}
+                    {razon && (
+                      <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-ink-mute/15 text-ink-mute">
+                        No disponible
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-ink-mute mt-1">
+                    {razon ?? descripciones[e]}
+                  </div>
 
                   {e === 'AL_FINAL' && estrategia === 'AL_FINAL' && (
                     <div className="mt-2 flex items-center gap-2">
@@ -611,7 +668,8 @@ function SuspenderFechaForm({
                 </div>
               </div>
             </label>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -621,6 +679,13 @@ function SuspenderFechaForm({
           variant="accent"
           size="sm"
           onClick={() => {
+            // Defensa en profundidad: el radio inválido no debería estar
+            // seleccionable, pero por las dudas validamos antes del submit.
+            const razon = estrategiaInvalida(estrategia);
+            if (razon) {
+              alert(razon);
+              return;
+            }
             if (estrategia === 'REUSAR_EXISTENTE' && !fechaDestinoId) {
               alert('Tenés que elegir una fecha destino.');
               return;
