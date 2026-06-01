@@ -168,7 +168,11 @@ services:
     # ports:
     #   - "127.0.0.1:3001:3001"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3001/login || exit 1"]
+      # `/login` se eliminó en el cleanup del onboarding multi-tenant — el
+      # healthcheck quedó apuntando a una ruta inexistente y el container
+      # quedaba marcado unhealthy aunque Next.js estaba sirviendo OK.
+      # Usamos `/` (portal público home) que siempre responde 200.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3001/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
