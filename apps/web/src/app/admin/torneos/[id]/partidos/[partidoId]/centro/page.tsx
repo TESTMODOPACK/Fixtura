@@ -10,7 +10,6 @@ import {
   WifiOff,
 } from 'lucide-react';
 import Link from 'next/link';
-import { use } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
@@ -29,9 +28,10 @@ import {
 export default function CentroPage({
   params,
 }: {
-  params: Promise<{ id: string; partidoId: string }>;
+  // Next.js 14 — params es síncrono.
+  params: { id: string; partidoId: string };
 }): React.ReactElement {
-  const { id: torneoId, partidoId } = use(params);
+  const { id: torneoId, partidoId } = params;
   const { snapshot, conectado, error } = useMatchCenter(partidoId);
   const arrancar = useArrancarCentro(partidoId);
   const pausar = usePausarCentro(partidoId);

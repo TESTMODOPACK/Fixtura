@@ -11,7 +11,7 @@ import {
   Save,
 } from 'lucide-react';
 import Link from 'next/link';
-import { use, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -120,9 +120,10 @@ type FormData = z.infer<typeof Schema>;
 export default function DetalleTenantPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  // Next.js 14 — params es síncrono. En Next 15 es Promise y hay que usar use().
+  params: { id: string };
 }): React.ReactElement {
-  const { id } = use(params);
+  const { id } = params;
   const { data: tenant, isLoading, error } = useTenantPlataforma(id);
   const { data: planes } = usePlanesSuscripcion();
   const update = useUpdateTenantPlataforma(id);

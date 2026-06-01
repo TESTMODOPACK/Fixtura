@@ -10,7 +10,22 @@ import type { AuthTokens } from '@fixtura/types';
 import { useAuthStore } from '@/store/auth-store';
 import { enqueue as enqueueOffline } from '@/lib/offline-queue';
 
-export const API_URL = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'}/api/v1`;
+/**
+ * Construye la base URL del API tolerando que la env var venga con o sin
+ * sufijos `/`, `/api` o `/api/v1`. Históricamente el docker-compose la
+ * pasaba con `/api` final y el código también concatenaba `/api/v1`,
+ * resultando en `/api/api/v1/...` y todos los requests fallando con 401.
+ */
+function buildApiBase(): string {
+  const raw = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+  // Normaliza: saca trailing slash, después remueve sufijo /api/v1 o /api si existe.
+  const stripped = raw
+    .replace(/\/+$/, '')
+    .replace(/\/api\/v1$/, '')
+    .replace(/\/api$/, '');
+  return `${stripped}/api/v1`;
+}
+export const API_URL = buildApiBase();
 const API_BASE = API_URL;
 
 export class ApiError extends Error {

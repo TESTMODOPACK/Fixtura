@@ -1,7 +1,5 @@
 'use client';
 
-import { use } from 'react';
-
 import { useMatchCenter } from '@/hooks/use-match-center';
 
 /**
@@ -14,9 +12,10 @@ import { useMatchCenter } from '@/hooks/use-match-center';
 export default function PartidoVivoPage({
   params,
 }: {
-  params: Promise<{ partidoId: string }>;
+  // Next.js 14 — params es síncrono.
+  params: { partidoId: string };
 }): React.ReactElement {
-  const { partidoId } = use(params);
+  const { partidoId } = params;
   const { snapshot, conectado, error } = useMatchCenter(partidoId);
 
   if (error && !snapshot) {
