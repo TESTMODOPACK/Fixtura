@@ -1544,3 +1544,172 @@ export function useValidarPlantel(equipoId: string | null | undefined) {
     staleTime: 0,
   });
 }
+
+// ─── Sprint 26 — Clubes y vetados (ADR-0004) ────────────────────────
+
+import type {
+  Club,
+  CreateClubRequest,
+  CreateJugadorClubRequest,
+  CreateJugadorVetadoRequest,
+  Jugador,
+  JugadorVetado,
+  UpdateClubRequest,
+  UpdateJugadorClubRequest,
+} from '@fixtura/types';
+
+export function useClubes() {
+  return useQuery({
+    queryKey: ['admin', 'clubes'],
+    queryFn: () => apiFetch<Club[]>('/admin/clubes'),
+    staleTime: 30_000,
+  });
+}
+
+export function useClub(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'clubes', id],
+    queryFn: () => apiFetch<Club>(`/admin/clubes/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateClub() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateClubRequest) =>
+      apiFetch<Club>('/admin/clubes', { method: 'POST', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'clubes'] });
+    },
+  });
+}
+
+export function useUpdateClub(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateClubRequest) =>
+      apiFetch<Club>(`/admin/clubes/${id}`, { method: 'PATCH', body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'clubes'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'clubes', id] });
+    },
+  });
+}
+
+export function useDeleteClub() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/clubes/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'clubes'] });
+    },
+  });
+}
+
+/**
+ * Lista el plantel de un club, opcionalmente filtrado por categoría.
+ * Si no se pasa categoriaId, devuelve TODOS los jugadores del club.
+ */
+export function usePlantelClub(
+  clubId: string | null | undefined,
+  categoriaId?: string | null,
+) {
+  const qs = categoriaId ? `?categoriaId=${categoriaId}` : '';
+  return useQuery({
+    queryKey: ['admin', 'clubes', clubId, 'plantel', categoriaId ?? null],
+    queryFn: () => apiFetch<Jugador[]>(`/admin/clubes/${clubId}/jugadores${qs}`),
+    enabled: !!clubId,
+  });
+}
+
+export function useAddJugadorClub(clubId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateJugadorClubRequest) =>
+      apiFetch<Jugador>(`/admin/clubes/${clubId}/jugadores`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'clubes', clubId] });
+      qc.invalidateQueries({
+        queryKey: ['admin', 'clubes', clubId, 'plantel'],
+      });
+    },
+  });
+}
+
+export function useUpdateJugadorClub(clubId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      jugadorId,
+      input,
+    }: {
+      jugadorId: string;
+      input: UpdateJugadorClubRequest;
+    }) =>
+      apiFetch<Jugador>(`/admin/clubes/${clubId}/jugadores/${jugadorId}`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'clubes', clubId, 'plantel'],
+      });
+    },
+  });
+}
+
+export function useDeleteJugadorClub(clubId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (jugadorId: string) =>
+      apiFetch<void>(`/admin/clubes/${clubId}/jugadores/${jugadorId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'clubes', clubId] });
+      qc.invalidateQueries({
+        queryKey: ['admin', 'clubes', clubId, 'plantel'],
+      });
+    },
+  });
+}
+
+// ─── Vetados ────────────────────────────────────────────────────────
+
+export function useVetados() {
+  return useQuery({
+    queryKey: ['admin', 'vetados'],
+    queryFn: () => apiFetch<JugadorVetado[]>('/admin/vetados'),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateVetado() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateJugadorVetadoRequest) =>
+      apiFetch<JugadorVetado>('/admin/vetados', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'vetados'] });
+    },
+  });
+}
+
+export function useDeleteVetado() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/vetados/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'vetados'] });
+    },
+  });
+}

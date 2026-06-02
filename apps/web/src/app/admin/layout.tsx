@@ -16,7 +16,9 @@ import {
   PiggyBank,
   ScrollText,
   Settings,
+  Shield,
   ShieldCheck,
+  ShieldOff,
   Trophy,
   UserCog,
   Users,
@@ -73,7 +75,9 @@ const NAV: NavSection[] = [
   {
     title: 'Comunidad',
     items: [
+      { href: '/admin/clubes', label: 'Clubes', icon: Shield },
       { href: '/admin/jugadores', label: 'Jugadores & ranking', icon: Users },
+      { href: '/admin/vetados', label: 'Jugadores vetados', icon: ShieldOff },
       { href: '/admin/sponsors', label: 'Sponsors & banners', icon: Megaphone },
     ],
   },
