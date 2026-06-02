@@ -2,6 +2,9 @@ export { Cancha } from './cancha.entity';
 export type { SuperficieCancha } from './cancha.entity';
 export { CategoriaJugadores } from './categoria-jugadores.entity';
 export type { SerieEmbedded } from './categoria-jugadores.entity';
+export { Club } from './club.entity';
+export type { ContactoDirectivaEmbedded, EstadoClub } from './club.entity';
+export { ClubCategoria } from './club-categoria.entity';
 export { Cobro } from './cobro.entity';
 export type { CategoriaCobro, EstadoDunning, MetodoPago } from './cobro.entity';
 export { DiaNoJugable } from './dia-no-jugable.entity';
@@ -23,6 +26,17 @@ export { IncidenciaPartido } from './incidencia-partido.entity';
 export type { TipoIncidencia } from './incidencia-partido.entity';
 export { JugadorInscrito } from './jugador-inscrito.entity';
 export type { PieHabil } from './jugador-inscrito.entity';
+export { Jugador } from './jugador.entity';
+export type {
+  EstadoJugadorClub,
+  PieHabilJugador,
+  PosicionJugador,
+} from './jugador.entity';
+export { JugadorVetado } from './jugador-vetado.entity';
+export type { OrigenVeto } from './jugador-vetado.entity';
+export { InscripcionTorneo } from './inscripcion-torneo.entity';
+export type { EstadoInscripcion } from './inscripcion-torneo.entity';
+export { PlanillaTorneo } from './planilla-torneo.entity';
 export { Partido } from './partido.entity';
 export type { EstadoPartido } from './partido.entity';
 export { Personal } from './personal.entity';

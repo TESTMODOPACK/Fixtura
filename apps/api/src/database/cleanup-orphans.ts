@@ -216,6 +216,33 @@ async function main(): Promise<void> {
     );
     log('torneos.categoria_id + equipos.serie_slug asegurados (Sprint 25 paso 3).');
 
+    // Sprint 26A — Clubes globales por tenant (reemplaza el modelo viejo
+    // de equipos por torneo). Ver ADR-0004. Tablas:
+    //   clubes                  — entidad de primera clase a nivel tenant
+    //   club_categorias         — N:N club ↔ categoría (multi-categoría)
+    //   jugadores               — plantel del club por categoría
+    //   inscripciones_torneo    — club inscrito a (torneo, categoría, serie)
+    //   planilla_torneo         — subset del plantel que juega ese torneo
+    //   jugadores_vetados       — lista negra por RUT a nivel tenant
+    // Mientras dure la coexistencia (hasta sprint 26G), las tablas viejas
+    // `equipos` y `jugadores_inscritos` siguen existiendo.
+    await ensureClubesTables(client, log);
+
+    // Sprint 26D — campos nuevos en torneos para soportar el modelo nuevo.
+    // Aditivos: torneos viejos quedan con defaults razonables.
+    await client.query(`
+      ALTER TABLE torneos
+        ADD COLUMN IF NOT EXISTS categorias_series JSONB
+          NOT NULL DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS tope_jugadores_por_equipo SMALLINT
+          NOT NULL DEFAULT 25 CHECK (tope_jugadores_por_equipo BETWEEN 1 AND 99),
+        ADD COLUMN IF NOT EXISTS refuerzos_habilitados BOOLEAN
+          NOT NULL DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS fecha_limite_refuerzos_numero SMALLINT
+          CHECK (fecha_limite_refuerzos_numero IS NULL OR fecha_limite_refuerzos_numero >= 0)
+    `);
+    log('torneos.categorias_series + tope_jugadores + refuerzos asegurados (Sprint 26D).');
+
     await client.query(`
       ALTER TABLE tenants
         ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES planes_suscripcion(id) ON DELETE SET NULL,
@@ -1254,6 +1281,214 @@ async function ensureCategoriasYSeriesTables(
   await ensureTrigger(client, 'categorias_jugadores');
 
   log('categorias_jugadores asegurada (Sprint 25 con series embebidas JSONB).');
+}
+
+/**
+ * Sprint 26A — Modelo Clubes (ADR-0004).
+ *
+ * Crea las tablas del nuevo modelo de dominio: club como entidad de
+ * primera clase a nivel tenant, con planteles por categoría e
+ * inscripción a torneos como pivote separado.
+ *
+ * Coexiste con el modelo viejo (equipos/jugadores_inscritos) hasta el
+ * sprint 26G que hace el refactor cascada. La migración de datos
+ * (equipo viejo → club + inscripción) la hace el sprint 26F en un
+ * script aparte (no en cleanup-orphans para no correr en cada arranque).
+ */
+async function ensureClubesTables(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  // ─── clubes ──────────────────────────────────────────────────────
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS clubes (
+      id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id                   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      slug                        VARCHAR(100) NOT NULL,
+      nombre                      VARCHAR(150) NOT NULL,
+      escudo_url                  VARCHAR(500),
+      color_primario              VARCHAR(7),
+      color_secundario            VARCHAR(7),
+      pagina_web                  VARCHAR(500),
+      resena                      TEXT,
+      presidente_nombre           VARCHAR(150),
+      presidente_email            VARCHAR(150),
+      presidente_telefono         VARCHAR(50),
+      delegados                   JSONB NOT NULL DEFAULT '[]'::jsonb,
+      historial_manual            TEXT,
+      estado                      VARCHAR(20) NOT NULL DEFAULT 'ACTIVO'
+                                    CHECK (estado IN ('ACTIVO','INACTIVO')),
+      created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_club_slug UNIQUE (tenant_id, slug)
+    )
+  `);
+  await ensureRls(client, 'clubes');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_clubes_tenant ON clubes(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_clubes_estado ON clubes(estado)`,
+  );
+  await ensureTrigger(client, 'clubes');
+
+  // ─── club_categorias (pivote N:N) ────────────────────────────────
+  // Modelado como tabla pivote (no array) para tener FK real a
+  // categorias_jugadores y poder hacer JOIN limpio sin GIN index raro.
+  // tenant_id se duplica explícitamente para que la policy RLS sea
+  // simple y consistente con el resto.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS club_categorias (
+      tenant_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      club_id       UUID NOT NULL REFERENCES clubes(id) ON DELETE CASCADE,
+      categoria_id  UUID NOT NULL REFERENCES categorias_jugadores(id) ON DELETE CASCADE,
+      PRIMARY KEY (club_id, categoria_id)
+    )
+  `);
+  await ensureRls(client, 'club_categorias');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_club_categorias_tenant ON club_categorias(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_club_categorias_categoria ON club_categorias(categoria_id)`,
+  );
+
+  // ─── jugadores (plantel global del club por categoría) ──────────
+  // OJO: hay una tabla `jugadores_inscritos` del modelo viejo que NO
+  // tocamos. La nueva se llama `jugadores` y va a reemplazarla en 26G.
+  //
+  // UNIQUE (tenant_id, rut) implementa la regla "un jugador = un solo
+  // equipo en toda la liga" — un mismo RUT no puede aparecer dos
+  // veces en el tenant ni siquiera en distintas categorías del mismo
+  // club. Es el plantel-por-categoría coherente con la regla de
+  // multi-torneo cross-tenant.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS jugadores (
+      id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id          UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      club_id            UUID NOT NULL REFERENCES clubes(id) ON DELETE CASCADE,
+      categoria_id       UUID NOT NULL REFERENCES categorias_jugadores(id) ON DELETE RESTRICT,
+      rut                VARCHAR(20) NOT NULL,
+      nombres            VARCHAR(100) NOT NULL,
+      apellidos          VARCHAR(100) NOT NULL,
+      fecha_nac          DATE,
+      email              VARCHAR(150),
+      telefono           VARCHAR(50),
+      numero_camiseta    SMALLINT CHECK (numero_camiseta IS NULL OR numero_camiseta BETWEEN 0 AND 99),
+      posicion           VARCHAR(20) CHECK (posicion IS NULL OR posicion IN ('ARQUERO','DEFENSA','MEDIO','DELANTERO')),
+      pie_habil          VARCHAR(20) CHECK (pie_habil IS NULL OR pie_habil IN ('IZQUIERDO','DERECHO','AMBIDIESTRO')),
+      apodo              VARCHAR(50),
+      capitan            BOOLEAN NOT NULL DEFAULT FALSE,
+      estado             VARCHAR(20) NOT NULL DEFAULT 'ACTIVO'
+                           CHECK (estado IN ('ACTIVO','INACTIVO')),
+      created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_jugador_rut UNIQUE (tenant_id, rut)
+    )
+  `);
+  await ensureRls(client, 'jugadores');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_jugadores_tenant ON jugadores(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_jugadores_club ON jugadores(club_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_jugadores_categoria ON jugadores(categoria_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_jugadores_rut ON jugadores(rut)`,
+  );
+  await ensureTrigger(client, 'jugadores');
+
+  // ─── inscripciones_torneo ────────────────────────────────────────
+  // Pivote entre club y torneo. Un club puede inscribirse en distintas
+  // (categoría, serie) del mismo torneo (Halcones en Senior Primera y
+  // en Super Senior Primera al mismo torneo), pero NO dos veces en la
+  // misma combinación (UNIQUE).
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS inscripciones_torneo (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      club_id         UUID NOT NULL REFERENCES clubes(id) ON DELETE CASCADE,
+      torneo_id       UUID NOT NULL REFERENCES torneos(id) ON DELETE CASCADE,
+      categoria_id    UUID NOT NULL REFERENCES categorias_jugadores(id) ON DELETE RESTRICT,
+      serie_slug      VARCHAR(50),
+      estado          VARCHAR(20) NOT NULL DEFAULT 'INSCRITO'
+                        CHECK (estado IN ('INSCRITO','ACTIVO','RETIRADO','SUSPENDIDO')),
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_inscripcion UNIQUE (torneo_id, club_id, categoria_id)
+    )
+  `);
+  await ensureRls(client, 'inscripciones_torneo');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_inscripciones_tenant ON inscripciones_torneo(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_inscripciones_torneo ON inscripciones_torneo(torneo_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_inscripciones_club ON inscripciones_torneo(club_id)`,
+  );
+  await ensureTrigger(client, 'inscripciones_torneo');
+
+  // ─── planilla_torneo ─────────────────────────────────────────────
+  // Subset del plantel del club (jugadores) que efectivamente
+  // participa en este torneo. fecha_incorporacion permite distinguir
+  // refuerzos (incorporados después del inicio del torneo).
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS planilla_torneo (
+      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id            UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      inscripcion_id       UUID NOT NULL REFERENCES inscripciones_torneo(id) ON DELETE CASCADE,
+      jugador_id           UUID NOT NULL REFERENCES jugadores(id) ON DELETE CASCADE,
+      fecha_incorporacion  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_planilla_jugador UNIQUE (inscripcion_id, jugador_id)
+    )
+  `);
+  await ensureRls(client, 'planilla_torneo');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_planilla_tenant ON planilla_torneo(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_planilla_inscripcion ON planilla_torneo(inscripcion_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_planilla_jugador ON planilla_torneo(jugador_id)`,
+  );
+
+  // ─── jugadores_vetados ───────────────────────────────────────────
+  // Lista negra a nivel tenant. Identificación por RUT (ADR-0004).
+  // origen=TRIBUNAL: insertado automáticamente al dictar sanción
+  // permanente (Sprint 26H). origen=MANUAL: agregado por admin.
+  // El creado_por_user_id queda NULL si fue automático.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS jugadores_vetados (
+      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id            UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      rut                  VARCHAR(20) NOT NULL,
+      motivo               TEXT,
+      origen               VARCHAR(20) NOT NULL DEFAULT 'MANUAL'
+                             CHECK (origen IN ('TRIBUNAL','MANUAL')),
+      creado_por_user_id   UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_jugador_vetado_rut UNIQUE (tenant_id, rut)
+    )
+  `);
+  await ensureRls(client, 'jugadores_vetados');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_jugadores_vetados_tenant ON jugadores_vetados(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_jugadores_vetados_rut ON jugadores_vetados(rut)`,
+  );
+
+  log(
+    'clubes + club_categorias + jugadores + inscripciones_torneo + ' +
+      'planilla_torneo + jugadores_vetados asegurados (Sprint 26A, ADR-0004).',
+  );
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

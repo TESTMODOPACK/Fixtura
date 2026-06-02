@@ -13,6 +13,8 @@ import { CanchasAdminController } from './canchas/canchas-admin.controller';
 import { CanchasAdminService } from './canchas/canchas-admin.service';
 import { CategoriasAdminController } from './categorias/categorias-admin.controller';
 import { CategoriasAdminService } from './categorias/categorias-admin.service';
+import { ClubesAdminController } from './clubes/clubes-admin.controller';
+import { ClubesAdminService } from './clubes/clubes-admin.service';
 import { CobrosAdminController } from './cobros/cobros-admin.controller';
 import { CobrosAdminService } from './cobros/cobros-admin.service';
 import { DashboardAdminController } from './dashboard/dashboard-admin.controller';
@@ -57,6 +59,8 @@ import { TorneosAdminController } from './torneos/torneos-admin.controller';
 import { TorneosAdminService } from './torneos/torneos-admin.service';
 import { TribunalAdminController } from './tribunal/tribunal-admin.controller';
 import { TribunalAdminService } from './tribunal/tribunal-admin.service';
+import { VetadosAdminController } from './vetados/vetados-admin.controller';
+import { VetadosAdminService } from './vetados/vetados-admin.service';
 
 /**
  * Módulo admin — endpoints autenticados bajo /api/v1/admin/*.
@@ -99,8 +103,10 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     SponsorsAdminController,
     CanchasAdminController,
     CategoriasAdminController,
+    ClubesAdminController,
     CobrosAdminController,
     DiasNoJugablesController,
+    VetadosAdminController,
   ],
   providers: [
     TemporadasAdminService,
@@ -122,9 +128,11 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     SponsorsAdminService,
     CanchasAdminService,
     CategoriasAdminService,
+    ClubesAdminService,
     CobrosAdminService,
     DiasNoJugablesService,
+    VetadosAdminService,
   ],
-  exports: [DiasNoJugablesService],
+  exports: [DiasNoJugablesService, VetadosAdminService],
 })
 export class AdminModule {}
