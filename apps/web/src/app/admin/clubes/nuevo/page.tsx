@@ -40,6 +40,25 @@ const optionalEmail = z.preprocess(
   z.email('Email inválido — usá formato nombre@dominio.com').max(150).optional(),
 );
 
+/**
+ * URL opcional: vacío → undefined. Si hay texto, auto-prepende https://
+ * cuando falta el protocolo. Esto evita el bug clásico de "tipeé
+ * www.club.cl y el form no me deja seguir".
+ */
+const optionalUrl = z.preprocess(
+  (v) => {
+    if (typeof v !== 'string') return v;
+    const trimmed = v.trim();
+    if (trimmed === '') return undefined;
+    // Auto-prepend https:// si no trae protocolo.
+    if (!/^https?:\/\//i.test(trimmed)) {
+      return `https://${trimmed}`;
+    }
+    return trimmed;
+  },
+  z.url('URL inválida — revisá el formato').max(500).optional(),
+);
+
 const ContactoSchema = z.object({
   nombre: z.string().min(2, 'Mínimo 2 caracteres').max(150),
   email: optionalEmail,
@@ -53,13 +72,7 @@ const ClubFormSchema = z.object({
     .min(2)
     .max(100)
     .regex(/^[a-z0-9-]+$/, 'Solo minúsculas, números y guiones'),
-  escudoUrl: z
-    .string()
-    .optional()
-    .refine(
-      (v) => !v || /^https?:\/\//.test(v),
-      'Debe ser una URL completa (http:// o https://)',
-    ),
+  escudoUrl: optionalUrl,
   colorPrimario: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Formato hex #RRGGBB'),
   colorSecundario: z
     .string()
@@ -68,13 +81,7 @@ const ClubFormSchema = z.object({
       (v) => !v || /^#[0-9a-fA-F]{6}$/.test(v),
       'Formato hex #RRGGBB',
     ),
-  paginaWeb: z
-    .string()
-    .optional()
-    .refine(
-      (v) => !v || /^https?:\/\//.test(v),
-      'Debe ser una URL completa (http:// o https://)',
-    ),
+  paginaWeb: optionalUrl,
   resena: z.string().max(2000).optional(),
   categoriaIds: z.array(z.string().uuid()).min(1, 'Elegí al menos una categoría'),
   presidenteNombre: z.string().max(150).optional(),
@@ -506,7 +513,7 @@ export default function NuevoClubPage(): React.ReactElement {
           </div>
         </Card>
 
-        <div className="lg:col-span-3 flex items-center gap-3">
+        <div className="lg:col-span-3 flex items-center gap-3 flex-wrap">
           <Button
             type="submit"
             variant="accent"
@@ -519,6 +526,15 @@ export default function NuevoClubPage(): React.ReactElement {
               Cancelar
             </Button>
           </Link>
+          {/* Feedback adicional cerca del botón: si hay errores de
+              validación cuando el usuario ya intentó submitir, lo
+              guiamos al banner que está arriba. */}
+          {erroresParaMostrar.length > 0 && form.formState.isSubmitted && (
+            <span className="text-xs text-danger flex items-center gap-1">
+              <AlertTriangle size={12} />
+              Revisá los campos marcados arriba ({erroresParaMostrar.length})
+            </span>
+          )}
         </div>
       </form>
     </>
