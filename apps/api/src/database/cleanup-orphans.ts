@@ -186,6 +186,11 @@ async function main(): Promise<void> {
     // FK transacciones → facturas_plataforma. Se hace acá porque transacciones
     // se crea más arriba pero la tabla destino se crea recién acá.
     await ensureFkTransaccionesFacturaPlataforma(client, log);
+
+    // Sprint 25 (Categorías): categorias_jugadores + series. Soporte para
+    // ligas con divisiones por edad (Senior, Super Senior, Dorados, etc.)
+    // con cupo de excepciones configurable.
+    await ensureCategoriasYSeriesTables(client, log);
     await client.query(`
       ALTER TABLE tenants
         ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES planes_suscripcion(id) ON DELETE SET NULL,
@@ -1174,6 +1179,56 @@ async function ensureFacturasPlataformaTable(
   );
   await ensureTrigger(client, 'facturas_plataforma');
   log('facturas_plataforma asegurada (Sprint 24A).');
+}
+
+/**
+ * Sprint 25 — Mantenedor de categorías y series por tenant.
+ * Ej. Senior, Super Senior, Dorados con sus series Primera, Segunda.
+ * El cupo de excepciones permite flexibilizar la edad mínima general.
+ */
+async function ensureCategoriasYSeriesTables(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  // NOTA: NO creamos tabla `series` aparte porque ya existe otra (modelo
+  // viejo torneo→serie en uso por Equipo). Las series de esta categoría
+  // van embebidas como JSONB en la propia categoría.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS categorias_jugadores (
+      id                              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id                       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      slug                            VARCHAR(50) NOT NULL,
+      nombre                          VARCHAR(100) NOT NULL,
+      descripcion                     TEXT,
+      edad_minima_general             SMALLINT NOT NULL CHECK (edad_minima_general BETWEEN 0 AND 99),
+      cupo_excepciones_por_equipo     SMALLINT NOT NULL DEFAULT 0
+                                        CHECK (cupo_excepciones_por_equipo BETWEEN 0 AND 20),
+      edad_minima_excepcion           SMALLINT
+                                        CHECK (edad_minima_excepcion IS NULL OR edad_minima_excepcion BETWEEN 0 AND 99),
+      orden                           SMALLINT NOT NULL DEFAULT 0,
+      activa                          BOOLEAN NOT NULL DEFAULT TRUE,
+      series                          JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_categoria_slug UNIQUE (tenant_id, slug),
+      CONSTRAINT chk_excepcion_edad_coherente CHECK (
+        cupo_excepciones_por_equipo = 0
+        OR (edad_minima_excepcion IS NOT NULL AND edad_minima_excepcion < edad_minima_general)
+      )
+    )
+  `);
+  // Auto-cura schema drift (si la tabla ya existía pre-series JSONB).
+  await client.query(`
+    ALTER TABLE categorias_jugadores
+      ADD COLUMN IF NOT EXISTS series JSONB NOT NULL DEFAULT '[]'::jsonb
+  `);
+  await ensureRls(client, 'categorias_jugadores');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_categorias_tenant ON categorias_jugadores(tenant_id)`,
+  );
+  await ensureTrigger(client, 'categorias_jugadores');
+
+  log('categorias_jugadores asegurada (Sprint 25 con series embebidas JSONB).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

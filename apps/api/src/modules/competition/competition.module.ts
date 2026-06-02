@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import {
   Cancha,
+  CategoriaJugadores,
   Cobro,
   Designacion,
   DesignacionRecinto,
@@ -37,6 +38,7 @@ import {
       Temporada,
       Torneo,
       Serie,
+      CategoriaJugadores,
       Equipo,
       JugadorInscrito,
       Fecha,

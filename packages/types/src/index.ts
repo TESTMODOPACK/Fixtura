@@ -26,3 +26,4 @@ export * from './match-center';
 export * from './audit-log';
 export * from './super-admin';
 export * from './facturacion-plataforma';
+export * from './categorias';

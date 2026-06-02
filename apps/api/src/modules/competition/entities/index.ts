@@ -1,5 +1,7 @@
 export { Cancha } from './cancha.entity';
 export type { SuperficieCancha } from './cancha.entity';
+export { CategoriaJugadores } from './categoria-jugadores.entity';
+export type { SerieEmbedded } from './categoria-jugadores.entity';
 export { Cobro } from './cobro.entity';
 export type { CategoriaCobro, EstadoDunning, MetodoPago } from './cobro.entity';
 export { DiaNoJugable } from './dia-no-jugable.entity';

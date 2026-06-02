@@ -11,6 +11,8 @@ import { AjustesAdminController } from './ajustes/ajustes-admin.controller';
 import { AjustesAdminService } from './ajustes/ajustes-admin.service';
 import { CanchasAdminController } from './canchas/canchas-admin.controller';
 import { CanchasAdminService } from './canchas/canchas-admin.service';
+import { CategoriasAdminController } from './categorias/categorias-admin.controller';
+import { CategoriasAdminService } from './categorias/categorias-admin.service';
 import { CobrosAdminController } from './cobros/cobros-admin.controller';
 import { CobrosAdminService } from './cobros/cobros-admin.service';
 import { DashboardAdminController } from './dashboard/dashboard-admin.controller';
@@ -95,6 +97,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     AjustesAdminController,
     SponsorsAdminController,
     CanchasAdminController,
+    CategoriasAdminController,
     CobrosAdminController,
     DiasNoJugablesController,
   ],
@@ -117,6 +120,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     AjustesAdminService,
     SponsorsAdminService,
     CanchasAdminService,
+    CategoriasAdminService,
     CobrosAdminService,
     DiasNoJugablesService,
   ],
