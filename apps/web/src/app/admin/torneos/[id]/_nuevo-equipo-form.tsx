@@ -1,16 +1,19 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Save } from 'lucide-react';
-import { useEffect } from 'react';
+import { ArrowRight, Plus, Save, Shield } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
+import { Card, CardLabel } from '@/components/ui/card';
 import { ColorSwatchPicker } from '@/components/ui/color-swatch-picker';
 import { Input } from '@/components/ui/input';
-import { useCreateEquipo } from '@/hooks/use-admin';
+import { useClubes, useCreateEquipo } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
 
 interface SerieOption {
   slug: string;
@@ -38,6 +41,19 @@ function slugify(s: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+/**
+ * Form de inscripción de equipo a un torneo del modelo VIEJO (sin
+ * categoriasSeries definidas). Si el torneo está bien configurado con
+ * categorías nuevas, el admin debería usar la pestaña "Inscripciones →"
+ * en su lugar — pero acá igual permitimos que reutilice clubes ya
+ * cargados para evitar tipear los datos otra vez.
+ *
+ * Sprint 26C+: si hay clubes globales cargados en la liga, los muestra
+ * como lista clickeable arriba del form. Al hacer click se autocompleta
+ * todo (nombre, slug, color, escudo lo tendrá si el club lo tiene).
+ * Si el admin prefiere crear desde cero, sigue habiendo opción
+ * "Crear equipo nuevo desde cero".
+ */
 export function NuevoEquipoForm({
   torneoId,
   series,
@@ -49,7 +65,22 @@ export function NuevoEquipoForm({
   onDone: () => void;
 }): React.ReactElement {
   const mutation = useCreateEquipo(torneoId);
+  const { data: clubes, isLoading: loadingClubes } = useClubes();
   const tieneSeries = (series?.length ?? 0) > 0;
+
+  // Modo del UI:
+  //   'lista'   → mostrar clubes existentes (default si hay clubes activos)
+  //   'manual'  → form completo de creación desde cero
+  // Si NO hay clubes cargados, arrancamos directo en 'manual'.
+  const [modo, setModo] = useState<'lista' | 'manual'>('lista');
+  const clubesActivos = (clubes ?? []).filter((c) => c.estado === 'ACTIVO');
+
+  // Si después de cargar resulta que no hay clubes, saltamos a 'manual'.
+  useEffect(() => {
+    if (!loadingClubes && clubesActivos.length === 0) {
+      setModo('manual');
+    }
+  }, [loadingClubes, clubesActivos.length]);
 
   const form = useForm<EquipoForm>({
     resolver: zodResolver(EquipoFormSchema),
@@ -58,17 +89,35 @@ export function NuevoEquipoForm({
 
   const nombre = form.watch('nombre');
   useEffect(() => {
+    if (modo !== 'manual') return;
     form.setValue('slug', slugify(nombre));
-  }, [nombre, form]);
+  }, [nombre, form, modo]);
+
+  const inscribirDesdeClub = async (
+    clubId: string,
+  ): Promise<void> => {
+    const club = clubesActivos.find((c) => c.id === clubId);
+    if (!club) return;
+    try {
+      await mutation.mutateAsync({
+        nombre: club.nombre,
+        slug: club.slug,
+        colorPrimario: club.colorPrimario ?? '#1B4332',
+        colorSecundario: club.colorSecundario ?? null,
+        escudoUrl: club.escudoUrl ?? null,
+        serieSlug: null,
+      });
+      onDone();
+    } catch {
+      // El error queda en mutation.error, se muestra abajo.
+    }
+  };
 
   const onSubmit = async (vals: EquipoForm): Promise<void> => {
     await mutation.mutateAsync({
       nombre: vals.nombre,
       slug: vals.slug,
       colorPrimario: vals.colorPrimario,
-      // Si no hay categoría/series, NO mandamos serieSlug. El backend
-      // ignora el campo cuando el torneo no tiene categoría, pero
-      // somos defensivos en el cliente también.
       serieSlug: tieneSeries && vals.serieSlug ? vals.serieSlug : null,
     });
     onDone();
@@ -76,9 +125,122 @@ export function NuevoEquipoForm({
 
   const error = mutation.error as ApiError | undefined;
 
+  // ── Modo "lista": elegir club existente ─────────────────────────
+  if (modo === 'lista') {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-green-deep">
+            → Inscribir un club existente
+          </div>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => setModo('manual')}
+          >
+            <Plus size={12} /> Crear equipo nuevo desde cero
+          </Button>
+        </div>
+
+        {loadingClubes && (
+          <p className="font-serif italic text-ink-mute text-sm">
+            Cargando clubes…
+          </p>
+        )}
+
+        {!loadingClubes && clubesActivos.length === 0 && (
+          <Card padding="comfortable" variant="lime">
+            <p className="text-sm text-green-deep/85">
+              Todavía no hay clubes cargados en la liga. Podés crear el equipo
+              directamente desde cero acá abajo, o ir a{' '}
+              <Link
+                href="/admin/clubes/nuevo"
+                className="text-accent font-semibold hover:underline"
+              >
+                /admin/clubes
+              </Link>{' '}
+              y crear primero la ficha del club (recomendado — los datos te
+              quedan disponibles para futuros torneos).
+            </p>
+          </Card>
+        )}
+
+        {clubesActivos.length > 0 && (
+          <ul className="divide-y divide-line border border-line rounded-card overflow-hidden">
+            {clubesActivos.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => inscribirDesdeClub(c.id)}
+                  disabled={mutation.isPending}
+                  className={cn(
+                    'w-full text-left px-3 py-2 flex items-center gap-3 hover:bg-paper transition-colors',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                  )}
+                >
+                  <div
+                    className="w-9 h-9 rounded-full flex-shrink-0 border border-line flex items-center justify-center"
+                    style={{ backgroundColor: c.colorPrimario ?? '#888278' }}
+                  >
+                    {c.escudoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={c.escudoUrl}
+                        alt={c.nombre}
+                        className="w-full h-full object-contain rounded-full"
+                      />
+                    ) : (
+                      <Shield size={14} className="text-chalk" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-ink truncate">
+                      {c.nombre}
+                    </div>
+                    <div className="text-xs text-ink-mute font-mono">
+                      {c.slug} · {c.jugadoresCount} jugador
+                      {c.jugadoresCount === 1 ? '' : 'es'}
+                    </div>
+                  </div>
+                  <ArrowRight
+                    size={14}
+                    className="text-accent flex-shrink-0"
+                  />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {error && (
+          <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
+            {error.message}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Modo "manual": form de creación desde cero ──────────────────
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-      {/* Fila 1: datos principales */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-green-deep">
+          → Crear equipo desde cero
+        </div>
+        {clubesActivos.length > 0 && (
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => setModo('lista')}
+          >
+            ← Elegir un club existente
+          </Button>
+        )}
+      </div>
+
       <div
         className={`grid grid-cols-1 ${tieneSeries ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-3`}
       >
@@ -109,7 +271,6 @@ export function NuevoEquipoForm({
         )}
       </div>
 
-      {/* Fila 2: color del equipo */}
       <ColorSwatchPicker
         label="Color del equipo"
         value={form.watch('colorPrimario') ?? ''}
@@ -122,7 +283,6 @@ export function NuevoEquipoForm({
         error={form.formState.errors.colorPrimario?.message}
       />
 
-      {/* Fila 3: error + botón */}
       <div className="flex items-center gap-3 pt-1">
         <Button type="submit" variant="accent" size="sm" loading={mutation.isPending}>
           <Save size={14} /> Inscribir
