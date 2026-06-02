@@ -9,13 +9,13 @@ import {
   Lock,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { ActaResumen } from '@fixtura/types';
 
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
-import { useActasGlobal, useTorneos } from '@/hooks/use-admin';
+import { useActasGlobal, useFixtureDetail, useTorneos } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
 
 type Filtro = 'todas' | 'pendientes' | 'cerradas';
@@ -23,12 +23,24 @@ type Filtro = 'todas' | 'pendientes' | 'cerradas';
 export default function ActasGlobalPage(): React.ReactElement {
   const [filtro, setFiltro] = useState<Filtro>('pendientes');
   const [torneoId, setTorneoId] = useState<string>('');
+  const [fechaId, setFechaId] = useState<string>('');
 
   const { data: torneos } = useTorneos();
+  // El filtro de fecha solo tiene sentido cuando hay un torneo seleccionado:
+  // distintos torneos pueden tener fechas con el mismo número y mezclarlas
+  // confundiría al usuario. El hook está deshabilitado sin torneoId.
+  const { data: fixture } = useFixtureDetail(torneoId || null);
   const { data: actas, isLoading } = useActasGlobal({
     filtro,
     torneoId: torneoId || undefined,
+    fechaId: fechaId || undefined,
   });
+
+  // Si el usuario cambia el torneo (o lo deselecciona), la fecha previa
+  // ya no aplica — la limpiamos para evitar mandar un fechaId huérfano.
+  useEffect(() => {
+    setFechaId('');
+  }, [torneoId]);
 
   const stats = useMemo(() => {
     const all = actas ?? [];
@@ -90,7 +102,7 @@ export default function ActasGlobalPage(): React.ReactElement {
             </FiltroChip>
           ))}
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
           <select
             className="input text-sm"
             value={torneoId}
@@ -100,6 +112,24 @@ export default function ActasGlobalPage(): React.ReactElement {
             {torneos?.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.nombre}
+              </option>
+            ))}
+          </select>
+          <select
+            className="input text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            value={fechaId}
+            onChange={(e) => setFechaId(e.target.value)}
+            disabled={!torneoId || !fixture}
+            title={!torneoId ? 'Seleccioná primero un torneo' : undefined}
+          >
+            <option value="">
+              {torneoId ? 'Todas las fechas' : 'Elegí un torneo primero'}
+            </option>
+            {fixture?.fechas.map((f) => (
+              <option key={f.id} value={f.id}>
+                Fecha {f.numero}
+                {f.etiqueta ? ` — ${f.etiqueta}` : ''}
+                {f.tipoReprogramacion === 'REPROGRAMADA' ? ' (reprog.)' : ''}
               </option>
             ))}
           </select>
