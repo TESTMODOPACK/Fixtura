@@ -1,5 +1,15 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class CreateSancionTribunalDto {
   @IsUUID()
@@ -21,4 +31,9 @@ export class CreateSancionTribunalDto {
   @IsInt()
   @Min(1)
   desdeFechaNumero?: number;
+
+  // Sprint 26H — Marca al jugador como vetado de por vida en la liga.
+  @IsOptional()
+  @IsBoolean()
+  vetoPermanente?: boolean;
 }

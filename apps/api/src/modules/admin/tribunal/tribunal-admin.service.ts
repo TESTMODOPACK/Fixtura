@@ -12,6 +12,7 @@ import { Fecha } from '../../competition/entities/fecha.entity';
 import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { VetadosAdminService } from '../vetados/vetados-admin.service';
 
 @Injectable()
 export class TribunalAdminService {
@@ -21,6 +22,9 @@ export class TribunalAdminService {
     @InjectRepository(JugadorInscrito)
     private readonly jugadorRepo: Repository<JugadorInscrito>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
+    // Sprint 26H (ADR-0004) — para vetar de por vida en sanciones
+    // permanentes del Tribunal. addFromTribunal es idempotente.
+    private readonly vetadosService: VetadosAdminService,
   ) {}
 
   /**
@@ -82,6 +86,17 @@ export class TribunalAdminService {
         cumplida: false,
       }),
     );
+
+    // Sprint 26H — Si la sanción es definitiva (vetoPermanente=true),
+    // agregamos el RUT del jugador a la lista negra del tenant.
+    // Idempotente: si ya estaba vetado, no hace nada.
+    if (input.vetoPermanente && jugador.rut) {
+      await this.vetadosService.addFromTribunal(
+        tenantId,
+        jugador.rut,
+        `Sanción permanente del Tribunal: ${input.descripcion}`,
+      );
+    }
 
     return this.findOne(created.id, tenantId);
   }

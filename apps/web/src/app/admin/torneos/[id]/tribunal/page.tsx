@@ -243,20 +243,35 @@ function NuevaSancionTribunalForm({
     fechasSuspension: z.coerce.number().int().min(1).max(20),
     descripcion: z.string().min(3).max(1000),
     desdeFechaNumero: z.coerce.number().int().min(1).optional(),
+    vetoPermanente: z.boolean().default(false),
   });
   type Form = z.infer<typeof Schema>;
 
   const form = useForm<Form>({
     resolver: zodResolver(Schema),
-    defaultValues: { jugadorInscritoId: '', fechasSuspension: 1, descripcion: '' },
+    defaultValues: {
+      jugadorInscritoId: '',
+      fechasSuspension: 1,
+      descripcion: '',
+      vetoPermanente: false,
+    },
   });
 
   const onSubmit = async (vals: Form): Promise<void> => {
+    if (vals.vetoPermanente) {
+      const ok = confirm(
+        '¿Confirmás VETO DE POR VIDA? Esto agrega el RUT del jugador a la ' +
+          'lista negra de la liga. No podrá ser fichado por ningún club en ' +
+          'ningún torneo futuro hasta que un admin levante el veto manualmente.',
+      );
+      if (!ok) return;
+    }
     await mutation.mutateAsync({
       jugadorInscritoId: vals.jugadorInscritoId,
       fechasSuspension: vals.fechasSuspension,
       descripcion: vals.descripcion,
       desdeFechaNumero: vals.desdeFechaNumero,
+      vetoPermanente: vals.vetoPermanente,
     });
     form.reset();
     setEquipoSeleccionado('');
@@ -334,6 +349,28 @@ function NuevaSancionTribunalForm({
           {form.formState.errors.descripcion && (
             <p className="text-xs text-danger mt-1">{form.formState.errors.descripcion.message}</p>
           )}
+        </div>
+
+        {/* Sprint 26H — Veto permanente desde el Tribunal */}
+        <div className="md:col-span-2 border border-danger/30 rounded-card p-3 bg-danger/5">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              {...form.register('vetoPermanente')}
+              className="mt-1"
+            />
+            <div className="text-sm">
+              <div className="font-semibold text-danger">
+                Vetar de por vida (expulsión definitiva)
+              </div>
+              <div className="text-xs text-ink-mute mt-0.5 font-serif italic">
+                Además de la suspensión por fechas, agrega el RUT del jugador
+                a la lista negra de la liga. No podrá ser fichado por ningún
+                club en ningún torneo futuro. Usalo solo para sanciones graves
+                (agresión física, falsificación, etc).
+              </div>
+            </div>
+          </label>
         </div>
 
         {error && (

@@ -42,6 +42,13 @@ export const CreateSancionTribunalSchema = z.object({
   fechasSuspension: z.number().int().min(1).max(20),
   descripcion: z.string().min(3).max(1000),
   desdeFechaNumero: z.number().int().min(1).optional(),
+  /**
+   * Sprint 26H (ADR-0004) — Si true, además de la suspensión por fechas
+   * agrega el RUT del jugador a la lista negra de la liga (vetado de
+   * por vida cross-torneos). Útil para expulsiones definitivas.
+   * Default false. Idempotente: si el RUT ya está vetado, no falla.
+   */
+  vetoPermanente: z.boolean().default(false),
 });
 export type CreateSancionTribunalRequest = z.infer<typeof CreateSancionTribunalSchema>;
 

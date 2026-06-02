@@ -11,7 +11,12 @@ import {
   Query,
 } from '@nestjs/common';
 
-import { ROLE, type SancionAdmin, type UserContext } from '@fixtura/types';
+import {
+  ROLE,
+  type CreateSancionTribunalRequest,
+  type SancionAdmin,
+  type UserContext,
+} from '@fixtura/types';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -63,7 +68,11 @@ export class TribunalAdminController {
     @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
     @Body() dto: CreateSancionTribunalDto,
   ): Promise<SancionAdmin> {
-    return this.svc.create(torneoId, ensureTenant(user), dto);
+    return this.svc.create(
+      torneoId,
+      ensureTenant(user),
+      dto as unknown as CreateSancionTribunalRequest,
+    );
   }
 
   @Delete(':id')
