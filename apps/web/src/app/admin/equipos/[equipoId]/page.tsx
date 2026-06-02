@@ -209,6 +209,14 @@ function JugadorRow({ jugador }: { jugador: JugadorAdmin }): React.ReactElement 
         <div className="text-xs text-ink-mute">
           {jugador.apodo && <span>&ldquo;{jugador.apodo}&rdquo; · </span>}
           {jugador.rut ?? 'Sin RUT'}
+          {jugador.edadCalendario != null && (
+            <>
+              {' · '}
+              <span title="Edad calendario: años que cumple este año">
+                {jugador.edadCalendario} años
+              </span>
+            </>
+          )}
         </div>
       </div>
       <div className="text-xs text-ink-mute font-mono">{jugador.pieHabil ?? ''}</div>
@@ -237,6 +245,24 @@ function NuevoJugadorForm({
     numeroCamiseta: z.coerce.number().int().min(0).max(99).optional(),
     posicion: z.enum(['ARQUERO', 'DEFENSA', 'MEDIO', 'DELANTERO']).optional(),
     pieHabil: z.enum(['IZQUIERDO', 'DERECHO', 'AMBIDIESTRO']).optional(),
+    // Fecha nacimiento opcional para arrancar, pero será requerida cuando
+    // se active el mantenedor de categorías (siguiente sprint). El input
+    // valida que sea pasada (no fechas futuras) y razonablemente reciente
+    // (post-1900) para atajar typos al cargar planteles.
+    fechaNac: z
+      .string()
+      .optional()
+      .refine(
+        (v) => {
+          if (!v) return true;
+          const d = new Date(v + 'T00:00:00Z');
+          if (Number.isNaN(d.getTime())) return false;
+          if (d.getTime() > Date.now()) return false;
+          if (d.getUTCFullYear() < 1900) return false;
+          return true;
+        },
+        'Fecha de nacimiento inválida (debe ser pasada y posterior a 1900).',
+      ),
     capitan: z.boolean().default(false),
   });
   type Form = z.infer<typeof Schema>;
@@ -251,6 +277,7 @@ function NuevoJugadorForm({
       numeroCamiseta: undefined,
       posicion: undefined,
       pieHabil: undefined,
+      fechaNac: '',
       capitan: false,
     },
   });
@@ -264,6 +291,7 @@ function NuevoJugadorForm({
       numeroCamiseta: vals.numeroCamiseta ?? null,
       posicion: vals.posicion ?? null,
       pieHabil: vals.pieHabil ?? null,
+      fechaNac: vals.fechaNac || null,
       capitan: vals.capitan,
     });
     form.reset();
@@ -322,6 +350,14 @@ function NuevoJugadorForm({
           <option value="AMBIDIESTRO">Ambidiestro</option>
         </select>
       </div>
+
+      <Input
+        label="Fecha de nacimiento"
+        type="date"
+        max={new Date().toISOString().slice(0, 10)}
+        {...form.register('fechaNac')}
+        error={form.formState.errors.fechaNac?.message}
+      />
       <label className="flex items-center gap-2 mt-7">
         <input type="checkbox" {...form.register('capitan')} className="rounded" />
         <span className="text-sm">Capitán</span>

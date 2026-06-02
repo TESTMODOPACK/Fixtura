@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import type { CreateJugadorRequest, JugadorAdmin } from '@fixtura/types';
+import { calcularEdad, calcularEdadCalendario } from '@fixtura/domain';
 
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
@@ -189,6 +190,8 @@ function toDto(j: JugadorInscrito): JugadorAdmin {
     posicion: j.posicion,
     pieHabil: j.pieHabil,
     fechaNac: j.fechaNac,
+    edad: calcularEdad(j.fechaNac),
+    edadCalendario: calcularEdadCalendario(j.fechaNac),
     capitan: j.capitan,
     activo: j.activo,
   };

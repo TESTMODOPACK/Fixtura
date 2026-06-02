@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import type { JugadorGlobal, JugadoresGlobalQuery } from '@fixtura/types';
+import { calcularEdad, calcularEdadCalendario } from '@fixtura/domain';
 
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
@@ -126,6 +127,9 @@ export class JugadoresGlobalService {
         rut: j.rut,
         numeroCamiseta: j.numeroCamiseta,
         posicion: j.posicion,
+        fechaNac: j.fechaNac,
+        edad: calcularEdad(j.fechaNac),
+        edadCalendario: calcularEdadCalendario(j.fechaNac),
         capitan: j.capitan,
         activo: j.activo,
         equipoId: j.equipoId,

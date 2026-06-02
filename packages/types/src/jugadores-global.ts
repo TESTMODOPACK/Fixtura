@@ -14,6 +14,11 @@ export const JugadorGlobalSchema = z.object({
   rut: z.string().nullable(),
   numeroCamiseta: z.number().int().nullable(),
   posicion: z.string().nullable(),
+  // Edad calendario (años que el jugador cumple en el año actual).
+  // Es el criterio típico de categorías por edad en ligas amateur.
+  fechaNac: z.string().nullable(),
+  edad: z.number().int().nullable(),
+  edadCalendario: z.number().int().nullable(),
   capitan: z.boolean(),
   activo: z.boolean(),
   equipoId: z.uuid(),

@@ -150,6 +150,12 @@ export const JugadorAdminSchema = z.object({
   posicion: z.string().nullable(),
   pieHabil: z.string().nullable(),
   fechaNac: z.string().nullable(),
+  // Campos derivados (no se guardan en DB — los calcula el backend en
+  // cada respuesta). Útiles para la UI: mostrar la edad actual del
+  // jugador y la edad que tendrá al cierre del año, que es la regla
+  // típica de inscripción por categoría en ligas amateur.
+  edad: z.number().int().nullable(),
+  edadCalendario: z.number().int().nullable(),
   capitan: z.boolean(),
   activo: z.boolean(),
 });
