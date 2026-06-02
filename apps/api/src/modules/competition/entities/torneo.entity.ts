@@ -79,14 +79,52 @@ export class Torneo {
   reglamentoUrl!: string | null;
 
   // Sprint 25 paso 3 — categoría de jugadores asociada (nullable: torneos
-  // viejos sin categoría siguen funcionando). FK ON DELETE SET NULL al
-  // nivel de DB (cleanup-orphans).
+  // viejos sin categoría siguen funcionando). DEPRECADO en favor de
+  // categoriasSeries (Sprint 26D, ADR-0004). Se mantiene por back-compat
+  // hasta sprint 26G/26F que hacen la migración cascada.
   @Column({ name: 'categoria_id', type: 'uuid', nullable: true })
   categoriaId!: string | null;
 
   @ManyToOne(() => CategoriaJugadores, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'categoria_id' })
   categoria?: CategoriaJugadores | null;
+
+  // Sprint 26D (ADR-0004) — multi-categoría + serie + cupo en el torneo.
+  // Ej. [{categoriaId, serieSlug:'primera', cupoEquipos:10},
+  //      {categoriaId, serieSlug:'segunda', cupoEquipos:8}].
+  // Si está vacío, el torneo no tiene división por categorías (back-compat
+  // con torneos viejos del modelo previo).
+  @Column({
+    name: 'categorias_series',
+    type: 'jsonb',
+    default: () => "'[]'::jsonb",
+  })
+  categoriasSeries!: Array<{
+    categoriaId: string;
+    serieSlug: string | null;
+    cupoEquipos: number;
+  }>;
+
+  // Tope de jugadores fichados en la planilla del torneo (ADR-0004).
+  // No es el mismo que el cupo de cancha — esto es la "lista grande"
+  // del equipo durante la temporada.
+  @Column({ name: 'tope_jugadores_por_equipo', type: 'smallint', default: 25 })
+  topeJugadoresPorEquipo!: number;
+
+  // Refuerzos: si está habilitado, los equipos pueden sumar jugadores
+  // a la planilla durante el torneo hasta la fecha límite.
+  @Column({ name: 'refuerzos_habilitados', type: 'boolean', default: true })
+  refuerzosHabilitados!: boolean;
+
+  // Número de fecha del torneo hasta la cual se permiten refuerzos.
+  // null = sin límite (mientras haya cupo). Se mide por número de fecha
+  // (no fecha calendario) para ser robusto contra reprogramaciones.
+  @Column({
+    name: 'fecha_limite_refuerzos_numero',
+    type: 'smallint',
+    nullable: true,
+  })
+  fechaLimiteRefuerzosNumero!: number | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

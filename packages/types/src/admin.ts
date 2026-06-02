@@ -31,6 +31,25 @@ export type TipoFormato = z.infer<typeof TipoFormatoSchema>;
 export const EstadoTorneoSchema = z.enum(['DRAFT', 'ACTIVO', 'CERRADO']);
 export type EstadoTorneo = z.infer<typeof EstadoTorneoSchema>;
 
+/**
+ * Categoría + serie + cupo dentro de un torneo. Definidos al crear el
+ * torneo y validados al inscribir clubes. Sprint 26D (ADR-0004).
+ *
+ * Repetido del schema en clubes.ts para no introducir un import
+ * circular — admin.ts es importado por casi todo.
+ */
+const TorneoCategoriaSerieSchema = z.object({
+  categoriaId: z.uuid(),
+  serieSlug: z
+    .string()
+    .min(2)
+    .max(50)
+    .regex(/^[a-z0-9-]+$/)
+    .nullable()
+    .optional(),
+  cupoEquipos: z.number().int().min(1).max(100),
+});
+
 export const CreateTorneoSchema = z.object({
   temporadaId: z.uuid(),
   nombre: z.string().min(2).max(200),
@@ -48,10 +67,13 @@ export const CreateTorneoSchema = z.object({
   fechaFin: z.iso.date().nullable().optional(),
   reglamentoUrl: z.url().nullable().optional(),
   tablaTiebreakers: z.array(z.string()).optional(),
-  // Sprint 25 paso 3 — categoría de jugadores (opcional, back-compat con
-  // torneos viejos). Si se setea, los equipos del torneo se validan
-  // contra su edad mínima general / cupo de excepciones.
+  // Sprint 25 paso 3 — DEPRECADO en favor de categoriasSeries.
   categoriaId: z.uuid().nullable().optional(),
+  // Sprint 26D (ADR-0004) — multi-categoría con cupo por combo.
+  categoriasSeries: z.array(TorneoCategoriaSerieSchema).optional(),
+  topeJugadoresPorEquipo: z.number().int().min(1).max(99).optional(),
+  refuerzosHabilitados: z.boolean().optional(),
+  fechaLimiteRefuerzosNumero: z.number().int().min(0).max(99).nullable().optional(),
 });
 export type CreateTorneoRequest = z.infer<typeof CreateTorneoSchema>;
 
@@ -78,12 +100,15 @@ export const TorneoAdminSchema = z.object({
   reglamentoUrl: z.string().nullable(),
   equiposCount: z.number().int().min(0),
   fechasCount: z.number().int().min(0),
-  // Sprint 25 paso 3 — categoría asociada (nullable: torneos viejos sin
-  // categoría siguen funcionando). nombre y slug son cache para no tener
-  // que hacer un join en el listado.
+  // Sprint 25 paso 3 — DEPRECADO en favor de categoriasSeries.
   categoriaId: z.uuid().nullable(),
   categoriaNombre: z.string().nullable(),
   categoriaSlug: z.string().nullable(),
+  // Sprint 26D — config multi-categoría del torneo.
+  categoriasSeries: z.array(TorneoCategoriaSerieSchema),
+  topeJugadoresPorEquipo: z.number().int().min(1).max(99),
+  refuerzosHabilitados: z.boolean(),
+  fechaLimiteRefuerzosNumero: z.number().int().min(0).max(99).nullable(),
   createdAt: z.iso.datetime(),
 });
 export type TorneoAdmin = z.infer<typeof TorneoAdminSchema>;

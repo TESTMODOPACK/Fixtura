@@ -7,7 +7,19 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import type { CreateTorneoRequest, TorneoAdmin, UpdateTorneoRequest } from '@fixtura/types';
+import { In } from 'typeorm';
+
+import type {
+  CreateTorneoRequest,
+  TorneoAdmin,
+  UpdateTorneoRequest,
+} from '@fixtura/types';
+
+interface CategoriaSerieInput {
+  categoriaId: string;
+  serieSlug?: string | null;
+  cupoEquipos: number;
+}
 
 import { CategoriaJugadores } from '../../competition/entities/categoria-jugadores.entity';
 import { Equipo } from '../../competition/entities/equipo.entity';
@@ -52,6 +64,85 @@ export class TorneosAdminService {
     return cat;
   }
 
+  /**
+   * Sprint 26D — Valida la lista de (categoría, serie, cupo) del torneo:
+   *   - Cada categoriaId existe en el tenant.
+   *   - Si trae serieSlug, esa serie existe (y está activa) en la
+   *     categoría correspondiente.
+   *   - No hay combos duplicados (categoria_id, serie_slug).
+   *   - cupoEquipos > 0 (zod ya lo enforza, defensa en profundidad).
+   *
+   * Devuelve la lista normalizada (slugs en lowercase, serie_slug null
+   * si no vino).
+   */
+  private async validarCategoriasSeries(
+    tenantId: string,
+    input: CategoriaSerieInput[] | undefined,
+  ): Promise<
+    Array<{ categoriaId: string; serieSlug: string | null; cupoEquipos: number }>
+  > {
+    if (!input || input.length === 0) return [];
+
+    // Validar categorías de un tirón (1 query)
+    const catIds = Array.from(new Set(input.map((c) => c.categoriaId)));
+    const cats = await this.categoriaRepo.find({
+      where: { tenantId, id: In(catIds) },
+    });
+    if (cats.length !== catIds.length) {
+      const faltantes = catIds.filter((id) => !cats.some((c) => c.id === id));
+      throw new BadRequestException(
+        `Categoría(s) inválida(s) o de otro tenant: ${faltantes.join(', ')}.`,
+      );
+    }
+    const catById = new Map(cats.map((c) => [c.id, c]));
+
+    const seen = new Set<string>();
+    const out: Array<{
+      categoriaId: string;
+      serieSlug: string | null;
+      cupoEquipos: number;
+    }> = [];
+
+    for (const combo of input) {
+      const cat = catById.get(combo.categoriaId);
+      if (!cat) continue; // ya validado arriba pero TS no lo sabe
+
+      const serieSlug = combo.serieSlug ? combo.serieSlug.toLowerCase().trim() : null;
+
+      if (serieSlug) {
+        const series = Array.isArray(cat.series) ? cat.series : [];
+        const match = series.find((s) => s.slug === serieSlug && s.activa);
+        if (!match) {
+          const disponibles = series
+            .filter((s) => s.activa)
+            .map((s) => s.slug)
+            .join(', ');
+          throw new BadRequestException(
+            `La serie "${serieSlug}" no existe (o está inactiva) en la ` +
+              `categoría "${cat.nombre}". Series disponibles: ` +
+              (disponibles || 'ninguna'),
+          );
+        }
+      }
+
+      const key = `${combo.categoriaId}::${serieSlug ?? ''}`;
+      if (seen.has(key)) {
+        throw new BadRequestException(
+          `Hay combo duplicado en la lista: ${cat.nombre}${serieSlug ? ` / ${serieSlug}` : ''}.`,
+        );
+      }
+      seen.add(key);
+
+      out.push({
+        categoriaId: combo.categoriaId,
+        serieSlug,
+        cupoEquipos: combo.cupoEquipos,
+      });
+    }
+
+    return out;
+  }
+
   async list(tenantId: string): Promise<TorneoAdmin[]> {
     const torneos = await this.repo.find({
       where: { tenantId },
@@ -81,9 +172,20 @@ export class TorneosAdminService {
       throw new NotFoundException(`Temporada ${input.temporadaId} no encontrada`);
     }
 
-    // Validar categoría (Sprint 25 paso 3). Opcional — torneos sin
-    // categoría siguen funcionando para back-compat.
+    // Validar categoría legacy (sprint 25 paso 3) — opcional.
     await this.resolveCategoria(tenantId, input.categoriaId ?? null);
+
+    // Sprint 26D — validar categoriasSeries del torneo nuevo.
+    const categoriasSeries = await this.validarCategoriasSeries(
+      tenantId,
+      input.categoriasSeries,
+    );
+
+    // Refuerzos: si están deshabilitados, ignorar fechaLimite que venga.
+    const refuerzosHabilitados = input.refuerzosHabilitados ?? true;
+    const fechaLimiteRefuerzosNumero = refuerzosHabilitados
+      ? (input.fechaLimiteRefuerzosNumero ?? null)
+      : null;
 
     // Unique (tenant, slug)
     const dup = await this.repo.findOne({ where: { tenantId, slug: input.slug } });
@@ -107,6 +209,10 @@ export class TorneosAdminService {
       fechaFin: input.fechaFin ?? null,
       reglamentoUrl: input.reglamentoUrl ?? null,
       categoriaId: input.categoriaId ?? null,
+      categoriasSeries,
+      topeJugadoresPorEquipo: input.topeJugadoresPorEquipo ?? 25,
+      refuerzosHabilitados,
+      fechaLimiteRefuerzosNumero,
     });
     try {
       const saved = await this.repo.save(t);
@@ -162,6 +268,15 @@ export class TorneosAdminService {
       }
     }
 
+    // Sprint 26D — re-validar categoriasSeries si vinieron en el patch.
+    let categoriasSeriesValidadas: typeof existing.categoriasSeries | undefined;
+    if (input.categoriasSeries !== undefined) {
+      categoriasSeriesValidadas = await this.validarCategoriasSeries(
+        tenantId,
+        input.categoriasSeries,
+      );
+    }
+
     Object.assign(existing, {
       ...(input.nombre !== undefined && { nombre: input.nombre }),
       ...(input.slug !== undefined && { slug: input.slug }),
@@ -178,7 +293,27 @@ export class TorneosAdminService {
         tablaTiebreakers: input.tablaTiebreakers,
       }),
       ...(input.categoriaId !== undefined && { categoriaId: input.categoriaId }),
+      ...(categoriasSeriesValidadas !== undefined && {
+        categoriasSeries: categoriasSeriesValidadas,
+      }),
+      ...(input.topeJugadoresPorEquipo !== undefined && {
+        topeJugadoresPorEquipo: input.topeJugadoresPorEquipo,
+      }),
+      ...(input.refuerzosHabilitados !== undefined && {
+        refuerzosHabilitados: input.refuerzosHabilitados,
+      }),
+      ...(input.fechaLimiteRefuerzosNumero !== undefined && {
+        fechaLimiteRefuerzosNumero: input.fechaLimiteRefuerzosNumero,
+      }),
     });
+
+    // Si se desactivan los refuerzos, limpiar la fecha límite para
+    // mantener el estado coherente (defensa: el cron de refuerzos
+    // chequea ambos campos, pero un null evita confusión visual).
+    if (input.refuerzosHabilitados === false) {
+      existing.fechaLimiteRefuerzosNumero = null;
+    }
+
     await this.repo.save(existing);
     return this.findOne(id, tenantId);
   }
@@ -213,6 +348,10 @@ export class TorneosAdminService {
       categoriaId: t.categoriaId,
       categoriaNombre: t.categoria?.nombre ?? null,
       categoriaSlug: t.categoria?.slug ?? null,
+      categoriasSeries: Array.isArray(t.categoriasSeries) ? t.categoriasSeries : [],
+      topeJugadoresPorEquipo: t.topeJugadoresPorEquipo ?? 25,
+      refuerzosHabilitados: t.refuerzosHabilitados ?? true,
+      fechaLimiteRefuerzosNumero: t.fechaLimiteRefuerzosNumero,
       createdAt: t.createdAt.toISOString(),
     };
   }
