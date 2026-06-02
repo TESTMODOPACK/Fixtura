@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
+import { ColorSwatchPicker } from '@/components/ui/color-swatch-picker';
 import { Input } from '@/components/ui/input';
 import { useCreateEquipo } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
@@ -76,48 +77,57 @@ export function NuevoEquipoForm({
   const error = mutation.error as ApiError | undefined;
 
   return (
-    <form
-      onSubmit={form.handleSubmit(onSubmit)}
-      className={`grid grid-cols-1 ${tieneSeries ? 'md:grid-cols-[1fr_1fr_1fr_auto_auto]' : 'md:grid-cols-[1fr_1fr_auto_auto]'} gap-3 items-end`}
-    >
-      <Input
-        label="Nombre del equipo"
-        placeholder="Halcones FC"
-        autoFocus
-        {...form.register('nombre')}
-        error={form.formState.errors.nombre?.message}
-      />
-      <Input
-        label="Slug"
-        {...form.register('slug')}
-        error={form.formState.errors.slug?.message}
-      />
-      {tieneSeries && (
-        <div>
-          <label className="label">Serie</label>
-          <select className="input" {...form.register('serieSlug')}>
-            <option value="">— Sin serie —</option>
-            {series?.map((s) => (
-              <option key={s.slug} value={s.slug}>
-                {s.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      <div>
-        <label className="label">Color</label>
-        <input
-          type="color"
-          className="h-10 w-14 rounded-card border border-line cursor-pointer"
-          {...form.register('colorPrimario')}
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+      {/* Fila 1: datos principales */}
+      <div
+        className={`grid grid-cols-1 ${tieneSeries ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-3`}
+      >
+        <Input
+          label="Nombre del equipo"
+          placeholder="Halcones FC"
+          autoFocus
+          {...form.register('nombre')}
+          error={form.formState.errors.nombre?.message}
         />
+        <Input
+          label="Slug"
+          {...form.register('slug')}
+          error={form.formState.errors.slug?.message}
+        />
+        {tieneSeries && (
+          <div>
+            <label className="label">Serie</label>
+            <select className="input" {...form.register('serieSlug')}>
+              <option value="">— Sin serie —</option>
+              {series?.map((s) => (
+                <option key={s.slug} value={s.slug}>
+                  {s.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
-      <div className="flex flex-col gap-1">
-        {error && <span className="text-xs text-danger">{error.message}</span>}
+
+      {/* Fila 2: color del equipo */}
+      <ColorSwatchPicker
+        label="Color del equipo"
+        value={form.watch('colorPrimario') ?? ''}
+        onChange={(hex) =>
+          form.setValue('colorPrimario', hex, {
+            shouldValidate: true,
+            shouldDirty: true,
+          })
+        }
+        error={form.formState.errors.colorPrimario?.message}
+      />
+
+      {/* Fila 3: error + botón */}
+      <div className="flex items-center gap-3 pt-1">
         <Button type="submit" variant="accent" size="sm" loading={mutation.isPending}>
           <Save size={14} /> Inscribir
         </Button>
+        {error && <span className="text-xs text-danger">{error.message}</span>}
       </div>
     </form>
   );

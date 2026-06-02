@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { ColorSwatchPicker } from '@/components/ui/color-swatch-picker';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import { useCategorias, useCreateClub } from '@/hooks/use-admin';
@@ -317,24 +318,31 @@ export default function NuevoClubPage(): React.ReactElement {
               {...form.register('escudoUrl')}
               error={form.formState.errors.escudoUrl?.message}
             />
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Color primario</label>
-                <input
-                  type="color"
-                  className="h-10 w-full rounded-card border border-line cursor-pointer"
-                  {...form.register('colorPrimario')}
-                />
-              </div>
-              <div>
-                <label className="label">Color secundario (opcional)</label>
-                <input
-                  type="color"
-                  className="h-10 w-full rounded-card border border-line cursor-pointer"
-                  {...form.register('colorSecundario')}
-                />
-              </div>
-            </div>
+            <ColorSwatchPicker
+              label="Color primario"
+              value={form.watch('colorPrimario') ?? ''}
+              onChange={(hex) =>
+                form.setValue('colorPrimario', hex, {
+                  shouldValidate: true,
+                  shouldDirty: true,
+                })
+              }
+              error={form.formState.errors.colorPrimario?.message}
+              help="Color principal del escudo / camiseta titular del club."
+            />
+            <ColorSwatchPicker
+              label="Color secundario (opcional)"
+              value={form.watch('colorSecundario') ?? ''}
+              onChange={(hex) =>
+                form.setValue('colorSecundario', hex, {
+                  shouldValidate: true,
+                  shouldDirty: true,
+                })
+              }
+              allowEmpty
+              error={form.formState.errors.colorSecundario?.message}
+              help="Color complementario (alterno, vivos). Dejá vacío si no aplica."
+            />
             <Input
               label="Página web (opcional)"
               placeholder="https://halconesfc.cl"
