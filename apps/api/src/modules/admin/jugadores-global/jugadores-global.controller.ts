@@ -22,15 +22,19 @@ export class JugadoresGlobalController {
   list(
     @CurrentUser() user: UserContext,
     @Query('search') search?: string,
-    @Query('torneoId') torneoId?: string,
-    @Query('equipoId') equipoId?: string,
+    @Query('clubId') clubId?: string,
+    @Query('categoriaId') categoriaId?: string,
     @Query('estado') estado?: string,
   ): Promise<JugadorGlobal[]> {
+    const estadoValid =
+      estado === 'todos' || estado === 'activos' || estado === 'vetados'
+        ? estado
+        : 'activos';
     return this.svc.list(ensureTenant(user), {
       search: search?.trim() || undefined,
-      torneoId: torneoId || undefined,
-      equipoId: equipoId || undefined,
-      estado: estado === 'todos' ? 'todos' : 'activos',
+      clubId: clubId || undefined,
+      categoriaId: categoriaId || undefined,
+      estado: estadoValid,
     });
   }
 }

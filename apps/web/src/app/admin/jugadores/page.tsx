@@ -3,7 +3,10 @@
 import {
   AlertTriangle,
   ChevronRight,
+  Mail,
   Search,
+  Shield,
+  ShieldOff,
   Star,
   Users,
 } from 'lucide-react';
@@ -14,21 +17,33 @@ import type { JugadorGlobal } from '@fixtura/types';
 
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
-import { useJugadoresGlobal, useTorneos } from '@/hooks/use-admin';
+import { useCategorias, useClubes, useJugadoresGlobal } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
 
+/**
+ * Sprint 28' (ADR-0004) — Página cross-tenant de jugadores basada en
+ * el modelo Clubes. Reemplaza la versión que mostraba "Equipo · Torneo"
+ * por una vista de "Club · Categoría" con estado consolidado (ACTIVO,
+ * INACTIVO, VETADO) y stats agregadas vía match por RUT al modelo
+ * viejo (que se mantiene sincronizado por el shim del 26G.2).
+ */
 export default function JugadoresGlobalPage(): React.ReactElement {
   const [search, setSearch] = useState('');
-  const [torneoId, setTorneoId] = useState('');
-  const [estado, setEstado] = useState<'activos' | 'todos'>('activos');
+  const [clubId, setClubId] = useState('');
+  const [categoriaId, setCategoriaId] = useState('');
+  const [estado, setEstado] = useState<'activos' | 'todos' | 'vetados'>(
+    'activos',
+  );
 
-  // Deferred para que el input no dispare query en cada tecla
+  // Deferred para que el input no dispare query en cada tecla.
   const deferredSearch = useDeferredValue(search);
 
-  const { data: torneos } = useTorneos();
+  const { data: clubes } = useClubes();
+  const { data: categorias } = useCategorias();
   const { data: jugadores, isLoading } = useJugadoresGlobal({
     search: deferredSearch.trim() || undefined,
-    torneoId: torneoId || undefined,
+    clubId: clubId || undefined,
+    categoriaId: categoriaId || undefined,
     estado,
   });
 
@@ -36,7 +51,8 @@ export default function JugadoresGlobalPage(): React.ReactElement {
     const all = jugadores ?? [];
     return {
       total: all.length,
-      activos: all.filter((j) => j.activo).length,
+      activos: all.filter((j) => j.estado === 'ACTIVO').length,
+      vetados: all.filter((j) => j.estado === 'VETADO').length,
       sancionados: all.filter((j) => j.tieneSancionActiva).length,
       goleadores: all.filter((j) => j.goles > 0).length,
     };
@@ -47,10 +63,10 @@ export default function JugadoresGlobalPage(): React.ReactElement {
       <PageHead
         eyebrow="Comunidad"
         title="Jugadores & ranking"
-        sub="Buscá a cualquier jugador del tenant. Las stats se calculan sobre el torneo del equipo al que está inscrito."
+        sub="Buscá a cualquier jugador del plantel global de la liga. Las stats se calculan sobre todos los torneos donde participó (match por RUT)."
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         <Card padding="comfortable">
           <CardLabel>Visibles</CardLabel>
           <div className="font-display text-3xl text-green-deep tracking-display">
@@ -64,11 +80,22 @@ export default function JugadoresGlobalPage(): React.ReactElement {
           </div>
         </Card>
         <Card padding="comfortable">
+          <CardLabel>Vetados</CardLabel>
+          <div
+            className={cn(
+              'font-display text-3xl tracking-display',
+              stats.vetados > 0 ? 'text-danger' : 'text-ink-mute',
+            )}
+          >
+            {isLoading ? '…' : stats.vetados}
+          </div>
+        </Card>
+        <Card padding="comfortable">
           <CardLabel>Con sanción</CardLabel>
           <div
             className={cn(
               'font-display text-3xl tracking-display',
-              stats.sancionados > 0 ? 'text-danger' : 'text-green-bright',
+              stats.sancionados > 0 ? 'text-accent' : 'text-green-bright',
             )}
           >
             {isLoading ? '…' : stats.sancionados}
@@ -83,7 +110,7 @@ export default function JugadoresGlobalPage(): React.ReactElement {
       </div>
 
       {/* Filtros */}
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-3 mb-4">
         <div className="relative">
           <Search
             size={14}
@@ -99,30 +126,47 @@ export default function JugadoresGlobalPage(): React.ReactElement {
         </div>
         <select
           className="input text-sm"
-          value={torneoId}
-          onChange={(e) => setTorneoId(e.target.value)}
+          value={clubId}
+          onChange={(e) => setClubId(e.target.value)}
         >
-          <option value="">Todos los torneos</option>
-          {torneos?.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.nombre}
+          <option value="">Todos los clubes</option>
+          {clubes?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nombre}
+            </option>
+          ))}
+        </select>
+        <select
+          className="input text-sm"
+          value={categoriaId}
+          onChange={(e) => setCategoriaId(e.target.value)}
+        >
+          <option value="">Todas las categorías</option>
+          {categorias?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nombre}
             </option>
           ))}
         </select>
         <select
           className="input text-sm"
           value={estado}
-          onChange={(e) => setEstado(e.target.value as 'activos' | 'todos')}
+          onChange={(e) =>
+            setEstado(e.target.value as 'activos' | 'todos' | 'vetados')
+          }
         >
           <option value="activos">Solo activos</option>
-          <option value="todos">Incluir inactivos</option>
+          <option value="todos">Activos + inactivos + vetados</option>
+          <option value="vetados">Solo vetados</option>
         </select>
       </div>
 
       {/* Tabla */}
       <Card padding="none" className="overflow-hidden">
         {isLoading && (
-          <div className="p-8 text-center font-serif italic text-ink-mute">Cargando…</div>
+          <div className="p-8 text-center font-serif italic text-ink-mute">
+            Cargando…
+          </div>
         )}
         {!isLoading && (jugadores?.length ?? 0) === 0 && (
           <div className="p-12 text-center">
@@ -130,7 +174,16 @@ export default function JugadoresGlobalPage(): React.ReactElement {
             <p className="font-serif italic text-ink-mute">
               {deferredSearch
                 ? `No hay jugadores que coincidan con "${deferredSearch}".`
-                : 'No hay jugadores cargados.'}
+                : 'No hay jugadores cargados. Cargá clubes y sus planteles desde '}
+              {!deferredSearch && (
+                <Link
+                  href="/admin/clubes"
+                  className="text-accent font-semibold hover:underline"
+                >
+                  /admin/clubes
+                </Link>
+              )}
+              {!deferredSearch && '.'}
             </p>
           </div>
         )}
@@ -140,7 +193,7 @@ export default function JugadoresGlobalPage(): React.ReactElement {
               <thead className="bg-paper-dark border-b border-line">
                 <tr className="text-left text-[10px] uppercase tracking-[0.15em] text-ink-mute font-semibold">
                   <th className="px-4 py-2.5">Jugador</th>
-                  <th className="px-3 py-2.5">Equipo · Torneo</th>
+                  <th className="px-3 py-2.5">Club · Categoría</th>
                   <th className="px-3 py-2.5">Pos</th>
                   <th className="px-3 py-2.5 text-right">PJ</th>
                   <th className="px-3 py-2.5 text-right">⚽</th>
@@ -165,8 +218,20 @@ export default function JugadoresGlobalPage(): React.ReactElement {
 }
 
 function JugadorRow({ jugador }: { jugador: JugadorGlobal }): React.ReactElement {
+  const esVetado = jugador.estado === 'VETADO';
+  const esInactivo = jugador.estado === 'INACTIVO';
+
   return (
-    <tr className="hover:bg-paper transition-colors">
+    <tr
+      className={cn(
+        'transition-colors',
+        esVetado
+          ? 'bg-danger/5 hover:bg-danger/10'
+          : esInactivo
+            ? 'opacity-60 hover:bg-paper'
+            : 'hover:bg-paper',
+      )}
+    >
       <td className="px-4 py-2.5">
         <div className="flex items-center gap-2">
           {jugador.numeroCamiseta != null && (
@@ -176,28 +241,42 @@ function JugadorRow({ jugador }: { jugador: JugadorGlobal }): React.ReactElement
           )}
           <div>
             <div className="font-semibold flex items-center gap-1">
-              {jugador.nombre} {jugador.apellido}
-              {jugador.capitan && <Star size={12} className="text-accent fill-accent" />}
+              {jugador.nombres} {jugador.apellidos}
+              {jugador.capitan && (
+                <Star size={12} className="text-accent fill-accent" />
+              )}
             </div>
-            <div className="text-xs text-ink-mute">
-              {jugador.apodo && <span>« {jugador.apodo} » · </span>}
-              {jugador.rut && <span className="font-mono">{jugador.rut}</span>}
+            <div className="text-xs text-ink-mute flex flex-wrap gap-2">
+              {jugador.apodo && <span>« {jugador.apodo} »</span>}
+              <span className="font-mono">{jugador.rut}</span>
+              {jugador.email && (
+                <span className="flex items-center gap-0.5">
+                  <Mail size={10} /> {jugador.email}
+                </span>
+              )}
             </div>
           </div>
         </div>
       </td>
       <td className="px-3 py-2.5">
         <Link
-          href={`/admin/equipos/${jugador.equipoId}`}
-          className="font-semibold hover:underline"
+          href={`/admin/clubes/${jugador.clubId}`}
+          className="font-semibold hover:underline flex items-center gap-1.5"
         >
-          {jugador.equipoNombre}
+          <Shield size={12} className="text-ink-mute flex-shrink-0" />
+          {jugador.clubNombre}
         </Link>
-        <div className="text-xs text-ink-mute">{jugador.torneoNombre}</div>
+        <div className="text-xs text-ink-mute">{jugador.categoriaNombre}</div>
       </td>
-      <td className="px-3 py-2.5 text-xs uppercase">{jugador.posicion ?? '—'}</td>
-      <td className="px-3 py-2.5 text-right font-mono">{jugador.partidosJugados}</td>
-      <td className="px-3 py-2.5 text-right font-mono font-semibold">{jugador.goles}</td>
+      <td className="px-3 py-2.5 text-xs uppercase">
+        {jugador.posicion ?? '—'}
+      </td>
+      <td className="px-3 py-2.5 text-right font-mono">
+        {jugador.partidosJugados}
+      </td>
+      <td className="px-3 py-2.5 text-right font-mono font-semibold">
+        {jugador.goles}
+      </td>
       <td className="px-3 py-2.5 text-right font-mono">{jugador.amarillas}</td>
       <td
         className={cn(
@@ -209,21 +288,32 @@ function JugadorRow({ jugador }: { jugador: JugadorGlobal }): React.ReactElement
       </td>
       <td className="px-3 py-2.5 text-right font-mono">{jugador.mvps}</td>
       <td className="px-3 py-2.5">
-        {!jugador.activo && (
-          <span className="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-ink-mute/15 text-ink-mute">
-            inactivo
-          </span>
-        )}
-        {jugador.activo && jugador.tieneSancionActiva && (
-          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-danger/15 text-danger">
-            <AlertTriangle size={10} /> sanción
-          </span>
-        )}
+        <div className="flex flex-col gap-0.5">
+          {esVetado && (
+            <span
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-danger/15 text-danger w-fit"
+              title={jugador.vetoMotivo ?? 'Vetado'}
+            >
+              <ShieldOff size={10} /> vetado
+            </span>
+          )}
+          {esInactivo && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-ink-mute/15 text-ink-mute w-fit">
+              inactivo
+            </span>
+          )}
+          {jugador.tieneSancionActiva && (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-accent/15 text-accent w-fit">
+              <AlertTriangle size={10} /> sanción
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-3 py-2.5">
         <Link
-          href={`/admin/equipos/${jugador.equipoId}`}
+          href={`/admin/clubes/${jugador.clubId}`}
           className="text-line hover:text-ink-mute"
+          title="Ver ficha del club"
         >
           <ChevronRight size={14} />
         </Link>

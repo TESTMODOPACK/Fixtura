@@ -503,17 +503,19 @@ export function useActasGlobal(filters: {
   });
 }
 
-// ─── Jugadores global (cross-torneo) ──────────────────────────────────
+// ─── Jugadores global (cross-club) ────────────────────────────────────
+// Sprint 28' (ADR-0004) — Refactor al modelo Clubes. Filtros ahora son
+// clubId/categoriaId (en vez de torneoId/equipoId del modelo viejo).
 export function useJugadoresGlobal(filters: {
   search?: string;
-  torneoId?: string;
-  equipoId?: string;
-  estado?: 'activos' | 'todos';
+  clubId?: string;
+  categoriaId?: string;
+  estado?: 'activos' | 'todos' | 'vetados';
 }) {
   const qs = new URLSearchParams();
   if (filters.search) qs.set('search', filters.search);
-  if (filters.torneoId) qs.set('torneoId', filters.torneoId);
-  if (filters.equipoId) qs.set('equipoId', filters.equipoId);
+  if (filters.clubId) qs.set('clubId', filters.clubId);
+  if (filters.categoriaId) qs.set('categoriaId', filters.categoriaId);
   if (filters.estado) qs.set('estado', filters.estado);
   const query = qs.toString();
 
