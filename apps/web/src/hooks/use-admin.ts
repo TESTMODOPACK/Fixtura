@@ -1713,3 +1713,109 @@ export function useDeleteVetado() {
     },
   });
 }
+
+// ─── Sprint 26E — Inscripciones a torneos + planilla del torneo ─────
+
+import type {
+  CreateInscripcionTorneoRequest,
+  InscripcionTorneo,
+} from '@fixtura/types';
+
+export interface PlanillaTorneoItem {
+  jugadorId: string;
+  rut: string;
+  nombres: string;
+  apellidos: string;
+  numeroCamiseta: number | null;
+  posicion: string | null;
+  capitan: boolean;
+  fechaIncorporacion: string;
+}
+
+export function useInscripcionesTorneo(torneoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'inscripciones'],
+    queryFn: () =>
+      apiFetch<InscripcionTorneo[]>(
+        `/admin/torneos/${torneoId}/inscripciones`,
+      ),
+    enabled: !!torneoId,
+  });
+}
+
+export function useInscribirClub(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateInscripcionTorneoRequest) =>
+      apiFetch<InscripcionTorneo>(`/admin/torneos/${torneoId}/inscripciones`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'torneos', torneoId, 'inscripciones'],
+      });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
+    },
+  });
+}
+
+export function useDesinscribir(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (inscripcionId: string) =>
+      apiFetch<void>(`/admin/inscripciones/${inscripcionId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'torneos', torneoId, 'inscripciones'],
+      });
+    },
+  });
+}
+
+export function usePlanillaTorneo(
+  inscripcionId: string | null | undefined,
+) {
+  return useQuery({
+    queryKey: ['admin', 'inscripciones', inscripcionId, 'planilla'],
+    queryFn: () =>
+      apiFetch<PlanillaTorneoItem[]>(
+        `/admin/inscripciones/${inscripcionId}/planilla`,
+      ),
+    enabled: !!inscripcionId,
+  });
+}
+
+export function useAddJugadorPlanilla(inscripcionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (jugadorId: string) =>
+      apiFetch<void>(`/admin/inscripciones/${inscripcionId}/planilla`, {
+        method: 'POST',
+        body: { jugadorId },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'inscripciones', inscripcionId, 'planilla'],
+      });
+    },
+  });
+}
+
+export function useRemoveJugadorPlanilla(inscripcionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (jugadorId: string) =>
+      apiFetch<void>(
+        `/admin/inscripciones/${inscripcionId}/planilla/${jugadorId}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'inscripciones', inscripcionId, 'planilla'],
+      });
+    },
+  });
+}
