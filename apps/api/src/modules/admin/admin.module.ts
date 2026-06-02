@@ -24,7 +24,7 @@ import { DesignacionesRespuestaController } from './designaciones/designaciones-
 import { RecintoAdminService } from './designaciones/recinto-admin.service';
 import { DiasNoJugablesController } from './dias-no-jugables/dias-no-jugables.controller';
 import { DiasNoJugablesService } from './dias-no-jugables/dias-no-jugables.service';
-import { EquiposAdminController } from './equipos/equipos-admin.controller';
+import { EquiposAdminController, EquiposItemController } from './equipos/equipos-admin.controller';
 import { EquiposAdminService } from './equipos/equipos-admin.service';
 import { FechasAdminService } from './fixture/fechas-admin.service';
 import {
@@ -81,6 +81,7 @@ import { TribunalAdminService } from './tribunal/tribunal-admin.service';
     TemporadasAdminController,
     TorneosAdminController,
     EquiposAdminController,
+    EquiposItemController,
     JugadoresAdminController,
     JugadoresGlobalController,
     FechasAdminController,

@@ -1,9 +1,15 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import type { CreateTorneoRequest, TorneoAdmin, UpdateTorneoRequest } from '@fixtura/types';
 
+import { CategoriaJugadores } from '../../competition/entities/categoria-jugadores.entity';
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { Temporada } from '../../competition/entities/temporada.entity';
@@ -16,12 +22,40 @@ export class TorneosAdminService {
     @InjectRepository(Temporada) private readonly temporadaRepo: Repository<Temporada>,
     @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
+    @InjectRepository(CategoriaJugadores)
+    private readonly categoriaRepo: Repository<CategoriaJugadores>,
   ) {}
+
+  /**
+   * Si el input trae categoriaId, valida que exista en este tenant y
+   * esté activa. Devuelve la categoría o null. Lanza si el id existe
+   * pero pertenece a otro tenant (defense-in-depth: RLS también bloquea).
+   */
+  private async resolveCategoria(
+    tenantId: string,
+    categoriaId: string | null | undefined,
+  ): Promise<CategoriaJugadores | null> {
+    if (categoriaId == null) return null;
+    const cat = await this.categoriaRepo.findOne({
+      where: { id: categoriaId, tenantId },
+    });
+    if (!cat) {
+      throw new NotFoundException(
+        `Categoría ${categoriaId} no encontrada en este tenant.`,
+      );
+    }
+    if (!cat.activa) {
+      throw new BadRequestException(
+        `La categoría "${cat.nombre}" está inactiva. Reactivala o elegí otra.`,
+      );
+    }
+    return cat;
+  }
 
   async list(tenantId: string): Promise<TorneoAdmin[]> {
     const torneos = await this.repo.find({
       where: { tenantId },
-      relations: { temporada: true },
+      relations: { temporada: true, categoria: true },
       order: { createdAt: 'DESC' },
     });
 
@@ -31,7 +65,7 @@ export class TorneosAdminService {
   async findOne(id: string, tenantId: string): Promise<TorneoAdmin> {
     const t = await this.repo.findOne({
       where: { id, tenantId },
-      relations: { temporada: true },
+      relations: { temporada: true, categoria: true },
     });
     if (!t) throw new NotFoundException(`Torneo ${id} no encontrado`);
     return this.toDto(t);
@@ -46,6 +80,10 @@ export class TorneosAdminService {
     if (!temporada) {
       throw new NotFoundException(`Temporada ${input.temporadaId} no encontrada`);
     }
+
+    // Validar categoría (Sprint 25 paso 3). Opcional — torneos sin
+    // categoría siguen funcionando para back-compat.
+    await this.resolveCategoria(tenantId, input.categoriaId ?? null);
 
     // Unique (tenant, slug)
     const dup = await this.repo.findOne({ where: { tenantId, slug: input.slug } });
@@ -68,9 +106,26 @@ export class TorneosAdminService {
       fechaInicio: input.fechaInicio ?? null,
       fechaFin: input.fechaFin ?? null,
       reglamentoUrl: input.reglamentoUrl ?? null,
+      categoriaId: input.categoriaId ?? null,
     });
-    const saved = await this.repo.save(t);
-    return this.findOne(saved.id, tenantId);
+    try {
+      const saved = await this.repo.save(t);
+      return this.findOne(saved.id, tenantId);
+    } catch (err) {
+      // Race condition con UNIQUE (tenant, slug) — atrapamos para
+      // devolver 409 limpio en vez de un 500 con stack de Postgres.
+      if (
+        err instanceof Error &&
+        (err.message.includes('duplicate key') ||
+          err.message.includes('IDX_') ||
+          err.message.includes('UQ_'))
+      ) {
+        throw new ConflictException(
+          `Ya existe un torneo con slug "${input.slug}"`,
+        );
+      }
+      throw err;
+    }
   }
 
   async update(
@@ -84,6 +139,27 @@ export class TorneosAdminService {
     if (input.slug && input.slug !== existing.slug) {
       const dup = await this.repo.findOne({ where: { tenantId, slug: input.slug } });
       if (dup) throw new ConflictException(`Slug "${input.slug}" ya está en uso`);
+    }
+
+    // Validar categoría si viene en el patch. Si llega null explícito,
+    // se desvincula. Si no viene la key, no se toca.
+    if (input.categoriaId !== undefined) {
+      await this.resolveCategoria(tenantId, input.categoriaId);
+
+      // Si cambia la categoría (a otra distinta o a null) y ya hay equipos
+      // inscritos con un serie_slug, esos slugs pueden no existir en la
+      // nueva categoría. Limpiamos serie_slug de equipos del torneo —
+      // mejor null que un slug colgado que apunta a series fantasma.
+      const cambioCategoria = (input.categoriaId ?? null) !== existing.categoriaId;
+      if (cambioCategoria) {
+        await this.equipoRepo
+          .createQueryBuilder()
+          .update()
+          .set({ serieSlug: null })
+          .where('torneo_id = :id AND tenant_id = :tenantId', { id, tenantId })
+          .andWhere('serie_slug IS NOT NULL')
+          .execute();
+      }
     }
 
     Object.assign(existing, {
@@ -101,6 +177,7 @@ export class TorneosAdminService {
       ...(input.tablaTiebreakers !== undefined && {
         tablaTiebreakers: input.tablaTiebreakers,
       }),
+      ...(input.categoriaId !== undefined && { categoriaId: input.categoriaId }),
     });
     await this.repo.save(existing);
     return this.findOne(id, tenantId);
@@ -133,6 +210,9 @@ export class TorneosAdminService {
       reglamentoUrl: t.reglamentoUrl,
       equiposCount,
       fechasCount,
+      categoriaId: t.categoriaId,
+      categoriaNombre: t.categoria?.nombre ?? null,
+      categoriaSlug: t.categoria?.slug ?? null,
       createdAt: t.createdAt.toISOString(),
     };
   }

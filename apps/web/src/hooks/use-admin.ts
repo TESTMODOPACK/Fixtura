@@ -139,6 +139,11 @@ export function useCreateJugador(equipoId: string) {
       apiFetch<JugadorAdmin>(`/admin/equipos/${equipoId}/jugadores`, { method: 'POST', body: input }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'equipos', equipoId, 'jugadores'] });
+      // Sprint 25: agregar un jugador puede cambiar el estado de validez
+      // del plantel (suma a validos, en excepción o bloqueados).
+      qc.invalidateQueries({
+        queryKey: ['admin', 'equipos', equipoId, 'validar-plantel'],
+      });
     },
   });
 }
@@ -153,6 +158,9 @@ export function useBulkCreateJugadores(equipoId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'equipos', equipoId, 'jugadores'] });
+      qc.invalidateQueries({
+        queryKey: ['admin', 'equipos', equipoId, 'validar-plantel'],
+      });
     },
   });
 }
@@ -1471,6 +1479,7 @@ import type {
   CategoriaJugadores,
   CreateCategoriaRequest,
   UpdateCategoriaRequest,
+  ValidarPlantelResult,
 } from '@fixtura/types';
 
 export function useCategorias() {
@@ -1517,5 +1526,21 @@ export function useDeleteCategoria() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'categorias'] });
     },
+  });
+}
+
+/**
+ * Valida el plantel de un equipo contra la categoría del torneo.
+ * Si el torneo no tiene categoría, devuelve apto=true sin validar.
+ */
+export function useValidarPlantel(equipoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'equipos', equipoId, 'validar-plantel'],
+    queryFn: () =>
+      apiFetch<ValidarPlantelResult>(`/admin/equipos/${equipoId}/validar-plantel`),
+    enabled: !!equipoId,
+    // Re-validar cada vez que la UI vuelve a montar — el plantel
+    // puede haber cambiado en otra pestaña / por otro admin.
+    staleTime: 0,
   });
 }

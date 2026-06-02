@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { CategoriaJugadores } from './categoria-jugadores.entity';
 import { Temporada } from './temporada.entity';
 
 export type TipoFormato = 'ROUND_ROBIN' | 'PLAYOFFS' | 'GROUPS' | 'MIXTO';
@@ -76,6 +77,16 @@ export class Torneo {
 
   @Column({ name: 'reglamento_url', type: 'varchar', length: 500, nullable: true })
   reglamentoUrl!: string | null;
+
+  // Sprint 25 paso 3 — categoría de jugadores asociada (nullable: torneos
+  // viejos sin categoría siguen funcionando). FK ON DELETE SET NULL al
+  // nivel de DB (cleanup-orphans).
+  @Column({ name: 'categoria_id', type: 'uuid', nullable: true })
+  categoriaId!: string | null;
+
+  @ManyToOne(() => CategoriaJugadores, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'categoria_id' })
+  categoria?: CategoriaJugadores | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

@@ -130,5 +130,11 @@ export const ValidarPlantelResultSchema = z.object({
   cupoExcepcionesUsado: z.number().int(),
   apto: z.boolean(),
   motivosRechazo: z.array(z.string()),
+  /**
+   * Flag explícito para que la UI distinga "no se valida porque el torneo
+   * no tiene categoría" de "se validó y todo OK". Sin esto, el caller
+   * tendría que heurísticar contra counts (frágil).
+   */
+  sinCategoria: z.boolean(),
 });
 export type ValidarPlantelResult = z.infer<typeof ValidarPlantelResultSchema>;

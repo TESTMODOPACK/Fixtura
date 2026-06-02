@@ -12,7 +12,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
-import { useCreateTemporada, useCreateTorneo, useTemporadas } from '@/hooks/use-admin';
+import {
+  useCategorias,
+  useCreateTemporada,
+  useCreateTorneo,
+  useTemporadas,
+} from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 
 const TorneoFormSchema = z.object({
@@ -30,6 +35,8 @@ const TorneoFormSchema = z.object({
   puntosVictoria: z.coerce.number().int().min(0).max(10),
   puntosEmpate: z.coerce.number().int().min(0).max(10),
   puntosDerrota: z.coerce.number().int().min(0).max(10),
+  // categoría opcional. '' = "Sin categoría" (back-compat).
+  categoriaId: z.union([z.literal(''), z.uuid('Categoría inválida')]).optional(),
 });
 type TorneoForm = z.infer<typeof TorneoFormSchema>;
 
@@ -59,6 +66,7 @@ const FIELD_LABEL: Record<string, string> = {
 export default function NuevoTorneoPage(): React.ReactElement {
   const router = useRouter();
   const { data: temporadas, isLoading: loadingTemporadas } = useTemporadas();
+  const { data: categorias } = useCategorias();
   const createTemporada = useCreateTemporada();
   const createTorneo = useCreateTorneo();
   const errorBannerRef = useRef<HTMLDivElement | null>(null);
@@ -74,6 +82,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
       puntosVictoria: 3,
       puntosEmpate: 1,
       puntosDerrota: 0,
+      categoriaId: '',
     },
     // Re-validar mientras tipea — para que el slug muestre su error
     // apenas el usuario haga `min < 3`.
@@ -129,6 +138,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
       puntosVictoria: vals.puntosVictoria,
       puntosEmpate: vals.puntosEmpate,
       puntosDerrota: vals.puntosDerrota,
+      categoriaId: vals.categoriaId ? vals.categoriaId : null,
     });
     router.push(`/admin/torneos/${torneo.id}`);
   };
@@ -306,6 +316,34 @@ export default function NuevoTorneoPage(): React.ReactElement {
                 <option value={1}>1 — solo ida</option>
                 <option value={2}>2 — ida y vuelta</option>
               </select>
+            </div>
+
+            <div>
+              <label className="label">Categoría de jugadores</label>
+              <select className="input" {...form.register('categoriaId')}>
+                <option value="">Sin categoría (libre)</option>
+                {categorias
+                  ?.filter((c) => c.activa)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre} · mín. {c.edadMinimaGeneral} años
+                      {c.cupoExcepcionesPorEquipo > 0 && c.edadMinimaExcepcion != null
+                        ? ` (+${c.cupoExcepcionesPorEquipo} excep. desde ${c.edadMinimaExcepcion})`
+                        : ''}
+                    </option>
+                  ))}
+              </select>
+              <p className="text-xs text-ink-mute font-serif italic mt-1">
+                Opcional. Si la elegís, al inscribir equipos podrás asignar
+                una serie (Primera, Segunda…) y el sistema valida que los
+                jugadores cumplan la edad mínima.{' '}
+                <Link
+                  href="/admin/categorias"
+                  className="text-accent hover:underline"
+                >
+                  Gestionar categorías
+                </Link>
+              </p>
             </div>
           </div>
         </Card>

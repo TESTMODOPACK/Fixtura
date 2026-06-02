@@ -11,6 +11,11 @@ import { Input } from '@/components/ui/input';
 import { useCreateEquipo } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 
+interface SerieOption {
+  slug: string;
+  nombre: string;
+}
+
 const EquipoFormSchema = z.object({
   nombre: z.string().min(2).max(150),
   slug: z
@@ -19,6 +24,7 @@ const EquipoFormSchema = z.object({
     .max(100)
     .regex(/^[a-z0-9-]+$/, 'Solo minúsculas, números y guiones'),
   colorPrimario: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Formato hex #RRGGBB'),
+  serieSlug: z.string().optional(),
 });
 type EquipoForm = z.infer<typeof EquipoFormSchema>;
 
@@ -33,16 +39,20 @@ function slugify(s: string): string {
 
 export function NuevoEquipoForm({
   torneoId,
+  series,
   onDone,
 }: {
   torneoId: string;
+  /** Series disponibles si el torneo tiene categoría. Si no, vacío. */
+  series?: SerieOption[];
   onDone: () => void;
 }): React.ReactElement {
   const mutation = useCreateEquipo(torneoId);
+  const tieneSeries = (series?.length ?? 0) > 0;
 
   const form = useForm<EquipoForm>({
     resolver: zodResolver(EquipoFormSchema),
-    defaultValues: { nombre: '', slug: '', colorPrimario: '#1B4332' },
+    defaultValues: { nombre: '', slug: '', colorPrimario: '#1B4332', serieSlug: '' },
   });
 
   const nombre = form.watch('nombre');
@@ -55,6 +65,10 @@ export function NuevoEquipoForm({
       nombre: vals.nombre,
       slug: vals.slug,
       colorPrimario: vals.colorPrimario,
+      // Si no hay categoría/series, NO mandamos serieSlug. El backend
+      // ignora el campo cuando el torneo no tiene categoría, pero
+      // somos defensivos en el cliente también.
+      serieSlug: tieneSeries && vals.serieSlug ? vals.serieSlug : null,
     });
     onDone();
   };
@@ -62,7 +76,10 @@ export function NuevoEquipoForm({
   const error = mutation.error as ApiError | undefined;
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] gap-3 items-end">
+    <form
+      onSubmit={form.handleSubmit(onSubmit)}
+      className={`grid grid-cols-1 ${tieneSeries ? 'md:grid-cols-[1fr_1fr_1fr_auto_auto]' : 'md:grid-cols-[1fr_1fr_auto_auto]'} gap-3 items-end`}
+    >
       <Input
         label="Nombre del equipo"
         placeholder="Halcones FC"
@@ -75,6 +92,19 @@ export function NuevoEquipoForm({
         {...form.register('slug')}
         error={form.formState.errors.slug?.message}
       />
+      {tieneSeries && (
+        <div>
+          <label className="label">Serie</label>
+          <select className="input" {...form.register('serieSlug')}>
+            <option value="">— Sin serie —</option>
+            {series?.map((s) => (
+              <option key={s.slug} value={s.slug}>
+                {s.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div>
         <label className="label">Color</label>
         <input

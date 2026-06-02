@@ -31,6 +31,7 @@ import {
   useBulkCreateJugadores,
   useCreateJugador,
   useJugadores,
+  useValidarPlantel,
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -127,23 +128,27 @@ export default function EquipoDetallePage({
           {jugadores && jugadores.length > 0 && <JugadoresTable jugadores={jugadores} />}
         </Card>
 
-        <Card variant="lime" padding="comfortable">
-          <CardLabel tone="mute">Plantilla mínima</CardLabel>
-          <div className="font-display text-lg text-green-deep tracking-display mb-2">
-            CHECKLIST ANFA
-          </div>
-          <ul className="space-y-2 text-sm text-green-deep/85">
-            <li>• Mínimo 1 arquero</li>
-            <li>• Mínimo 11 titulares en cancha</li>
-            <li>• Capitán designado (banda)</li>
-            <li>• Número de camiseta único por equipo</li>
-            <li>• RUT registrado para sanciones por acumulación</li>
-          </ul>
-          <p className="font-serif italic text-xs text-green-deep/70 mt-4">
-            El RUT es lo que permite que la sanción por amarillas siga al jugador si cambia de club
-            dentro del mismo torneo.
-          </p>
-        </Card>
+        <div className="space-y-4">
+          <ValidacionPlantelCard equipoId={equipoId} />
+
+          <Card variant="lime" padding="comfortable">
+            <CardLabel tone="mute">Plantilla mínima</CardLabel>
+            <div className="font-display text-lg text-green-deep tracking-display mb-2">
+              CHECKLIST ANFA
+            </div>
+            <ul className="space-y-2 text-sm text-green-deep/85">
+              <li>• Mínimo 1 arquero</li>
+              <li>• Mínimo 11 titulares en cancha</li>
+              <li>• Capitán designado (banda)</li>
+              <li>• Número de camiseta único por equipo</li>
+              <li>• RUT registrado para sanciones por acumulación</li>
+            </ul>
+            <p className="font-serif italic text-xs text-green-deep/70 mt-4">
+              El RUT es lo que permite que la sanción por amarillas siga al jugador si cambia de club
+              dentro del mismo torneo.
+            </p>
+          </Card>
+        </div>
       </div>
     </>
   );
@@ -660,4 +665,117 @@ function parseCsv(input: string): FilaParseada[] {
       },
     };
   });
+}
+
+/**
+ * Card que muestra si el plantel del equipo cumple la categoría del
+ * torneo. Si el torneo no tiene categoría, el componente sigue siendo
+ * útil informativamente pero indica "Sin categoría".
+ *
+ * El estado se calcula contra la edad calendaria (años cumplidos al
+ * cierre del año de referencia), no contra la edad actual.
+ */
+function ValidacionPlantelCard({
+  equipoId,
+}: {
+  equipoId: string;
+}): React.ReactElement | null {
+  const { data, isLoading, isError } = useValidarPlantel(equipoId);
+
+  if (isLoading) {
+    return (
+      <Card padding="comfortable">
+        <CardLabel>Validación de plantel</CardLabel>
+        <p className="text-sm font-serif italic text-ink-mute">Calculando…</p>
+      </Card>
+    );
+  }
+  if (isError || !data) {
+    // No bloqueamos la página por esto — la card es informativa.
+    return null;
+  }
+
+  // Sin categoría: el torneo no impone reglas de edad.
+  // Usamos el flag explícito del backend (no heurística).
+  if (data.sinCategoria) {
+    return (
+      <Card padding="comfortable">
+        <CardLabel>Validación de plantel</CardLabel>
+        <div className="font-display text-lg text-ink-mute tracking-display mb-2">
+          SIN CATEGORÍA
+        </div>
+        <p className="text-sm font-serif italic text-ink-mute">
+          Este torneo no tiene categoría asignada — no se valida edad.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card
+      padding="comfortable"
+      className={cn(
+        data.apto
+          ? 'border-green-bright bg-green-bright/5'
+          : 'border-danger bg-danger/5',
+      )}
+    >
+      <CardLabel tone={data.apto ? 'mute' : 'mute'}>Validación de plantel</CardLabel>
+      <div
+        className={cn(
+          'font-display text-lg tracking-display mb-2',
+          data.apto ? 'text-green-bright' : 'text-danger',
+        )}
+      >
+        {data.apto ? (
+          <span className="inline-flex items-center gap-2">
+            <CheckCircle2 size={18} /> PLANTEL APTO
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-2">
+            <AlertTriangle size={18} /> NO CUMPLE
+          </span>
+        )}
+      </div>
+
+      <ul className="text-sm space-y-1 mb-3">
+        <li>
+          ✓ Válidos: <span className="font-semibold">{data.validos}</span>
+        </li>
+        {data.cupoExcepcionesDisponibles > 0 && (
+          <li>
+            ⚠️ En excepción:{' '}
+            <span className="font-semibold">
+              {data.enExcepcion}/{data.cupoExcepcionesDisponibles}
+            </span>
+          </li>
+        )}
+        {data.bloqueados > 0 && (
+          <li className="text-danger">
+            ✕ Bloqueados (edad insuficiente):{' '}
+            <span className="font-semibold">{data.bloqueados}</span>
+          </li>
+        )}
+        {data.sinFecha > 0 && (
+          <li className="text-accent">
+            ? Sin fecha de nacimiento:{' '}
+            <span className="font-semibold">{data.sinFecha}</span>
+          </li>
+        )}
+        <li className="text-ink-mute text-xs pt-1">
+          Total: {data.totalJugadores} jugador(es)
+        </li>
+      </ul>
+
+      {data.motivosRechazo.length > 0 && (
+        <ul className="text-xs space-y-1 mt-2 pt-2 border-t border-line">
+          {data.motivosRechazo.map((m, i) => (
+            <li key={i} className="text-danger">
+              • {m}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
 }

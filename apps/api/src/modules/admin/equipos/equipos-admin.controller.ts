@@ -1,6 +1,19 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+} from '@nestjs/common';
 
-import { ROLE, type EquipoAdmin, type UserContext } from '@fixtura/types';
+import {
+  ROLE,
+  type EquipoAdmin,
+  type UserContext,
+  type ValidarPlantelResult,
+} from '@fixtura/types';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -27,6 +40,24 @@ export class EquiposAdminController {
     @Body() dto: CreateEquipoDto,
   ): Promise<EquipoAdmin> {
     return this.svc.create(torneoId, ensureTenant(user), dto);
+  }
+}
+
+// Endpoints sobre un equipo concreto (sin torneo en el path). El equipoId
+// es unique global (RLS lo restringe por tenant). Lo separamos del
+// controller anterior para no anidar :torneoId/:equipoId — el equipo ya
+// sabe a qué torneo pertenece.
+@Controller('admin/equipos')
+@Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
+export class EquiposItemController {
+  constructor(private readonly svc: EquiposAdminService) {}
+
+  @Get(':id/validar-plantel')
+  validarPlantel(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<ValidarPlantelResult> {
+    return this.svc.validarPlantel(id, ensureTenant(user));
   }
 }
 

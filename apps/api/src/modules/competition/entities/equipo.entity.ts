@@ -39,12 +39,22 @@ export class Equipo {
   @JoinColumn({ name: 'torneo_id' })
   torneo?: Torneo;
 
+  // Legacy (modelo viejo torneo→serie como tabla aparte). Nadie lo usa
+  // hoy. Lo dejamos por backward compat hasta que una migración formal
+  // lo limpie. NO usar para lógica nueva — usar serieSlug (Sprint 25).
   @Column({ name: 'serie_id', type: 'uuid', nullable: true })
   serieId!: string | null;
 
   @ManyToOne(() => Serie, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'serie_id' })
   serie?: Serie | null;
+
+  // Sprint 25 paso 3 — slug de la serie embebida en la categoría del
+  // torneo. Permite que distintos equipos del mismo torneo estén en
+  // distintas series (Primera, Segunda, Honor…). Validado en backend
+  // contra la lista de series de la categoría del torneo.
+  @Column({ name: 'serie_slug', type: 'varchar', length: 50, nullable: true })
+  serieSlug!: string | null;
 
   @Column({ type: 'varchar', length: 150 })
   nombre!: string;

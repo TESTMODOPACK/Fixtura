@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import { ApiError } from '@/lib/api';
-import { useEquipos, useTorneo, useUpdateTorneo } from '@/hooks/use-admin';
+import { useCategorias, useEquipos, useTorneo, useUpdateTorneo } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
 
 import { GenerarFixtureForm } from './_generar-fixture-form';
@@ -58,7 +58,7 @@ export default function TorneoDetailPage({
   return (
     <>
       <PageHead
-        eyebrow={`Torneo · ${torneo.temporadaNombre}`}
+        eyebrow={`Torneo · ${torneo.temporadaNombre}${torneo.categoriaNombre ? ` · ${torneo.categoriaNombre}` : ''}`}
         title={torneo.nombre}
         sub={`${torneo.tipoFormato.replace('_', ' ')} · ${torneo.ruedas === 2 ? 'ida y vuelta' : 'solo ida'} · ${torneo.puntosVictoria}/${torneo.puntosEmpate}/${torneo.puntosDerrota} pts`}
       >
@@ -117,7 +117,14 @@ export default function TorneoDetailPage({
         </nav>
       </div>
 
-      {tab === 'equipos' && <EquiposTab torneoId={id} estadoTorneo={torneo.estado} />}
+      {tab === 'equipos' && (
+        <EquiposTab
+          torneoId={id}
+          estadoTorneo={torneo.estado}
+          categoriaId={torneo.categoriaId}
+          categoriaNombre={torneo.categoriaNombre}
+        />
+      )}
       {tab === 'fixture' && (
         <FixtureTab
           torneoId={id}
@@ -126,7 +133,13 @@ export default function TorneoDetailPage({
         />
       )}
       {tab === 'configuracion' && (
-        <ConfiguracionTab torneoId={id} estado={torneo.estado} fechasCount={torneo.fechasCount} />
+        <ConfiguracionTab
+          torneoId={id}
+          estado={torneo.estado}
+          fechasCount={torneo.fechasCount}
+          equiposCount={torneo.equiposCount}
+          categoriaId={torneo.categoriaId}
+        />
       )}
     </>
   );
@@ -195,17 +208,30 @@ function TabButton({
 function EquiposTab({
   torneoId,
   estadoTorneo,
+  categoriaId,
+  categoriaNombre,
 }: {
   torneoId: string;
   estadoTorneo: 'DRAFT' | 'ACTIVO' | 'CERRADO';
+  categoriaId: string | null;
+  categoriaNombre: string | null;
 }): React.ReactElement {
   const { data: equipos, isLoading } = useEquipos(torneoId);
+  const { data: categorias } = useCategorias();
   const [adding, setAdding] = useState(false);
-  // Solo se pueden inscribir equipos en DRAFT. Después el fixture está
-  // generado y agregar un equipo rompe la consistencia (cantidad de
-  // partidos/fechas). Si el admin necesita agregar, primero debe
-  // resetear el fixture.
+  // Solo se pueden inscribir equipos en DRAFT.
   const puedeInscribir = estadoTorneo === 'DRAFT';
+
+  // Series disponibles según la categoría del torneo. Si el torneo no tiene
+  // categoría, no mostramos selector de serie en el form.
+  const categoria = categoriaId
+    ? categorias?.find((c) => c.id === categoriaId)
+    : null;
+  const series =
+    categoria?.series?.filter((s) => s.activa).map((s) => ({
+      slug: s.slug,
+      nombre: s.nombre,
+    })) ?? [];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -225,7 +251,11 @@ function EquiposTab({
 
         {adding && puedeInscribir && (
           <div className="px-5 py-4 bg-paper-dark border-b border-line">
-            <NuevoEquipoForm torneoId={torneoId} onDone={() => setAdding(false)} />
+            <NuevoEquipoForm
+              torneoId={torneoId}
+              series={series}
+              onDone={() => setAdding(false)}
+            />
           </div>
         )}
 
@@ -245,7 +275,11 @@ function EquiposTab({
         {equipos && equipos.length > 0 && (
           <div className="divide-y divide-line">
             {equipos.map((e) => (
-              <div key={e.id} className="px-5 py-3 flex items-center gap-3">
+              <Link
+                key={e.id}
+                href={`/admin/equipos/${e.id}`}
+                className="px-5 py-3 flex items-center gap-3 hover:bg-paper transition-colors"
+              >
                 <div
                   className="w-8 h-8 rounded-full flex-shrink-0 border border-line"
                   style={{ backgroundColor: e.colorPrimario ?? '#888278' }}
@@ -254,24 +288,71 @@ function EquiposTab({
                   <div className="font-semibold text-ink truncate">{e.nombre}</div>
                   <div className="text-xs text-ink-mute font-mono">{e.slug}</div>
                 </div>
+                {e.serieNombre && (
+                  <span className="text-[10px] uppercase tracking-[0.15em] font-semibold px-2 py-0.5 rounded bg-green-deep/10 text-green-deep">
+                    {e.serieNombre}
+                  </span>
+                )}
                 <div className="text-xs text-ink-mute">{e.jugadoresCount} jugadores</div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
       </Card>
 
-      <Card variant="lime" padding="comfortable">
-        <CardLabel tone="mute">Recordatorio</CardLabel>
-        <div className="font-display text-lg text-green-deep tracking-display mb-2">
-          MÍNIMO 2 EQUIPOS
-        </div>
-        <p className="text-sm text-green-deep/85">
-          Para generar el fixture necesitás al menos 2 equipos. Para una liga real, recomendamos
-          inscribir todos los equipos antes de generar el fixture — agregar equipos después
-          requiere regenerar.
-        </p>
-      </Card>
+      <div className="space-y-4">
+        {categoriaNombre ? (
+          <Card variant="lime" padding="comfortable">
+            <CardLabel tone="mute">Categoría del torneo</CardLabel>
+            <div className="font-display text-lg text-green-deep tracking-display mb-2">
+              {categoriaNombre.toUpperCase()}
+            </div>
+            {categoria && (
+              <div className="text-sm text-green-deep/85 space-y-1">
+                <div>
+                  Edad mínima:{' '}
+                  <span className="font-semibold">{categoria.edadMinimaGeneral} años</span>
+                </div>
+                {categoria.cupoExcepcionesPorEquipo > 0 &&
+                  categoria.edadMinimaExcepcion != null && (
+                    <div>
+                      Hasta {categoria.cupoExcepcionesPorEquipo} excepciones desde{' '}
+                      {categoria.edadMinimaExcepcion} años.
+                    </div>
+                  )}
+                {series.length > 0 && (
+                  <div>
+                    Series: {series.map((s) => s.nombre).join(', ')}
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+        ) : (
+          <Card variant="lime" padding="comfortable">
+            <CardLabel tone="mute">Sin categoría</CardLabel>
+            <div className="font-display text-lg text-green-deep tracking-display mb-2">
+              LIBRE
+            </div>
+            <p className="text-sm text-green-deep/85">
+              Este torneo no tiene categoría asignada — no se valida edad de jugadores.
+              Asignala desde la pestaña <span className="font-semibold">Configuración</span>.
+            </p>
+          </Card>
+        )}
+
+        <Card variant="lime" padding="comfortable">
+          <CardLabel tone="mute">Recordatorio</CardLabel>
+          <div className="font-display text-lg text-green-deep tracking-display mb-2">
+            MÍNIMO 2 EQUIPOS
+          </div>
+          <p className="text-sm text-green-deep/85">
+            Para generar el fixture necesitás al menos 2 equipos. Para una liga real,
+            recomendamos inscribir todos los equipos antes de generar el fixture — agregar
+            equipos después requiere regenerar.
+          </p>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -339,13 +420,39 @@ function ConfiguracionTab({
   torneoId,
   estado,
   fechasCount,
+  equiposCount,
+  categoriaId,
 }: {
   torneoId: string;
   estado: string;
   fechasCount: number;
+  equiposCount: number;
+  categoriaId: string | null;
 }): React.ReactElement {
   const mutation = useUpdateTorneo(torneoId);
   const error = mutation.error as ApiError | undefined;
+  const { data: categorias } = useCategorias();
+  const [seleccion, setSeleccion] = useState<string>(categoriaId ?? '');
+
+  // Mantener el select sincronizado si el torneo se recarga (ej. después
+  // de un save remoto). Sin esto, el dropdown muestra la selección vieja.
+  useEffect(() => {
+    setSeleccion(categoriaId ?? '');
+  }, [categoriaId]);
+
+  const cambioCategoria = seleccion !== (categoriaId ?? '');
+
+  const guardarCategoria = (): void => {
+    // Confirm si ya hay equipos inscritos — el backend les borra el
+    // serie_slug, vale la pena avisarle al admin antes.
+    if (cambioCategoria && equiposCount > 0) {
+      const ok = confirm(
+        `Hay ${equiposCount} equipo(s) inscriptos. Cambiar la categoría va a borrar la serie asignada a esos equipos (vas a tener que reasignarla manualmente).\n\n¿Continuar?`,
+      );
+      if (!ok) return;
+    }
+    mutation.mutate({ categoriaId: seleccion || null });
+  };
 
   const transitions: Record<string, { label: string; next: 'DRAFT' | 'ACTIVO' | 'CERRADO'; disabled?: string }> = {
     DRAFT: {
@@ -413,6 +520,42 @@ function ConfiguracionTab({
             <span className="font-display text-lg text-green-deep tracking-display">CERRADO</span>
             <span className="font-serif italic">Histórico. Datos congelados para consulta.</span>
           </div>
+        </div>
+      </Card>
+
+      <Card padding="roomy" className="lg:col-span-2">
+        <CardLabel>Categoría de jugadores</CardLabel>
+        <p className="text-sm text-ink-mute font-serif italic mt-2 mb-4">
+          La categoría define la edad mínima y las series disponibles. Si lo cambiás,
+          los equipos pierden su serie asignada (la tendrás que reasignar).
+        </p>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="flex-1 min-w-[280px]">
+            <select
+              className="input"
+              value={seleccion}
+              onChange={(e) => setSeleccion(e.target.value)}
+            >
+              <option value="">Sin categoría (libre)</option>
+              {categorias
+                ?.filter((c) => c.activa || c.id === categoriaId)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre} · mín. {c.edadMinimaGeneral} años
+                    {!c.activa ? ' (inactiva)' : ''}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <Button
+            variant="accent"
+            size="sm"
+            onClick={guardarCategoria}
+            disabled={!cambioCategoria}
+            loading={mutation.isPending}
+          >
+            <Check size={14} /> Guardar
+          </Button>
         </div>
       </Card>
     </div>

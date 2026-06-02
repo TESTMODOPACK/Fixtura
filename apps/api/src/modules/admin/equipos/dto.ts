@@ -27,4 +27,11 @@ export class CreateEquipoDto {
   @IsOptional()
   @IsUUID()
   delegadoUserId?: string | null;
+
+  // Sprint 25 paso 3 — serie del equipo dentro de la categoría del torneo.
+  @IsOptional()
+  @IsString()
+  @Length(2, 50)
+  @Matches(/^[a-z0-9-]+$/, { message: 'Slug solo admite minúsculas, números y guiones' })
+  serieSlug?: string | null;
 }

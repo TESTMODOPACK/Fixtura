@@ -191,6 +191,31 @@ async function main(): Promise<void> {
     // ligas con divisiones por edad (Senior, Super Senior, Dorados, etc.)
     // con cupo de excepciones configurable.
     await ensureCategoriasYSeriesTables(client, log);
+
+    // Sprint 25 Paso 3: vincular torneos a una categoría y equipos a una
+    // serie (slug embebido de la categoría del torneo). categoria_id en
+    // torneos para evitar referencias cruzadas raras desde equipos, y
+    // serie_slug en equipos porque cada equipo del torneo puede estar en
+    // una serie distinta (Primera/Segunda/Honor dentro de la misma cat.).
+    // FK ON DELETE SET NULL: si borran una categoría, los torneos
+    // referenciados quedan sin categoría (no se rompe el torneo en curso).
+    await client.query(`
+      ALTER TABLE torneos
+        ADD COLUMN IF NOT EXISTS categoria_id UUID
+          REFERENCES categorias_jugadores(id) ON DELETE SET NULL
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_torneos_categoria ON torneos(categoria_id)`,
+    );
+    await client.query(`
+      ALTER TABLE equipos
+        ADD COLUMN IF NOT EXISTS serie_slug VARCHAR(50)
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_equipos_torneo_serie ON equipos(torneo_id, serie_slug)`,
+    );
+    log('torneos.categoria_id + equipos.serie_slug asegurados (Sprint 25 paso 3).');
+
     await client.query(`
       ALTER TABLE tenants
         ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES planes_suscripcion(id) ON DELETE SET NULL,

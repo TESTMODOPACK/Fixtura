@@ -48,6 +48,10 @@ export const CreateTorneoSchema = z.object({
   fechaFin: z.iso.date().nullable().optional(),
   reglamentoUrl: z.url().nullable().optional(),
   tablaTiebreakers: z.array(z.string()).optional(),
+  // Sprint 25 paso 3 — categoría de jugadores (opcional, back-compat con
+  // torneos viejos). Si se setea, los equipos del torneo se validan
+  // contra su edad mínima general / cupo de excepciones.
+  categoriaId: z.uuid().nullable().optional(),
 });
 export type CreateTorneoRequest = z.infer<typeof CreateTorneoSchema>;
 
@@ -74,6 +78,12 @@ export const TorneoAdminSchema = z.object({
   reglamentoUrl: z.string().nullable(),
   equiposCount: z.number().int().min(0),
   fechasCount: z.number().int().min(0),
+  // Sprint 25 paso 3 — categoría asociada (nullable: torneos viejos sin
+  // categoría siguen funcionando). nombre y slug son cache para no tener
+  // que hacer un join en el listado.
+  categoriaId: z.uuid().nullable(),
+  categoriaNombre: z.string().nullable(),
+  categoriaSlug: z.string().nullable(),
   createdAt: z.iso.datetime(),
 });
 export type TorneoAdmin = z.infer<typeof TorneoAdminSchema>;
@@ -98,6 +108,16 @@ export const CreateEquipoSchema = z.object({
     .nullable()
     .optional(),
   delegadoUserId: z.uuid().nullable().optional(),
+  // Sprint 25 paso 3 — slug de la serie (Primera, Segunda…) dentro de
+  // la categoría del torneo. Solo aplica si el torneo tiene categoría.
+  // El backend valida que el slug exista en la categoría asociada.
+  serieSlug: z
+    .string()
+    .min(2)
+    .max(50)
+    .regex(/^[a-z0-9-]+$/)
+    .nullable()
+    .optional(),
 });
 export type CreateEquipoRequest = z.infer<typeof CreateEquipoSchema>;
 
@@ -112,6 +132,10 @@ export const EquipoAdminSchema = z.object({
   delegadoUserId: z.uuid().nullable(),
   estado: z.enum(['INSCRITO', 'ACTIVO', 'RETIRADO', 'SUSPENDIDO']),
   jugadoresCount: z.number().int().min(0),
+  // Sprint 25 paso 3 — serie del equipo dentro del torneo. nombre es
+  // cache (lookup en la categoría del torneo) para evitar fetch extra.
+  serieSlug: z.string().nullable(),
+  serieNombre: z.string().nullable(),
   createdAt: z.iso.datetime(),
 });
 export type EquipoAdmin = z.infer<typeof EquipoAdminSchema>;
