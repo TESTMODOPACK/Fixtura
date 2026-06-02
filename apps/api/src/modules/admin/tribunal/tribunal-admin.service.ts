@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import type { CreateSancionTribunalRequest, SancionAdmin } from '@fixtura/types';
 
 import { Fecha } from '../../competition/entities/fecha.entity';
+import { Jugador } from '../../competition/entities/jugador.entity';
 import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
@@ -25,6 +26,10 @@ export class TribunalAdminService {
     // Sprint 26H (ADR-0004) — para vetar de por vida en sanciones
     // permanentes del Tribunal. addFromTribunal es idempotente.
     private readonly vetadosService: VetadosAdminService,
+    // Sprint 26I — al vetar, marcar también como INACTIVO el registro
+    // del jugador en el plantel nuevo del club (si existe).
+    @InjectRepository(Jugador)
+    private readonly jugadorNuevoRepo: Repository<Jugador>,
   ) {}
 
   /**
@@ -95,6 +100,17 @@ export class TribunalAdminService {
         tenantId,
         jugador.rut,
         `Sanción permanente del Tribunal: ${input.descripcion}`,
+      );
+      // Sprint 26I — Además de vetar el RUT, marcamos como INACTIVO
+      // el registro del jugador en el plantel del club del modelo
+      // nuevo (si lo encuentra por RUT). Esto evita que admins
+      // distraídos sigan citándolo en futuros torneos del mismo club.
+      // En el modelo viejo (jugadores_inscritos) NO lo desactivamos
+      // porque no tiene campo de estado — el chequeo a futuro es via
+      // jugadores_vetados.rut.
+      await this.jugadorNuevoRepo.update(
+        { tenantId, rut: jugador.rut },
+        { estado: 'INACTIVO' },
       );
     }
 
