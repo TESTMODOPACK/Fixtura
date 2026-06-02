@@ -4,8 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { AlertTriangle, ArrowLeft, Plus, Save, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { useFieldArray, useForm } from 'react-hook-form';
+import { useEffect, useRef } from 'react';
+import { useFieldArray, useForm, type FieldErrors } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
@@ -92,10 +92,28 @@ function slugify(s: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+// Labels legibles para mostrar errores de validación al usuario.
+const FIELD_LABEL: Record<string, string> = {
+  nombre: 'Nombre',
+  slug: 'Slug',
+  escudoUrl: 'URL del escudo',
+  colorPrimario: 'Color primario',
+  colorSecundario: 'Color secundario',
+  paginaWeb: 'Página web',
+  resena: 'Reseña',
+  categoriaIds: 'Categorías',
+  presidenteNombre: 'Nombre del presidente',
+  presidenteEmail: 'Email del presidente',
+  presidenteTelefono: 'Teléfono del presidente',
+  delegados: 'Delegados',
+  historialManual: 'Historial',
+};
+
 export default function NuevoClubPage(): React.ReactElement {
   const router = useRouter();
   const { data: categorias, isLoading: loadingCats } = useCategorias();
   const createClub = useCreateClub();
+  const errorBannerRef = useRef<HTMLDivElement | null>(null);
 
   const form = useForm<ClubForm>({
     resolver: zodResolver(ClubFormSchema),
@@ -170,7 +188,59 @@ export default function NuevoClubPage(): React.ReactElement {
     router.push(`/admin/clubes/${club.id}`);
   };
 
+  // Cuando handleSubmit detecta errores de validación, llama a onError
+  // (en vez de onSubmit). Sin este handler, el botón "Crear club" parece
+  // que no hace nada cuando hay un email mal formado u otro campo
+  // inválido. Acá scrolleamos al banner para que el usuario vea qué falta.
+  const onError = (errors: FieldErrors<ClubForm>): void => {
+    // eslint-disable-next-line no-console
+    console.warn('[nuevo-club] validación falló:', errors);
+    if (errorBannerRef.current) {
+      errorBannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
   const apiError = createClub.error as ApiError | undefined;
+  // Aplanamos los errores de zod a una lista plana para el banner.
+  // delegados es un FieldArray — manejamos sus errores anidados aparte.
+  const formErrors = form.formState.errors;
+  const erroresParaMostrar: Array<{ label: string; mensaje: string }> = [];
+  for (const [campo, err] of Object.entries(formErrors)) {
+    if (campo === 'delegados') continue;
+    const errObj = err as { message?: string } | undefined;
+    if (errObj?.message) {
+      erroresParaMostrar.push({
+        label: FIELD_LABEL[campo] ?? campo,
+        mensaje: errObj.message,
+      });
+    }
+  }
+  // Errores anidados de delegados (cada delegado tiene nombre/email/telefono)
+  const delegadosErrors = formErrors.delegados as
+    | Array<{ nombre?: { message?: string }; email?: { message?: string }; telefono?: { message?: string } }>
+    | undefined;
+  if (Array.isArray(delegadosErrors)) {
+    delegadosErrors.forEach((dErr, i) => {
+      if (dErr?.nombre?.message) {
+        erroresParaMostrar.push({
+          label: `Delegado #${i + 1} · nombre`,
+          mensaje: dErr.nombre.message,
+        });
+      }
+      if (dErr?.email?.message) {
+        erroresParaMostrar.push({
+          label: `Delegado #${i + 1} · email`,
+          mensaje: dErr.email.message,
+        });
+      }
+      if (dErr?.telefono?.message) {
+        erroresParaMostrar.push({
+          label: `Delegado #${i + 1} · teléfono`,
+          mensaje: dErr.telefono.message,
+        });
+      }
+    });
+  }
 
   return (
     <>
@@ -186,18 +256,37 @@ export default function NuevoClubPage(): React.ReactElement {
         </Link>
       </PageHead>
 
-      {apiError && (
-        <div className="mb-5 bg-danger/10 border-2 border-danger/40 rounded-card px-4 py-3 flex items-start gap-2 text-danger">
-          <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <div className="font-semibold">No se pudo crear el club</div>
-            <div className="mt-1">{apiError.message}</div>
+      {/* Banner unificado: errores del cliente (zod) Y errores del backend (apiError) */}
+      {(erroresParaMostrar.length > 0 || apiError) && (
+        <div
+          ref={errorBannerRef}
+          className="mb-5 bg-danger/10 border-2 border-danger/40 rounded-card px-4 py-3"
+        >
+          <div className="flex items-start gap-2 text-danger">
+            <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
+            <div className="text-sm flex-1">
+              <div className="font-semibold">
+                {apiError
+                  ? 'No se pudo crear el club'
+                  : 'Revisá los campos marcados antes de crear el club:'}
+              </div>
+              {apiError && <div className="mt-1">{apiError.message}</div>}
+              {erroresParaMostrar.length > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {erroresParaMostrar.map((e, i) => (
+                    <li key={i}>
+                      <span className="font-semibold">{e.label}:</span> {e.mensaje}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       )}
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={form.handleSubmit(onSubmit, onError)}
         className="grid grid-cols-1 lg:grid-cols-3 gap-5"
       >
         {/* Bloque 1: identidad */}
