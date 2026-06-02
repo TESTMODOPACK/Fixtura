@@ -1465,3 +1465,57 @@ export function useIsSuperAdmin(): boolean {
   const { data } = useMe();
   return data?.roles.some((r) => r.role === 'SUPER_ADMIN') ?? false;
 }
+
+// ─── Sprint 25: Categorías de jugadores ─────────────────────────────
+import type {
+  CategoriaJugadores,
+  CreateCategoriaRequest,
+  UpdateCategoriaRequest,
+} from '@fixtura/types';
+
+export function useCategorias() {
+  return useQuery({
+    queryKey: ['admin', 'categorias'],
+    queryFn: () => apiFetch<CategoriaJugadores[]>('/admin/categorias'),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateCategoria() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateCategoriaRequest) =>
+      apiFetch<CategoriaJugadores>('/admin/categorias', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'categorias'] });
+    },
+  });
+}
+
+export function useUpdateCategoria(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateCategoriaRequest) =>
+      apiFetch<CategoriaJugadores>(`/admin/categorias/${id}`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'categorias'] });
+    },
+  });
+}
+
+export function useDeleteCategoria() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/categorias/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'categorias'] });
+    },
+  });
+}

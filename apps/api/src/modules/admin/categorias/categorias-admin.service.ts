@@ -77,8 +77,23 @@ export class CategoriasAdminService {
       activa: input.activa,
       series: this.normalizarSeries(input.series),
     });
-    const saved = await this.repo.save(c);
-    return this.toDto(saved);
+    try {
+      const saved = await this.repo.save(c);
+      return this.toDto(saved);
+    } catch (err) {
+      // Race condition: dos requests con mismo slug que pasaron el check
+      // anterior. El UNIQUE de DB las atrapa — devolvemos 409 limpio.
+      if (
+        err instanceof Error &&
+        (err.message.includes('uq_categoria_slug') ||
+          err.message.includes('duplicate key'))
+      ) {
+        throw new ConflictException(
+          `Ya existe una categoría con slug '${slug}'.`,
+        );
+      }
+      throw err;
+    }
   }
 
   async update(

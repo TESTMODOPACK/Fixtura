@@ -125,6 +125,7 @@ export const ValidarPlantelResultSchema = z.object({
   enExcepcion: z.number().int(),
   bloqueados: z.number().int(),
   sinFecha: z.number().int(),
+  totalJugadores: z.number().int(),
   cupoExcepcionesDisponibles: z.number().int(),
   cupoExcepcionesUsado: z.number().int(),
   apto: z.boolean(),

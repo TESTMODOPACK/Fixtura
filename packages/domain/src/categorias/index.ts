@@ -33,6 +33,7 @@ export interface PlantelValidacionResult {
   enExcepcion: number;
   bloqueados: number;
   sinFecha: number;
+  totalJugadores: number;
   cupoExcepcionesDisponibles: number;
   cupoExcepcionesUsado: number;
   apto: boolean;
@@ -45,17 +46,39 @@ export interface PlantelValidacionResult {
   }>;
 }
 
+export interface ValidarPlantelOpciones {
+  /** Año de referencia para edad calendaria. Default: año actual UTC. */
+  anioRef?: number;
+  /** Mínimo de jugadores requerido para que el plantel sea apto. Default 0 (sin chequeo). */
+  minimoJugadores?: number;
+}
+
 export function validarPlantelCategoria(
   jugadores: JugadorParaValidar[],
   regla: ReglaCategoria,
-  anioRef: number = new Date().getUTCFullYear(),
+  opciones: ValidarPlantelOpciones = {},
 ): PlantelValidacionResult {
+  const anioRef = opciones.anioRef ?? new Date().getUTCFullYear();
+  const minimoJugadores = opciones.minimoJugadores ?? 0;
+
+  // Sanitizamos la regla: si llegó cupo > 0 sin edadMinimaExcepcion (estado
+  // inconsistente que el service backend NO debería permitir, pero defensa
+  // en profundidad), tratamos cupo como 0 para no bloquear silencioso.
+  const reglaSegura: ReglaCategoria = {
+    edadMinimaGeneral: regla.edadMinimaGeneral,
+    cupoExcepcionesPorEquipo:
+      regla.cupoExcepcionesPorEquipo > 0 && regla.edadMinimaExcepcion == null
+        ? 0
+        : regla.cupoExcepcionesPorEquipo,
+    edadMinimaExcepcion: regla.edadMinimaExcepcion,
+  };
+
   // Piso absoluto: si hay cupo de excepciones, usar edadMinimaExcepcion
   // como piso. Si no hay cupo, el piso es la edad mínima general.
   const piso =
-    regla.cupoExcepcionesPorEquipo > 0 && regla.edadMinimaExcepcion != null
-      ? regla.edadMinimaExcepcion
-      : regla.edadMinimaGeneral;
+    reglaSegura.cupoExcepcionesPorEquipo > 0 && reglaSegura.edadMinimaExcepcion != null
+      ? reglaSegura.edadMinimaExcepcion
+      : reglaSegura.edadMinimaGeneral;
 
   const detalle: PlantelValidacionResult['detalle'] = [];
   let validos = 0;
@@ -73,10 +96,10 @@ export function validarPlantelCategoria(
       continue;
     }
 
-    if (edadCal >= regla.edadMinimaGeneral) {
+    if (edadCal >= reglaSegura.edadMinimaGeneral) {
       validos++;
       detalle.push({ jugadorId: j.id, estado: 'VALIDO', edadCalendario: edadCal });
-    } else if (edadCal >= piso && regla.cupoExcepcionesPorEquipo > 0) {
+    } else if (edadCal >= piso && reglaSegura.cupoExcepcionesPorEquipo > 0) {
       enExcepcion++;
       detalle.push({
         jugadorId: j.id,
@@ -106,9 +129,15 @@ export function validarPlantelCategoria(
       `${bloqueados} jugador(es) por debajo del piso de edad (${piso} años): ${bloqueadosNombres.slice(0, 3).join(', ')}${bloqueadosNombres.length > 3 ? '…' : ''}.`,
     );
   }
-  if (enExcepcion > regla.cupoExcepcionesPorEquipo) {
+  if (enExcepcion > reglaSegura.cupoExcepcionesPorEquipo) {
     motivosRechazo.push(
-      `Excede el cupo de excepciones (${enExcepcion} en uso, máximo ${regla.cupoExcepcionesPorEquipo}). Jugadores en excepción: ${enExcepcionNombres.join(', ')}.`,
+      `Excede el cupo de excepciones (${enExcepcion} en uso, máximo ${reglaSegura.cupoExcepcionesPorEquipo}). Jugadores en excepción: ${enExcepcionNombres.join(', ')}.`,
+    );
+  }
+  const totalJugadores = jugadores.length;
+  if (minimoJugadores > 0 && totalJugadores < minimoJugadores) {
+    motivosRechazo.push(
+      `El equipo tiene ${totalJugadores} jugador(es) inscriptos. Se requieren al menos ${minimoJugadores}.`,
     );
   }
 
@@ -117,12 +146,14 @@ export function validarPlantelCategoria(
     enExcepcion,
     bloqueados,
     sinFecha,
-    cupoExcepcionesDisponibles: regla.cupoExcepcionesPorEquipo,
+    totalJugadores,
+    cupoExcepcionesDisponibles: reglaSegura.cupoExcepcionesPorEquipo,
     cupoExcepcionesUsado: enExcepcion,
     apto:
       bloqueados === 0 &&
       sinFecha === 0 &&
-      enExcepcion <= regla.cupoExcepcionesPorEquipo,
+      enExcepcion <= reglaSegura.cupoExcepcionesPorEquipo &&
+      totalJugadores >= minimoJugadores,
     motivosRechazo,
     detalle,
   };
