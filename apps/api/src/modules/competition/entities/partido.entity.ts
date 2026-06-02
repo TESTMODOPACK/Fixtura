@@ -15,6 +15,7 @@ import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Cancha } from './cancha.entity';
 import { Equipo } from './equipo.entity';
 import { Fecha } from './fecha.entity';
+import { InscripcionTorneo } from './inscripcion-torneo.entity';
 
 export type EstadoPartido =
   | 'PROGRAMADO'
@@ -67,6 +68,24 @@ export class Partido {
   @ManyToOne(() => Equipo, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'equipo_visita_id' })
   equipoVisita?: Equipo;
+
+  // Sprint 26G.1 (ADR-0004) — referencias paralelas al modelo nuevo.
+  // Pobladas por backfill (migrate-clubes) y por el shim (Sprint 26G.2).
+  // El código de lectura sigue usando equipo_*_id hasta el refactor
+  // incremental del Sprint 26G.3.
+  @Column({ name: 'inscripcion_local_id', type: 'uuid', nullable: true })
+  inscripcionLocalId!: string | null;
+
+  @ManyToOne(() => InscripcionTorneo, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'inscripcion_local_id' })
+  inscripcionLocal?: InscripcionTorneo | null;
+
+  @Column({ name: 'inscripcion_visita_id', type: 'uuid', nullable: true })
+  inscripcionVisitaId!: string | null;
+
+  @ManyToOne(() => InscripcionTorneo, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'inscripcion_visita_id' })
+  inscripcionVisita?: InscripcionTorneo | null;
 
   @Column({ name: 'cancha_id', type: 'uuid', nullable: true })
   canchaId!: string | null;

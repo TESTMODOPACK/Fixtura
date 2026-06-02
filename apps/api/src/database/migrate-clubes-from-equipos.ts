@@ -44,6 +44,10 @@ interface ResumenTenant {
   jugadoresSaltadosEnOtroClub: Array<{ rut: string; clubExistente: string }>;
   jugadoresSaltadosEnOtraCategoria: Array<{ rut: string }>;
   equiposSaltadosSinCategoria: Array<{ equipoNombre: string; torneoNombre: string }>;
+  // Sprint 26G.1 — backfill de columnas paralelas
+  partidosBackfilleados: number;
+  incidenciasBackfilleadas: number;
+  cobrosBackfilleados: number;
 }
 
 function limpiarRut(rut: string): string {
@@ -164,7 +168,15 @@ async function migrarTenant(
     jugadoresSaltadosEnOtroClub: [],
     jugadoresSaltadosEnOtraCategoria: [],
     equiposSaltadosSinCategoria: [],
+    partidosBackfilleados: 0,
+    incidenciasBackfilleadas: 0,
+    cobrosBackfilleados: 0,
   };
+
+  // Mapa equipo_id (viejo) → inscripcion_id (nueva), poblado a medida
+  // que se procesa cada equipo. Lo usamos al final para backfillear
+  // partidos, incidencias y cobros (Sprint 26G.1).
+  const equipoToInscripcion = new Map<string, string>();
 
   // Traer equipos del tenant con torneo y categoría (puede ser null)
   const equipos = await client.query<{
@@ -272,6 +284,8 @@ async function migrarTenant(
       inscripcionId = inscCreated.rows[0]!.id;
       resumen.inscripcionesCreadas++;
     }
+    // Anotar mapeo equipo viejo → inscripción nueva (Sprint 26G.1 backfill)
+    equipoToInscripcion.set(e.equipo_id, inscripcionId);
 
     // 4. Migrar jugadores del equipo viejo → jugador global + planilla
     const jugadoresInscritos = await client.query<{
@@ -370,12 +384,77 @@ async function migrarTenant(
     }
   }
 
+  // Sprint 26G.1 — backfill de columnas paralelas en partidos,
+  // incidencias_partido y cobros. Usamos el mapa equipoToInscripcion
+  // armado arriba. Solo actualizamos filas donde inscripcion_*_id es
+  // NULL (idempotente: re-ejecutar no toca filas ya backfilleadas).
+  if (equipoToInscripcion.size > 0) {
+    const equipoIds = Array.from(equipoToInscripcion.keys());
+
+    // Construir CASE WHEN para mapear en una sola UPDATE por columna.
+    // Postgres no tiene VALUES tan natural en UPDATE — usamos
+    // FROM (VALUES ...) en una subconsulta.
+    const valuesSql = equipoIds
+      .map((_, i) => `($${i * 2 + 1}::uuid, $${i * 2 + 2}::uuid)`)
+      .join(', ');
+    const params: string[] = [];
+    for (const id of equipoIds) {
+      params.push(id, equipoToInscripcion.get(id)!);
+    }
+
+    // Partidos: backfill inscripcion_local_id e inscripcion_visita_id
+    const partidosLocal = await client.query(
+      `UPDATE partidos p SET inscripcion_local_id = m.insc_id
+       FROM (VALUES ${valuesSql}) AS m(eq_id, insc_id)
+       WHERE p.equipo_local_id = m.eq_id
+         AND p.tenant_id = $${params.length + 1}
+         AND p.inscripcion_local_id IS NULL`,
+      [...params, tenantId],
+    );
+    resumen.partidosBackfilleados += partidosLocal.rowCount ?? 0;
+
+    const partidosVisita = await client.query(
+      `UPDATE partidos p SET inscripcion_visita_id = m.insc_id
+       FROM (VALUES ${valuesSql}) AS m(eq_id, insc_id)
+       WHERE p.equipo_visita_id = m.eq_id
+         AND p.tenant_id = $${params.length + 1}
+         AND p.inscripcion_visita_id IS NULL`,
+      [...params, tenantId],
+    );
+    resumen.partidosBackfilleados += partidosVisita.rowCount ?? 0;
+
+    // Incidencias
+    const incidencias = await client.query(
+      `UPDATE incidencias_partido i SET inscripcion_id = m.insc_id
+       FROM (VALUES ${valuesSql}) AS m(eq_id, insc_id)
+       WHERE i.equipo_id = m.eq_id
+         AND i.tenant_id = $${params.length + 1}
+         AND i.inscripcion_id IS NULL`,
+      [...params, tenantId],
+    );
+    resumen.incidenciasBackfilleadas = incidencias.rowCount ?? 0;
+
+    // Cobros (equipo_id puede ser NULL — solo updateamos los que tienen)
+    const cobros = await client.query(
+      `UPDATE cobros c SET inscripcion_id = m.insc_id
+       FROM (VALUES ${valuesSql}) AS m(eq_id, insc_id)
+       WHERE c.equipo_id = m.eq_id
+         AND c.tenant_id = $${params.length + 1}
+         AND c.inscripcion_id IS NULL`,
+      [...params, tenantId],
+    );
+    resumen.cobrosBackfilleados = cobros.rowCount ?? 0;
+  }
+
   log(
     `  ✓ ${resumen.clubesCreados} clubes nuevos, ` +
       `${resumen.clubesReutilizados} reutilizados; ` +
       `${resumen.inscripcionesCreadas} inscripciones; ` +
       `${resumen.jugadoresCreados} jugadores; ` +
-      `${resumen.jugadoresEnPlanilla} en planilla.`,
+      `${resumen.jugadoresEnPlanilla} en planilla; ` +
+      `${resumen.partidosBackfilleados} partidos backfilleados; ` +
+      `${resumen.incidenciasBackfilleadas} incidencias backfilleadas; ` +
+      `${resumen.cobrosBackfilleados} cobros backfilleados.`,
   );
 
   return resumen;

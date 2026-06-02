@@ -243,6 +243,50 @@ async function main(): Promise<void> {
     `);
     log('torneos.categorias_series + tope_jugadores + refuerzos asegurados (Sprint 26D).');
 
+    // Sprint 26G.1 (ADR-0004) — columnas paralelas inscripcion_*_id en
+    // tablas que históricamente referencian equipo_id. Aditivas y NULLABLE:
+    // el modelo viejo sigue siendo source-of-truth y el nuevo se popula
+    // primero por backfill (migrate-clubes-from-equipos) y después por
+    // el shim de coexistencia (Sprint 26G.2). El refactor incremental
+    // que cambia el código de lectura es Sprint 26G.3.
+    //
+    // ON DELETE SET NULL: si una inscripción se borra (por error o por
+    // limpieza), preservamos los registros históricos (partidos jugados,
+    // incidencias, cobros). El equipo_id viejo sigue siendo la referencia
+    // funcional. El refactor 26G.3 hará el switch.
+    await client.query(`
+      ALTER TABLE partidos
+        ADD COLUMN IF NOT EXISTS inscripcion_local_id UUID
+          REFERENCES inscripciones_torneo(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS inscripcion_visita_id UUID
+          REFERENCES inscripciones_torneo(id) ON DELETE SET NULL
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_partidos_insc_local ON partidos(inscripcion_local_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_partidos_insc_visita ON partidos(inscripcion_visita_id)`,
+    );
+    await client.query(`
+      ALTER TABLE incidencias_partido
+        ADD COLUMN IF NOT EXISTS inscripcion_id UUID
+          REFERENCES inscripciones_torneo(id) ON DELETE SET NULL
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_incidencias_inscripcion ON incidencias_partido(inscripcion_id)`,
+    );
+    await client.query(`
+      ALTER TABLE cobros
+        ADD COLUMN IF NOT EXISTS inscripcion_id UUID
+          REFERENCES inscripciones_torneo(id) ON DELETE SET NULL
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_cobros_inscripcion ON cobros(inscripcion_id)`,
+    );
+    log(
+      'partidos + incidencias_partido + cobros.inscripcion_*_id asegurados (Sprint 26G.1).',
+    );
+
     await client.query(`
       ALTER TABLE tenants
         ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES planes_suscripcion(id) ON DELETE SET NULL,

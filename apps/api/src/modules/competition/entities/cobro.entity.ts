@@ -11,6 +11,7 @@ import {
 
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Equipo } from './equipo.entity';
+import { InscripcionTorneo } from './inscripcion-torneo.entity';
 
 export type CategoriaCobro =
   | 'INSCRIPCION'
@@ -48,6 +49,15 @@ export class Cobro {
   @ManyToOne(() => Equipo, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'equipo_id' })
   equipo?: Equipo | null;
+
+  // Sprint 26G.1 (ADR-0004) — referencia paralela al modelo nuevo.
+  // Poblada por backfill (migrate-clubes) y shim (Sprint 26G.2).
+  @Column({ name: 'inscripcion_id', type: 'uuid', nullable: true })
+  inscripcionId!: string | null;
+
+  @ManyToOne(() => InscripcionTorneo, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'inscripcion_id' })
+  inscripcion?: InscripcionTorneo | null;
 
   @Column({ type: 'varchar', length: 200 })
   concepto!: string;
