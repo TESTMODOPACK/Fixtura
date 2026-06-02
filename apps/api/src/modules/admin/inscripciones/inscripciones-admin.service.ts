@@ -12,10 +12,13 @@ import type {
   InscripcionTorneo as InscripcionDto,
 } from '@fixtura/types';
 
+import { CategoriaJugadores } from '../../competition/entities/categoria-jugadores.entity';
 import { ClubCategoria } from '../../competition/entities/club-categoria.entity';
 import { Club } from '../../competition/entities/club.entity';
+import { Equipo } from '../../competition/entities/equipo.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Jugador } from '../../competition/entities/jugador.entity';
+import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
 import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 
@@ -47,7 +50,76 @@ export class InscripcionesAdminService {
     private readonly planillaRepo: Repository<PlanillaTorneo>,
     @InjectRepository(Jugador)
     private readonly jugadorRepo: Repository<Jugador>,
+    @InjectRepository(CategoriaJugadores)
+    private readonly categoriaRepo: Repository<CategoriaJugadores>,
+    // ── Shim de coexistencia (Sprint 26G.2) ──────────────────────
+    // Estos dos repos del modelo viejo se usan SÓLO para mantener
+    // sincronizado el "equipo sombra" + sus jugadores_inscritos. No
+    // se exponen en endpoints — son detalle de implementación del
+    // shim que permite que fixture/actas/sanciones sigan funcionando.
+    @InjectRepository(Equipo)
+    private readonly equipoRepo: Repository<Equipo>,
+    @InjectRepository(JugadorInscrito)
+    private readonly jugadorInscritoRepo: Repository<JugadorInscrito>,
   ) {}
+
+  /**
+   * Sprint 26G.2 — Asegura el "equipo sombra" del modelo viejo que
+   * corresponde a esta inscripción. Si ya existe, devuelve el ID.
+   * Si no, lo crea con datos copiados del club + categoría.
+   */
+  private async ensureEquipoSombra(
+    insc: InscripcionTorneo,
+    club: Club,
+    tenantId: string,
+  ): Promise<string> {
+    if (insc.equipoSombraId) return insc.equipoSombraId;
+
+    // Slug del equipo sombra: <club.slug>-<categoria.slug> para evitar
+    // colisión cuando un mismo club se inscribe a dos categorías del
+    // mismo torneo (UNIQUE de equipos es torneo_id + slug).
+    const cat = await this.categoriaRepo.findOne({
+      where: { id: insc.categoriaId, tenantId },
+    });
+    const catSlug = cat?.slug ?? insc.categoriaId.slice(0, 8);
+    let slugBase = `${club.slug}-${catSlug}`;
+    // En el remoto caso que ya exista por una migración previa, agregamos
+    // sufijo aleatorio. Es un fallback raro; en flujo limpio nunca pasa.
+    let slug = slugBase;
+    let attempt = 1;
+    while (
+      await this.equipoRepo.findOne({
+        where: { torneoId: insc.torneoId, slug },
+      })
+    ) {
+      attempt++;
+      if (attempt > 5) {
+        slug = `${slugBase}-${Math.random().toString(36).slice(2, 6)}`;
+        break;
+      }
+      slug = `${slugBase}-${attempt}`;
+    }
+
+    const equipo = this.equipoRepo.create({
+      tenantId,
+      torneoId: insc.torneoId,
+      nombre: club.nombre,
+      slug,
+      escudoUrl: club.escudoUrl,
+      colorPrimario: club.colorPrimario,
+      colorSecundario: club.colorSecundario,
+      delegadoUserId: null,
+      estado: 'INSCRITO',
+      serieSlug: insc.serieSlug,
+    });
+    const saved = await this.equipoRepo.save(equipo);
+
+    // Anotar en la inscripción
+    insc.equipoSombraId = saved.id;
+    await this.inscRepo.save(insc);
+
+    return saved.id;
+  }
 
   /**
    * Lista las inscripciones de un torneo con datos del club + categoría
@@ -171,9 +243,9 @@ export class InscripcionesAdminService {
       estado: 'INSCRITO',
     });
 
+    let saved: InscripcionTorneo;
     try {
-      const saved = await this.inscRepo.save(insc);
-      return this.findOne(saved.id, tenantId);
+      saved = await this.inscRepo.save(insc);
     } catch (err) {
       // UNIQUE (torneo, club, categoria) — race con otro admin.
       if (
@@ -188,6 +260,12 @@ export class InscripcionesAdminService {
       }
       throw err;
     }
+
+    // Sprint 26G.2 — Shim: crear equipo sombra en el modelo viejo para
+    // que fixture/actas/sanciones puedan operar sobre el equipo "real".
+    await this.ensureEquipoSombra(saved, club, tenantId);
+
+    return this.findOne(saved.id, tenantId);
   }
 
   async desinscribir(id: string, tenantId: string): Promise<void> {
@@ -203,9 +281,26 @@ export class InscripcionesAdminService {
       );
     }
 
+    const equipoSombraId = insc.equipoSombraId;
+
     const r = await this.inscRepo.delete({ id, tenantId });
     if (r.affected === 0) {
       throw new NotFoundException(`Inscripción ${id} no encontrada.`);
+    }
+
+    // Sprint 26G.2 — Shim: si el equipo sombra no tiene partidos
+    // jugados todavía (estamos en DRAFT, recién validado arriba), lo
+    // borramos. Esto cascade a sus jugadores_inscritos.
+    // Si tuviera partidos, la FK del partido lo bloquearía — en ese
+    // caso lo dejamos como histórico.
+    if (equipoSombraId) {
+      try {
+        await this.equipoRepo.delete({ id: equipoSombraId, tenantId });
+      } catch {
+        // Si falla por FK (partidos existentes), lo dejamos. Sigue
+        // funcionando porque inscripcion_*_id en partido también
+        // quedó NULL por ON DELETE SET NULL.
+      }
     }
   }
 
@@ -328,6 +423,23 @@ export class InscripcionesAdminService {
         inscripcionId,
         jugadorId,
       });
+      // Sprint 26G.2 — Shim: replicar el jugador al jugadores_inscritos
+      // del equipo sombra para que actas/sanciones lo vean.
+      const club = await this.clubRepo.findOne({
+        where: { id: insc.clubId, tenantId },
+      });
+      if (club) {
+        const equipoSombraId = await this.ensureEquipoSombra(
+          insc,
+          club,
+          tenantId,
+        );
+        await this.sincronizarJugadorAModeloViejo(
+          tenantId,
+          equipoSombraId,
+          jugador,
+        );
+      }
     } catch (err) {
       // UNIQUE (inscripcion_id, jugador_id) — ya estaba en la planilla.
       if (
@@ -348,7 +460,14 @@ export class InscripcionesAdminService {
     tenantId: string,
     jugadorId: string,
   ): Promise<void> {
-    await this.ensureInscripcion(inscripcionId, tenantId);
+    const insc = await this.ensureInscripcion(inscripcionId, tenantId);
+
+    // Antes de borrar, buscar el jugador (necesitamos el RUT para el
+    // shim) y el equipo sombra para limpiar el modelo viejo.
+    const jugador = await this.jugadorRepo.findOne({
+      where: { id: jugadorId, tenantId },
+    });
+
     const r = await this.planillaRepo.delete({
       inscripcionId,
       jugadorId,
@@ -358,6 +477,15 @@ export class InscripcionesAdminService {
       throw new NotFoundException(
         `Jugador ${jugadorId} no está en la planilla.`,
       );
+    }
+
+    // Sprint 26G.2 — Shim: borrar el jugador_inscrito del equipo sombra.
+    if (insc.equipoSombraId && jugador) {
+      await this.jugadorInscritoRepo.delete({
+        equipoId: insc.equipoSombraId,
+        tenantId,
+        rut: jugador.rut,
+      });
     }
   }
 
@@ -400,6 +528,52 @@ export class InscripcionesAdminService {
       qb.andWhere('i.serie_slug = :serieSlug', { serieSlug });
     }
     return qb.getCount();
+  }
+
+  /**
+   * Sprint 26G.2 — Replica el jugador del modelo nuevo (jugadores)
+   * a un jugadores_inscritos del modelo viejo dentro del equipo
+   * sombra. Idempotente: si ya existe el RUT en ese equipo, actualiza
+   * los datos para que se mantengan en sync.
+   *
+   * El modelo viejo usa RUT (tenant_id, rut, torneo_id) como key
+   * lógica para sanciones — por eso la sincronización pasa por RUT.
+   */
+  private async sincronizarJugadorAModeloViejo(
+    tenantId: string,
+    equipoId: string,
+    jugadorNuevo: Jugador,
+  ): Promise<void> {
+    const existente = await this.jugadorInscritoRepo.findOne({
+      where: { tenantId, equipoId, rut: jugadorNuevo.rut },
+    });
+    if (existente) {
+      // Actualizar datos por si cambió algo en el modelo nuevo
+      existente.nombre = jugadorNuevo.nombres;
+      existente.apellido = jugadorNuevo.apellidos;
+      existente.fechaNac = jugadorNuevo.fechaNac;
+      existente.numeroCamiseta = jugadorNuevo.numeroCamiseta;
+      existente.posicion = jugadorNuevo.posicion;
+      existente.pieHabil = jugadorNuevo.pieHabil;
+      existente.apodo = jugadorNuevo.apodo;
+      existente.capitan = jugadorNuevo.capitan;
+      await this.jugadorInscritoRepo.save(existente);
+      return;
+    }
+    const inscrito = this.jugadorInscritoRepo.create({
+      tenantId,
+      equipoId,
+      nombre: jugadorNuevo.nombres,
+      apellido: jugadorNuevo.apellidos,
+      apodo: jugadorNuevo.apodo,
+      rut: jugadorNuevo.rut,
+      numeroCamiseta: jugadorNuevo.numeroCamiseta,
+      posicion: jugadorNuevo.posicion,
+      pieHabil: jugadorNuevo.pieHabil,
+      fechaNac: jugadorNuevo.fechaNac,
+      capitan: jugadorNuevo.capitan,
+    });
+    await this.jugadorInscritoRepo.save(inscrito);
   }
 
   private toDto(i: InscripcionTorneo, jugadoresEnPlanilla: number): InscripcionDto {

@@ -287,6 +287,22 @@ async function main(): Promise<void> {
       'partidos + incidencias_partido + cobros.inscripcion_*_id asegurados (Sprint 26G.1).',
     );
 
+    // Sprint 26G.2 (ADR-0004) — Shim de coexistencia. La inscripción
+    // del modelo nuevo guarda referencia al "equipo sombra" del modelo
+    // viejo. Cuando se inscribe un club via el modelo nuevo, se crea
+    // automáticamente un `equipo` que el fixture/actas/sanciones siguen
+    // usando. Esto permite que el modelo nuevo sea usable end-to-end
+    // SIN refactorear toda la cadena de servicios viejos.
+    await client.query(`
+      ALTER TABLE inscripciones_torneo
+        ADD COLUMN IF NOT EXISTS equipo_sombra_id UUID
+          REFERENCES equipos(id) ON DELETE SET NULL
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_inscripciones_equipo_sombra ON inscripciones_torneo(equipo_sombra_id)`,
+    );
+    log('inscripciones_torneo.equipo_sombra_id asegurada (Sprint 26G.2 shim).');
+
     await client.query(`
       ALTER TABLE tenants
         ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES planes_suscripcion(id) ON DELETE SET NULL,
