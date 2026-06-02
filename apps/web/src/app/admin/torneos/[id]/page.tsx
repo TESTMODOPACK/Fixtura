@@ -2,7 +2,6 @@
 
 import {
   ArrowLeft,
-  ArrowRight,
   CalendarRange,
   Check,
   type LucideIcon,
@@ -11,7 +10,8 @@ import {
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
@@ -83,9 +83,22 @@ export default function TorneoDetailPage({
           <TabButton active={tab === 'equipos'} onClick={() => setTab('equipos')}>
             Equipos <span className="text-ink-mute">({torneo.equiposCount})</span>
           </TabButton>
-          <TabButton active={tab === 'fixture'} onClick={() => setTab('fixture')}>
-            Fixture <span className="text-ink-mute">({torneo.fechasCount})</span>
-          </TabButton>
+          {/* Si el torneo ya tiene fixture generado, el tab navega DIRECTO
+              al detalle (sin pasar por una card intermedia con un botón
+              "Ver detalle"). Si todavía no hay fixture, queda como tab
+              interno que muestra el botón de generación. */}
+          {torneo.fechasCount > 0 ? (
+            <Link
+              href={`/admin/torneos/${id}/fixture`}
+              className="px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold transition-colors border-b-2 -mb-px border-transparent text-ink-mute hover:text-ink"
+            >
+              Fixture <span className="text-ink-mute">({torneo.fechasCount})</span> →
+            </Link>
+          ) : (
+            <TabButton active={tab === 'fixture'} onClick={() => setTab('fixture')}>
+              Fixture <span className="text-ink-mute">({torneo.fechasCount})</span>
+            </TabButton>
+          )}
           <TabButton active={tab === 'configuracion'} onClick={() => setTab('configuracion')}>
             Configuración
           </TabButton>
@@ -272,26 +285,22 @@ function FixtureTab({
   hasFechas: boolean;
   hasEquipos: boolean;
 }): React.ReactElement {
+  const router = useRouter();
+
+  // Si el torneo YA tiene fixture, redirigimos directo al detalle.
+  // Evita la card intermedia "FIXTURE ACTIVO + Ver detalle" que era ruido
+  // (el header del tab ya navega derecho, esto es defensivo si llegan acá
+  // por deeplink o por estado interno preservado).
+  useEffect(() => {
+    if (hasFechas) {
+      router.replace(`/admin/torneos/${torneoId}/fixture`);
+    }
+  }, [hasFechas, router, torneoId]);
+
   if (hasFechas) {
     return (
       <Card padding="roomy">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <CardLabel>Fixture generado</CardLabel>
-            <div className="font-display text-2xl text-green-deep tracking-display">
-              FIXTURE ACTIVO
-            </div>
-          </div>
-          <Link href={`/admin/torneos/${torneoId}/fixture`}>
-            <Button variant="accent" size="sm">
-              Ver detalle <ArrowRight size={14} />
-            </Button>
-          </Link>
-        </div>
-        <p className="font-serif italic text-ink-mute">
-          El fixture está generado. Entrá al detalle para editar partidos, cargar actas y ver
-          incidencias por fecha.
-        </p>
+        <p className="font-serif italic text-ink-mute text-center">Abriendo el fixture…</p>
       </Card>
     );
   }
