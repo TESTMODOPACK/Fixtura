@@ -45,13 +45,12 @@ const JugadorFormSchema = z.object({
       if (d.getUTCFullYear() < 1900) return false;
       return true;
     }, 'Fecha inválida (debe ser pasada y posterior a 1900).'),
-  email: z
-    .string()
-    .optional()
-    .refine(
-      (v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
-      'Email inválido',
-    ),
+  // Email opcional: si hay texto, debe ser email válido. preprocess
+  // convierte "" a undefined antes de validar.
+  email: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.email('Email inválido — usá formato nombre@dominio.com').max(150).optional(),
+  ),
   telefono: z.string().max(50).optional(),
   numeroCamiseta: z
     .union([z.coerce.number().int().min(0).max(99), z.literal('')])

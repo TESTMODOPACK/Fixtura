@@ -28,13 +28,20 @@ import { ApiError } from '@/lib/api';
  * el admin no tiene a mano al momento de crear el club por primera vez.
  */
 
+/**
+ * Email opcional: si no hay texto (vacío o solo espacios) se envía como
+ * undefined, si hay texto debe ser un email válido. El preprocess
+ * normaliza el "" a undefined antes de validar, lo cual evita el
+ * comportamiento de "vacío pasa pero pepe@ también".
+ */
+const optionalEmail = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+  z.email('Email inválido — usá formato nombre@dominio.com').max(150).optional(),
+);
+
 const ContactoSchema = z.object({
   nombre: z.string().min(2, 'Mínimo 2 caracteres').max(150),
-  email: z
-    .string()
-    .max(150)
-    .optional()
-    .refine((v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Email inválido'),
+  email: optionalEmail,
   telefono: z.string().max(50).optional(),
 });
 
@@ -70,11 +77,7 @@ const ClubFormSchema = z.object({
   resena: z.string().max(2000).optional(),
   categoriaIds: z.array(z.string().uuid()).min(1, 'Elegí al menos una categoría'),
   presidenteNombre: z.string().max(150).optional(),
-  presidenteEmail: z
-    .string()
-    .max(150)
-    .optional()
-    .refine((v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Email inválido'),
+  presidenteEmail: optionalEmail,
   presidenteTelefono: z.string().max(50).optional(),
   delegados: z.array(ContactoSchema),
 });
