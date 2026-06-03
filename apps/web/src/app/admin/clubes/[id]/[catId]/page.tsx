@@ -7,6 +7,7 @@ import {
   Mail,
   Pencil,
   Phone,
+  Plus,
   Shield,
   Trash2,
   User,
@@ -129,22 +130,37 @@ export default function ClubCategoriaPage({
         </Link>
       </PageHead>
 
-      {/* Otras categorías del mismo club (tabs de navegación) */}
-      {otrasCategorias.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
-          <span className="text-ink-mute">Otras categorías de {club.nombre}:</span>
-          {otrasCategorias.map((d) => (
-            <Link
-              key={d.categoriaId}
-              href={`/admin/clubes/${id}/${d.categoriaId}`}
-              className="px-3 py-1 rounded-full border border-line bg-paper hover:border-green-deep hover:text-green-deep font-semibold transition-colors"
-            >
-              {d.categoriaNombre}{' '}
-              <span className="font-mono opacity-60">({d.jugadoresCount})</span>
-            </Link>
-          ))}
-        </div>
-      )}
+      {/* Otras categorías del mismo club (tabs de navegación + pista para agregar) */}
+      <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
+        {otrasCategorias.length > 0 && (
+          <>
+            <span className="text-ink-mute">Otras categorías de {club.nombre}:</span>
+            {otrasCategorias.map((d) => (
+              <Link
+                key={d.categoriaId}
+                href={`/admin/clubes/${id}/${d.categoriaId}`}
+                className="px-3 py-1 rounded-full border border-line bg-paper hover:border-green-deep hover:text-green-deep font-semibold transition-colors"
+              >
+                {d.categoriaNombre}{' '}
+                <span className="font-mono opacity-60">({d.jugadoresCount})</span>
+              </Link>
+            ))}
+          </>
+        )}
+        {otrasCategorias.length === 0 && (
+          <span className="text-ink-mute italic">
+            Este club solo participa en {detalle.categoriaNombre}.
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setEditarOpen(true)}
+          className="px-3 py-1 rounded-full border border-dashed border-green-deep/40 text-green-deep hover:bg-green-deep/5 hover:border-green-deep font-semibold transition-colors flex items-center gap-1"
+          title="Abre el editor de datos del club, donde se asignan/quitan categorías"
+        >
+          <Plus size={12} /> Agregar otra categoría
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
         {/* Identidad transversal (read-only acá) */}
@@ -155,9 +171,9 @@ export default function ClubCategoriaPage({
               variant="ghost"
               size="sm"
               onClick={() => setEditarOpen(true)}
-              title="Modificar nombre, escudo, colores o página web (afecta a todas las categorías)"
+              title="Modificar nombre, escudo, colores, página web y categorías asignadas. Afecta a todas las categorías del club."
             >
-              <Pencil size={12} /> Editar datos del club
+              <Pencil size={12} /> Editar club / categorías
             </Button>
           </div>
 
@@ -200,8 +216,16 @@ export default function ClubCategoriaPage({
             </div>
           </div>
 
-          <div className="text-[10px] text-ink-mute font-serif italic mt-3 pt-3 border-t border-line">
-            Estos datos son compartidos por todas las categorías del club.
+          <div className="text-[11px] text-ink-mute font-serif italic mt-3 pt-3 border-t border-line">
+            Estos datos son compartidos por todas las categorías del club.{' '}
+            <button
+              type="button"
+              onClick={() => setEditarOpen(true)}
+              className="text-accent hover:underline font-semibold not-italic"
+            >
+              Editar club / categorías
+            </button>{' '}
+            para modificarlos o asignar nuevas categorías a este club.
           </div>
         </Card>
 
