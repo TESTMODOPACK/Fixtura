@@ -275,7 +275,7 @@ export class PlantelImportService {
         const nuevoEmail = raw.email?.trim() || null;
         const nuevoTel = raw.telefono?.trim() || null;
         const nuevoNum = this.parseNumeroCamiseta(raw.numeroCamiseta);
-        const nuevaPos = (raw.posicion as string | null)?.trim() || null;
+        const nuevaPos = this.parsePosicion(raw.posicion);
         const nuevoCap = this.parseBoolean(raw.capitan);
 
         if (existente.estado === 'INACTIVO') cambios.push('reactivar (estaba inactivo)');
@@ -405,7 +405,7 @@ export class PlantelImportService {
               email: raw.email?.trim() || null,
               telefono: raw.telefono?.trim() || null,
               numeroCamiseta: this.parseNumeroCamiseta(raw.numeroCamiseta),
-              posicion: (raw.posicion as Jugador['posicion']) ?? null,
+              posicion: this.parsePosicion(raw.posicion),
               pieHabil: null,
               apodo: null,
               capitan: this.parseBoolean(raw.capitan),
@@ -489,7 +489,7 @@ export class PlantelImportService {
         email: raw.email?.trim() || null,
         telefono: raw.telefono?.trim() || null,
         numeroCamiseta: this.parseNumeroCamiseta(raw.numeroCamiseta),
-        posicion: (raw.posicion as Jugador['posicion']) ?? null,
+        posicion: this.parsePosicion(raw.posicion),
         capitan: this.parseBoolean(raw.capitan),
         // Reactivar: si el jugador estaba INACTIVO y vuelve a venir en el
         // archivo, queda ACTIVO. Es lo que el admin espera al reimportar.
@@ -503,6 +503,27 @@ export class PlantelImportService {
     const n = typeof v === 'number' ? v : Number(String(v).trim());
     if (!Number.isFinite(n) || n < 0 || n > 99) return null;
     return Math.trunc(n);
+  }
+
+  /**
+   * La posición es informativa y opcional. Si el Excel trae algo que
+   * no coincide con el enum (ej. "VOLANTE", "Mediocampista", "9"), se
+   * persiste como null en vez de tumbar el INSERT con el CHECK
+   * constraint de la tabla `jugadores`. El operador puede corregirla
+   * a mano después si quiere.
+   */
+  private parsePosicion(v: unknown): Jugador['posicion'] {
+    if (v == null) return null;
+    const t = String(v).trim().toUpperCase();
+    if (
+      t === 'ARQUERO' ||
+      t === 'DEFENSA' ||
+      t === 'MEDIO' ||
+      t === 'DELANTERO'
+    ) {
+      return t;
+    }
+    return null;
   }
 
   private parseBoolean(v: unknown): boolean {
