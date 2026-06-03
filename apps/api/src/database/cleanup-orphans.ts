@@ -258,6 +258,37 @@ async function main(): Promise<void> {
     `);
     log('torneos.duracion_periodo + duracion_entretiempo asegurados (Sprint 29A).');
 
+    // Sprint 30 — healing: propagar nombre/escudo/colores del club a los
+    // equipos sombra de sus inscripciones. Necesario porque el backfill
+    // 26F creó equipos sombra copiando el equipo viejo (con nombres como
+    // "lifegreen.cl" heredados del seed) en vez del club ya limpio. El
+    // resultado: dashboard/fixture/portal mostraban valores viejos.
+    // Esta query es idempotente: no rompe nada si los nombres ya estaban
+    // sincronizados.
+    const healing = await client.query(`
+      UPDATE equipos e
+      SET
+        nombre = c.nombre,
+        escudo_url = c.escudo_url,
+        color_primario = c.color_primario,
+        color_secundario = c.color_secundario
+      FROM inscripciones_torneo it
+      JOIN clubes c ON c.id = it.club_id
+      WHERE it.equipo_sombra_id = e.id
+        AND e.tenant_id = it.tenant_id
+        AND (
+          e.nombre IS DISTINCT FROM c.nombre
+          OR e.escudo_url IS DISTINCT FROM c.escudo_url
+          OR e.color_primario IS DISTINCT FROM c.color_primario
+          OR e.color_secundario IS DISTINCT FROM c.color_secundario
+        )
+    `);
+    if ((healing.rowCount ?? 0) > 0) {
+      log(
+        `Sprint 30: ${healing.rowCount} equipo(s) sombra resincronizados al club.`,
+      );
+    }
+
     // Sprint 26G.1 (ADR-0004) — columnas paralelas inscripcion_*_id en
     // tablas que históricamente referencian equipo_id. Aditivas y NULLABLE:
     // el modelo viejo sigue siendo source-of-truth y el nuevo se popula

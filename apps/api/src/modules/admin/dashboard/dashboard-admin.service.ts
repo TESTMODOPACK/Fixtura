@@ -4,11 +4,12 @@ import { Repository } from 'typeorm';
 
 import type { DashboardAdmin } from '@fixtura/types';
 
+import { Club } from '../../competition/entities/club.entity';
 import { Designacion } from '../../competition/entities/designacion.entity';
-import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
-import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
+import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
+import { Jugador } from '../../competition/entities/jugador.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Personal } from '../../competition/entities/personal.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
@@ -17,13 +18,25 @@ import { Tenant } from '../../tenants/entities/tenant.entity';
 
 const TREINTA_DIAS_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * Sprint 30 (ADR-0004) — Dashboard refactor al modelo Clubes.
+ *
+ * Antes leía de tablas viejas (equipos, jugadores_inscritos) que el shim
+ * de 26G.2 mantiene sincronizadas pero con nombres que el modelo viejo
+ * heredó (ej. "lifegreen.cl"). Ahora lee de las tablas nuevas:
+ *   - clubes → equiposTotales (mostramos como "clubes activos").
+ *   - jugadores → jugadoresTotales.
+ *   - inscripciones_torneo + partidos.inscripcion_*_id → topEquipos.
+ *   - incidencias + match por RUT → topGoleadores con nombre real.
+ */
 @Injectable()
 export class DashboardAdminService {
   constructor(
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
-    @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
-    @InjectRepository(JugadorInscrito)
-    private readonly jugadorRepo: Repository<JugadorInscrito>,
+    @InjectRepository(Club) private readonly clubRepo: Repository<Club>,
+    @InjectRepository(Jugador) private readonly jugadorRepo: Repository<Jugador>,
+    @InjectRepository(InscripcionTorneo)
+    private readonly inscripcionRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Personal) private readonly personalRepo: Repository<Personal>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
@@ -37,12 +50,9 @@ export class DashboardAdminService {
   ) {}
 
   async get(tenantId: string): Promise<DashboardAdmin> {
-    // Flag de regla de negocio: ¿la liga es ANFA? Determina si las
-    // alertas de carnet vencido/por-vencer son relevantes.
     const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
     const requiereCarnetAnfa = tenant?.requiereCarnetAnfa ?? false;
 
-    // 1) Torneo activo (el más reciente ACTIVO; si no hay, el más reciente)
     const torneoActivo = await this.torneoRepo
       .createQueryBuilder('t')
       .leftJoinAndSelect('t.temporada', 'temporada')
@@ -51,10 +61,9 @@ export class DashboardAdminService {
       .orderBy('t.created_at', 'DESC')
       .getOne();
 
-    // 2-N) En paralelo: counts globales + datos del torneo activo
     const [
       torneosCounts,
-      equiposCount,
+      clubesCount,
       jugadoresCount,
       personalCounts,
       sancionesActivasCount,
@@ -64,8 +73,8 @@ export class DashboardAdminService {
       topEquiposRows,
     ] = await Promise.all([
       this.contarTorneos(tenantId),
-      this.equipoRepo.count({ where: { tenantId } }),
-      this.jugadorRepo.count({ where: { tenantId, activo: true } }),
+      this.clubRepo.count({ where: { tenantId, estado: 'ACTIVO' } }),
+      this.jugadorRepo.count({ where: { tenantId, estado: 'ACTIVO' } }),
       this.contarPersonal(tenantId),
       this.contarSancionesActivas(tenantId),
       this.contarActasPendientes(tenantId),
@@ -81,20 +90,18 @@ export class DashboardAdminService {
             id: torneoActivo.id,
             nombre: torneoActivo.nombre,
             temporadaNombre: torneoActivo.temporada?.nombre ?? '',
-            equiposCount: 0, // se llena abajo si torneo activo
+            equiposCount: 0,
             fechasCount: 0,
           }
         : null,
       proximaFecha: proximaFechaData,
       actasPendientes: actasPendientesCount,
       sancionesActivas: sancionesActivasCount,
-      // Si la liga NO es ANFA, devolvemos 0/0 en counts de carnet —
-      // los datos no son relevantes para la operación de esa liga.
       carnetVencido: requiereCarnetAnfa ? personalCounts.carnetVencido : 0,
       carnetPorVencer: requiereCarnetAnfa ? personalCounts.carnetPorVencer : 0,
       torneosActivos: torneosCounts.activos,
       torneosDraft: torneosCounts.draft,
-      equiposTotales: equiposCount,
+      equiposTotales: clubesCount,
       jugadoresTotales: jugadoresCount,
       personalActivo: personalCounts.total,
       topGoleadores: topGoleadoresRows,
@@ -152,11 +159,6 @@ export class DashboardAdminService {
       .getCount();
   }
 
-  /**
-   * Partidos cuya fecha_hora ya pasó pero no tienen acta cerrada y no
-   * están finalizados/walkover. Si fecha_hora es NULL, no se cuenta
-   * (no podemos saber si "pasó").
-   */
   private async contarActasPendientes(tenantId: string): Promise<number> {
     return this.partidoRepo
       .createQueryBuilder('p')
@@ -168,11 +170,6 @@ export class DashboardAdminService {
       .getCount();
   }
 
-  /**
-   * Próxima fecha del torneo activo: la fecha con menor `numero` cuyo
-   * estado sea PROGRAMADA o EN_CURSO. Calcula cobertura arbitral:
-   * % de partidos con árbitro principal en estado != RECHAZADA/AUSENTE.
-   */
   private async calcularProximaFecha(
     tenantId: string,
     torneoId: string,
@@ -202,7 +199,6 @@ export class DashboardAdminService {
       };
     }
 
-    // Cuántos partidos tienen un ARBITRO_PRINCIPAL en estado activo
     const partidoIds = partidos.map((p) => p.id);
     const rows = await this.designacionRepo
       .createQueryBuilder('d')
@@ -224,64 +220,107 @@ export class DashboardAdminService {
     };
   }
 
+  /**
+   * Top 5 goleadores del torneo activo.
+   *
+   * Las incidencias siguen referenciando jugador_inscrito_id (modelo
+   * viejo). Para mostrar el nombre canónico hacemos match por RUT al
+   * modelo nuevo: jugador_inscrito.rut == jugadores.rut. Si no hay
+   * match, fallback al nombre del modelo viejo.
+   */
   private async topGoleadores(
     tenantId: string,
     torneoId: string,
   ): Promise<DashboardAdmin['topGoleadores']> {
-    return (await this.incidenciaRepo
-      .createQueryBuilder('i')
-      .leftJoin('i.jugadorInscrito', 'j')
-      .leftJoin('j.equipo', 'e')
-      .select('j.id', 'jugadorId')
-      .addSelect('j.nombre', 'nombre')
-      .addSelect('j.apellido', 'apellido')
-      .addSelect('e.nombre', 'equipoNombre')
-      .addSelect('COUNT(*)', 'goles')
-      .where('i.tenant_id = :tenantId', { tenantId })
-      .andWhere(`i.tipo = 'GOL'`)
-      .andWhere('e.torneo_id = :torneoId', { torneoId })
-      .andWhere('j.id IS NOT NULL')
-      .groupBy('j.id, j.nombre, j.apellido, e.nombre')
-      .orderBy('goles', 'DESC')
-      .limit(5)
-      .getRawMany<{
-        jugadorId: string;
-        nombre: string;
-        apellido: string;
-        equipoNombre: string;
-        goles: string;
-      }>()).map((r) => ({
-      jugadorId: r.jugadorId,
-      nombre: r.nombre,
-      apellido: r.apellido,
-      equipoNombre: r.equipoNombre,
+    type Row = {
+      rut: string | null;
+      nombreNuevo: string | null;
+      apellidoNuevo: string | null;
+      nombreViejo: string | null;
+      apellidoViejo: string | null;
+      clubNombre: string | null;
+      equipoNombre: string | null;
+      jugadorId: string | null;
+      goles: string;
+    };
+    const rows = await this.incidenciaRepo.query(
+      `
+      SELECT
+        ji.rut AS rut,
+        jn.id AS "jugadorId",
+        jn.nombres AS "nombreNuevo",
+        jn.apellidos AS "apellidoNuevo",
+        ji.nombre AS "nombreViejo",
+        ji.apellido AS "apellidoViejo",
+        c.nombre AS "clubNombre",
+        e.nombre AS "equipoNombre",
+        COUNT(*) AS goles
+      FROM incidencias_partido i
+      LEFT JOIN jugadores_inscritos ji ON ji.id = i.jugador_inscrito_id
+      LEFT JOIN equipos e ON e.id = i.equipo_id
+      LEFT JOIN inscripciones_torneo it ON it.id = i.inscripcion_id
+      LEFT JOIN clubes c ON c.id = it.club_id
+      LEFT JOIN jugadores jn ON jn.tenant_id = i.tenant_id AND jn.rut = ji.rut
+      WHERE i.tenant_id = $1
+        AND i.tipo = 'GOL'
+        AND (
+          (it.torneo_id = $2)
+          OR (e.torneo_id = $2)
+        )
+        AND ji.id IS NOT NULL
+      GROUP BY ji.rut, jn.id, jn.nombres, jn.apellidos, ji.nombre, ji.apellido, c.nombre, e.nombre, ji.id
+      ORDER BY goles DESC
+      LIMIT 5
+      `,
+      [tenantId, torneoId],
+    ) as Row[];
+
+    return rows.map((r) => ({
+      jugadorId: r.jugadorId ?? r.rut ?? '',
+      nombre: r.nombreNuevo ?? r.nombreViejo ?? '?',
+      apellido: r.apellidoNuevo ?? r.apellidoViejo ?? '',
+      equipoNombre: r.clubNombre ?? r.equipoNombre ?? '?',
       goles: Number(r.goles),
     }));
   }
 
   /**
-   * Top 5 equipos por puntos. Calcula puntos en SQL agregando victorias,
-   * empates y derrotas a partir de partidos FINALIZADOS / WALKOVER.
-   * 3 pts victoria / 1 empate / 0 derrota (defaults — el torneo puede
-   * tenerlos personalizados pero acá usamos los stándar).
+   * Top 5 equipos por puntos del torneo activo.
+   *
+   * Camino preferido: inscripciones_torneo (modelo nuevo) + partidos
+   * via inscripcion_local_id/inscripcion_visita_id (poblados por shim
+   * en 26G.2 + backfill 26G.1). El nombre viene del club.
    */
   private async topEquipos(
     tenantId: string,
     torneoId: string,
   ): Promise<DashboardAdmin['topEquipos']> {
-    const equipos = await this.equipoRepo
-      .createQueryBuilder('e')
-      .where('e.torneo_id = :torneoId', { torneoId })
-      .andWhere('e.tenant_id = :tenantId', { tenantId })
-      .getMany();
-    if (equipos.length === 0) return [];
+    type InscripcionRow = {
+      inscripcion_id: string;
+      club_nombre: string;
+    };
+    const inscripciones: InscripcionRow[] = await this.inscripcionRepo.query(
+      `
+      SELECT it.id AS inscripcion_id, c.nombre AS club_nombre
+      FROM inscripciones_torneo it
+      JOIN clubes c ON c.id = it.club_id
+      WHERE it.torneo_id = $1
+        AND it.tenant_id = $2
+        AND it.estado <> 'RETIRADA'
+      `,
+      [torneoId, tenantId],
+    );
+    if (inscripciones.length === 0) return [];
 
-    const equipoIds = equipos.map((e) => e.id);
+    const inscripcionIds = inscripciones.map((i) => i.inscripcion_id);
     const partidos = await this.partidoRepo
       .createQueryBuilder('p')
       .where(`p.estado IN ('FINALIZADO', 'WALKOVER')`)
-      .andWhere('p.equipo_local_id IN (:...equipoIds)', { equipoIds })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
+      .andWhere(
+        '(p.inscripcion_local_id IN (:...ids) OR p.inscripcion_visita_id IN (:...ids))',
+        { ids: inscripcionIds },
+      )
       .getMany();
 
     type Stat = {
@@ -296,10 +335,10 @@ export class DashboardAdminService {
       puntos: number;
     };
     const statsMap = new Map<string, Stat>();
-    for (const e of equipos) {
-      statsMap.set(e.id, {
-        equipoId: e.id,
-        nombre: e.nombre,
+    for (const i of inscripciones) {
+      statsMap.set(i.inscripcion_id, {
+        equipoId: i.inscripcion_id,
+        nombre: i.club_nombre,
         partidosJugados: 0,
         victorias: 0,
         empates: 0,
@@ -310,8 +349,11 @@ export class DashboardAdminService {
       });
     }
     for (const p of partidos) {
-      const local = statsMap.get(p.equipoLocalId);
-      const visita = statsMap.get(p.equipoVisitaId);
+      const localId = p.inscripcionLocalId;
+      const visitaId = p.inscripcionVisitaId;
+      if (!localId || !visitaId) continue;
+      const local = statsMap.get(localId);
+      const visita = statsMap.get(visitaId);
       if (!local || !visita) continue;
       const gl = p.golesLocal ?? 0;
       const gv = p.golesVisita ?? 0;

@@ -211,7 +211,57 @@ export class ClubesAdminService {
       await this.sincronizarCategorias(tenantId, id, input.categoriaIds);
     }
 
+    // Sprint 30 (shim 26G.2 extendido): propagar nombre/escudo/colores
+    // a los equipos sombra. Sin esto, /admin (dashboard), fixture y
+    // portal público siguen mostrando los valores viejos del Equipo
+    // shadow (ej. "lifegreen.cl") aunque el Club ya tenga nombre limpio.
+    if (
+      input.nombre !== undefined ||
+      input.escudoUrl !== undefined ||
+      input.colorPrimario !== undefined ||
+      input.colorSecundario !== undefined
+    ) {
+      await this.sincronizarEquiposSombra(tenantId, club);
+    }
+
     return this.findOne(id, tenantId);
+  }
+
+  /**
+   * Sprint 30 — propaga nombre/escudo/colores del club a todos los
+   * equipos sombra (shim 26G.2) de sus inscripciones.
+   *
+   * Sin esto, el dashboard, el fixture y el portal público seguían
+   * mostrando valores viejos del Equipo shadow después de editar el
+   * club (ej. nombres "lifegreen.cl" heredados del seed inicial).
+   */
+  private async sincronizarEquiposSombra(
+    tenantId: string,
+    club: Club,
+  ): Promise<void> {
+    await this.dataSource.query(
+      `
+      UPDATE equipos e
+      SET
+        nombre = $1,
+        escudo_url = $2,
+        color_primario = $3,
+        color_secundario = $4
+      FROM inscripciones_torneo it
+      WHERE it.equipo_sombra_id = e.id
+        AND it.club_id = $5
+        AND it.tenant_id = $6
+        AND e.tenant_id = $6
+      `,
+      [
+        club.nombre,
+        club.escudoUrl,
+        club.colorPrimario,
+        club.colorSecundario,
+        club.id,
+        tenantId,
+      ],
+    );
   }
 
   async remove(id: string, tenantId: string): Promise<void> {
