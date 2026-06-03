@@ -12,6 +12,7 @@ import type { AuthTokens, UserContext } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { CardLabel } from '@/components/ui/card';
+import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { ApiError, apiFetch } from '@/lib/api';
@@ -98,7 +99,10 @@ export function LoginModal({ open, onClose }: LoginModalProps): React.ReactEleme
         </p>
 
         <form
-          onSubmit={form.handleSubmit((vals) => mutation.mutate(vals))}
+          onSubmit={form.handleSubmit(
+            (vals) => mutation.mutate(vals),
+            makeRhfErrorHandler({ formName: 'login' }),
+          )}
           className="space-y-4"
         >
           <Input

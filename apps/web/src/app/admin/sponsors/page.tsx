@@ -28,6 +28,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -371,7 +372,10 @@ function SponsorForm({
       </div>
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={form.handleSubmit(
+          onSubmit,
+          makeRhfErrorHandler({ formName: 'sponsor' }),
+        )}
         className="grid grid-cols-1 md:grid-cols-3 gap-3"
       >
         <div className="md:col-span-2 space-y-3">

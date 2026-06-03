@@ -4,6 +4,7 @@ import { AlertTriangle } from 'lucide-react';
 import { forwardRef } from 'react';
 
 import { parseApiErrorMessage } from '@/lib/api';
+import { toastWarning } from '@/lib/toast';
 
 /**
  * Sprint 27 — componentes reusables de feedback de errores en forms.
@@ -171,4 +172,54 @@ export function rhfErrorsToBanner(
     }
   }
   return result;
+}
+
+/**
+ * Sprint 30 — handler reusable para `react-hook-form.handleSubmit(_, onError)`.
+ *
+ * Cuando los errores de validacion cliente (Zod) hacen que `handleSubmit`
+ * llame a onError en lugar de onSubmit, este helper garantiza que SIEMPRE
+ * haya feedback visible:
+ *   - toastWarning con los primeros campos invalidos.
+ *   - Si hay un bannerRef, scrollea al banner.
+ *
+ * Uso:
+ *   const onError = makeRhfErrorHandler({
+ *     labelMap: FIELD_LABEL,
+ *     bannerRef: errorBannerRef,
+ *     formName: 'nuevo-torneo',
+ *   });
+ *   <form onSubmit={form.handleSubmit(onSubmit, onError)}>
+ *
+ * Reemplaza el patron repetitivo de console.warn + scrollIntoView que
+ * estaba copiado en cada form.
+ */
+export function makeRhfErrorHandler(opts: {
+  labelMap?: Record<string, string>;
+  bannerRef?: React.RefObject<HTMLDivElement | null>;
+  formName?: string;
+}) {
+  return (errors: Record<string, unknown>): void => {
+    if (opts.formName) {
+      // eslint-disable-next-line no-console
+      console.warn(`[${opts.formName}] validación falló:`, errors);
+    }
+    const flat = rhfErrorsToBanner(errors, opts.labelMap);
+    if (flat.length > 0) {
+      toastWarning(
+        `Revisá: ${flat
+          .slice(0, 3)
+          .map((e) => e.label)
+          .join(', ')}${flat.length > 3 ? '…' : ''}`,
+      );
+    } else {
+      toastWarning('Hay errores en el formulario. Revisá los campos marcados.');
+    }
+    if (opts.bannerRef?.current) {
+      opts.bannerRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  };
 }

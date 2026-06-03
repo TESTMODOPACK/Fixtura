@@ -28,6 +28,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -260,7 +261,10 @@ function BrandingTab({ settings }: { settings: TenantSettings }): React.ReactEle
 
   return (
     <form
-      onSubmit={form.handleSubmit(onSubmit)}
+      onSubmit={form.handleSubmit(
+        onSubmit,
+        makeRhfErrorHandler({ formName: 'ajustes-branding' }),
+      )}
       className="grid grid-cols-1 lg:grid-cols-3 gap-5"
     >
       <Card padding="roomy" className="lg:col-span-2">
@@ -436,7 +440,13 @@ function DominioTab({ settings }: { settings: TenantSettings }): React.ReactElem
   const dominioActual = form.watch('customDomain');
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-2xl space-y-5">
+    <form
+      onSubmit={form.handleSubmit(
+        onSubmit,
+        makeRhfErrorHandler({ formName: 'ajustes-invitacion' }),
+      )}
+      className="max-w-2xl space-y-5"
+    >
       <Card padding="roomy">
         <div className="flex items-center gap-2 mb-3">
           <Globe size={18} className="text-accent" />
@@ -747,7 +757,10 @@ function InvitarMiembroForm({ onDone }: { onDone: () => void }): React.ReactElem
 
   return (
     <form
-      onSubmit={form.handleSubmit(onSubmit)}
+      onSubmit={form.handleSubmit(
+        onSubmit,
+        makeRhfErrorHandler({ formName: 'ajustes-anfa' }),
+      )}
       className="grid grid-cols-1 md:grid-cols-2 gap-3"
     >
       <div className="md:col-span-2 flex items-center gap-2">

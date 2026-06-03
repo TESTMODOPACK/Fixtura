@@ -1,13 +1,29 @@
 'use client';
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Toaster } from 'sonner';
+
+import { toastError } from '@/lib/toast';
 
 export function Providers({ children }: { children: React.ReactNode }): React.ReactElement {
   const [client] = useState(
     () =>
       new QueryClient({
+        // Sprint 30 fix — toast global para CUALQUIER mutación fallida
+        // que el caller no haya manejado explícitamente. Cubre el caso
+        // de mutate() (sin try/catch) y mutateAsync() cuando RHF se
+        // traga la excepción.
+        //
+        // Para silenciar (caso raro: la mutación tiene UI específica
+        // de error y el toast sería ruido), pasar
+        //   useMutation({ meta: { silentError: true }, ... })
+        mutationCache: new MutationCache({
+          onError: (error, _variables, _context, mutation) => {
+            if (mutation.meta?.silentError === true) return;
+            toastError(error);
+          },
+        }),
         defaultOptions: {
           queries: {
             staleTime: 30 * 1000,

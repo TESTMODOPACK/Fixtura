@@ -29,6 +29,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import {
   OfflineActaBanner,
@@ -241,7 +242,10 @@ function ActaSection({
     <Card padding="comfortable">
       <CardLabel>Cerrar acta</CardLabel>
       <form
-        onSubmit={form.handleSubmit((vals) => cerrarActa.mutate(vals))}
+        onSubmit={form.handleSubmit(
+          (vals) => cerrarActa.mutate(vals),
+          makeRhfErrorHandler({ formName: 'cerrar-acta' }),
+        )}
         className="space-y-3 mt-3"
       >
         <div className="grid grid-cols-2 gap-3">
@@ -398,22 +402,27 @@ function EditarPartidoCard({
     <Card padding="comfortable" className="mb-5">
       <CardLabel>Detalles del partido</CardLabel>
       <form
-        onSubmit={form.handleSubmit((vals) => {
-          const payload: {
-            canchaId: string | null;
-            canchaNombre?: string | null;
-            fechaHora: string | null;
-            estado: Form['estado'];
-          } = {
-            canchaId: vals.canchaId || null,
-            fechaHora: vals.fechaHora ? new Date(vals.fechaHora).toISOString() : null,
-            estado: vals.estado,
-          };
-          // Solo enviamos canchaNombre cuando no hay cancha del catálogo
-          // (modo legacy). Si hay canchaId, el backend setea el nombre.
-          if (!vals.canchaId) payload.canchaNombre = vals.canchaNombre;
-          mutation.mutate(payload);
-        })}
+        onSubmit={form.handleSubmit(
+          (vals) => {
+            const payload: {
+              canchaId: string | null;
+              canchaNombre?: string | null;
+              fechaHora: string | null;
+              estado: Form['estado'];
+            } = {
+              canchaId: vals.canchaId || null,
+              fechaHora: vals.fechaHora
+                ? new Date(vals.fechaHora).toISOString()
+                : null,
+              estado: vals.estado,
+            };
+            // Solo enviamos canchaNombre cuando no hay cancha del catálogo
+            // (modo legacy). Si hay canchaId, el backend setea el nombre.
+            if (!vals.canchaId) payload.canchaNombre = vals.canchaNombre;
+            mutation.mutate(payload);
+          },
+          makeRhfErrorHandler({ formName: 'partido-detalle' }),
+        )}
         className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3"
       >
         <div>
@@ -970,7 +979,13 @@ function IncidenciasSection({
         </button>
       </div>
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      <form
+        onSubmit={form.handleSubmit(
+          onSubmit,
+          makeRhfErrorHandler({ formName: 'incidencia-partido' }),
+        )}
+        className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end"
+      >
         <div className="md:col-span-2">
           <label className="label">Jugador</label>
           <select className="input" {...form.register('jugadorInscritoId')}>

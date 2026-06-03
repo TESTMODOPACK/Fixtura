@@ -11,7 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { ColorSwatchPicker } from '@/components/ui/color-swatch-picker';
 import { Input } from '@/components/ui/input';
-import { FormErrorBanner } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+} from '@/components/ui/form-errors';
 import { useClubes, useCreateEquipo } from '@/hooks/use-admin';
 import { parseApiErrorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -233,7 +236,13 @@ export function NuevoEquipoForm({
 
   // ── Modo "manual": form de creación desde cero ──────────────────
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+    <form
+      onSubmit={form.handleSubmit(
+        onSubmit,
+        makeRhfErrorHandler({ formName: 'nuevo-equipo-manual' }),
+      )}
+      className="space-y-3"
+    >
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-green-deep">
           → Crear equipo desde cero

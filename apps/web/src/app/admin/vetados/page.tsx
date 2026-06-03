@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertTriangle, Gavel, Plus, ShieldOff, Trash2 } from 'lucide-react';
+import { Gavel, Plus, ShieldOff, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -10,6 +10,10 @@ import { formatearRut, validarRut } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -17,7 +21,7 @@ import {
   useDeleteVetado,
   useVetados,
 } from '@/hooks/use-admin';
-import { ApiError } from '@/lib/api';
+import { toastSuccess } from '@/lib/toast';
 
 const VetadoFormSchema = z.object({
   rut: z
@@ -42,13 +46,20 @@ export default function VetadosPage(): React.ReactElement {
   });
 
   const onSubmit = async (vals: VetadoForm): Promise<void> => {
-    await createVetado.mutateAsync({
-      rut: vals.rut,
-      motivo: vals.motivo,
-    });
-    form.reset();
-    setAdding(false);
+    try {
+      await createVetado.mutateAsync({
+        rut: vals.rut,
+        motivo: vals.motivo,
+      });
+      toastSuccess(`RUT ${vals.rut} vetado correctamente.`);
+      form.reset();
+      setAdding(false);
+    } catch {
+      // toastError ya lo dispara MutationCache.onError globalmente.
+    }
   };
+
+  const onValidationError = makeRhfErrorHandler({ formName: 'vetar-jugador' });
 
   const onDelete = async (id: string, rut: string): Promise<void> => {
     const ok = confirm(
@@ -59,7 +70,7 @@ export default function VetadosPage(): React.ReactElement {
     await deleteVetado.mutateAsync(id);
   };
 
-  const apiError = createVetado.error as ApiError | undefined;
+  const apiError = createVetado.error;
 
   return (
     <>
@@ -82,14 +93,11 @@ export default function VetadosPage(): React.ReactElement {
       {adding && (
         <Card padding="comfortable" className="mb-4">
           <CardLabel>Vetar jugador</CardLabel>
-          {apiError && (
-            <div className="bg-danger/10 border border-danger/30 rounded-card px-3 py-2 mt-3 text-sm text-danger flex items-start gap-2">
-              <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
-              <span>{apiError.message}</span>
-            </div>
-          )}
+          <div className="mt-3">
+            <FormErrorBanner apiError={apiError} apiTitle="No se pudo vetar el jugador" />
+          </div>
           <form
-            onSubmit={form.handleSubmit(onSubmit)}
+            onSubmit={form.handleSubmit(onSubmit, onValidationError)}
             className="space-y-3 mt-3"
           >
             <Input

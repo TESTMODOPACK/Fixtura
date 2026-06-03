@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -48,25 +49,28 @@ export default function NuevoTenantPage(): React.ReactElement {
     },
   });
 
-  const onSubmit = form.handleSubmit(async (data) => {
-    try {
-      const r = await crear.mutateAsync({
-        slug: data.slug,
-        nombre: data.nombre,
-        tipo: data.tipo,
-        planSlug: data.planSlug || undefined,
-        trialDias: data.trialDias,
-        adminEmail: data.adminEmail || undefined,
-        adminNombre: data.adminNombre || undefined,
-        adminApellido: data.adminApellido || undefined,
-        adminPassword: data.adminPassword || undefined,
-      });
-      router.push(`/admin/super/tenants/${r.id}`);
-    } catch (err) {
-      // El error se muestra abajo
-      console.error(err);
-    }
-  });
+  const onSubmit = form.handleSubmit(
+    async (data) => {
+      try {
+        const r = await crear.mutateAsync({
+          slug: data.slug,
+          nombre: data.nombre,
+          tipo: data.tipo,
+          planSlug: data.planSlug || undefined,
+          trialDias: data.trialDias,
+          adminEmail: data.adminEmail || undefined,
+          adminNombre: data.adminNombre || undefined,
+          adminApellido: data.adminApellido || undefined,
+          adminPassword: data.adminPassword || undefined,
+        });
+        router.push(`/admin/super/tenants/${r.id}`);
+      } catch {
+        // MutationCache global dispara toastError; el banner abajo
+        // muestra el detalle del error.
+      }
+    },
+    makeRhfErrorHandler({ formName: 'nuevo-tenant' }),
+  );
 
   const error = crear.error as ApiError | undefined;
 

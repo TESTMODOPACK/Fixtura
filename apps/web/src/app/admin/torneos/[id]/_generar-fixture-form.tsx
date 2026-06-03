@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
+import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { useGenerarFixture } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
@@ -67,7 +68,13 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
         </div>
       )}
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-w-2xl">
+      <form
+        onSubmit={form.handleSubmit(
+          onSubmit,
+          makeRhfErrorHandler({ formName: 'generar-fixture' }),
+        )}
+        className="space-y-4 max-w-2xl"
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input
             label="Fecha de la primera fecha"

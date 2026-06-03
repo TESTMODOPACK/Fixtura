@@ -19,6 +19,7 @@ import type { EstadoSuscripcion } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -157,18 +158,22 @@ export default function DetalleTenantPage({
     }
   }, [tenant, form]);
 
-  const onSubmit = form.handleSubmit(async (data) => {
-    try {
-      await update.mutateAsync({
-        nombre: data.nombre,
-        customDomain: data.customDomain || null,
-        planId: data.planId || null,
-        estadoSuscripcion: data.estadoSuscripcion,
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  });
+  const onSubmit = form.handleSubmit(
+    async (data) => {
+      try {
+        await update.mutateAsync({
+          nombre: data.nombre,
+          customDomain: data.customDomain || null,
+          planId: data.planId || null,
+          estadoSuscripcion: data.estadoSuscripcion,
+        });
+      } catch {
+        // MutationCache global muestra toastError; el banner abajo
+        // muestra el detalle.
+      }
+    },
+    makeRhfErrorHandler({ formName: 'editar-tenant' }),
+  );
 
   const onSuspender = async (): Promise<void> => {
     const motivo = window.prompt(

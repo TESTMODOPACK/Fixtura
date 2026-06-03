@@ -9,7 +9,10 @@ import { z } from 'zod';
 import { formatearRut, validarRut } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
-import { FormErrorBanner } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { useAddJugadorClub } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
@@ -168,7 +171,10 @@ export function NuevoJugadorForm({
   return (
     <>
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={form.handleSubmit(
+          onSubmit,
+          makeRhfErrorHandler({ formName: 'nuevo-jugador-club' }),
+        )}
         className="grid grid-cols-1 md:grid-cols-2 gap-3"
       >
         <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-3">

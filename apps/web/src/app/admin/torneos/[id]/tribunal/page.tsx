@@ -18,6 +18,7 @@ import type { SancionAdmin } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -287,7 +288,13 @@ function NuevaSancionTribunalForm({
         <CardLabel>Nueva sanción del tribunal</CardLabel>
       </div>
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <form
+        onSubmit={form.handleSubmit(
+          onSubmit,
+          makeRhfErrorHandler({ formName: 'sancion-tribunal' }),
+        )}
+        className="grid grid-cols-1 md:grid-cols-2 gap-3"
+      >
         <div>
           <label className="label">Equipo</label>
           <select

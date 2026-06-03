@@ -40,6 +40,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -812,7 +813,10 @@ function CobroForm({ onDone }: { onDone: () => void }): React.ReactElement {
       </div>
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={form.handleSubmit(
+          onSubmit,
+          makeRhfErrorHandler({ formName: 'cobro' }),
+        )}
         className="grid grid-cols-1 md:grid-cols-2 gap-3"
       >
         <Input

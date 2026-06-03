@@ -25,6 +25,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -306,7 +307,13 @@ function NuevoJugadorForm({
   const error = mutation.error as ApiError | undefined;
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <form
+      onSubmit={form.handleSubmit(
+        onSubmit,
+        makeRhfErrorHandler({ formName: 'jugador-equipo' }),
+      )}
+      className="grid grid-cols-1 md:grid-cols-3 gap-3"
+    >
       <Input label="Nombre" {...form.register('nombre')} error={form.formState.errors.nombre?.message} />
       <Input
         label="Apellido"
