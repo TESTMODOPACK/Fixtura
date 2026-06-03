@@ -4,6 +4,7 @@ import type { Jugador } from '@fixtura/types';
 import {
   AlertTriangle,
   FileSpreadsheet,
+  Pencil,
   Plus,
   Trash2,
   User,
@@ -15,6 +16,10 @@ import { Button } from '@/components/ui/button';
 import { useDeleteJugadorClub, usePlantelClub } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
 
+import {
+  EditarJugadorModal,
+  JugadorContactoEmergenciaBadge,
+} from './_editar-jugador-modal';
 import { ImportPlantelModal } from './_import-plantel-modal';
 import { NuevoJugadorForm } from './_nuevo-jugador-form';
 
@@ -38,6 +43,7 @@ export function PlantelTab({
   const deleteJugador = useDeleteJugadorClub(clubId);
   const [adding, setAdding] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [editandoJugador, setEditandoJugador] = useState<Jugador | null>(null);
 
   const onRemove = async (j: Jugador): Promise<void> => {
     const ok = confirm(
@@ -111,7 +117,7 @@ export function PlantelTab({
           {plantel.map((j) => (
             <div
               key={j.id}
-              className="px-5 py-3 grid grid-cols-[auto_1fr_auto_auto] gap-3 items-center"
+              className="px-5 py-3 grid grid-cols-[auto_1fr_auto_auto_auto] gap-3 items-center"
             >
               <div
                 className={cn(
@@ -125,16 +131,19 @@ export function PlantelTab({
                 <User size={14} />
               </div>
               <div className="min-w-0">
-                <div className="font-semibold text-ink truncate">
-                  {j.nombres} {j.apellidos}
-                  {j.apodo ? (
-                    <span className="text-ink-mute font-normal"> «{j.apodo}»</span>
-                  ) : null}
+                <div className="font-semibold text-ink truncate flex items-center gap-2">
+                  <span className="truncate">
+                    {j.nombres} {j.apellidos}
+                    {j.apodo ? (
+                      <span className="text-ink-mute font-normal"> «{j.apodo}»</span>
+                    ) : null}
+                  </span>
                   {j.capitan && (
-                    <span className="ml-2 text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-accent/15 text-accent">
+                    <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-accent/15 text-accent flex-shrink-0">
                       C
                     </span>
                   )}
+                  <JugadorContactoEmergenciaBadge jugador={j} />
                 </div>
                 <div className="text-xs text-ink-mute font-mono flex flex-wrap gap-3">
                   <span>{j.rut}</span>
@@ -150,6 +159,15 @@ export function PlantelTab({
               <div className="text-sm font-mono text-ink-mute">
                 {j.numeroCamiseta != null ? `#${j.numeroCamiseta}` : ''}
               </div>
+              <button
+                type="button"
+                onClick={() => setEditandoJugador(j)}
+                className="h-8 w-8 flex items-center justify-center rounded-card hover:bg-accent/10 text-ink-mute hover:text-accent"
+                aria-label="Editar jugador"
+                title="Editar datos del jugador"
+              >
+                <Pencil size={14} />
+              </button>
               <button
                 type="button"
                 onClick={() => onRemove(j)}
@@ -170,6 +188,13 @@ export function PlantelTab({
           editar club.
         </div>
       )}
+
+      <EditarJugadorModal
+        clubId={clubId}
+        jugador={editandoJugador}
+        open={editandoJugador !== null}
+        onClose={() => setEditandoJugador(null)}
+      />
     </div>
   );
 }
