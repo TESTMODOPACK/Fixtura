@@ -58,6 +58,9 @@ const TorneoFormSchema = z.object({
   fechaLimiteRefuerzosNumero: z
     .union([z.coerce.number().int().min(0).max(99), z.literal('')])
     .optional(),
+  // Sprint 29A — duración del partido configurable por torneo.
+  duracionPeriodoMinutos: z.coerce.number().int().min(1).max(120),
+  duracionEntretiempoMinutos: z.coerce.number().int().min(0).max(60),
 });
 type TorneoForm = z.infer<typeof TorneoFormSchema>;
 
@@ -93,6 +96,8 @@ export default function NuevoTorneoPage(): React.ReactElement {
       topeJugadoresPorEquipo: 25,
       refuerzosHabilitados: true,
       fechaLimiteRefuerzosNumero: '' as unknown as number,
+      duracionPeriodoMinutos: 40,
+      duracionEntretiempoMinutos: 10,
     },
     mode: 'onChange',
   });
@@ -164,6 +169,8 @@ export default function NuevoTorneoPage(): React.ReactElement {
       topeJugadoresPorEquipo: vals.topeJugadoresPorEquipo,
       refuerzosHabilitados: vals.refuerzosHabilitados,
       fechaLimiteRefuerzosNumero: vals.refuerzosHabilitados ? fechaLimite : null,
+      duracionPeriodoMinutos: vals.duracionPeriodoMinutos,
+      duracionEntretiempoMinutos: vals.duracionEntretiempoMinutos,
     });
     router.push(`/admin/torneos/${torneo.id}`);
   };
@@ -406,6 +413,35 @@ export default function NuevoTorneoPage(): React.ReactElement {
               </p>
             )}
           </div>
+        </Card>
+
+        {/* Bloque 5 (Sprint 29A): Duración del partido */}
+        <Card padding="roomy">
+          <CardLabel>Duración del partido</CardLabel>
+          <p className="text-xs font-serif italic text-ink-mute mt-1 mb-4">
+            Configura cuánto dura cada tiempo y el descanso. El match center y
+            la vista pública en vivo van a usar estos valores.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Minutos por tiempo"
+              type="number"
+              min={1}
+              max={120}
+              {...form.register('duracionPeriodoMinutos', { valueAsNumber: true })}
+            />
+            <Input
+              label="Minutos de entretiempo"
+              type="number"
+              min={0}
+              max={60}
+              {...form.register('duracionEntretiempoMinutos', { valueAsNumber: true })}
+            />
+          </div>
+          <p className="text-xs font-serif italic text-ink-mute mt-3">
+            Default: 40 min por tiempo, 10 min de entretiempo (estándar amateur).
+            Cambialo según el reglamento de tu liga.
+          </p>
         </Card>
 
         {/* Submit */}

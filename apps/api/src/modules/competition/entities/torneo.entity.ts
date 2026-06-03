@@ -126,6 +126,15 @@ export class Torneo {
   })
   fechaLimiteRefuerzosNumero!: number | null;
 
+  // Sprint 29A — duración del partido configurable por torneo.
+  // El match-center lo hereda al arrancar el cronómetro de cada partido.
+  // Default 40 min: típico amateur de fútbol 11 con 2 tiempos = 80 min.
+  @Column({ name: 'duracion_periodo_minutos', type: 'smallint', default: 40 })
+  duracionPeriodoMinutos!: number;
+
+  @Column({ name: 'duracion_entretiempo_minutos', type: 'smallint', default: 10 })
+  duracionEntretiempoMinutos!: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

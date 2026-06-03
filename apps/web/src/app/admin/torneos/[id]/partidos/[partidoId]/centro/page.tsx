@@ -108,6 +108,11 @@ export default function CentroPage({
                 </div>
                 <div className="mt-2 text-xs uppercase tracking-[0.18em] font-semibold text-ink-mute">
                   Período {snapshot.periodo || '—'} de {snapshot.minutosPorPeriodo} min
+                  {snapshot.minutosEntretiempo > 0 && (
+                    <span className="ml-2 text-ink-mute/70">
+                      · descanso {snapshot.minutosEntretiempo}&nbsp;min
+                    </span>
+                  )}
                 </div>
                 <div className="mt-1 text-[10px] uppercase tracking-wider font-semibold inline-block px-2 py-0.5 rounded bg-paper-dark text-ink-mute">
                   {snapshot.estado.replace('_', ' ')}
@@ -161,6 +166,13 @@ export default function CentroPage({
                   >
                     <RotateCcw size={16} /> Siguiente período
                   </Button>
+                  {snapshot.minutosEntretiempo > 0 && (
+                    <div className="basis-full text-xs font-serif italic text-ink-mute mt-2">
+                      Pausa en período {snapshot.periodo}. El reglamento del
+                      torneo prevé {snapshot.minutosEntretiempo} min de descanso
+                      antes del siguiente período.
+                    </div>
+                  )}
                 </>
               )}
               {(snapshot.estado === 'EN_VIVO' || snapshot.estado === 'PAUSADO') && (

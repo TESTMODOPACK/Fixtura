@@ -155,8 +155,13 @@ export class Partido {
   @Column({ name: 'centro_periodo', type: 'smallint', default: 0 })
   centroPeriodo!: number;
 
-  @Column({ name: 'centro_minutos_por_periodo', type: 'smallint', default: 45 })
+  @Column({ name: 'centro_minutos_por_periodo', type: 'smallint', default: 40 })
   centroMinutosPorPeriodo!: number;
+
+  // Sprint 29A — descanso entre períodos (solo info para la UI; no se
+  // usa para cálculo del cronómetro).
+  @Column({ name: 'centro_minutos_entretiempo', type: 'smallint', default: 10 })
+  centroMinutosEntretiempo!: number;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

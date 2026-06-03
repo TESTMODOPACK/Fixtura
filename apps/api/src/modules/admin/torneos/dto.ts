@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsIn,
@@ -88,6 +89,55 @@ export class CreateTorneoDto {
   @IsString({ each: true })
   @IsIn(TIEBREAKER_KEYS, { each: true })
   tablaTiebreakers?: string[];
+
+  // Sprint 25 paso 3 — categoría legacy.
+  @IsOptional()
+  @IsUUID()
+  categoriaId?: string | null;
+
+  // Sprint 26D — multi-categoría/serie con cupo. Validación profunda
+  // la hace el service (validarCategoriasSeries); acá solo array bound.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  categoriasSeries?: Array<{
+    categoriaId: string;
+    serieSlug: string | null;
+    cupoEquipos: number;
+  }>;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(99)
+  topeJugadoresPorEquipo?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  refuerzosHabilitados?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(99)
+  fechaLimiteRefuerzosNumero?: number | null;
+
+  // Sprint 29A — duración del partido por torneo.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  duracionPeriodoMinutos?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  duracionEntretiempoMinutos?: number;
 }
 
 export class UpdateTorneoDto {
@@ -154,4 +204,50 @@ export class UpdateTorneoDto {
   @IsString({ each: true })
   @IsIn(TIEBREAKER_KEYS, { each: true })
   tablaTiebreakers?: string[];
+
+  @IsOptional()
+  @IsUUID()
+  categoriaId?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  categoriasSeries?: Array<{
+    categoriaId: string;
+    serieSlug: string | null;
+    cupoEquipos: number;
+  }>;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(99)
+  topeJugadoresPorEquipo?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  refuerzosHabilitados?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(99)
+  fechaLimiteRefuerzosNumero?: number | null;
+
+  // Sprint 29A
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  duracionPeriodoMinutos?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  duracionEntretiempoMinutos?: number;
 }

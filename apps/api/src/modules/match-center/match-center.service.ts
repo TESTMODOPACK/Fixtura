@@ -76,7 +76,15 @@ export class MatchCenterService {
     if (partido.centroEstado === 'IDLE') {
       partido.centroPeriodo = 1;
       partido.centroSegundosAcumulados = 0;
-      if (minutosPorPeriodo) partido.centroMinutosPorPeriodo = minutosPorPeriodo;
+
+      // Sprint 29A — heredar duración del torneo si no viene override.
+      // Esto asegura que el match-center respete lo configurado al crear
+      // el torneo (40 min default amateur). El override por payload sigue
+      // permitido para casos puntuales (partido de exhibición, etc.).
+      const config = await this.cargarConfigTorneo(partido.id, tenantId);
+      partido.centroMinutosPorPeriodo =
+        minutosPorPeriodo ?? config.duracionPeriodoMinutos;
+      partido.centroMinutosEntretiempo = config.duracionEntretiempoMinutos;
     }
     partido.centroEstado = 'EN_VIVO';
     partido.centroArrancadoAt = new Date();
@@ -85,6 +93,35 @@ export class MatchCenterService {
     await this.repo.save(partido);
     this.log.log(`[match-center] partido=${partidoId} arrancado periodo=${partido.centroPeriodo}`);
     return this.toSnapshot(partido);
+  }
+
+  /**
+   * Lee la duración del partido desde el torneo del partido.
+   * Camino: partido.fecha_id → fechas.torneo_id → torneos.
+   * Si falla (datos inconsistentes), devuelve defaults seguros.
+   */
+  private async cargarConfigTorneo(
+    partidoId: string,
+    tenantId: string,
+  ): Promise<{ duracionPeriodoMinutos: number; duracionEntretiempoMinutos: number }> {
+    type Row = {
+      duracion_periodo_minutos: number | null;
+      duracion_entretiempo_minutos: number | null;
+    };
+    const rows: Row[] = await this.repo.query(
+      `SELECT t.duracion_periodo_minutos, t.duracion_entretiempo_minutos
+         FROM partidos p
+         JOIN fechas f ON f.id = p.fecha_id
+         JOIN torneos t ON t.id = f.torneo_id
+         WHERE p.id = $1 AND p.tenant_id = $2
+         LIMIT 1`,
+      [partidoId, tenantId],
+    );
+    const row = rows[0];
+    return {
+      duracionPeriodoMinutos: row?.duracion_periodo_minutos ?? 40,
+      duracionEntretiempoMinutos: row?.duracion_entretiempo_minutos ?? 10,
+    };
   }
 
   async pausar(partidoId: string, tenantId: string): Promise<MatchCenterSnapshot> {
@@ -208,6 +245,7 @@ export class MatchCenterService {
       estado: partido.centroEstado,
       periodo: partido.centroPeriodo,
       minutosPorPeriodo: partido.centroMinutosPorPeriodo,
+      minutosEntretiempo: partido.centroMinutosEntretiempo ?? 10,
       segundosTranscurridos: this.calcularTranscurrido(partido),
       golesLocal: partido.golesLocal ?? 0,
       golesVisita: partido.golesVisita ?? 0,

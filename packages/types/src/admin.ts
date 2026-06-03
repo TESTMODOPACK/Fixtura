@@ -74,6 +74,9 @@ export const CreateTorneoSchema = z.object({
   topeJugadoresPorEquipo: z.number().int().min(1).max(99).optional(),
   refuerzosHabilitados: z.boolean().optional(),
   fechaLimiteRefuerzosNumero: z.number().int().min(0).max(99).nullable().optional(),
+  // Sprint 29A — duración del partido por torneo. El match-center lo hereda.
+  duracionPeriodoMinutos: z.number().int().min(1).max(120).optional(),
+  duracionEntretiempoMinutos: z.number().int().min(0).max(60).optional(),
 });
 export type CreateTorneoRequest = z.infer<typeof CreateTorneoSchema>;
 
@@ -109,6 +112,9 @@ export const TorneoAdminSchema = z.object({
   topeJugadoresPorEquipo: z.number().int().min(1).max(99),
   refuerzosHabilitados: z.boolean(),
   fechaLimiteRefuerzosNumero: z.number().int().min(0).max(99).nullable(),
+  // Sprint 29A
+  duracionPeriodoMinutos: z.number().int().min(1).max(120),
+  duracionEntretiempoMinutos: z.number().int().min(0).max(60),
   createdAt: z.iso.datetime(),
 });
 export type TorneoAdmin = z.infer<typeof TorneoAdminSchema>;

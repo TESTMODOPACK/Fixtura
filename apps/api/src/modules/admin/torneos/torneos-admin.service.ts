@@ -213,6 +213,8 @@ export class TorneosAdminService {
       topeJugadoresPorEquipo: input.topeJugadoresPorEquipo ?? 25,
       refuerzosHabilitados,
       fechaLimiteRefuerzosNumero,
+      duracionPeriodoMinutos: input.duracionPeriodoMinutos ?? 40,
+      duracionEntretiempoMinutos: input.duracionEntretiempoMinutos ?? 10,
     });
     try {
       const saved = await this.repo.save(t);
@@ -305,6 +307,12 @@ export class TorneosAdminService {
       ...(input.fechaLimiteRefuerzosNumero !== undefined && {
         fechaLimiteRefuerzosNumero: input.fechaLimiteRefuerzosNumero,
       }),
+      ...(input.duracionPeriodoMinutos !== undefined && {
+        duracionPeriodoMinutos: input.duracionPeriodoMinutos,
+      }),
+      ...(input.duracionEntretiempoMinutos !== undefined && {
+        duracionEntretiempoMinutos: input.duracionEntretiempoMinutos,
+      }),
     });
 
     // Si se desactivan los refuerzos, limpiar la fecha límite para
@@ -352,6 +360,8 @@ export class TorneosAdminService {
       topeJugadoresPorEquipo: t.topeJugadoresPorEquipo ?? 25,
       refuerzosHabilitados: t.refuerzosHabilitados ?? true,
       fechaLimiteRefuerzosNumero: t.fechaLimiteRefuerzosNumero,
+      duracionPeriodoMinutos: t.duracionPeriodoMinutos ?? 40,
+      duracionEntretiempoMinutos: t.duracionEntretiempoMinutos ?? 10,
       createdAt: t.createdAt.toISOString(),
     };
   }

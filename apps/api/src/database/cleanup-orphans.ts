@@ -243,6 +243,21 @@ async function main(): Promise<void> {
     `);
     log('torneos.categorias_series + tope_jugadores + refuerzos asegurados (Sprint 26D).');
 
+    // Sprint 29A — duración del partido configurable por torneo.
+    // duracion_periodo_minutos: minutos por tiempo (default 40 amateur).
+    // duracion_entretiempo_minutos: descanso entre períodos (default 10).
+    // Cantidad de períodos sigue siendo fija en 2 (los deportes que cubrimos
+    // son 2 tiempos). Si en el futuro se quiere soportar cuartos/tercios,
+    // se agrega cantidad_periodos acá.
+    await client.query(`
+      ALTER TABLE torneos
+        ADD COLUMN IF NOT EXISTS duracion_periodo_minutos SMALLINT
+          NOT NULL DEFAULT 40 CHECK (duracion_periodo_minutos BETWEEN 1 AND 120),
+        ADD COLUMN IF NOT EXISTS duracion_entretiempo_minutos SMALLINT
+          NOT NULL DEFAULT 10 CHECK (duracion_entretiempo_minutos BETWEEN 0 AND 60)
+    `);
+    log('torneos.duracion_periodo + duracion_entretiempo asegurados (Sprint 29A).');
+
     // Sprint 26G.1 (ADR-0004) — columnas paralelas inscripcion_*_id en
     // tablas que históricamente referencian equipo_id. Aditivas y NULLABLE:
     // el modelo viejo sigue siendo source-of-truth y el nuevo se popula
@@ -358,9 +373,10 @@ async function main(): Promise<void> {
         ADD COLUMN IF NOT EXISTS centro_pausado_at TIMESTAMPTZ,
         ADD COLUMN IF NOT EXISTS centro_segundos_acumulados INT NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS centro_periodo SMALLINT NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS centro_minutos_por_periodo SMALLINT NOT NULL DEFAULT 45
+        ADD COLUMN IF NOT EXISTS centro_minutos_por_periodo SMALLINT NOT NULL DEFAULT 40,
+        ADD COLUMN IF NOT EXISTS centro_minutos_entretiempo SMALLINT NOT NULL DEFAULT 10
     `);
-    log('partidos.centro_* asegurado (Sprint 18, RF-17).');
+    log('partidos.centro_* asegurado (Sprint 18, RF-17 / Sprint 29A entretiempo).');
 
     // AUDIT-3: jugadores_inscritos.torneo_id + UNIQUE (rut, torneo).
     await ensureJugadoresUniqueRutTorneo(client, log);

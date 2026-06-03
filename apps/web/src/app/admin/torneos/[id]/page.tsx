@@ -145,6 +145,8 @@ export default function TorneoDetailPage({
           fechasCount={torneo.fechasCount}
           equiposCount={torneo.equiposCount}
           categoriaId={torneo.categoriaId}
+          duracionPeriodoMinutos={torneo.duracionPeriodoMinutos}
+          duracionEntretiempoMinutos={torneo.duracionEntretiempoMinutos}
         />
       )}
     </>
@@ -428,17 +430,43 @@ function ConfiguracionTab({
   fechasCount,
   equiposCount,
   categoriaId,
+  duracionPeriodoMinutos,
+  duracionEntretiempoMinutos,
 }: {
   torneoId: string;
   estado: string;
   fechasCount: number;
   equiposCount: number;
   categoriaId: string | null;
+  duracionPeriodoMinutos: number;
+  duracionEntretiempoMinutos: number;
 }): React.ReactElement {
   const mutation = useUpdateTorneo(torneoId);
   const error = mutation.error as ApiError | undefined;
   const { data: categorias } = useCategorias();
   const [seleccion, setSeleccion] = useState<string>(categoriaId ?? '');
+
+  // Sprint 29A — duración del partido editable.
+  const [duracionPeriodo, setDuracionPeriodo] = useState<number>(duracionPeriodoMinutos);
+  const [duracionEntretiempo, setDuracionEntretiempo] = useState<number>(
+    duracionEntretiempoMinutos,
+  );
+  useEffect(() => {
+    setDuracionPeriodo(duracionPeriodoMinutos);
+    setDuracionEntretiempo(duracionEntretiempoMinutos);
+  }, [duracionPeriodoMinutos, duracionEntretiempoMinutos]);
+
+  const cambioDuracion =
+    duracionPeriodo !== duracionPeriodoMinutos ||
+    duracionEntretiempo !== duracionEntretiempoMinutos;
+
+  const guardarDuracion = (): void => {
+    if (!cambioDuracion) return;
+    mutation.mutate({
+      duracionPeriodoMinutos: duracionPeriodo,
+      duracionEntretiempoMinutos: duracionEntretiempo,
+    });
+  };
 
   // Mantener el select sincronizado si el torneo se recarga (ej. después
   // de un save remoto). Sin esto, el dropdown muestra la selección vieja.
@@ -563,6 +591,56 @@ function ConfiguracionTab({
             <Check size={14} /> Guardar
           </Button>
         </div>
+      </Card>
+
+      {/* Sprint 29A — Duración del partido */}
+      <Card padding="roomy" className="lg:col-span-2">
+        <CardLabel>Duración del partido</CardLabel>
+        <p className="text-sm text-ink-mute font-serif italic mt-2 mb-4">
+          Cuánto dura cada tiempo y el descanso. El match center y la vista en
+          vivo van a heredar estos valores al arrancar el cronómetro.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-ink-mute font-semibold mb-1">
+              Minutos por tiempo
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={120}
+              className="input w-full"
+              value={duracionPeriodo}
+              onChange={(e) => setDuracionPeriodo(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-ink-mute font-semibold mb-1">
+              Minutos de entretiempo
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={60}
+              className="input w-full"
+              value={duracionEntretiempo}
+              onChange={(e) => setDuracionEntretiempo(Number(e.target.value))}
+            />
+          </div>
+          <Button
+            variant="accent"
+            size="sm"
+            onClick={guardarDuracion}
+            disabled={!cambioDuracion}
+            loading={mutation.isPending}
+          >
+            <Check size={14} /> Guardar
+          </Button>
+        </div>
+        <p className="text-xs font-serif italic text-ink-mute mt-3">
+          Default: 40 min / 10 min entretiempo. El cambio aplica solo a
+          partidos que todavía no arrancaron el match center.
+        </p>
       </Card>
     </div>
   );

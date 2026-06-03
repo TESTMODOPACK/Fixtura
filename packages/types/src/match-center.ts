@@ -27,6 +27,8 @@ export const MatchCenterSnapshotSchema = z.object({
   estado: EstadoCentroSchema,
   periodo: z.number().int().min(0),
   minutosPorPeriodo: z.number().int().min(1).max(120),
+  // Sprint 29A — descanso entre períodos (config del torneo).
+  minutosEntretiempo: z.number().int().min(0).max(60),
   segundosTranscurridos: z.number().int().min(0),
   golesLocal: z.number().int().min(0),
   golesVisita: z.number().int().min(0),
