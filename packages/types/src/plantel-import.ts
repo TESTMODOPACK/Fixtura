@@ -19,11 +19,24 @@ import { z } from 'zod';
  *     se proponen INACTIVAR (estado = INACTIVO; reversible manualmente).
  */
 
-/** Fila tal como viene del Excel después de parseo. */
+/**
+ * Fila tal como viene del Excel después de parseo.
+ *
+ * IMPORTANTE: este schema es DELIBERADAMENTE PERMISIVO. Acepta filas
+ * con campos vacíos, strings cortos, RUT inválido, etc. La validación
+ * profunda (rut requerido, nombres/apellidos mínimos, RUT chileno,
+ * vetados, edad de categoría) vive en plantel-import.service.ts dentro
+ * de `previsualizar()` — cada fila inválida se marca como RECHAZADO
+ * con un motivo claro y aparece en la tabla del preview, en vez de
+ * tumbar toda la importación con un 400.
+ *
+ * Si querés validar estricto en el cliente (RHF), usá las reglas
+ * sueltas: nombres.length >= 2, apellidos.length >= 2, etc.
+ */
 export const BulkImportRowSchema = z.object({
-  rut: z.string().min(1, 'RUT requerido'),
-  nombres: z.string().min(2, 'Nombres requeridos'),
-  apellidos: z.string().min(2, 'Apellidos requeridos'),
+  rut: z.string().optional().nullable(),
+  nombres: z.string().optional().nullable(),
+  apellidos: z.string().optional().nullable(),
   fechaNac: z.string().optional().nullable(),
   email: z.string().optional().nullable(),
   telefono: z.string().optional().nullable(),

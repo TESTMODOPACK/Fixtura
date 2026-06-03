@@ -14,9 +14,15 @@ import {
 /**
  * Sprint 28 — DTOs class-validator para los endpoints de import.
  *
- * Validamos forma + tamaños razonables. La validación profunda
- * (RUT chileno, edad por categoría, RUT en otro club, vetados)
- * vive en el service para que pueda usar contexto de la DB.
+ * DELIBERADAMENTE PERMISIVO en los campos por fila: aceptamos rut,
+ * nombres y apellidos vacíos, demasiado cortos, etc. La validación
+ * profunda (RUT chileno, nombres/apellidos mínimos, email válido,
+ * edad por categoría, RUT en otro club, vetados) vive en el service
+ * `plantel-import.service.ts → previsualizar()` para que cada fila
+ * inválida quede como RECHAZADO con motivo claro en el preview, en
+ * lugar de tumbar el endpoint completo con un 400 críptico.
+ *
+ * El tope superior de longitud sigue para evitar payloads abusivos.
  *
  * MAX_FILAS_POR_IMPORT: límite duro para evitar OOM si alguien sube
  * un archivo enorme por accidente. 2000 jugadores cubre cualquier
@@ -25,17 +31,20 @@ import {
 const MAX_FILAS_POR_IMPORT = 2000;
 
 export class BulkImportRowDto {
+  @IsOptional()
   @IsString()
-  @Length(1, 30)
-  rut!: string;
+  @Length(0, 30)
+  rut?: string | null;
 
+  @IsOptional()
   @IsString()
-  @Length(2, 100)
-  nombres!: string;
+  @Length(0, 100)
+  nombres?: string | null;
 
+  @IsOptional()
   @IsString()
-  @Length(2, 100)
-  apellidos!: string;
+  @Length(0, 100)
+  apellidos?: string | null;
 
   @IsOptional()
   @IsString()
