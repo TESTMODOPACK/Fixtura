@@ -69,35 +69,47 @@ export class ClubesAdminService {
     });
     if (clubes.length === 0) return [];
 
-    // Categorías + counts en batch (1 query cada uno).
     const clubIds = clubes.map((c) => c.id);
 
+    // Filas del pivote con la categoría + directiva por (club, cat).
     const clubCats = await this.clubCatRepo.find({
       where: { clubId: In(clubIds) },
       relations: { categoria: true },
     });
-    const catsByClub = new Map<string, { id: string; nombre: string }[]>();
+    const catsByClub = new Map<string, ClubCategoria[]>();
     for (const cc of clubCats) {
       const arr = catsByClub.get(cc.clubId) ?? [];
-      arr.push({
-        id: cc.categoriaId,
-        nombre: cc.categoria?.nombre ?? '',
-      });
+      arr.push(cc);
       catsByClub.set(cc.clubId, arr);
     }
 
+    // Counts por (club_id, categoria_id) y por club_id total.
     const counts = await this.jugadorRepo
       .createQueryBuilder('j')
       .select('j.club_id', 'clubId')
+      .addSelect('j.categoria_id', 'categoriaId')
       .addSelect('COUNT(*)', 'cnt')
       .where('j.tenant_id = :tenantId', { tenantId })
       .andWhere('j.club_id IN (:...clubIds)', { clubIds })
-      .groupBy('j.club_id')
-      .getRawMany<{ clubId: string; cnt: string }>();
+      .andWhere('j.estado = :estado', { estado: 'ACTIVO' })
+      .groupBy('j.club_id, j.categoria_id')
+      .getRawMany<{ clubId: string; categoriaId: string; cnt: string }>();
+    const countByPair = new Map<string, number>();
     const countByClub = new Map<string, number>();
-    for (const row of counts) countByClub.set(row.clubId, Number(row.cnt));
+    for (const row of counts) {
+      const n = Number(row.cnt);
+      countByPair.set(`${row.clubId}::${row.categoriaId}`, n);
+      countByClub.set(row.clubId, (countByClub.get(row.clubId) ?? 0) + n);
+    }
 
-    return clubes.map((c) => this.toDto(c, catsByClub.get(c.id) ?? [], countByClub.get(c.id) ?? 0));
+    return clubes.map((c) =>
+      this.toDto(
+        c,
+        catsByClub.get(c.id) ?? [],
+        countByClub.get(c.id) ?? 0,
+        countByPair,
+      ),
+    );
   }
 
   async findOne(id: string, tenantId: string): Promise<ClubDto> {
@@ -108,18 +120,25 @@ export class ClubesAdminService {
       where: { clubId: id, tenantId },
       relations: { categoria: true },
     });
-    const jugadoresCount = await this.jugadorRepo.count({
-      where: { clubId: id, tenantId },
-    });
 
-    return this.toDto(
-      club,
-      cats.map((cc) => ({
-        id: cc.categoriaId,
-        nombre: cc.categoria?.nombre ?? '',
-      })),
-      jugadoresCount,
-    );
+    const counts = await this.jugadorRepo
+      .createQueryBuilder('j')
+      .select('j.categoria_id', 'categoriaId')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('j.tenant_id = :tenantId', { tenantId })
+      .andWhere('j.club_id = :clubId', { clubId: id })
+      .andWhere('j.estado = :estado', { estado: 'ACTIVO' })
+      .groupBy('j.categoria_id')
+      .getRawMany<{ categoriaId: string; cnt: string }>();
+    const countByPair = new Map<string, number>();
+    let jugadoresCount = 0;
+    for (const row of counts) {
+      const n = Number(row.cnt);
+      countByPair.set(`${id}::${row.categoriaId}`, n);
+      jugadoresCount += n;
+    }
+
+    return this.toDto(club, cats, jugadoresCount, countByPair);
   }
 
   async create(tenantId: string, input: CreateClubRequest): Promise<ClubDto> {
@@ -555,10 +574,63 @@ export class ClubesAdminService {
       });
     }
     if (aAgregar.length > 0) {
+      // Sprint 32 — copiar la directiva del club a las nuevas filas como
+      // punto de partida. Si el admin después quiere directiva distinta
+      // para una categoría, la edita desde la ficha (club, categoría).
+      const club = await this.clubRepo.findOne({ where: { id: clubId, tenantId } });
+      const presNombre = club?.presidenteNombre ?? null;
+      const presEmail = club?.presidenteEmail ?? null;
+      const presTel = club?.presidenteTelefono ?? null;
+      const delegados = Array.isArray(club?.delegados) ? club.delegados : [];
       await this.clubCatRepo.insert(
-        aAgregar.map((catId) => ({ tenantId, clubId, categoriaId: catId })),
+        aAgregar.map((catId) => ({
+          tenantId,
+          clubId,
+          categoriaId: catId,
+          presidenteNombre: presNombre,
+          presidenteEmail: presEmail,
+          presidenteTelefono: presTel,
+          delegados,
+        })),
       );
     }
+  }
+
+  /**
+   * Sprint 32 — editar la directiva específica de un (club, categoría).
+   * NO toca la directiva "madre" del club ni la de otras categorías.
+   *
+   * Si el caller quiere "borrar" la directiva, debe pasar
+   * presidente: null y delegados: [].
+   */
+  async updateDirectivaCategoria(
+    clubId: string,
+    categoriaId: string,
+    tenantId: string,
+    input: { presidente?: ContactoDirectiva | null; delegados?: ContactoDirectiva[] },
+  ): Promise<ClubDto> {
+    const pivote = await this.clubCatRepo.findOne({
+      where: { clubId, categoriaId, tenantId },
+    });
+    if (!pivote) {
+      throw new NotFoundException(
+        `El club no tiene asignada esta categoría. Agregala primero desde la ficha del club.`,
+      );
+    }
+    if (input.presidente !== undefined) {
+      pivote.presidenteNombre = input.presidente?.nombre?.trim() || null;
+      pivote.presidenteEmail = input.presidente?.email?.trim() || null;
+      pivote.presidenteTelefono = input.presidente?.telefono?.trim() || null;
+    }
+    if (input.delegados !== undefined) {
+      pivote.delegados = this.normalizarDelegados(input.delegados).map((d) => ({
+        nombre: d.nombre,
+        email: d.email ?? null,
+        telefono: d.telefono ?? null,
+      }));
+    }
+    await this.clubCatRepo.save(pivote);
+    return this.findOne(clubId, tenantId);
   }
 
   private normalizarDelegados(
@@ -574,9 +646,25 @@ export class ClubesAdminService {
 
   private toDto(
     c: Club,
-    categorias: { id: string; nombre: string }[],
+    categoriasPivot: ClubCategoria[],
     jugadoresCount: number,
+    countByPair: Map<string, number>,
   ): ClubDto {
+    const detalles = categoriasPivot.map((cc) => ({
+      categoriaId: cc.categoriaId,
+      categoriaNombre: cc.categoria?.nombre ?? '',
+      categoriaSlug: cc.categoria?.slug ?? null,
+      edadMinimaGeneral: cc.categoria?.edadMinimaGeneral ?? 0,
+      presidente: cc.presidenteNombre
+        ? {
+            nombre: cc.presidenteNombre,
+            email: cc.presidenteEmail,
+            telefono: cc.presidenteTelefono,
+          }
+        : null,
+      delegados: Array.isArray(cc.delegados) ? cc.delegados : [],
+      jugadoresCount: countByPair.get(`${c.id}::${cc.categoriaId}`) ?? 0,
+    }));
     return {
       id: c.id,
       tenantId: c.tenantId,
@@ -597,8 +685,9 @@ export class ClubesAdminService {
       delegados: Array.isArray(c.delegados) ? c.delegados : [],
       historialManual: c.historialManual,
       estado: c.estado,
-      categoriaIds: categorias.map((cat) => cat.id),
-      categoriaNombres: categorias.map((cat) => cat.nombre),
+      categoriaIds: detalles.map((d) => d.categoriaId),
+      categoriaNombres: detalles.map((d) => d.categoriaNombre),
+      categoriasDetalle: detalles,
       jugadoresCount,
       createdAt: c.createdAt.toISOString(),
     };

@@ -1,5 +1,6 @@
 'use client';
 
+import type { Club, ClubCategoriaDetalle } from '@fixtura/types';
 import {
   ChevronRight,
   Plus,
@@ -18,16 +19,20 @@ import { useCategorias, useClubes } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
 
 /**
- * Sprint 31 — Catálogo de clubes con filtros para ligas grandes (100+).
+ * Sprint 32 — listado de clubes expandido por (club, categoría).
  *
- * Combina:
- *   - Buscador por nombre/slug con deferred value para no laggear.
- *   - Tabs/pills por categoría (incluye conteo por categoría).
- *   - Toggle "solo activos" (default ON — inactivos suelen ser ruido
- *     hasta que el admin los necesita ver).
- *   - Sort alfabético por nombre.
- *   - Stats arriba (X clubes mostrados de Y totales).
+ * Cada card representa UN combo (club, categoría) — un club con N
+ * categorías aparece como N entradas. Cada combo tiene su propia
+ * directiva + plantel editables desde la ficha. Los datos transversales
+ * del club (nombre, escudo, colores) viven en otro lado y son los
+ * mismos para todas las categorías del club.
  */
+
+type ClubCategoriaEntry = {
+  club: Club;
+  detalle: ClubCategoriaDetalle;
+};
+
 export default function ClubesPage(): React.ReactElement {
   const { data: clubes, isLoading } = useClubes();
   const { data: categorias } = useCategorias();
@@ -39,24 +44,29 @@ export default function ClubesPage(): React.ReactElement {
   const deferredSearch = useDeferredValue(search);
   const searchLower = deferredSearch.trim().toLowerCase();
 
-  // Conteos por categoría (para mostrar en cada tab). Solo cuenta clubes
-  // activos si el toggle está prendido — coherente con lo que se ve.
-  const conteoCategorias = useMemo(() => {
-    const m = new Map<string, number>();
-    const fuente = soloActivos
-      ? (clubes ?? []).filter((c) => c.estado === 'ACTIVO')
-      : (clubes ?? []);
-    for (const c of fuente) {
-      for (const nom of c.categoriaNombres) {
-        m.set(nom, (m.get(nom) ?? 0) + 1);
+  // Expandir clubes → (club, categoría) entries.
+  const entries: ClubCategoriaEntry[] = useMemo(() => {
+    const out: ClubCategoriaEntry[] = [];
+    for (const c of clubes ?? []) {
+      // Si soloActivos está prendido y el club está INACTIVO, no entra.
+      if (soloActivos && c.estado === 'INACTIVO') continue;
+      for (const det of c.categoriasDetalle) {
+        out.push({ club: c, detalle: det });
       }
     }
-    return m;
+    return out;
   }, [clubes, soloActivos]);
 
-  // Categorías presentes en al menos un club + nombres ordenados.
-  // Solo mostramos las categorías que tienen ≥1 club (sino el filtro
-  // estaría siempre vacío y confunde).
+  // Conteos por categoría (sobre lo que actualmente cuenta como visible).
+  const conteoCategorias = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of entries) {
+      m.set(e.detalle.categoriaNombre, (m.get(e.detalle.categoriaNombre) ?? 0) + 1);
+    }
+    return m;
+  }, [entries]);
+
+  // Categorías ordenadas por edad mínima — solo las que tienen ≥1 entry.
   const categoriasOrdenadas = useMemo(() => {
     const presentes = new Set(conteoCategorias.keys());
     const todas = categorias ?? [];
@@ -65,28 +75,30 @@ export default function ClubesPage(): React.ReactElement {
       .sort((a, b) => a.edadMinimaGeneral - b.edadMinimaGeneral);
   }, [categorias, conteoCategorias]);
 
-  // Filtro principal
+  // Filtro principal.
   const filtrados = useMemo(() => {
-    const todos = clubes ?? [];
-    return todos
-      .filter((c) => (soloActivos ? c.estado === 'ACTIVO' : true))
-      .filter((c) =>
-        categoriaFiltro ? c.categoriaNombres.includes(categoriaFiltro) : true,
+    return entries
+      .filter((e) =>
+        categoriaFiltro ? e.detalle.categoriaNombre === categoriaFiltro : true,
       )
-      .filter((c) => {
+      .filter((e) => {
         if (!searchLower) return true;
         return (
-          c.nombre.toLowerCase().includes(searchLower) ||
-          c.slug.toLowerCase().includes(searchLower)
+          e.club.nombre.toLowerCase().includes(searchLower) ||
+          e.club.slug.toLowerCase().includes(searchLower) ||
+          e.detalle.categoriaNombre.toLowerCase().includes(searchLower)
         );
       })
-      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-  }, [clubes, soloActivos, categoriaFiltro, searchLower]);
+      .sort((a, b) => {
+        const byNombre = a.club.nombre.localeCompare(b.club.nombre, 'es');
+        if (byNombre !== 0) return byNombre;
+        return a.detalle.edadMinimaGeneral - b.detalle.edadMinimaGeneral;
+      });
+  }, [entries, categoriaFiltro, searchLower]);
 
   const totalMostrados = filtrados.length;
-  const totalGlobal = clubes?.length ?? 0;
-  const totalActivos =
-    clubes?.filter((c) => c.estado === 'ACTIVO').length ?? 0;
+  const totalGlobal = entries.length;
+  const totalClubesGlobal = clubes?.length ?? 0;
   const hayFiltrosActivos =
     search.trim() !== '' || categoriaFiltro !== '' || !soloActivos;
 
@@ -95,7 +107,7 @@ export default function ClubesPage(): React.ReactElement {
       <PageHead
         eyebrow="Comunidad"
         title="Clubes"
-        sub="Catálogo de clubes (equipos) de la liga. Cada club mantiene su identidad, directiva, plantel por categoría y se inscribe a los torneos que la liga organiza."
+        sub="Catálogo de clubes por categoría. Cada combo (club, categoría) tiene su propia directiva y plantel — los datos generales del club (nombre, escudo, colores) son compartidos."
       >
         <Link href="/admin/clubes/nuevo">
           <Button variant="accent" size="sm">
@@ -110,7 +122,7 @@ export default function ClubesPage(): React.ReactElement {
         </Card>
       )}
 
-      {!isLoading && totalGlobal === 0 && (
+      {!isLoading && totalClubesGlobal === 0 && (
         <Card padding="roomy" className="text-center">
           <Shield size={36} className="mx-auto text-line mb-3" />
           <div className="font-display text-2xl text-green-deep tracking-display mb-2">
@@ -127,9 +139,9 @@ export default function ClubesPage(): React.ReactElement {
         </Card>
       )}
 
-      {!isLoading && totalGlobal > 0 && (
+      {!isLoading && totalClubesGlobal > 0 && (
         <>
-          {/* Barra de búsqueda + toggle */}
+          {/* Buscador + toggle */}
           <div className="flex flex-col md:flex-row gap-3 mb-4">
             <div className="relative flex-1">
               <Search
@@ -139,7 +151,7 @@ export default function ClubesPage(): React.ReactElement {
               <input
                 type="text"
                 className="input pl-8 pr-8 w-full"
-                placeholder="Buscar por nombre o slug…"
+                placeholder="Buscar por nombre del club, slug o categoría…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -161,9 +173,6 @@ export default function ClubesPage(): React.ReactElement {
                 onChange={(e) => setSoloActivos(e.target.checked)}
               />
               Solo activos
-              <span className="text-xs text-ink-mute font-mono">
-                ({totalActivos}/{totalGlobal})
-              </span>
             </label>
           </div>
 
@@ -182,7 +191,7 @@ export default function ClubesPage(): React.ReactElement {
               >
                 Todas{' '}
                 <span className="font-mono text-[10px] opacity-70">
-                  ({soloActivos ? totalActivos : totalGlobal})
+                  ({totalGlobal})
                 </span>
               </button>
               {categoriasOrdenadas.map((cat) => {
@@ -211,14 +220,17 @@ export default function ClubesPage(): React.ReactElement {
             </div>
           )}
 
-          {/* Stat de resultados + reset */}
+          {/* Stat + reset */}
           <div className="flex items-center justify-between mb-3 text-xs text-ink-mute">
             <div>
               Mostrando <span className="font-semibold text-ink">{totalMostrados}</span>{' '}
-              {totalMostrados === 1 ? 'club' : 'clubes'}
+              {totalMostrados === 1 ? 'plantel' : 'planteles'}
               {totalMostrados !== totalGlobal && (
-                <span> de {totalGlobal} totales</span>
+                <span> de {totalGlobal} visibles</span>
               )}
+              <span className="ml-2 text-ink-mute/70">
+                · {totalClubesGlobal} {totalClubesGlobal === 1 ? 'club' : 'clubes'} en la liga
+              </span>
               {hayFiltrosActivos && (
                 <button
                   type="button"
@@ -235,12 +247,12 @@ export default function ClubesPage(): React.ReactElement {
             </div>
           </div>
 
-          {/* Empty state filtrado */}
+          {/* Empty filtrado */}
           {totalMostrados === 0 && (
             <Card padding="roomy" className="text-center">
               <Search size={32} className="mx-auto text-line mb-3" />
               <div className="font-display text-xl text-green-deep tracking-display mb-2">
-                NINGÚN CLUB COINCIDE
+                NADA COINCIDE
               </div>
               <p className="font-serif italic text-ink-mute text-sm">
                 Probá cambiando la búsqueda o quitando algún filtro.
@@ -248,11 +260,15 @@ export default function ClubesPage(): React.ReactElement {
             </Card>
           )}
 
-          {/* Grid de clubes */}
+          {/* Grid de (club, categoría) */}
           {totalMostrados > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtrados.map((c) => (
-                <Link key={c.id} href={`/admin/clubes/${c.id}`} className="block">
+              {filtrados.map((e) => (
+                <Link
+                  key={`${e.club.id}::${e.detalle.categoriaId}`}
+                  href={`/admin/clubes/${e.club.id}/${e.detalle.categoriaId}`}
+                  className="block"
+                >
                   <Card
                     padding="comfortable"
                     className="hover:border-green-deep transition-colors h-full"
@@ -260,13 +276,13 @@ export default function ClubesPage(): React.ReactElement {
                     <div className="flex items-start gap-3 mb-3">
                       <div
                         className="w-12 h-12 rounded-full flex-shrink-0 border-2 border-line flex items-center justify-center"
-                        style={{ backgroundColor: c.colorPrimario ?? '#888278' }}
+                        style={{ backgroundColor: e.club.colorPrimario ?? '#888278' }}
                       >
-                        {c.escudoUrl ? (
+                        {e.club.escudoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={c.escudoUrl}
-                            alt={c.nombre}
+                            src={e.club.escudoUrl}
+                            alt={e.club.nombre}
                             className="w-full h-full object-contain rounded-full"
                           />
                         ) : (
@@ -274,12 +290,15 @@ export default function ClubesPage(): React.ReactElement {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <CardLabel>{c.slug}</CardLabel>
+                        <CardLabel>{e.club.slug}</CardLabel>
                         <div className="font-display text-lg text-green-deep tracking-display leading-tight truncate">
-                          {c.nombre.toUpperCase()}
+                          {e.club.nombre.toUpperCase()}
+                        </div>
+                        <div className="text-xs text-ink-mute mt-0.5 truncate">
+                          {e.detalle.categoriaNombre}
                         </div>
                       </div>
-                      {c.estado === 'INACTIVO' && (
+                      {e.club.estado === 'INACTIVO' && (
                         <span className="text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-ink-mute/15 text-ink-mute">
                           Inactivo
                         </span>
@@ -289,28 +308,15 @@ export default function ClubesPage(): React.ReactElement {
                     <div className="flex items-center gap-3 text-xs text-ink-mute mt-3">
                       <span className="flex items-center gap-1">
                         <Users size={12} />
-                        {c.jugadoresCount} jugador
-                        {c.jugadoresCount === 1 ? '' : 'es'}
+                        {e.detalle.jugadoresCount} jugador
+                        {e.detalle.jugadoresCount === 1 ? '' : 'es'}
                       </span>
+                      {e.detalle.presidente?.nombre && (
+                        <span className="text-ink-mute truncate">
+                          · Pres. {e.detalle.presidente.nombre}
+                        </span>
+                      )}
                     </div>
-
-                    {c.categoriaNombres.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-3">
-                        {c.categoriaNombres.map((nom, i) => (
-                          <span
-                            key={`${c.id}-cat-${i}`}
-                            className={cn(
-                              'text-[10px] uppercase tracking-[0.15em] font-semibold px-2 py-0.5 rounded',
-                              nom === categoriaFiltro
-                                ? 'bg-green-deep text-chalk'
-                                : 'bg-green-deep/10 text-green-deep',
-                            )}
-                          >
-                            {nom}
-                          </span>
-                        ))}
-                      </div>
-                    )}
 
                     <div className="flex items-center justify-end mt-3 text-accent text-xs font-semibold">
                       Ver ficha <ChevronRight size={14} />

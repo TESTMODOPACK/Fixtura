@@ -19,6 +19,7 @@ import {
   type CreateJugadorClubRequest,
   type Jugador,
   type UpdateClubRequest,
+  type UpdateDirectivaClubCategoriaRequest,
   type UpdateJugadorClubRequest,
   type UserContext,
 } from '@fixtura/types';
@@ -137,6 +138,28 @@ export class ClubesAdminController {
       jugadorId,
       ensureTenant(user),
       dto as unknown as UpdateJugadorClubRequest,
+    );
+  }
+
+  // ── Sprint 32: directiva específica por (club, categoría) ───────
+
+  @Patch(':id/categorias/:categoriaId/directiva')
+  @Audited({
+    action: 'club.categoria.directiva.actualizada',
+    entityType: 'Club',
+    entityIdFrom: 'params.id',
+  })
+  updateDirectivaCategoria(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('categoriaId', new ParseUUIDPipe()) categoriaId: string,
+    @Body() dto: UpdateDirectivaClubCategoriaRequest,
+  ): Promise<Club> {
+    return this.svc.updateDirectivaCategoria(
+      id,
+      categoriaId,
+      ensureTenant(user),
+      dto,
     );
   }
 

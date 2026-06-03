@@ -228,6 +228,46 @@ async function main(): Promise<void> {
     // `equipos` y `jugadores_inscritos` siguen existiendo.
     await ensureClubesTables(client, log);
 
+    // Sprint 32 — directiva por categoría. Un club que participa en
+    // varias categorías puede tener distinta directiva en cada una
+    // (caso típico: presidente Senior ≠ presidente Super Senior).
+    // Aditivo. Healing copia la directiva del club a cada fila del
+    // pivote como punto de partida.
+    await client.query(`
+      ALTER TABLE club_categorias
+        ADD COLUMN IF NOT EXISTS presidente_nombre VARCHAR(150),
+        ADD COLUMN IF NOT EXISTS presidente_email VARCHAR(150),
+        ADD COLUMN IF NOT EXISTS presidente_telefono VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS delegados JSONB NOT NULL DEFAULT '[]'::jsonb
+    `);
+
+    const healingDirectiva = await client.query(`
+      UPDATE club_categorias cc
+      SET
+        presidente_nombre = c.presidente_nombre,
+        presidente_email = c.presidente_email,
+        presidente_telefono = c.presidente_telefono,
+        delegados = COALESCE(c.delegados, '[]'::jsonb)
+      FROM clubes c
+      WHERE cc.club_id = c.id
+        AND cc.presidente_nombre IS NULL
+        AND cc.presidente_email IS NULL
+        AND cc.presidente_telefono IS NULL
+        AND (cc.delegados IS NULL OR jsonb_array_length(cc.delegados) = 0)
+        AND (
+          c.presidente_nombre IS NOT NULL
+          OR c.presidente_email IS NOT NULL
+          OR c.presidente_telefono IS NOT NULL
+          OR jsonb_array_length(COALESCE(c.delegados, '[]'::jsonb)) > 0
+        )
+    `);
+    if ((healingDirectiva.rowCount ?? 0) > 0) {
+      log(
+        `Sprint 32: directiva copiada del club a ${healingDirectiva.rowCount} fila(s) de club_categorias.`,
+      );
+    }
+    log('club_categorias.directiva por categoría asegurada (Sprint 32).');
+
     // Sprint 26D — campos nuevos en torneos para soportar el modelo nuevo.
     // Aditivos: torneos viejos quedan con defaults razonables.
     await client.query(`

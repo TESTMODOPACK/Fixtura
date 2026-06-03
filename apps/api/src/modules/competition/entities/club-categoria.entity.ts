@@ -45,4 +45,25 @@ export class ClubCategoria {
   @ManyToOne(() => CategoriaJugadores, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'categoria_id' })
   categoria?: CategoriaJugadores;
+
+  // Sprint 32 — directiva específica por (club, categoría). El typical
+  // caso amateur es que cada plantel adulto (Senior, Super Senior) tiene
+  // su propio presidente y delegados aunque sea el mismo club. Si no se
+  // distingue, todas las filas van a tener los mismos datos copiados
+  // del club al crear.
+  @Column({ name: 'presidente_nombre', type: 'varchar', length: 150, nullable: true })
+  presidenteNombre!: string | null;
+
+  @Column({ name: 'presidente_email', type: 'varchar', length: 150, nullable: true })
+  presidenteEmail!: string | null;
+
+  @Column({ name: 'presidente_telefono', type: 'varchar', length: 50, nullable: true })
+  presidenteTelefono!: string | null;
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  delegados!: Array<{
+    nombre: string;
+    email: string | null;
+    telefono: string | null;
+  }>;
 }

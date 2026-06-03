@@ -1567,6 +1567,7 @@ export function useValidarPlantel(equipoId: string | null | undefined) {
 
 import type {
   Club,
+  ContactoDirectiva,
   CreateClubRequest,
   CreateJugadorClubRequest,
   CreateJugadorVetadoRequest,
@@ -1677,6 +1678,28 @@ export function useUpdateJugadorClub(clubId: string) {
       qc.invalidateQueries({
         queryKey: ['admin', 'clubes', clubId, 'plantel'],
       });
+    },
+  });
+}
+
+/**
+ * Sprint 32 — actualiza la directiva específica de una (club, categoría)
+ * sin tocar la directiva "madre" del club ni la de otras categorías.
+ */
+export function useUpdateDirectivaCategoria(clubId: string, categoriaId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      presidente?: ContactoDirectiva | null;
+      delegados?: ContactoDirectiva[];
+    }) =>
+      apiFetch<Club>(
+        `/admin/clubes/${clubId}/categorias/${categoriaId}/directiva`,
+        { method: 'PATCH', body: input },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'clubes'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'clubes', clubId] });
     },
   });
 }

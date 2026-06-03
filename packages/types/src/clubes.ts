@@ -29,6 +29,23 @@ export type ContactoDirectiva = z.infer<typeof ContactoDirectivaSchema>;
 export const EstadoClubSchema = z.enum(['ACTIVO', 'INACTIVO']);
 export type EstadoClub = z.infer<typeof EstadoClubSchema>;
 
+/**
+ * Sprint 32 — detalle por (club, categoría). Cada combo tiene su
+ * propia directiva (puede ser distinta entre categorías del mismo
+ * club) y su propio plantel. El listado /admin/clubes muestra una
+ * fila por cada uno de estos para que sean editables aparte.
+ */
+export const ClubCategoriaDetalleSchema = z.object({
+  categoriaId: z.uuid(),
+  categoriaNombre: z.string(),
+  categoriaSlug: z.string().nullable(),
+  edadMinimaGeneral: z.number().int(),
+  presidente: ContactoDirectivaSchema.nullable(),
+  delegados: z.array(ContactoDirectivaSchema),
+  jugadoresCount: z.number().int().nonnegative(),
+});
+export type ClubCategoriaDetalle = z.infer<typeof ClubCategoriaDetalleSchema>;
+
 export const ClubSchema = z.object({
   id: z.uuid(),
   tenantId: z.uuid(),
@@ -39,6 +56,9 @@ export const ClubSchema = z.object({
   colorSecundario: z.string().nullable(),
   paginaWeb: z.string().nullable(),
   resena: z.string().nullable(),
+  // Directiva "madre" del club. Se mantiene para back-compat y como
+  // valor por defecto al crear nuevas (club, categoría). La directiva
+  // efectiva por categoría vive en categoriasDetalle[].
   presidente: ContactoDirectivaSchema.nullable(),
   delegados: z.array(ContactoDirectivaSchema),
   historialManual: z.string().nullable(),
@@ -49,10 +69,25 @@ export const ClubSchema = z.object({
   // Cache para listados (nombres de las categorías). Calculado en
   // backend para evitar N+1 desde la UI.
   categoriaNombres: z.array(z.string()),
+  // Sprint 32 — detalle por (club, categoría): directiva + plantel
+  // específicos. Tiene un entry por cada categoría asignada al club.
+  categoriasDetalle: z.array(ClubCategoriaDetalleSchema),
   jugadoresCount: z.number().int().nonnegative(),
   createdAt: z.iso.datetime(),
 });
 export type Club = z.infer<typeof ClubSchema>;
+
+/**
+ * Sprint 32 — request para editar la directiva de un (club, categoría)
+ * específico, sin tocar los datos transversales del club.
+ */
+export const UpdateDirectivaClubCategoriaSchema = z.object({
+  presidente: ContactoDirectivaSchema.nullable().optional(),
+  delegados: z.array(ContactoDirectivaSchema).optional(),
+});
+export type UpdateDirectivaClubCategoriaRequest = z.infer<
+  typeof UpdateDirectivaClubCategoriaSchema
+>;
 
 export const CreateClubSchema = z
   .object({
