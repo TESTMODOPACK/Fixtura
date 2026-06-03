@@ -128,6 +128,13 @@ export default function TorneoDetailPage({
           >
             Tribunal →
           </Link>
+          <Link
+            href={`/admin/torneos/${id}/tarifario`}
+            className="px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold transition-colors border-b-2 -mb-px border-transparent text-ink-mute hover:text-ink"
+            title="Configurar matrícula, cuota, multas y demás cobros del torneo"
+          >
+            Tarifario →
+          </Link>
         </nav>
       </div>
 

@@ -60,6 +60,8 @@ import {
 import { PersonalAdminService } from './personal/personal-admin.service';
 import { SponsorsAdminController } from './sponsors/sponsors-admin.controller';
 import { SponsorsAdminService } from './sponsors/sponsors-admin.service';
+import { TarifasAdminController } from './tarifas/tarifas-admin.controller';
+import { TarifasAdminService } from './tarifas/tarifas-admin.service';
 import { TemporadasAdminController } from './temporadas/temporadas-admin.controller';
 import { TemporadasAdminService } from './temporadas/temporadas-admin.service';
 import { TorneosAdminController } from './torneos/torneos-admin.controller';
@@ -108,6 +110,7 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     DashboardAdminController,
     AjustesAdminController,
     SponsorsAdminController,
+    TarifasAdminController,
     CanchasAdminController,
     CategoriasAdminController,
     ClubesAdminController,
@@ -136,6 +139,7 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     DashboardAdminService,
     AjustesAdminService,
     SponsorsAdminService,
+    TarifasAdminService,
     CanchasAdminService,
     CategoriasAdminService,
     ClubesAdminService,

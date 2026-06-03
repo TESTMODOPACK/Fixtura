@@ -1904,3 +1904,62 @@ export function useConfirmImportPlantel(clubId: string) {
     },
   });
 }
+
+// ─── Tarifario por torneo (Sprint 34B) ────────────────────────────
+import type {
+  CreateTarifaRequest,
+  TarifaTorneo,
+  UpdateTarifaRequest,
+} from '@fixtura/types';
+
+const tarifasKey = (torneoId: string) =>
+  ['admin', 'torneos', torneoId, 'tarifario'] as const;
+
+export function useTarifas(torneoId: string) {
+  return useQuery({
+    queryKey: tarifasKey(torneoId),
+    queryFn: () =>
+      apiFetch<TarifaTorneo[]>(`/admin/torneos/${torneoId}/tarifario`),
+  });
+}
+
+export function useCreateTarifa(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTarifaRequest) =>
+      apiFetch<TarifaTorneo>(`/admin/torneos/${torneoId}/tarifario`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tarifasKey(torneoId) });
+    },
+  });
+}
+
+export function useUpdateTarifa(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateTarifaRequest }) =>
+      apiFetch<TarifaTorneo>(`/admin/torneos/${torneoId}/tarifario/${id}`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tarifasKey(torneoId) });
+    },
+  });
+}
+
+export function useDeleteTarifa(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/torneos/${torneoId}/tarifario/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tarifasKey(torneoId) });
+    },
+  });
+}
