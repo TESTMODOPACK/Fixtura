@@ -22,7 +22,6 @@ const TIPOS = [
   'CUOTA',
   'MULTA_AMARILLA',
   'MULTA_ROJA',
-  'MULTA_FECHA_SANCION',
   'MULTA_WALKOVER',
   'OTRO',
 ] as const;

@@ -854,6 +854,34 @@ async function ensureTarifasTorneoTable(
       WHERE generado_auto = TRUE AND cancelado = FALSE
   `);
   log('cobros.tarifa_id + UNIQUE(inscripcion, tarifa, periodo) asegurados (Sprint 34A).');
+
+  // Sprint 34C revision (decision producto): MULTA_FECHA_SANCION sale
+  // del enum. Las rojas se cobran como monto fijo (MULTA_ROJA), las
+  // fechas de suspension NO generan cobro adicional. Cualquier sancion
+  // extra del tribunal queda como cobro manual desde /admin/finanzas.
+  //
+  // Aseguramos el enum actual: limpiamos filas con valores viejos y
+  // recreamos el CHECK constraint sin MULTA_FECHA_SANCION. Idempotente.
+  await client.query(`
+    DELETE FROM tarifas_torneo
+     WHERE tipo NOT IN (
+       'MATRICULA','CUOTA',
+       'MULTA_AMARILLA','MULTA_ROJA','MULTA_WALKOVER',
+       'OTRO'
+     )
+  `);
+  await client.query(`
+    ALTER TABLE tarifas_torneo DROP CONSTRAINT IF EXISTS tarifas_torneo_tipo_check
+  `);
+  await client.query(`
+    ALTER TABLE tarifas_torneo ADD CONSTRAINT tarifas_torneo_tipo_check
+      CHECK (tipo IN (
+        'MATRICULA','CUOTA',
+        'MULTA_AMARILLA','MULTA_ROJA','MULTA_WALKOVER',
+        'OTRO'
+      ))
+  `);
+  log('tarifas_torneo.tipo: MULTA_FECHA_SANCION removida del enum (Sprint 34C revision).');
 }
 
 async function ensureTransaccionesTable(

@@ -53,7 +53,6 @@ const TIPOS_ORDEN: TipoTarifa[] = [
   'CUOTA',
   'MULTA_AMARILLA',
   'MULTA_ROJA',
-  'MULTA_FECHA_SANCION',
   'MULTA_WALKOVER',
   'OTRO',
 ];
@@ -66,9 +65,7 @@ const DESCRIPCION_BREVE: Record<TipoTarifa, string> = {
   MULTA_AMARILLA:
     'Monto fijo por cada tarjeta amarilla. Se carga al club al cerrar el acta del partido.',
   MULTA_ROJA:
-    'Monto fijo por cada tarjeta roja. Se carga al club al cerrar el acta.',
-  MULTA_FECHA_SANCION:
-    'Monto por cada fecha de suspensión de un jugador. Si la suspensión es de 3 fechas, se cobra monto × 3 en un solo cobro.',
+    'Monto fijo por cada tarjeta roja. Se carga al club al cerrar el acta (independiente de las fechas de suspensión que el tribunal aplique).',
   MULTA_WALKOVER:
     'Monto fijo si un club no se presenta a un partido (walkover). Se cobra al club ausente.',
   OTRO:
@@ -281,9 +278,6 @@ function TarifaCard({
                     }
                   />
                 </>
-              )}
-              {tipo === 'MULTA_FECHA_SANCION' && (
-                <Dato label="Cálculo" valor="monto × cantidad de fechas" />
               )}
               {tarifa!.descripcion && (
                 <Dato
@@ -573,11 +567,7 @@ function FormFields({
       </p>
 
       <Input
-        label={
-          tipo === 'MULTA_FECHA_SANCION'
-            ? 'Monto por fecha (CLP)'
-            : 'Monto (CLP)'
-        }
+        label="Monto (CLP)"
         type="number"
         min={0}
         placeholder="ej. 50000"

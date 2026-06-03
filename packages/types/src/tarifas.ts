@@ -22,7 +22,6 @@ export const TIPO_TARIFA = [
   'CUOTA',
   'MULTA_AMARILLA',
   'MULTA_ROJA',
-  'MULTA_FECHA_SANCION',
   'MULTA_WALKOVER',
   'OTRO',
 ] as const;
@@ -33,7 +32,6 @@ export const TIPO_TARIFA_LABEL: Record<TipoTarifa, string> = {
   CUOTA: 'Cuota',
   MULTA_AMARILLA: 'Multa por tarjeta amarilla',
   MULTA_ROJA: 'Multa por tarjeta roja',
-  MULTA_FECHA_SANCION: 'Multa por fecha de suspensión',
   MULTA_WALKOVER: 'Multa por walkover (no se presentó)',
   OTRO: 'Otro',
 };

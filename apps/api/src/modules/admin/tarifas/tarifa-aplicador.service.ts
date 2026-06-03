@@ -383,7 +383,6 @@ export class TarifaAplicadorService {
         return 'CUOTA';
       case 'MULTA_AMARILLA':
       case 'MULTA_ROJA':
-      case 'MULTA_FECHA_SANCION':
       case 'MULTA_WALKOVER':
         return 'MULTA';
       default:

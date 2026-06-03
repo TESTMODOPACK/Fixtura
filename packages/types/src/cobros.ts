@@ -93,7 +93,6 @@ export const CobroAdminSchema = z.object({
       'CUOTA',
       'MULTA_AMARILLA',
       'MULTA_ROJA',
-      'MULTA_FECHA_SANCION',
       'MULTA_WALKOVER',
       'OTRO',
     ])
