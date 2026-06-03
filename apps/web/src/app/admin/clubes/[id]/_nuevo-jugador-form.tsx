@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertTriangle, Save } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Save, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -70,6 +70,9 @@ const JugadorFormSchema = z.object({
     .or(z.literal('').transform(() => undefined)),
   apodo: z.string().max(50).optional(),
   capitan: z.boolean().default(false),
+  // Contacto de emergencia (sprint 33A). Ambos opcionales.
+  telefonoContacto: z.string().max(50).optional(),
+  nombreContacto: z.string().max(100).optional(),
 });
 type JugadorForm = z.infer<typeof JugadorFormSchema>;
 
@@ -87,6 +90,7 @@ export function NuevoJugadorForm({
     mensaje: string;
     payload: JugadorForm;
   } | null>(null);
+  const [emergenciaAbierta, setEmergenciaAbierta] = useState(false);
 
   const form = useForm<JugadorForm>({
     resolver: zodResolver(JugadorFormSchema),
@@ -102,6 +106,8 @@ export function NuevoJugadorForm({
       pieHabil: undefined,
       apodo: '',
       capitan: false,
+      telefonoContacto: '',
+      nombreContacto: '',
     },
     mode: 'onChange',
   });
@@ -128,6 +134,8 @@ export function NuevoJugadorForm({
         posicion: vals.posicion ?? null,
         pieHabil: vals.pieHabil ?? null,
         apodo: vals.apodo || null,
+        telefonoContacto: vals.telefonoContacto || null,
+        nombreContacto: vals.nombreContacto || null,
         capitan: vals.capitan,
         aceptarExcepcionEdad,
       });
@@ -259,6 +267,49 @@ export function NuevoJugadorForm({
           <input type="checkbox" {...form.register('capitan')} />
           Capitán del equipo
         </label>
+
+        {/* Contacto de emergencia (sprint 33A). Plegada por default; el
+            operador la abre si quiere cargar los datos. */}
+        <div className="md:col-span-2 border border-line/70 rounded-card bg-paper/40">
+          <button
+            type="button"
+            onClick={() => setEmergenciaAbierta((v) => !v)}
+            className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-paper/60 rounded-card"
+          >
+            <div className="flex items-center gap-2">
+              <ShieldAlert size={14} className="text-accent" />
+              <div>
+                <div className="text-sm font-semibold text-ink">
+                  Contacto de emergencia
+                </div>
+                <div className="text-[11px] text-ink-mute font-serif italic">
+                  Opcional — para avisar a un familiar si el jugador se
+                  accidenta durante un partido.
+                </div>
+              </div>
+            </div>
+            <ChevronDown
+              size={16}
+              className={`text-ink-mute transition-transform ${
+                emergenciaAbierta ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+          {emergenciaAbierta && (
+            <div className="px-4 pb-4 pt-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Input
+                label="Nombre del contacto"
+                placeholder="Ej: María González (esposa)"
+                {...form.register('nombreContacto')}
+              />
+              <Input
+                label="Teléfono del contacto"
+                placeholder="+56 9 9876 5432"
+                {...form.register('telefonoContacto')}
+              />
+            </div>
+          )}
+        </div>
 
         {errorVisible && (
           <div className="md:col-span-2">

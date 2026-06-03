@@ -791,6 +791,26 @@ function mapRowToBulkImport(raw: Record<string, unknown>): BulkImportRow | null 
     ),
     posicion: optionalStr(pick(norm, 'posicion', 'pos'))?.toUpperCase() ?? null,
     capitan: parseCapitan(pick(norm, 'capitan', 'capi')),
+    // Contacto de emergencia (sprint 33A). Tolerante a varios nombres
+    // de columna y casing.
+    telefonoContacto: optionalStr(
+      pick(
+        norm,
+        'telefonocontacto',
+        'telefonoemergencia',
+        'contactotelefono',
+        'telcontacto',
+      ),
+    ),
+    nombreContacto: optionalStr(
+      pick(
+        norm,
+        'nombrecontacto',
+        'nombreemergencia',
+        'contactonombre',
+        'contacto',
+      ),
+    ),
   };
 }
 
