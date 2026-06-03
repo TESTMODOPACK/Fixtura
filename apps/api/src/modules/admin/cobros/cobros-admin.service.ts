@@ -212,6 +212,22 @@ export class CobrosAdminService {
       dunningUltimoAvisoAt: c.dunningUltimoAvisoAt
         ? c.dunningUltimoAvisoAt.toISOString()
         : null,
+      // Sprint 34A — campos de origen y trazabilidad. Los joins reales
+      // (torneoNombre, clubNombre) los hace 34E cuando exponemos los
+      // filtros. Aca pasamos null por default y solo el FK si la query
+      // ya lo trae.
+      torneoId: c.torneoId ?? null,
+      torneoNombre: c.torneo?.nombre ?? null,
+      inscripcionId: c.inscripcionId ?? null,
+      clubId: c.inscripcion?.clubId ?? null,
+      clubNombre: c.inscripcion?.club?.nombre ?? null,
+      sancionId: c.sancionId ?? null,
+      tarifaId: c.tarifaId ?? null,
+      tarifaTipo: c.tarifa?.tipo ?? null,
+      generadoAuto: c.generadoAuto ?? false,
+      periodoAnio: c.periodoAnio ?? null,
+      periodoMes: c.periodoMes ?? null,
+      periodoSemana: c.periodoSemana ?? null,
       createdAt: c.createdAt.toISOString(),
     };
   }

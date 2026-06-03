@@ -79,12 +79,39 @@ export const CobroAdminSchema = z.object({
   diasMorosidad: z.number().int(),
   dunningAvisosEnviados: z.number().int(),
   dunningUltimoAvisoAt: z.iso.datetime().nullable(),
+  // Sprint 34A — trazabilidad del origen.
+  torneoId: z.uuid().nullable(),
+  torneoNombre: z.string().nullable(),
+  inscripcionId: z.uuid().nullable(),
+  clubId: z.uuid().nullable(),
+  clubNombre: z.string().nullable(),
+  sancionId: z.uuid().nullable(),
+  tarifaId: z.uuid().nullable(),
+  tarifaTipo: z
+    .enum([
+      'MATRICULA',
+      'CUOTA',
+      'MULTA_AMARILLA',
+      'MULTA_ROJA',
+      'MULTA_FECHA_SANCION',
+      'MULTA_WALKOVER',
+      'OTRO',
+    ])
+    .nullable(),
+  generadoAuto: z.boolean(),
+  periodoAnio: z.number().int().nullable(),
+  periodoMes: z.number().int().nullable(),
+  periodoSemana: z.number().int().nullable(),
   createdAt: z.iso.datetime(),
 });
 export type CobroAdmin = z.infer<typeof CobroAdminSchema>;
 
 export const CreateCobroSchema = z.object({
   equipoId: z.uuid().optional().nullable(),
+  // Sprint 34A — el operador puede vincular un cobro manual a un torneo
+  // o a una inscripción específica. Opcional para back-compat.
+  torneoId: z.uuid().optional().nullable(),
+  inscripcionId: z.uuid().optional().nullable(),
   concepto: z.string().min(2).max(200),
   categoria: z.enum(CATEGORIA_COBRO),
   monto: z.number().int().min(0),

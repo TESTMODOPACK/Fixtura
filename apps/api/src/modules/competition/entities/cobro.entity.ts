@@ -12,6 +12,9 @@ import {
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Equipo } from './equipo.entity';
 import { InscripcionTorneo } from './inscripcion-torneo.entity';
+import { SancionActiva } from './sancion-activa.entity';
+import { TarifaTorneo } from './tarifa-torneo.entity';
+import { Torneo } from './torneo.entity';
 
 export type CategoriaCobro =
   | 'INSCRIPCION'
@@ -58,6 +61,44 @@ export class Cobro {
   @ManyToOne(() => InscripcionTorneo, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'inscripcion_id' })
   inscripcion?: InscripcionTorneo | null;
+
+  // Sprint 34A — vinculos para automatizacion y trazabilidad.
+  @Column({ name: 'torneo_id', type: 'uuid', nullable: true })
+  torneoId!: string | null;
+
+  @ManyToOne(() => Torneo, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'torneo_id' })
+  torneo?: Torneo | null;
+
+  @Column({ name: 'sancion_id', type: 'uuid', nullable: true })
+  sancionId!: string | null;
+
+  @ManyToOne(() => SancionActiva, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'sancion_id' })
+  sancion?: SancionActiva | null;
+
+  @Column({ name: 'tarifa_id', type: 'uuid', nullable: true })
+  tarifaId!: string | null;
+
+  @ManyToOne(() => TarifaTorneo, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'tarifa_id' })
+  tarifa?: TarifaTorneo | null;
+
+  /** True si lo creo un hook/cron automatico, false si lo cargo a mano el admin. */
+  @Column({ name: 'generado_auto', type: 'boolean', default: false })
+  generadoAuto!: boolean;
+
+  // Identificacion del periodo cubierto por una cuota recurrente. Solo
+  // tienen valor cuando la tarifa es CUOTA SEMANAL/MENSUAL/ANUAL. El
+  // anti-duplicado del cron usa (inscripcion, tarifa, anio, mes/semana).
+  @Column({ name: 'periodo_anio', type: 'smallint', nullable: true })
+  periodoAnio!: number | null;
+
+  @Column({ name: 'periodo_mes', type: 'smallint', nullable: true })
+  periodoMes!: number | null;
+
+  @Column({ name: 'periodo_semana', type: 'smallint', nullable: true })
+  periodoSemana!: number | null;
 
   @Column({ type: 'varchar', length: 200 })
   concepto!: string;

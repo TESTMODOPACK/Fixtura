@@ -24,6 +24,7 @@ import {
   SancionActiva,
   Serie,
   Sponsor,
+  TarifaTorneo,
   Temporada,
   Torneo,
   Transaccion,
@@ -60,6 +61,8 @@ import {
       Transaccion,
       DocumentoTributario,
       DiaNoJugable,
+      // Sprint 34A — tarifario configurable por torneo.
+      TarifaTorneo,
       // Sprint 26A — modelo nuevo de clubes/inscripciones/vetados.
       Club,
       ClubCategoria,

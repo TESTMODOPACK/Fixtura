@@ -17,6 +17,7 @@ export * from './sponsors';
 export * from './rut';
 export * from './canchas';
 export * from './cobros';
+export * from './tarifas';
 export * from './transacciones';
 export * from './sii';
 export * from './suspensiones';

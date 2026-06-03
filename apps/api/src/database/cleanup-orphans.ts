@@ -145,6 +145,13 @@ async function main(): Promise<void> {
     // Sprint 6B: tabla cobros (finanzas MVP).
     await ensureCobrosTable(client, log);
 
+    // Sprint 34A: tarifario configurable por torneo + FKs en cobros.
+    // Tiene que correr DESPUES de ensureCobrosTable porque suma columnas
+    // (torneo_id, sancion_id, tarifa_id, generado_auto, periodo_*) a
+    // cobros, y DESPUES de la creacion de torneos/inscripciones/sanciones
+    // que ya estan aseguradas por el flujo principal antes de este punto.
+    await ensureTarifasTorneoTable(client, log);
+
     // Sprint 6A-v2: FK formal partidos.cancha_id → canchas.id, con
     // backfill por nombre para no perder los partidos ya creados.
     await ensurePartidosCanchaId(client, log);
@@ -741,6 +748,112 @@ async function ensureCobrosTable(
   );
   await ensureTrigger(client, 'cobros');
   log('Cobros asegurada (idempotente).');
+
+  // Sprint 34A — vinculos del cobro con torneo, sancion origen y tarifa
+  // que lo genero. Tambien marca generado_auto y periodo (para cuotas
+  // recurrentes mensuales/semanales). Todo nullable para back-compat con
+  // los cobros viejos creados manualmente.
+  await client.query(`
+    ALTER TABLE cobros
+      ADD COLUMN IF NOT EXISTS torneo_id     UUID REFERENCES torneos(id)          ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS sancion_id    UUID REFERENCES sanciones_activas(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS generado_auto BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS periodo_anio   SMALLINT,
+      ADD COLUMN IF NOT EXISTS periodo_mes    SMALLINT CHECK (periodo_mes    IS NULL OR periodo_mes    BETWEEN 1 AND 12),
+      ADD COLUMN IF NOT EXISTS periodo_semana SMALLINT CHECK (periodo_semana IS NULL OR periodo_semana BETWEEN 1 AND 53)
+  `);
+  // tarifa_id se agrega despues, una vez que ensureTarifasTorneoTable
+  // creo la tabla (orden de FK).
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_cobros_torneo
+      ON cobros(torneo_id)  WHERE torneo_id  IS NOT NULL
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_cobros_sancion
+      ON cobros(sancion_id) WHERE sancion_id IS NOT NULL
+  `);
+  log('cobros: torneo_id + sancion_id + generado_auto + periodo asegurados (Sprint 34A).');
+}
+
+async function ensureTarifasTorneoTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  // Sprint 34A — Tarifario configurable por torneo.
+  //
+  // Una fila por (torneo, tipo de cobro). UNIQUE (torneo_id, tipo) — solo
+  // puede haber UNA tarifa por concepto, p.ej. una MATRICULA, una CUOTA,
+  // una MULTA_AMARILLA. Si la liga necesita varios "OTROS", los crea
+  // todos con tipo='OTRO' y los distingue por descripcion (no aplica
+  // UNIQUE en ese caso porque tenemos `descripcion` parte del key
+  // funcional, pero por simplicidad arrancamos con UNIQUE estricta y si
+  // hace falta se relaja despues).
+  //
+  // `frecuencia` aplica solo a tipo=CUOTA (UNICO=no recurrente, SEMANAL,
+  // MENSUAL, ANUAL). `dia_vencimiento` para mensual/anual es el dia del
+  // mes; para semanal es 1..7 (lunes..domingo) — el service lo interpreta.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS tarifas_torneo (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id       UUID NOT NULL REFERENCES tenants(id)  ON DELETE CASCADE,
+      torneo_id       UUID NOT NULL REFERENCES torneos(id)  ON DELETE CASCADE,
+      tipo            VARCHAR(40) NOT NULL CHECK (tipo IN (
+                        'MATRICULA','CUOTA',
+                        'MULTA_AMARILLA','MULTA_ROJA',
+                        'MULTA_FECHA_SANCION','MULTA_WALKOVER',
+                        'OTRO'
+                      )),
+      descripcion     VARCHAR(200),
+      monto           INTEGER NOT NULL CHECK (monto >= 0),
+      frecuencia      VARCHAR(20) NOT NULL DEFAULT 'UNICO'
+                        CHECK (frecuencia IN ('UNICO','SEMANAL','MENSUAL','ANUAL')),
+      dia_vencimiento SMALLINT CHECK (dia_vencimiento IS NULL OR (dia_vencimiento BETWEEN 1 AND 31)),
+      activo          BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_tarifa_torneo_tipo UNIQUE (torneo_id, tipo)
+    )
+  `);
+  await ensureRls(client, 'tarifas_torneo');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_tarifas_tenant ON tarifas_torneo(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_tarifas_torneo ON tarifas_torneo(torneo_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_tarifas_activas ON tarifas_torneo(torneo_id) WHERE activo = TRUE`,
+  );
+  await ensureTrigger(client, 'tarifas_torneo');
+  log('tarifas_torneo asegurada (Sprint 34A).');
+
+  // Ahora que existe tarifas_torneo, podemos sumar la FK al cobro.
+  await client.query(`
+    ALTER TABLE cobros
+      ADD COLUMN IF NOT EXISTS tarifa_id UUID
+        REFERENCES tarifas_torneo(id) ON DELETE SET NULL
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_cobros_tarifa
+      ON cobros(tarifa_id) WHERE tarifa_id IS NOT NULL
+  `);
+
+  // Anti-duplicado de cuotas recurrentes: 1 sola cobro activo por
+  // (inscripcion, tarifa, periodo). El COALESCE trata NULL como 0
+  // (semanal no usa mes y viceversa). Limitado a generados auto y no
+  // cancelados — los manuales no entran al anti-dup.
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_cobro_cuota_periodo
+      ON cobros (
+        inscripcion_id,
+        tarifa_id,
+        periodo_anio,
+        COALESCE(periodo_mes, 0),
+        COALESCE(periodo_semana, 0)
+      )
+      WHERE generado_auto = TRUE AND cancelado = FALSE
+  `);
+  log('cobros.tarifa_id + UNIQUE(inscripcion, tarifa, periodo) asegurados (Sprint 34A).');
 }
 
 async function ensureTransaccionesTable(
