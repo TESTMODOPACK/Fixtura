@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { Club } from '@fixtura/types';
-import { Check, Plus, Save, Users, X } from 'lucide-react';
+import { AlertTriangle, Info, Plus, Save, Users, X } from 'lucide-react';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -235,76 +235,217 @@ export function EditarClubDrawer({
           </div>
 
           <div>
-            <CardLabel>Categorías</CardLabel>
-            <p className="text-xs font-serif italic text-ink-mute mt-1 mb-3">
-              Marcá las categorías en las que el club compite. Las
-              categorías nuevas heredan la directiva &ldquo;madre&rdquo; del club como
-              punto de partida; podés ajustarla después desde la ficha de
-              cada categoría. <b>No se puede quitar una categoría que ya
-              tenga jugadores cargados</b> — eliminalos primero.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {(categorias ?? []).filter((c) => c.activa || seleccionadas.includes(c.id)).map((c) => {
-                const seleccionada = seleccionadas.includes(c.id);
-                const detalle = club.categoriasDetalle.find(
-                  (d) => d.categoriaId === c.id,
-                );
-                const tieneJugadores = (detalle?.jugadoresCount ?? 0) > 0;
-                const yaAsignada = club.categoriaIds.includes(c.id);
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => toggleCategoria(c.id)}
-                    className={cn(
-                      'px-3 py-2 rounded-card border text-sm flex items-center gap-2 transition-colors',
-                      seleccionada
-                        ? 'bg-green-deep/10 border-green-deep text-green-deep'
-                        : 'bg-paper border-line text-ink-mute hover:border-green-deep hover:text-green-deep',
-                    )}
-                    title={
-                      tieneJugadores && yaAsignada && !seleccionada
-                        ? `Si quitás ${c.nombre}, el backend va a rechazar porque tiene ${detalle?.jugadoresCount} jugador(es). Eliminalos primero.`
-                        : undefined
-                    }
-                  >
-                    {seleccionada && (
-                      <Check size={14} className="flex-shrink-0" />
-                    )}
-                    {!seleccionada && !yaAsignada && (
-                      <Plus size={14} className="flex-shrink-0" />
-                    )}
-                    <span className="font-semibold">{c.nombre}</span>
-                    <span className="text-[10px] text-ink-mute font-mono">
-                      mín. {c.edadMinimaGeneral}
-                    </span>
-                    {detalle && detalle.jugadoresCount > 0 && (
-                      <span
-                        className={cn(
-                          'text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ml-1 flex items-center gap-0.5',
-                          seleccionada
-                            ? 'bg-green-deep/20'
-                            : 'bg-ink-mute/15 text-ink-mute',
-                        )}
-                      >
-                        <Users size={9} />
-                        {detalle.jugadoresCount}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+            <CardLabel>Categorías del club</CardLabel>
+
+            {/* Info-box explicativo */}
+            <div className="bg-green-bright/10 border border-green-bright/30 rounded-card px-3 py-2 mt-2 mb-4 flex items-start gap-2 text-xs">
+              <Info size={14} className="flex-shrink-0 mt-0.5 text-green-bright" />
+              <div className="space-y-1 text-green-deep/90">
+                <div>
+                  Cada categoría tiene su propia directiva y plantel — un mismo
+                  club puede competir en varias.
+                </div>
+                <div>
+                  Al <b>agregar una categoría nueva</b>, hereda la directiva
+                  actual del club como punto de partida. Después podés ajustarla
+                  desde la ficha de esa categoría.
+                </div>
+              </div>
             </div>
+
+            {/* Categorías actuales del club */}
+            {(() => {
+              const actuales = (categorias ?? []).filter((c) =>
+                club.categoriaIds.includes(c.id),
+              );
+              if (actuales.length === 0) return null;
+              return (
+                <div className="mb-4">
+                  <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-mute mb-2">
+                    Asignadas actualmente ({actuales.length})
+                  </div>
+                  <div className="space-y-2">
+                    {actuales.map((c) => {
+                      const detalle = club.categoriasDetalle.find(
+                        (d) => d.categoriaId === c.id,
+                      );
+                      const sigue = seleccionadas.includes(c.id);
+                      const aQuitar = !sigue;
+                      const tieneJugadores = (detalle?.jugadoresCount ?? 0) > 0;
+                      return (
+                        <div
+                          key={c.id}
+                          className={cn(
+                            'flex items-center gap-3 px-3 py-2 rounded-card border',
+                            aQuitar
+                              ? 'bg-danger/5 border-danger/30'
+                              : 'bg-paper border-line',
+                          )}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div
+                              className={cn(
+                                'font-semibold text-sm',
+                                aQuitar && 'line-through text-ink-mute',
+                              )}
+                            >
+                              {c.nombre}
+                            </div>
+                            <div className="text-[10px] text-ink-mute flex items-center gap-2 mt-0.5">
+                              <span>Mín. {c.edadMinimaGeneral} años</span>
+                              {detalle && (
+                                <span className="flex items-center gap-0.5">
+                                  <Users size={10} />
+                                  {detalle.jugadoresCount} jugador
+                                  {detalle.jugadoresCount === 1 ? '' : 'es'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {aQuitar ? (
+                            <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-danger/15 text-danger">
+                              Se va a quitar
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => toggleCategoria(c.id)}
+                            disabled={tieneJugadores && !aQuitar}
+                            title={
+                              tieneJugadores && !aQuitar
+                                ? `No se puede quitar: ${detalle?.jugadoresCount} jugador(es) cargados. Eliminalos primero desde la ficha.`
+                                : aQuitar
+                                  ? 'Deshacer (mantener asignada)'
+                                  : 'Quitar del club'
+                            }
+                            className={cn(
+                              'h-8 w-8 rounded-card flex items-center justify-center transition-colors',
+                              tieneJugadores && !aQuitar
+                                ? 'text-ink-mute/40 cursor-not-allowed'
+                                : aQuitar
+                                  ? 'text-accent hover:bg-accent/10'
+                                  : 'text-ink-mute hover:bg-danger/10 hover:text-danger',
+                            )}
+                            aria-label={
+                              aQuitar ? 'Deshacer quitar' : 'Quitar categoría'
+                            }
+                          >
+                            {aQuitar ? <Plus size={14} /> : <X size={14} />}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Categorías disponibles para agregar */}
+            {(() => {
+              const disponibles = (categorias ?? []).filter(
+                (c) => c.activa && !club.categoriaIds.includes(c.id),
+              );
+              if (disponibles.length === 0) {
+                return (
+                  <div className="text-xs font-serif italic text-ink-mute">
+                    No hay otras categorías disponibles. Creá categorías nuevas
+                    desde{' '}
+                    <a
+                      href="/admin/categorias"
+                      className="text-accent hover:underline"
+                    >
+                      /admin/categorías
+                    </a>
+                    .
+                  </div>
+                );
+              }
+              return (
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-mute mb-2">
+                    Agregar otra categoría ({disponibles.length} disponible
+                    {disponibles.length === 1 ? '' : 's'})
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {disponibles.map((c) => {
+                      const aAgregar = seleccionadas.includes(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => toggleCategoria(c.id)}
+                          className={cn(
+                            'px-3 py-2 rounded-card border text-sm flex items-center gap-2 transition-colors',
+                            aAgregar
+                              ? 'bg-green-bright/15 border-green-bright text-green-deep'
+                              : 'bg-paper border-line border-dashed text-ink-mute hover:border-green-bright hover:text-green-deep hover:bg-green-bright/5',
+                          )}
+                        >
+                          <Plus size={14} className="flex-shrink-0" />
+                          <span className="font-semibold">{c.nombre}</span>
+                          <span className="text-[10px] text-ink-mute font-mono">
+                            mín. {c.edadMinimaGeneral}
+                          </span>
+                          {aAgregar && (
+                            <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-green-bright/30 text-green-deep ml-1">
+                              Se va a agregar
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Resumen de cambios pendientes */}
+            {(() => {
+              const aAgregar = seleccionadas.filter(
+                (id) => !club.categoriaIds.includes(id),
+              );
+              const aQuitar = club.categoriaIds.filter(
+                (id) => !seleccionadas.includes(id),
+              );
+              if (aAgregar.length === 0 && aQuitar.length === 0) return null;
+              return (
+                <div className="mt-4 px-3 py-2 rounded-card bg-accent/10 border border-accent/30 flex items-start gap-2 text-xs">
+                  <AlertTriangle
+                    size={14}
+                    className="flex-shrink-0 mt-0.5 text-accent"
+                  />
+                  <div className="space-y-0.5 text-ink">
+                    <div className="font-semibold">Cambios pendientes:</div>
+                    {aAgregar.length > 0 && (
+                      <div>
+                        <span className="text-green-deep font-semibold">
+                          {aAgregar.length} agregar
+                        </span>{' '}
+                        — heredan la directiva actual del club.
+                      </div>
+                    )}
+                    {aQuitar.length > 0 && (
+                      <div>
+                        <span className="text-danger font-semibold">
+                          {aQuitar.length} quitar
+                        </span>{' '}
+                        — se borra la directiva de esa categoría
+                        (los jugadores deben estar eliminados primero).
+                      </div>
+                    )}
+                    <div className="text-ink-mute italic mt-1">
+                      Hacé click en &ldquo;Guardar&rdquo; para aplicar.
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {form.formState.errors.categoriaIds?.message && (
               <p className="text-xs text-danger mt-2">
                 {form.formState.errors.categoriaIds.message}
               </p>
             )}
-            <p className="text-[10px] text-ink-mute font-serif italic mt-3">
-              {seleccionadas.length} categoría
-              {seleccionadas.length === 1 ? '' : 's'} seleccionada
-              {seleccionadas.length === 1 ? '' : 's'}.
-            </p>
           </div>
 
           <div>
