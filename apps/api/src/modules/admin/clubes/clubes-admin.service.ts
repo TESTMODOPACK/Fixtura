@@ -424,6 +424,8 @@ export class ClubesAdminService {
       posicion: input.posicion ?? null,
       pieHabil: input.pieHabil ?? null,
       apodo: input.apodo?.trim() || null,
+      telefonoContacto: input.telefonoContacto?.trim() || null,
+      nombreContacto: input.nombreContacto?.trim() || null,
       capitan: input.capitan ?? false,
       estado: 'ACTIVO',
     });
@@ -472,6 +474,12 @@ export class ClubesAdminService {
     if (input.posicion !== undefined) jugador.posicion = input.posicion;
     if (input.pieHabil !== undefined) jugador.pieHabil = input.pieHabil;
     if (input.apodo !== undefined) jugador.apodo = input.apodo?.trim() || null;
+    if (input.telefonoContacto !== undefined) {
+      jugador.telefonoContacto = input.telefonoContacto?.trim() || null;
+    }
+    if (input.nombreContacto !== undefined) {
+      jugador.nombreContacto = input.nombreContacto?.trim() || null;
+    }
     if (input.capitan !== undefined) jugador.capitan = input.capitan;
     if (input.estado !== undefined) jugador.estado = input.estado;
 
@@ -709,6 +717,8 @@ export class ClubesAdminService {
       posicion: j.posicion,
       pieHabil: j.pieHabil,
       apodo: j.apodo,
+      telefonoContacto: j.telefonoContacto,
+      nombreContacto: j.nombreContacto,
       capitan: j.capitan,
       estado: j.estado,
       edad: calcularEdad(j.fechaNac),

@@ -172,6 +172,10 @@ export const JugadorSchema = z.object({
   posicion: PosicionJugadorSchema.nullable(),
   pieHabil: PieHabilSchema.nullable(),
   apodo: z.string().nullable(),
+  // Contacto de emergencia (sprint 33A): nombre + teléfono de un
+  // familiar/responsable a quien avisar si el jugador se accidenta.
+  telefonoContacto: z.string().nullable(),
+  nombreContacto: z.string().nullable(),
   capitan: z.boolean(),
   estado: z.enum(['ACTIVO', 'INACTIVO']),
   // Calculados al vuelo desde fechaNac (ADR-0004). NO se persisten.
@@ -193,6 +197,8 @@ export const CreateJugadorClubSchema = z.object({
   posicion: PosicionJugadorSchema.nullable().optional(),
   pieHabil: PieHabilSchema.nullable().optional(),
   apodo: z.string().max(50).nullable().optional(),
+  telefonoContacto: z.string().max(50).nullable().optional(),
+  nombreContacto: z.string().max(100).nullable().optional(),
   capitan: z.boolean().default(false),
   /**
    * Si true, el backend acepta el jugador aunque caiga en excepción

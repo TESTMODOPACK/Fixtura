@@ -94,6 +94,15 @@ export class Jugador {
   @Column({ type: 'varchar', length: 50, nullable: true })
   apodo!: string | null;
 
+  // Contacto de emergencia (sprint 33A). Ambos opcionales — se usan
+  // para localizar a un familiar/responsable si el jugador sufre un
+  // accidente durante un partido.
+  @Column({ name: 'telefono_contacto', type: 'varchar', length: 50, nullable: true })
+  telefonoContacto!: string | null;
+
+  @Column({ name: 'nombre_contacto', type: 'varchar', length: 100, nullable: true })
+  nombreContacto!: string | null;
+
   @Column({ type: 'boolean', default: false })
   capitan!: boolean;
 

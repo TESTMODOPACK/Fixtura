@@ -70,6 +70,16 @@ export class BulkImportRowDto {
 
   @IsOptional()
   capitan?: unknown;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 50)
+  telefonoContacto?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 100)
+  nombreContacto?: string | null;
 }
 
 export class BulkImportPreviewDto {

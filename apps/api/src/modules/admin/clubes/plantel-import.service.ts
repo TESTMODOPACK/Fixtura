@@ -277,6 +277,8 @@ export class PlantelImportService {
         const nuevoNum = this.parseNumeroCamiseta(raw.numeroCamiseta);
         const nuevaPos = this.parsePosicion(raw.posicion);
         const nuevoCap = this.parseBoolean(raw.capitan);
+        const nuevoTelContacto = raw.telefonoContacto?.trim() || null;
+        const nuevoNombreContacto = raw.nombreContacto?.trim() || null;
 
         if (existente.estado === 'INACTIVO') cambios.push('reactivar (estaba inactivo)');
         if (existente.email !== nuevoEmail) cambios.push('email');
@@ -284,6 +286,12 @@ export class PlantelImportService {
         if (existente.numeroCamiseta !== nuevoNum) cambios.push('camiseta');
         if (existente.posicion !== nuevaPos) cambios.push('posición');
         if (existente.capitan !== nuevoCap) cambios.push('capitán');
+        if (existente.telefonoContacto !== nuevoTelContacto) {
+          cambios.push('teléfono de contacto');
+        }
+        if (existente.nombreContacto !== nuevoNombreContacto) {
+          cambios.push('nombre de contacto');
+        }
 
         filasPreview.push({
           rut,
@@ -408,6 +416,8 @@ export class PlantelImportService {
               posicion: this.parsePosicion(raw.posicion),
               pieHabil: null,
               apodo: null,
+              telefonoContacto: raw.telefonoContacto?.trim() || null,
+              nombreContacto: raw.nombreContacto?.trim() || null,
               capitan: this.parseBoolean(raw.capitan),
               estado: 'ACTIVO',
             });
@@ -490,6 +500,8 @@ export class PlantelImportService {
         telefono: raw.telefono?.trim() || null,
         numeroCamiseta: this.parseNumeroCamiseta(raw.numeroCamiseta),
         posicion: this.parsePosicion(raw.posicion),
+        telefonoContacto: raw.telefonoContacto?.trim() || null,
+        nombreContacto: raw.nombreContacto?.trim() || null,
         capitan: this.parseBoolean(raw.capitan),
         // Reactivar: si el jugador estaba INACTIVO y vuelve a venir en el
         // archivo, queda ACTIVO. Es lo que el admin espera al reimportar.

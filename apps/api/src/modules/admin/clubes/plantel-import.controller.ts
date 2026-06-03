@@ -121,6 +121,8 @@ function buildTemplate(): Buffer {
     numeroCamiseta: 10,
     posicion: 'MEDIO',
     capitan: false,
+    telefonoContacto: '+56 9 9876 5432',
+    nombreContacto: 'María González (esposa)',
   };
   const ws1 = XLSX.utils.json_to_sheet([ejemplo], { header: headers });
   // Anchos cómodos
@@ -141,6 +143,8 @@ function buildTemplate(): Buffer {
     ['numeroCamiseta', 'Opcional. Número entero entre 0 y 99.'],
     ['posicion', 'Opcional. Uno de: ARQUERO, DEFENSA, MEDIO, DELANTERO.'],
     ['capitan', 'Opcional. Sí/No, true/false, 1/0.'],
+    ['telefonoContacto', 'Opcional. Teléfono de un familiar/responsable para avisar en caso de accidente durante un partido.'],
+    ['nombreContacto', 'Opcional. Nombre + parentesco de esa persona. Ej: "María González (esposa)".'],
     ['', ''],
     ['Reglas de match', ''],
     ['1', 'Se identifica al jugador por RUT a nivel de la liga.'],

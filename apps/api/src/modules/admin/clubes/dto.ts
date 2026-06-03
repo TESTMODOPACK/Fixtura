@@ -199,6 +199,20 @@ export class CreateJugadorClubDto {
   @Length(0, 50)
   apodo?: string | null;
 
+  /**
+   * Contacto de emergencia (sprint 33A). Ambos opcionales — para
+   * avisar a un familiar/responsable si el jugador se accidenta.
+   */
+  @IsOptional()
+  @IsString()
+  @Length(0, 50)
+  telefonoContacto?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 100)
+  nombreContacto?: string | null;
+
   @IsOptional()
   @IsBoolean()
   capitan?: boolean;
@@ -255,6 +269,16 @@ export class UpdateJugadorClubDto {
   @IsString()
   @Length(0, 50)
   apodo?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 50)
+  telefonoContacto?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 100)
+  nombreContacto?: string | null;
 
   @IsOptional()
   @IsBoolean()

@@ -43,6 +43,10 @@ export const BulkImportRowSchema = z.object({
   numeroCamiseta: z.union([z.number(), z.string()]).optional().nullable(),
   posicion: z.string().optional().nullable(),
   capitan: z.union([z.boolean(), z.string()]).optional(),
+  // Contacto de emergencia (sprint 33A): familiar/responsable para
+  // avisar si el jugador se accidenta. Opcional.
+  telefonoContacto: z.string().optional().nullable(),
+  nombreContacto: z.string().optional().nullable(),
 });
 export type BulkImportRow = z.infer<typeof BulkImportRowSchema>;
 
@@ -130,4 +134,6 @@ export const PLANTEL_COLUMNAS_OPCIONALES = [
   'numeroCamiseta',
   'posicion',
   'capitan',
+  'telefonoContacto',
+  'nombreContacto',
 ] as const;

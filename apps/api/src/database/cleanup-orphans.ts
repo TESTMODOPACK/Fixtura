@@ -1571,6 +1571,16 @@ async function ensureClubesTables(
   );
   await ensureTrigger(client, 'jugadores');
 
+  // Sprint 33A — contacto de emergencia del jugador.
+  // Para avisar a un familiar/responsable en caso de accidente durante
+  // un partido. Ambas columnas opcionales — no se exige cargarlas.
+  await client.query(`
+    ALTER TABLE jugadores
+      ADD COLUMN IF NOT EXISTS telefono_contacto VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS nombre_contacto   VARCHAR(100)
+  `);
+  log('jugadores.telefono_contacto + nombre_contacto asegurados (Sprint 33A).');
+
   // ─── inscripciones_torneo ────────────────────────────────────────
   // Pivote entre club y torneo. Un club puede inscribirse en distintas
   // (categoría, serie) del mismo torneo (Halcones en Senior Primera y
