@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { Club } from '@fixtura/types';
-import { Save, X } from 'lucide-react';
+import { Check, Plus, Save, Users, X } from 'lucide-react';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -16,19 +16,22 @@ import {
   rhfErrorsToBanner,
 } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
-import { useUpdateClub } from '@/hooks/use-admin';
+import { useCategorias, useUpdateClub } from '@/hooks/use-admin';
+import { cn } from '@/lib/cn';
 import { toastError, toastSuccess } from '@/lib/toast';
 
 /**
  * Sprint 32 — drawer para editar los datos transversales del club
- * (nombre, escudo, colores, página web, reseña). Estos campos son
- * compartidos por todas las categorías del club, así que se editan
- * acá y no desde la ficha por categoría.
+ * (nombre, escudo, colores, página web, reseña) y el set de categorías
+ * en las que participa. Todo lo de acá afecta a TODAS las categorías
+ * del club.
  *
- * NO incluye la directiva del club (eso se edita por categoría).
- * NO incluye el set de categorías asignadas (eso es decisión más
- * grande y se hace desde otro lado si hace falta — por ahora solo
- * desde "Nuevo club" o admin DB).
+ * Las categorías nuevas que se agregan heredan la directiva "madre"
+ * del club como punto de partida (el backend lo hace automático en
+ * sincronizarCategorias). Las que se quitan deben tener 0 jugadores
+ * cargados, sino el backend rechaza con detalle.
+ *
+ * NO incluye la directiva (eso se edita por categoría en la ficha).
  */
 
 const optionalEmail = z.preprocess(
@@ -60,6 +63,9 @@ const FormSchema = z.object({
     .optional(),
   paginaWeb: optionalUrl,
   resena: z.string().max(2000).optional(),
+  categoriaIds: z
+    .array(z.uuid())
+    .min(1, 'El club debe tener al menos una categoría asignada.'),
 });
 type FormData = z.infer<typeof FormSchema>;
 
@@ -70,6 +76,7 @@ const FIELD_LABEL: Record<string, string> = {
   colorSecundario: 'Color secundario',
   paginaWeb: 'Página web',
   resena: 'Reseña',
+  categoriaIds: 'Categorías',
 };
 
 export function EditarClubDrawer({
@@ -82,6 +89,7 @@ export function EditarClubDrawer({
   onClose: () => void;
 }): React.ReactElement | null {
   const mutation = useUpdateClub(club.id);
+  const { data: categorias } = useCategorias();
 
   const form = useForm<FormData>({
     resolver: zodResolver(FormSchema),
@@ -92,6 +100,7 @@ export function EditarClubDrawer({
       colorSecundario: club.colorSecundario ?? '',
       paginaWeb: club.paginaWeb ?? '',
       resena: club.resena ?? '',
+      categoriaIds: club.categoriaIds,
     },
     mode: 'onChange',
   });
@@ -106,9 +115,10 @@ export function EditarClubDrawer({
         colorSecundario: club.colorSecundario ?? '',
         paginaWeb: club.paginaWeb ?? '',
         resena: club.resena ?? '',
+        categoriaIds: club.categoriaIds,
       });
     }
-  }, [open, club.id, club.nombre, club.escudoUrl, club.colorPrimario, club.colorSecundario, club.paginaWeb, club.resena, form]);
+  }, [open, club.id, club.nombre, club.escudoUrl, club.colorPrimario, club.colorSecundario, club.paginaWeb, club.resena, club.categoriaIds, form]);
 
   // ESC cierra el drawer.
   useEffect(() => {
@@ -120,6 +130,19 @@ export function EditarClubDrawer({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  const seleccionadas = form.watch('categoriaIds');
+
+  const toggleCategoria = (catId: string): void => {
+    const actuales = form.getValues('categoriaIds');
+    const next = actuales.includes(catId)
+      ? actuales.filter((x) => x !== catId)
+      : [...actuales, catId];
+    form.setValue('categoriaIds', next, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+  };
+
   const onSubmit = async (vals: FormData): Promise<void> => {
     try {
       await mutation.mutateAsync({
@@ -129,10 +152,14 @@ export function EditarClubDrawer({
         colorSecundario: vals.colorSecundario?.trim() || null,
         paginaWeb: vals.paginaWeb?.trim() || null,
         resena: vals.resena?.trim() || null,
+        categoriaIds: vals.categoriaIds,
       });
       toastSuccess('Datos del club actualizados.');
       onClose();
     } catch (err) {
+      // El backend rechaza con ConflictException si se intenta quitar
+      // una categoría que tiene jugadores cargados. El toast lo muestra
+      // automáticamente vía MutationCache global.
       toastError(err);
     }
   };
@@ -205,6 +232,79 @@ export function EditarClubDrawer({
                 error={form.formState.errors.paginaWeb?.message as string}
               />
             </div>
+          </div>
+
+          <div>
+            <CardLabel>Categorías</CardLabel>
+            <p className="text-xs font-serif italic text-ink-mute mt-1 mb-3">
+              Marcá las categorías en las que el club compite. Las
+              categorías nuevas heredan la directiva &ldquo;madre&rdquo; del club como
+              punto de partida; podés ajustarla después desde la ficha de
+              cada categoría. <b>No se puede quitar una categoría que ya
+              tenga jugadores cargados</b> — eliminalos primero.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(categorias ?? []).filter((c) => c.activa || seleccionadas.includes(c.id)).map((c) => {
+                const seleccionada = seleccionadas.includes(c.id);
+                const detalle = club.categoriasDetalle.find(
+                  (d) => d.categoriaId === c.id,
+                );
+                const tieneJugadores = (detalle?.jugadoresCount ?? 0) > 0;
+                const yaAsignada = club.categoriaIds.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => toggleCategoria(c.id)}
+                    className={cn(
+                      'px-3 py-2 rounded-card border text-sm flex items-center gap-2 transition-colors',
+                      seleccionada
+                        ? 'bg-green-deep/10 border-green-deep text-green-deep'
+                        : 'bg-paper border-line text-ink-mute hover:border-green-deep hover:text-green-deep',
+                    )}
+                    title={
+                      tieneJugadores && yaAsignada && !seleccionada
+                        ? `Si quitás ${c.nombre}, el backend va a rechazar porque tiene ${detalle?.jugadoresCount} jugador(es). Eliminalos primero.`
+                        : undefined
+                    }
+                  >
+                    {seleccionada && (
+                      <Check size={14} className="flex-shrink-0" />
+                    )}
+                    {!seleccionada && !yaAsignada && (
+                      <Plus size={14} className="flex-shrink-0" />
+                    )}
+                    <span className="font-semibold">{c.nombre}</span>
+                    <span className="text-[10px] text-ink-mute font-mono">
+                      mín. {c.edadMinimaGeneral}
+                    </span>
+                    {detalle && detalle.jugadoresCount > 0 && (
+                      <span
+                        className={cn(
+                          'text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ml-1 flex items-center gap-0.5',
+                          seleccionada
+                            ? 'bg-green-deep/20'
+                            : 'bg-ink-mute/15 text-ink-mute',
+                        )}
+                      >
+                        <Users size={9} />
+                        {detalle.jugadoresCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {form.formState.errors.categoriaIds?.message && (
+              <p className="text-xs text-danger mt-2">
+                {form.formState.errors.categoriaIds.message}
+              </p>
+            )}
+            <p className="text-[10px] text-ink-mute font-serif italic mt-3">
+              {seleccionadas.length} categoría
+              {seleccionadas.length === 1 ? '' : 's'} seleccionada
+              {seleccionadas.length === 1 ? '' : 's'}.
+            </p>
           </div>
 
           <div>
