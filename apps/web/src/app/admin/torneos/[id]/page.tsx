@@ -6,6 +6,7 @@ import {
   Check,
   type LucideIcon,
   Plus,
+  Trash2,
   Trophy,
   Users,
 } from 'lucide-react';
@@ -17,8 +18,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import { ApiError } from '@/lib/api';
-import { useCategorias, useEquipos, useTorneo, useUpdateTorneo } from '@/hooks/use-admin';
+import {
+  useCategorias,
+  useDeleteTorneo,
+  useEquipos,
+  useTorneo,
+  useUpdateTorneo,
+} from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
+import { toastSuccess } from '@/lib/toast';
 
 import { GenerarFixtureForm } from './_generar-fixture-form';
 import { NuevoEquipoForm } from './_nuevo-equipo-form';
@@ -442,9 +450,26 @@ function ConfiguracionTab({
   duracionEntretiempoMinutos: number;
 }): React.ReactElement {
   const mutation = useUpdateTorneo(torneoId);
+  const deleteTorneo = useDeleteTorneo();
+  const router = useRouter();
   const error = mutation.error as ApiError | undefined;
   const { data: categorias } = useCategorias();
   const [seleccion, setSeleccion] = useState<string>(categoriaId ?? '');
+
+  const onEliminarTorneo = (): void => {
+    const ok = window.confirm(
+      '¿Eliminar este torneo? Esto borra el torneo y todo lo que tenga ' +
+        'cargado en borrador (equipos, configuración, etc.). No se puede ' +
+        'deshacer.',
+    );
+    if (!ok) return;
+    deleteTorneo.mutate(torneoId, {
+      onSuccess: () => {
+        toastSuccess('Torneo eliminado correctamente.');
+        router.push('/admin/torneos');
+      },
+    });
+  };
 
   // Sprint 29A — duración del partido editable.
   const [duracionPeriodo, setDuracionPeriodo] = useState<number>(duracionPeriodoMinutos);
@@ -533,6 +558,29 @@ function ConfiguracionTab({
             {error && (
               <p className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">{error.message}</p>
             )}
+          </div>
+        )}
+
+        {/* Sprint 31 — eliminar torneo. Solo permitido en DRAFT, después
+            de activar el torneo ya hay data en juego (designaciones,
+            actas, posibles cobros) y borrarlo perdería historial. */}
+        {estado === 'DRAFT' && (
+          <div className="mt-6 pt-5 border-t border-line">
+            <CardLabel tone="mute">Zona peligrosa</CardLabel>
+            <p className="font-serif italic text-ink-mute text-xs mt-2 mb-3">
+              Si este torneo fue creado por error, podés eliminarlo mientras
+              esté en borrador. Una vez activo, no se puede borrar — usá
+              &ldquo;Cerrar torneo&rdquo; para mantenerlo como histórico.
+            </p>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={onEliminarTorneo}
+              loading={deleteTorneo.isPending}
+              className="text-danger border-danger/40 hover:bg-danger/5"
+            >
+              <Trash2 size={14} /> Eliminar torneo
+            </Button>
           </div>
         )}
       </Card>

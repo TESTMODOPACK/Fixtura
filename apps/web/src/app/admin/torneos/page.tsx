@@ -1,13 +1,14 @@
 'use client';
 
-import { Plus, Trophy } from 'lucide-react';
+import { Plus, Trash2, Trophy } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
-import { useTorneos } from '@/hooks/use-admin';
+import { useDeleteTorneo, useTorneos } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
+import { toastSuccess } from '@/lib/toast';
 
 const estadoBadge = (estado: string): string => {
   if (estado === 'ACTIVO') return 'bg-green-bright/10 text-green-bright';
@@ -17,6 +18,21 @@ const estadoBadge = (estado: string): string => {
 
 export default function TorneosListPage(): React.ReactElement {
   const { data: torneos, isLoading } = useTorneos();
+  const deleteTorneo = useDeleteTorneo();
+
+  const onEliminar = (id: string, nombre: string): void => {
+    const ok = window.confirm(
+      `¿Eliminar el torneo "${nombre}"?\n\n` +
+        `Esto borra el torneo y todo lo que tenga cargado en borrador ` +
+        `(equipos sin fixture, configuración, etc.). No se puede deshacer.`,
+    );
+    if (!ok) return;
+    deleteTorneo.mutate(id, {
+      onSuccess: () => {
+        toastSuccess(`Torneo "${nombre}" eliminado.`);
+      },
+    });
+  };
 
   return (
     <>
@@ -92,13 +108,25 @@ export default function TorneosListPage(): React.ReactElement {
                         {t.estado}
                       </span>
                     </td>
-                    <td className="px-3 py-4 text-right">
+                    <td className="px-3 py-4 text-right whitespace-nowrap">
                       <Link
                         href={`/admin/torneos/${t.id}`}
                         className="text-xs text-accent hover:underline"
                       >
                         Gestionar →
                       </Link>
+                      {t.estado === 'DRAFT' && (
+                        <button
+                          type="button"
+                          onClick={() => onEliminar(t.id, t.nombre)}
+                          disabled={deleteTorneo.isPending}
+                          className="ml-3 text-ink-mute hover:text-danger disabled:opacity-50"
+                          title="Eliminar torneo (solo en borrador)"
+                          aria-label="Eliminar torneo"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

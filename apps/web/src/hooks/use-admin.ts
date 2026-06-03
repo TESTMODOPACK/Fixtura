@@ -102,6 +102,22 @@ export function useUpdateTorneo(id: string) {
   });
 }
 
+/**
+ * Sprint 31 — eliminar torneo. Solo permitido en estado DRAFT (backend
+ * lo valida con BadRequestException si está ACTIVO/CERRADO).
+ */
+export function useDeleteTorneo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/torneos/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos'] });
+      qc.invalidateQueries({ queryKey: ['public'] });
+    },
+  });
+}
+
 // ─── Equipos ─────────────────────────────────────────────────────────
 export function useEquipos(torneoId: string | null | undefined) {
   return useQuery({

@@ -1,9 +1,27 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 
-import { ROLE, type TorneoAdmin, type UserContext } from '@fixtura/types';
+import {
+  ROLE,
+  type CreateTorneoRequest,
+  type TorneoAdmin,
+  type UpdateTorneoRequest,
+  type UserContext,
+} from '@fixtura/types';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { Audited } from '../../audit';
 import { CreateTorneoDto, UpdateTorneoDto } from './dto';
 import { TorneosAdminService } from './torneos-admin.service';
 
@@ -26,29 +44,50 @@ export class TorneosAdminController {
   }
 
   @Post()
-  create(@CurrentUser() user: UserContext, @Body() dto: CreateTorneoDto): Promise<TorneoAdmin> {
-    return this.svc.create(ensureTenant(user), {
-      temporadaId: dto.temporadaId,
-      nombre: dto.nombre,
-      slug: dto.slug,
-      tipoFormato: dto.tipoFormato ?? 'ROUND_ROBIN',
-      ruedas: dto.ruedas ?? 1,
-      puntosVictoria: dto.puntosVictoria ?? 3,
-      puntosEmpate: dto.puntosEmpate ?? 1,
-      puntosDerrota: dto.puntosDerrota ?? 0,
-      fechaInicio: dto.fechaInicio,
-      fechaFin: dto.fechaFin,
-      reglamentoUrl: dto.reglamentoUrl,
-    });
+  @Audited({ action: 'torneo.creado', entityType: 'Torneo' })
+  create(
+    @CurrentUser() user: UserContext,
+    @Body() dto: CreateTorneoDto,
+  ): Promise<TorneoAdmin> {
+    // Sprint 31 fix — el cast bridge class-validator (defaults opcionales)
+    // con Zod (defaults requeridos tras .default()). El service aplica
+    // los defaults faltantes (tipoFormato, ruedas, etc.) internamente.
+    return this.svc.create(
+      ensureTenant(user),
+      dto as unknown as CreateTorneoRequest,
+    );
   }
 
   @Patch(':id')
+  @Audited({
+    action: 'torneo.actualizado',
+    entityType: 'Torneo',
+    entityIdFrom: 'params.id',
+  })
   update(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateTorneoDto,
   ): Promise<TorneoAdmin> {
-    return this.svc.update(id, ensureTenant(user), dto);
+    return this.svc.update(
+      id,
+      ensureTenant(user),
+      dto as unknown as UpdateTorneoRequest,
+    );
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @Audited({
+    action: 'torneo.eliminado',
+    entityType: 'Torneo',
+    entityIdFrom: 'params.id',
+  })
+  remove(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<void> {
+    return this.svc.remove(id, ensureTenant(user));
   }
 }
 

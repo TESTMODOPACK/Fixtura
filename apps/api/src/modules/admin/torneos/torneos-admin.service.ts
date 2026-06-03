@@ -363,6 +363,42 @@ export class TorneosAdminService {
     return this.findOne(id, tenantId);
   }
 
+  /**
+   * Sprint 31 — eliminar torneo. Solo permitido en estado DRAFT.
+   *
+   * Por qué no permitir borrar ACTIVO/CERRADO:
+   *   - ACTIVO: ya hay partidos en juego, designaciones asignadas,
+   *     posibles cobros emitidos. Borrar perdería data en vivo.
+   *   - CERRADO: es histórico de la liga. Si se borra, se pierde
+   *     el track de campeón, goleador, sanciones, etc.
+   *
+   * Para casos de error real en la creación, el admin debe borrar
+   * cuando todavía está en DRAFT (antes de activar).
+   *
+   * Si alguna vez se necesita borrar un torneo activo/cerrado por
+   * razones extremas (test data, compliance, etc.), va por SQL
+   * directo con el super admin.
+   *
+   * FK con ON DELETE CASCADE en equipos/fechas/partidos garantiza
+   * que el borrado en DRAFT limpia todo lo que pudo haberse creado
+   * antes (equipos inscritos pero sin fixture todavía, por ej.).
+   */
+  async remove(id: string, tenantId: string): Promise<void> {
+    const torneo = await this.repo.findOne({ where: { id, tenantId } });
+    if (!torneo) {
+      throw new NotFoundException(`Torneo ${id} no encontrado.`);
+    }
+    if (torneo.estado !== 'DRAFT') {
+      throw new BadRequestException(
+        `Solo se pueden eliminar torneos en estado DRAFT. ` +
+          `Este torneo está en ${torneo.estado}. Si fue creado por error, ` +
+          `podés cerrarlo desde la pestaña Configuración para mantenerlo ` +
+          `como histórico.`,
+      );
+    }
+    await this.repo.delete({ id, tenantId });
+  }
+
   private async toDto(t: Torneo): Promise<TorneoAdmin> {
     const [equiposCount, fechasCount] = await Promise.all([
       this.equipoRepo.count({ where: { torneoId: t.id } }),
