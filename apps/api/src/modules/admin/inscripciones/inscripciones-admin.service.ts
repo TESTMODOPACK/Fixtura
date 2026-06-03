@@ -21,6 +21,7 @@ import { Jugador } from '../../competition/entities/jugador.entity';
 import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
 import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { TarifaAplicadorService } from '../tarifas/tarifa-aplicador.service';
 
 /**
  * Sprint 26E (ADR-0004) — Inscripción de clubes a un torneo.
@@ -61,6 +62,8 @@ export class InscripcionesAdminService {
     private readonly equipoRepo: Repository<Equipo>,
     @InjectRepository(JugadorInscrito)
     private readonly jugadorInscritoRepo: Repository<JugadorInscrito>,
+    // Sprint 34C — hook de matrícula automática al inscribir.
+    private readonly tarifaAplicador: TarifaAplicadorService,
   ) {}
 
   /**
@@ -264,6 +267,22 @@ export class InscripcionesAdminService {
     // Sprint 26G.2 — Shim: crear equipo sombra en el modelo viejo para
     // que fixture/actas/sanciones puedan operar sobre el equipo "real".
     await this.ensureEquipoSombra(saved, club, tenantId);
+
+    // Sprint 34C — Hook: generar el cobro de MATRICULA si el torneo
+    // tiene tarifa configurada. Si no hay tarifa, el aplicador deja
+    // un audit log y devuelve null silenciosamente — no bloquea la
+    // inscripción. Cualquier excepción inesperada también la
+    // contenemos acá para que no rompa el caller.
+    try {
+      await this.tarifaAplicador.aplicarMatricula(saved.id, tenantId);
+    } catch (err) {
+      // Log y seguir — la inscripción ya está, lo financiero se puede
+      // reponer manualmente desde /admin/finanzas.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[inscripcion] matricula auto falló insc=${saved.id}: ${(err as Error).message}`,
+      );
+    }
 
     return this.findOne(saved.id, tenantId);
   }

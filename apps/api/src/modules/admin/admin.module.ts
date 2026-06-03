@@ -60,6 +60,8 @@ import {
 import { PersonalAdminService } from './personal/personal-admin.service';
 import { SponsorsAdminController } from './sponsors/sponsors-admin.controller';
 import { SponsorsAdminService } from './sponsors/sponsors-admin.service';
+import { CuotasCron } from './tarifas/cuotas.cron';
+import { TarifaAplicadorService } from './tarifas/tarifa-aplicador.service';
 import { TarifasAdminController } from './tarifas/tarifas-admin.controller';
 import { TarifasAdminService } from './tarifas/tarifas-admin.service';
 import { TemporadasAdminController } from './temporadas/temporadas-admin.controller';
@@ -140,6 +142,9 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     AjustesAdminService,
     SponsorsAdminService,
     TarifasAdminService,
+    // Sprint 34C — aplicador compartido + cron de cuotas recurrentes.
+    TarifaAplicadorService,
+    CuotasCron,
     CanchasAdminService,
     CategoriasAdminService,
     ClubesAdminService,
