@@ -15,6 +15,8 @@ import { CategoriasAdminController } from './categorias/categorias-admin.control
 import { CategoriasAdminService } from './categorias/categorias-admin.service';
 import { ClubesAdminController } from './clubes/clubes-admin.controller';
 import { ClubesAdminService } from './clubes/clubes-admin.service';
+import { PlantelImportController } from './clubes/plantel-import.controller';
+import { PlantelImportService } from './clubes/plantel-import.service';
 import {
   InscripcionesItemController,
   InscripcionesTorneoController,
@@ -109,6 +111,7 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     CanchasAdminController,
     CategoriasAdminController,
     ClubesAdminController,
+    PlantelImportController,
     CobrosAdminController,
     DiasNoJugablesController,
     InscripcionesTorneoController,
@@ -136,6 +139,7 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     CanchasAdminService,
     CategoriasAdminService,
     ClubesAdminService,
+    PlantelImportService,
     CobrosAdminService,
     DiasNoJugablesService,
     InscripcionesAdminService,

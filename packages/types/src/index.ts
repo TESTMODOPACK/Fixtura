@@ -28,3 +28,4 @@ export * from './super-admin';
 export * from './facturacion-plataforma';
 export * from './categorias';
 export * from './clubes';
+export * from './plantel-import';

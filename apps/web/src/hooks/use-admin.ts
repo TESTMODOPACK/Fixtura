@@ -1821,3 +1821,47 @@ export function useRemoveJugadorPlanilla(inscripcionId: string) {
     },
   });
 }
+
+// ─── Sprint 28 — Importación masiva de planteles desde Excel ────────
+
+import type {
+  BulkImportConfirmRequest,
+  BulkImportPreview,
+  BulkImportResult,
+  BulkImportRow,
+} from '@fixtura/types';
+
+/**
+ * Preview de import: no commitea. Devuelve detalle por fila para que
+ * la UI muestre la tabla de revisión.
+ */
+export function usePreviewImportPlantel(clubId: string) {
+  return useMutation({
+    mutationFn: (input: { categoriaId: string; rows: BulkImportRow[] }) =>
+      apiFetch<BulkImportPreview>(
+        `/admin/clubes/${clubId}/plantel/import/preview`,
+        { method: 'POST', body: input },
+      ),
+  });
+}
+
+/**
+ * Confirma el import. Re-evalúa y aplica los cambios.
+ */
+export function useConfirmImportPlantel(clubId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: BulkImportConfirmRequest) =>
+      apiFetch<BulkImportResult>(
+        `/admin/clubes/${clubId}/plantel/import/confirm`,
+        { method: 'POST', body: input },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'clubes', clubId] });
+      qc.invalidateQueries({
+        queryKey: ['admin', 'clubes', clubId, 'plantel'],
+      });
+      qc.invalidateQueries({ queryKey: ['admin', 'jugadores-global'] });
+    },
+  });
+}

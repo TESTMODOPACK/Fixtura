@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   ArrowLeft,
+  FileSpreadsheet,
   Globe,
   Mail,
   Phone,
@@ -31,6 +32,7 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
+import { ImportPlantelModal } from './_import-plantel-modal';
 import { NuevoJugadorForm } from './_nuevo-jugador-form';
 
 export default function ClubDetallePage({
@@ -296,6 +298,7 @@ function PlantelTab({
   const { data: plantel, isLoading } = usePlantelClub(clubId, categoriaId);
   const deleteJugador = useDeleteJugadorClub(clubId);
   const [adding, setAdding] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const onRemove = async (j: Jugador): Promise<void> => {
     const ok = confirm(
@@ -313,15 +316,33 @@ function PlantelTab({
           {(plantel?.length ?? 0) === 1 ? '' : 'es'} en {categoriaNombre}
         </div>
         {!clubInactivo && (
-          <Button
-            variant="accent"
-            size="sm"
-            onClick={() => setAdding((v) => !v)}
-          >
-            <Plus size={12} /> {adding ? 'Cancelar' : 'Agregar jugador'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setImportOpen(true)}
+              title="Cargar plantel masivo desde Excel"
+            >
+              <FileSpreadsheet size={12} /> Importar Excel
+            </Button>
+            <Button
+              variant="accent"
+              size="sm"
+              onClick={() => setAdding((v) => !v)}
+            >
+              <Plus size={12} /> {adding ? 'Cancelar' : 'Agregar jugador'}
+            </Button>
+          </div>
         )}
       </div>
+
+      <ImportPlantelModal
+        clubId={clubId}
+        categoriaId={categoriaId}
+        categoriaNombre={categoriaNombre}
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+      />
 
       {adding && (
         <div className="px-5 py-4 bg-paper-dark border-b border-line">
