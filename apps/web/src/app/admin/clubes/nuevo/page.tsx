@@ -19,7 +19,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import { useCategorias, useCreateClub } from '@/hooks/use-admin';
-import { toastSuccess } from '@/lib/toast';
+import { toastError, toastSuccess, toastWarning } from '@/lib/toast';
 
 /**
  * Sprint 26C — Crear nuevo club.
@@ -171,35 +171,45 @@ export default function NuevoClubPage(): React.ReactElement {
   };
 
   const onSubmit = async (vals: ClubForm): Promise<void> => {
-    const presidente =
-      vals.presidenteNombre && vals.presidenteNombre.trim().length > 0
-        ? {
-            nombre: vals.presidenteNombre.trim(),
-            email: vals.presidenteEmail?.trim() || null,
-            telefono: vals.presidenteTelefono?.trim() || null,
-          }
-        : null;
+    try {
+      const presidente =
+        vals.presidenteNombre && vals.presidenteNombre.trim().length > 0
+          ? {
+              nombre: vals.presidenteNombre.trim(),
+              email: vals.presidenteEmail?.trim() || null,
+              telefono: vals.presidenteTelefono?.trim() || null,
+            }
+          : null;
 
-    const club = await createClub.mutateAsync({
-      slug: vals.slug,
-      nombre: vals.nombre,
-      escudoUrl: vals.escudoUrl?.trim() || null,
-      colorPrimario: vals.colorPrimario,
-      colorSecundario: vals.colorSecundario?.trim() || null,
-      paginaWeb: vals.paginaWeb?.trim() || null,
-      resena: vals.resena?.trim() || null,
-      categoriaIds: vals.categoriaIds,
-      presidente,
-      delegados: vals.delegados
-        .filter((d) => d.nombre.trim().length > 0)
-        .map((d) => ({
-          nombre: d.nombre.trim(),
-          email: d.email?.trim() || null,
-          telefono: d.telefono?.trim() || null,
-        })),
-    });
-    toastSuccess(`Club "${club.nombre}" creado correctamente.`);
-    router.push(`/admin/clubes/${club.id}`);
+      const club = await createClub.mutateAsync({
+        slug: vals.slug,
+        nombre: vals.nombre,
+        escudoUrl: vals.escudoUrl?.trim() || null,
+        colorPrimario: vals.colorPrimario,
+        colorSecundario: vals.colorSecundario?.trim() || null,
+        paginaWeb: vals.paginaWeb?.trim() || null,
+        resena: vals.resena?.trim() || null,
+        categoriaIds: vals.categoriaIds,
+        presidente,
+        delegados: vals.delegados
+          .filter((d) => d.nombre.trim().length > 0)
+          .map((d) => ({
+            nombre: d.nombre.trim(),
+            email: d.email?.trim() || null,
+            telefono: d.telefono?.trim() || null,
+          })),
+      });
+      toastSuccess(`Club "${club.nombre}" creado correctamente.`);
+      router.push(`/admin/clubes/${club.id}`);
+    } catch (err) {
+      toastError(err);
+      if (errorBannerRef.current) {
+        errorBannerRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
+    }
   };
 
   // Cuando handleSubmit detecta errores de validación, llama a onError
@@ -209,6 +219,22 @@ export default function NuevoClubPage(): React.ReactElement {
   const onError = (errors: FieldErrors<ClubForm>): void => {
     // eslint-disable-next-line no-console
     console.warn('[nuevo-club] validación falló:', errors);
+    // Sprint 30 fix — toast como red de seguridad cuando el banner no
+    // captura el error (FieldArray nested) o está fuera del viewport.
+    const flat = rhfErrorsToBanner(
+      errors as Record<string, unknown>,
+      FIELD_LABEL,
+    );
+    if (flat.length > 0) {
+      toastWarning(
+        `Revisá: ${flat
+          .slice(0, 3)
+          .map((e) => e.label)
+          .join(', ')}${flat.length > 3 ? '…' : ''}`,
+      );
+    } else {
+      toastWarning('Hay errores en el formulario. Revisá los campos marcados.');
+    }
     if (errorBannerRef.current) {
       errorBannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }

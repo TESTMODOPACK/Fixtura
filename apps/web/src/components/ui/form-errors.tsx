@@ -116,18 +116,59 @@ export function FormErrorChip({
  * Helper para convertir el shape de errores de react-hook-form a
  * FormFieldError[]. Permite pasar un mapeo opcional name → label
  * legible. Si no se da label, usa el name.
+ *
+ * Soporta:
+ *  - Campos planos: `nombre.message`
+ *  - FieldArrays (e.g. delegados, categoriasSeries):
+ *    `delegados: [{nombre: {message}, email: {message}}, ...]`
+ *    Cada error nested se aplana como `<label> #N · <subcampo>`.
+ *  - Objetos nested: `direccion: {calle: {message}}`.
  */
 export function rhfErrorsToBanner(
-  errors: Record<string, { message?: string } | undefined>,
+  errors: Record<string, unknown>,
   labelMap?: Record<string, string>,
 ): FormFieldError[] {
   const result: FormFieldError[] = [];
   for (const [name, err] of Object.entries(errors)) {
-    if (!err?.message) continue;
-    result.push({
-      label: labelMap?.[name] ?? name,
-      mensaje: err.message,
-    });
+    if (err == null) continue;
+    const label = labelMap?.[name] ?? name;
+
+    // Caso 1: error plano con .message
+    if (
+      typeof err === 'object' &&
+      'message' in (err as Record<string, unknown>) &&
+      typeof (err as { message?: unknown }).message === 'string'
+    ) {
+      result.push({ label, mensaje: (err as { message: string }).message });
+      continue;
+    }
+
+    // Caso 2: FieldArray — array de objetos con sub-errores
+    if (Array.isArray(err)) {
+      err.forEach((item, idx) => {
+        if (item == null || typeof item !== 'object') return;
+        for (const [sub, subErr] of Object.entries(item)) {
+          const subMsg = (subErr as { message?: unknown } | undefined)?.message;
+          if (typeof subMsg === 'string') {
+            result.push({
+              label: `${label} #${idx + 1} · ${sub}`,
+              mensaje: subMsg,
+            });
+          }
+        }
+      });
+      continue;
+    }
+
+    // Caso 3: objeto nested con sub-errores
+    if (typeof err === 'object') {
+      for (const [sub, subErr] of Object.entries(err as Record<string, unknown>)) {
+        const subMsg = (subErr as { message?: unknown } | undefined)?.message;
+        if (typeof subMsg === 'string') {
+          result.push({ label: `${label} · ${sub}`, mensaje: subMsg });
+        }
+      }
+    }
   }
   return result;
 }

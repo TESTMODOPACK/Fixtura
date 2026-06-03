@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
-import { toastSuccess } from '@/lib/toast';
+import { toastError, toastSuccess, toastWarning } from '@/lib/toast';
 import {
   useCategorias,
   useCreateTemporada,
@@ -161,24 +161,28 @@ export default function NuevoTorneoPage(): React.ReactElement {
   };
 
   const onSubmit = async (vals: TorneoForm): Promise<void> => {
-    let temporadaId = vals.temporadaId;
-    if (!temporadaId) temporadaId = await ensureTemporadaActual();
+    // Try/catch obligatorio: react-hook-form se traga las excepciones
+    // de los submit async, asi que sin esto un fallo de mutateAsync
+    // queda invisible (banner + toast).
+    try {
+      let temporadaId = vals.temporadaId;
+      if (!temporadaId) temporadaId = await ensureTemporadaActual();
 
-    // Filtrar combos incompletos (sin categoría)
-    const categoriasSeries = vals.categoriasSeries
-      .filter((c) => c.categoriaId)
-      .map((c) => ({
-        categoriaId: c.categoriaId!,
-        serieSlug: c.serieSlug ? c.serieSlug : null,
-        cupoEquipos: c.cupoEquipos,
-      }));
+      // Filtrar combos incompletos (sin categoría)
+      const categoriasSeries = vals.categoriasSeries
+        .filter((c) => c.categoriaId)
+        .map((c) => ({
+          categoriaId: c.categoriaId!,
+          serieSlug: c.serieSlug ? c.serieSlug : null,
+          cupoEquipos: c.cupoEquipos,
+        }));
 
-    const fechaLimite =
-      typeof vals.fechaLimiteRefuerzosNumero === 'number'
-        ? vals.fechaLimiteRefuerzosNumero
-        : null;
+      const fechaLimite =
+        typeof vals.fechaLimiteRefuerzosNumero === 'number'
+          ? vals.fechaLimiteRefuerzosNumero
+          : null;
 
-    const torneo = await createTorneo.mutateAsync({
+      const torneo = await createTorneo.mutateAsync({
       temporadaId,
       nombre: vals.nombre,
       slug: vals.slug,
@@ -194,13 +198,39 @@ export default function NuevoTorneoPage(): React.ReactElement {
       duracionPeriodoMinutos: vals.duracionPeriodoMinutos,
       duracionEntretiempoMinutos: vals.duracionEntretiempoMinutos,
     });
-    toastSuccess(`Torneo "${torneo.nombre}" creado correctamente.`);
-    router.push(`/admin/torneos/${torneo.id}`);
+      toastSuccess(`Torneo "${torneo.nombre}" creado correctamente.`);
+      router.push(`/admin/torneos/${torneo.id}`);
+    } catch (err) {
+      toastError(err);
+      // El banner arriba tambien muestra el error via createTorneo.error;
+      // hacemos scroll al banner para que sea visible si está fuera del fold.
+      if (errorBannerRef.current) {
+        errorBannerRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
+    }
   };
 
   const onError = (errors: Record<string, unknown>): void => {
     // eslint-disable-next-line no-console
     console.warn('[nuevo-torneo] validación falló:', errors);
+    // Sprint 30 fix — si el banner no captura los errores (FieldArray
+    // sin .message a primer nivel, race con setValue, etc.) damos
+    // feedback explícito con un toast para que el botón nunca parezca
+    // "muerto".
+    const flat = rhfErrorsToBanner(errors, TORNEO_FIELD_LABEL);
+    if (flat.length > 0) {
+      toastWarning(
+        `Revisá los campos: ${flat
+          .slice(0, 3)
+          .map((e) => e.label)
+          .join(', ')}${flat.length > 3 ? '…' : ''}`,
+      );
+    } else {
+      toastWarning('Hay errores en el formulario. Revisá los campos marcados.');
+    }
     if (errorBannerRef.current) {
       errorBannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
