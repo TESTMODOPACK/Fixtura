@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertTriangle, ArrowLeft, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
@@ -10,15 +10,20 @@ import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import {
+  FormErrorBanner,
+  FormErrorChip,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
+import { toastSuccess } from '@/lib/toast';
 import {
   useCategorias,
   useCreateTemporada,
   useCreateTorneo,
   useTemporadas,
 } from '@/hooks/use-admin';
-import { ApiError } from '@/lib/api';
 
 /**
  * Sprint 26D — Crear torneo con multi-categoría/serie y configuración
@@ -37,6 +42,23 @@ const ComboSchema = z.object({
   serieSlug: z.string().optional(),
   cupoEquipos: z.coerce.number().int().min(1).max(100),
 });
+
+// Sprint 27 — mapeo nombre técnico → etiqueta humana para el banner.
+const TORNEO_FIELD_LABEL: Record<string, string> = {
+  temporadaId: 'Temporada',
+  nombre: 'Nombre',
+  slug: 'Slug',
+  tipoFormato: 'Tipo de formato',
+  ruedas: 'Ruedas',
+  puntosVictoria: 'Puntos por victoria',
+  puntosEmpate: 'Puntos por empate',
+  puntosDerrota: 'Puntos por derrota',
+  topeJugadoresPorEquipo: 'Tope de jugadores',
+  refuerzosHabilitados: 'Refuerzos',
+  fechaLimiteRefuerzosNumero: 'Cierre de refuerzos',
+  duracionPeriodoMinutos: 'Minutos por tiempo',
+  duracionEntretiempoMinutos: 'Minutos de entretiempo',
+};
 
 const TorneoFormSchema = z.object({
   temporadaId: z.union([z.literal(''), z.uuid('Elegí una temporada válida')]),
@@ -172,6 +194,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
       duracionPeriodoMinutos: vals.duracionPeriodoMinutos,
       duracionEntretiempoMinutos: vals.duracionEntretiempoMinutos,
     });
+    toastSuccess(`Torneo "${torneo.nombre}" creado correctamente.`);
     router.push(`/admin/torneos/${torneo.id}`);
   };
 
@@ -183,9 +206,11 @@ export default function NuevoTorneoPage(): React.ReactElement {
     }
   };
 
-  const apiError = (createTorneo.error ?? createTemporada.error) as
-    | ApiError
-    | undefined;
+  const apiError = createTorneo.error ?? createTemporada.error;
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, { message?: string } | undefined>,
+    TORNEO_FIELD_LABEL,
+  );
 
   const categoriasActivas = categorias?.filter((c) => c.activa) ?? [];
 
@@ -203,18 +228,13 @@ export default function NuevoTorneoPage(): React.ReactElement {
         </Link>
       </PageHead>
 
-      {apiError && (
-        <div
-          ref={errorBannerRef}
-          className="mb-5 bg-danger/10 border-2 border-danger/40 rounded-card px-4 py-3 flex items-start gap-2 text-danger"
-        >
-          <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <div className="font-semibold">No se pudo crear el torneo</div>
-            <div className="mt-1">{apiError.message}</div>
-          </div>
-        </div>
-      )}
+      <FormErrorBanner
+        ref={errorBannerRef}
+        fieldErrors={fieldErrors}
+        apiError={apiError}
+        apiTitle="No se pudo crear el torneo"
+        validationTitle="Revisá los campos marcados antes de crear el torneo:"
+      />
 
       <form
         onSubmit={form.handleSubmit(onSubmit, onError)}
@@ -456,6 +476,12 @@ export default function NuevoTorneoPage(): React.ReactElement {
           <Link href="/admin/torneos">
             <Button variant="ghost" size="sm">Cancelar</Button>
           </Link>
+          {form.formState.isSubmitted && (
+            <FormErrorChip
+              fieldErrors={fieldErrors}
+              hasApiError={apiError != null}
+            />
+          )}
         </div>
       </form>
     </>

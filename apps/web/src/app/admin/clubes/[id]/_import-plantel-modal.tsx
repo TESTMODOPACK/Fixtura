@@ -27,6 +27,7 @@ import {
   usePreviewImportPlantel,
 } from '@/hooks/use-admin';
 import { API_URL } from '@/lib/api';
+import { toastError, toastSuccess } from '@/lib/toast';
 import { useAuthStore } from '@/store/auth-store';
 import { cn } from '@/lib/cn';
 
@@ -152,14 +153,20 @@ export function ImportPlantelModal({
 
   const onConfirm = async (): Promise<void> => {
     try {
-      await confirmMut.mutateAsync({
+      const res = await confirmMut.mutateAsync({
         categoriaId,
         rows,
         inactivarFaltantes,
       });
       setStep('done');
-    } catch {
-      // confirmMut.error queda set y se muestra en el preview step.
+      const total = res.creados + res.actualizados + res.inactivados;
+      toastSuccess(
+        `Importación aplicada: ${total} cambio${total === 1 ? '' : 's'} en el plantel.`,
+      );
+    } catch (err) {
+      // confirmMut.error queda set y se muestra en el preview step,
+      // pero un toast adicional ayuda si el modal está scrolleado.
+      toastError(err);
     }
   };
 
@@ -336,7 +343,11 @@ function UploadStep({
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) {
-      alert('No se pudo descargar la plantilla.');
+      toastError(
+        new Error(
+          'No se pudo descargar la plantilla. Revisá tu sesión y volvé a intentar.',
+        ),
+      );
       return;
     }
     const blob = await res.blob();

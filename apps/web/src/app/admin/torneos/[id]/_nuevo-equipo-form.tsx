@@ -11,9 +11,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { ColorSwatchPicker } from '@/components/ui/color-swatch-picker';
 import { Input } from '@/components/ui/input';
+import { FormErrorBanner } from '@/components/ui/form-errors';
 import { useClubes, useCreateEquipo } from '@/hooks/use-admin';
-import { ApiError } from '@/lib/api';
+import { parseApiErrorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { toastError, toastSuccess } from '@/lib/toast';
 
 interface SerieOption {
   slug: string;
@@ -107,23 +109,31 @@ export function NuevoEquipoForm({
         escudoUrl: club.escudoUrl ?? null,
         serieSlug: null,
       });
+      toastSuccess(`"${club.nombre}" inscrito en el torneo.`);
       onDone();
-    } catch {
-      // El error queda en mutation.error, se muestra abajo.
+    } catch (err) {
+      // mutation.error queda visible en banner inline; toast adicional
+      // por si el usuario está scrolleado en una lista larga.
+      toastError(err);
     }
   };
 
   const onSubmit = async (vals: EquipoForm): Promise<void> => {
-    await mutation.mutateAsync({
-      nombre: vals.nombre,
-      slug: vals.slug,
-      colorPrimario: vals.colorPrimario,
-      serieSlug: tieneSeries && vals.serieSlug ? vals.serieSlug : null,
-    });
-    onDone();
+    try {
+      await mutation.mutateAsync({
+        nombre: vals.nombre,
+        slug: vals.slug,
+        colorPrimario: vals.colorPrimario,
+        serieSlug: tieneSeries && vals.serieSlug ? vals.serieSlug : null,
+      });
+      toastSuccess(`Equipo "${vals.nombre}" inscrito.`);
+      onDone();
+    } catch (err) {
+      toastError(err);
+    }
   };
 
-  const error = mutation.error as ApiError | undefined;
+  const error = mutation.error;
 
   // ── Modo "lista": elegir club existente ─────────────────────────
   if (modo === 'lista') {
@@ -213,11 +223,10 @@ export function NuevoEquipoForm({
           </ul>
         )}
 
-        {error && (
-          <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
-            {error.message}
-          </div>
-        )}
+        <FormErrorBanner
+          apiError={error}
+          apiTitle="No se pudo inscribir el club al torneo"
+        />
       </div>
     );
   }
@@ -287,7 +296,11 @@ export function NuevoEquipoForm({
         <Button type="submit" variant="accent" size="sm" loading={mutation.isPending}>
           <Save size={14} /> Inscribir
         </Button>
-        {error && <span className="text-xs text-danger">{error.message}</span>}
+        {error && (
+          <span className="text-xs text-danger flex-1">
+            {parseApiErrorMessage(error)}
+          </span>
+        )}
       </div>
     </form>
   );

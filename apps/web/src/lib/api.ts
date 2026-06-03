@@ -39,6 +39,35 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Convierte un error de mutación (de TanStack Query, fetch, etc.) a un
+ * string legible para mostrar al usuario.
+ *
+ * Maneja:
+ *  - ApiError con `body.message: string` → ese string.
+ *  - ApiError con `body.message: string[]` (class-validator) → unidos
+ *    con comas; el primero como título.
+ *  - ApiError con statusCode 401/403 → "Sesión expirada" / "Sin permiso".
+ *  - Error genérico → error.message.
+ *  - unknown → "Ocurrió un error inesperado".
+ */
+export function parseApiErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.statusCode === 401) return 'Tu sesión expiró. Volvé a iniciar sesión.';
+    if (err.statusCode === 403) return 'No tenés permiso para esta acción.';
+    if (err.statusCode === 404) return err.message || 'No se encontró el recurso solicitado.';
+    if (err.body && typeof err.body === 'object' && 'message' in err.body) {
+      const m = (err.body as { message: unknown }).message;
+      if (Array.isArray(m)) return m.filter((x) => typeof x === 'string').join(' · ') || err.message;
+      if (typeof m === 'string') return m;
+    }
+    return err.message || 'Ocurrió un error con la solicitud.';
+  }
+  if (err instanceof Error) return err.message || 'Ocurrió un error inesperado.';
+  if (typeof err === 'string') return err;
+  return 'Ocurrió un error inesperado.';
+}
+
 type FetchOpts = Omit<RequestInit, 'body'> & {
   body?: unknown;
   skipAuth?: boolean;
@@ -152,10 +181,20 @@ export async function apiFetch<T = unknown>(path: string, opts: FetchOpts = {}):
     } catch {
       /* ignore */
     }
-    const message =
-      parsed && typeof parsed === 'object' && 'message' in parsed
-        ? String((parsed as { message: unknown }).message)
-        : res.statusText;
+    let message: string;
+    if (parsed && typeof parsed === 'object' && 'message' in parsed) {
+      const raw = (parsed as { message: unknown }).message;
+      if (Array.isArray(raw)) {
+        // class-validator: ["nombre must be at least 2 chars", ...]
+        message = raw.filter((x) => typeof x === 'string').join(' · ') || res.statusText;
+      } else if (typeof raw === 'string') {
+        message = raw;
+      } else {
+        message = res.statusText;
+      }
+    } else {
+      message = res.statusText;
+    }
     throw new ApiError(res.status, message, parsed);
   }
 

@@ -9,9 +9,11 @@ import { z } from 'zod';
 import { formatearRut, validarRut } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
+import { FormErrorBanner } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { useAddJugadorClub } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
+import { toastSuccess } from '@/lib/toast';
 
 /**
  * Sprint 26C — Form de alta de jugador al plantel del club.
@@ -126,6 +128,9 @@ export function NuevoJugadorForm({
         capitan: vals.capitan,
         aceptarExcepcionEdad,
       });
+      toastSuccess(
+        `Jugador ${vals.nombres} ${vals.apellidos} agregado al plantel.`,
+      );
       onDone();
     } catch (err) {
       // Backend usa 409 ConflictException para excepción de edad —
@@ -250,9 +255,11 @@ export function NuevoJugadorForm({
         </label>
 
         {errorVisible && (
-          <div className="md:col-span-2 text-sm text-danger bg-danger/10 border border-danger/30 rounded-card px-3 py-2 flex items-start gap-2">
-            <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
-            <span>{error.message}</span>
+          <div className="md:col-span-2">
+            <FormErrorBanner
+              apiError={error}
+              apiTitle="No se pudo agregar el jugador"
+            />
           </div>
         )}
 

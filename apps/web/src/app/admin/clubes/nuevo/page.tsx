@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertTriangle, ArrowLeft, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
@@ -11,10 +11,15 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { ColorSwatchPicker } from '@/components/ui/color-swatch-picker';
+import {
+  FormErrorBanner,
+  FormErrorChip,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import { useCategorias, useCreateClub } from '@/hooks/use-admin';
-import { ApiError } from '@/lib/api';
+import { toastSuccess } from '@/lib/toast';
 
 /**
  * Sprint 26C — Crear nuevo club.
@@ -193,6 +198,7 @@ export default function NuevoClubPage(): React.ReactElement {
           telefono: d.telefono?.trim() || null,
         })),
     });
+    toastSuccess(`Club "${club.nombre}" creado correctamente.`);
     router.push(`/admin/clubes/${club.id}`);
   };
 
@@ -208,24 +214,25 @@ export default function NuevoClubPage(): React.ReactElement {
     }
   };
 
-  const apiError = createClub.error as ApiError | undefined;
-  // Aplanamos los errores de zod a una lista plana para el banner.
-  // delegados es un FieldArray — manejamos sus errores anidados aparte.
-  const formErrors = form.formState.errors;
-  const erroresParaMostrar: Array<{ label: string; mensaje: string }> = [];
-  for (const [campo, err] of Object.entries(formErrors)) {
-    if (campo === 'delegados') continue;
-    const errObj = err as { message?: string } | undefined;
-    if (errObj?.message) {
-      erroresParaMostrar.push({
-        label: FIELD_LABEL[campo] ?? campo,
-        mensaje: errObj.message,
-      });
-    }
-  }
-  // Errores anidados de delegados (cada delegado tiene nombre/email/telefono)
-  const delegadosErrors = formErrors.delegados as
-    | Array<{ nombre?: { message?: string }; email?: { message?: string }; telefono?: { message?: string } }>
+  const apiError = createClub.error;
+  // Sprint 27 — usamos rhfErrorsToBanner para campos planos; el caso
+  // de delegados (FieldArray) lo manejamos aparte.
+  const formErrors = form.formState.errors as Record<
+    string,
+    { message?: string } | undefined
+  >;
+  const erroresParaMostrar = rhfErrorsToBanner(
+    Object.fromEntries(
+      Object.entries(formErrors).filter(([k]) => k !== 'delegados'),
+    ),
+    FIELD_LABEL,
+  );
+  const delegadosErrors = form.formState.errors.delegados as
+    | Array<{
+        nombre?: { message?: string };
+        email?: { message?: string };
+        telefono?: { message?: string };
+      }>
     | undefined;
   if (Array.isArray(delegadosErrors)) {
     delegadosErrors.forEach((dErr, i) => {
@@ -264,34 +271,14 @@ export default function NuevoClubPage(): React.ReactElement {
         </Link>
       </PageHead>
 
-      {/* Banner unificado: errores del cliente (zod) Y errores del backend (apiError) */}
-      {(erroresParaMostrar.length > 0 || apiError) && (
-        <div
-          ref={errorBannerRef}
-          className="mb-5 bg-danger/10 border-2 border-danger/40 rounded-card px-4 py-3"
-        >
-          <div className="flex items-start gap-2 text-danger">
-            <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
-            <div className="text-sm flex-1">
-              <div className="font-semibold">
-                {apiError
-                  ? 'No se pudo crear el club'
-                  : 'Revisá los campos marcados antes de crear el club:'}
-              </div>
-              {apiError && <div className="mt-1">{apiError.message}</div>}
-              {erroresParaMostrar.length > 0 && (
-                <ul className="mt-1 space-y-0.5">
-                  {erroresParaMostrar.map((e, i) => (
-                    <li key={i}>
-                      <span className="font-semibold">{e.label}:</span> {e.mensaje}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <FormErrorBanner
+        ref={errorBannerRef}
+        fieldErrors={erroresParaMostrar}
+        apiError={apiError}
+        apiTitle="No se pudo crear el club"
+        validationTitle="Revisá los campos marcados antes de crear el club:"
+      />
+
 
       <form
         onSubmit={form.handleSubmit(onSubmit, onError)}
@@ -526,14 +513,11 @@ export default function NuevoClubPage(): React.ReactElement {
               Cancelar
             </Button>
           </Link>
-          {/* Feedback adicional cerca del botón: si hay errores de
-              validación cuando el usuario ya intentó submitir, lo
-              guiamos al banner que está arriba. */}
-          {erroresParaMostrar.length > 0 && form.formState.isSubmitted && (
-            <span className="text-xs text-danger flex items-center gap-1">
-              <AlertTriangle size={12} />
-              Revisá los campos marcados arriba ({erroresParaMostrar.length})
-            </span>
+          {form.formState.isSubmitted && (
+            <FormErrorChip
+              fieldErrors={erroresParaMostrar}
+              hasApiError={apiError != null}
+            />
           )}
         </div>
       </form>
