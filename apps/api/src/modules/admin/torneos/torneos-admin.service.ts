@@ -176,10 +176,22 @@ export class TorneosAdminService {
     await this.resolveCategoria(tenantId, input.categoriaId ?? null);
 
     // Sprint 26D — validar categoriasSeries del torneo nuevo.
-    const categoriasSeries = await this.validarCategoriasSeries(
+    let categoriasSeries = await this.validarCategoriasSeries(
       tenantId,
       input.categoriasSeries,
     );
+
+    // Sprint 30 fix — si el admin solo definió la categoría legacy
+    // (sin armar combos categoría+serie+cupo) y no vino nada en
+    // categoriasSeries, autogeneramos un combo único con cupo amplio.
+    // Sin esto la página de Inscripciones muestra "TORNEO SIN
+    // CATEGORÍAS" pese a que el form de Configuración sí muestra la
+    // categoría guardada.
+    if (categoriasSeries.length === 0 && input.categoriaId) {
+      categoriasSeries = [
+        { categoriaId: input.categoriaId, serieSlug: null, cupoEquipos: 99 },
+      ];
+    }
 
     // Refuerzos: si están deshabilitados, ignorar fechaLimite que venga.
     const refuerzosHabilitados = input.refuerzosHabilitados ?? true;
@@ -279,6 +291,31 @@ export class TorneosAdminService {
       );
     }
 
+    // Sprint 30 fix — si el admin cambia la categoría legacy desde la
+    // pestaña Configuración y categoriasSeries todavía está vacío,
+    // autopoblar para que la página de Inscripciones funcione sin
+    // forzar al admin a recrear el torneo.
+    const efectivoCategoriaId =
+      input.categoriaId !== undefined ? input.categoriaId : existing.categoriaId;
+    const efectivoCombos =
+      categoriasSeriesValidadas ?? existing.categoriasSeries ?? [];
+    if (efectivoCombos.length === 0 && efectivoCategoriaId) {
+      categoriasSeriesValidadas = [
+        { categoriaId: efectivoCategoriaId, serieSlug: null, cupoEquipos: 99 },
+      ];
+    }
+    // Si el admin desvinculó la categoría legacy y los combos quedaron
+    // apuntando a ella, los limpiamos. Sin esto, el combo huérfano
+    // referencia una categoría que el torneo ya no usa.
+    if (
+      input.categoriaId === null &&
+      Array.isArray(existing.categoriasSeries) &&
+      existing.categoriasSeries.length === 1 &&
+      existing.categoriasSeries[0]?.categoriaId === existing.categoriaId
+    ) {
+      categoriasSeriesValidadas = [];
+    }
+
     Object.assign(existing, {
       ...(input.nombre !== undefined && { nombre: input.nombre }),
       ...(input.slug !== undefined && { slug: input.slug }),
@@ -332,6 +369,20 @@ export class TorneosAdminService {
       this.fechaRepo.count({ where: { torneoId: t.id } }),
     ]);
 
+    // Sprint 30 fix — defensa en profundidad: si la fila quedó con
+    // categoriaId legacy poblado pero categoriasSeries vacío (caso de
+    // torneos creados antes del 26D), sintetizamos el combo en la
+    // respuesta para que la UI de Inscripciones funcione sin requerir
+    // un update del torneo. El healing en cleanup-orphans persiste el
+    // mismo cambio en DB para que la lectura sea consistente.
+    const combosSinSintetizar = Array.isArray(t.categoriasSeries)
+      ? t.categoriasSeries
+      : [];
+    const combosEfectivos =
+      combosSinSintetizar.length === 0 && t.categoriaId
+        ? [{ categoriaId: t.categoriaId, serieSlug: null, cupoEquipos: 99 }]
+        : combosSinSintetizar;
+
     return {
       id: t.id,
       temporadaId: t.temporadaId,
@@ -356,7 +407,7 @@ export class TorneosAdminService {
       categoriaId: t.categoriaId,
       categoriaNombre: t.categoria?.nombre ?? null,
       categoriaSlug: t.categoria?.slug ?? null,
-      categoriasSeries: Array.isArray(t.categoriasSeries) ? t.categoriasSeries : [],
+      categoriasSeries: combosEfectivos,
       topeJugadoresPorEquipo: t.topeJugadoresPorEquipo ?? 25,
       refuerzosHabilitados: t.refuerzosHabilitados ?? true,
       fechaLimiteRefuerzosNumero: t.fechaLimiteRefuerzosNumero,

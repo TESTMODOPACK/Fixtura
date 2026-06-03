@@ -258,6 +258,29 @@ async function main(): Promise<void> {
     `);
     log('torneos.duracion_periodo + duracion_entretiempo asegurados (Sprint 29A).');
 
+    // Sprint 30 fix — backfill categorias_series desde la categoria_id
+    // legacy. Torneos creados antes del Sprint 26D quedaron con
+    // categoria_id poblado pero categorias_series = '[]', lo que hacía
+    // que /admin/torneos/:id/inscripciones mostrara "TORNEO SIN
+    // CATEGORÍAS" como falso positivo. Cupo 99 = "ilimitado" práctico.
+    const healingCategorias = await client.query(`
+      UPDATE torneos
+      SET categorias_series = jsonb_build_array(
+        jsonb_build_object(
+          'categoriaId', categoria_id::text,
+          'serieSlug', NULL,
+          'cupoEquipos', 99
+        )
+      )
+      WHERE categoria_id IS NOT NULL
+        AND (categorias_series IS NULL OR jsonb_array_length(categorias_series) = 0)
+    `);
+    if ((healingCategorias.rowCount ?? 0) > 0) {
+      log(
+        `Sprint 30: ${healingCategorias.rowCount} torneo(s) con categoriasSeries autogenerado desde categoria legacy.`,
+      );
+    }
+
     // Sprint 30 — healing: propagar nombre/escudo/colores del club a los
     // equipos sombra de sus inscripciones. Necesario porque el backfill
     // 26F creó equipos sombra copiando el equipo viejo (con nombres como
