@@ -34,6 +34,12 @@ services:
       POSTGRES_DB: ${DB_NAME:-fixtura}
       POSTGRES_USER: ${DB_USER:-fixtura}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Debe definir DB_PASSWORD}
+      # Sin esto Postgres corre en UTC, lo que hace que CURRENT_DATE
+      # quede desfasada de 3-4 horas vs el operador chileno. El cron
+      # de dunning chequea vencimientos contra CURRENT_DATE, asi que
+      # un cobro vence "ayer" si se ejecuta despues de las 21:00 CLT.
+      TZ: ${TZ:-America/Santiago}
+      PGTZ: ${TZ:-America/Santiago}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     # No exponemos 5432 al host en producción. El API se conecta vía la
@@ -131,6 +137,10 @@ services:
       # TTLs JWT — el código los lee directamente de process.env
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      # Sprint 34G+ — TZ explicita. main.ts tambien lo setea como fallback
+      # pero pasarlo aca lo deja visible en docker inspect y permite que
+      # el cron y los logs usen la zona de la liga.
+      TZ: ${TZ:-America/Santiago}
     # No exponemos 3000 al host — nginx hace el proxy desde 80/443.
     # ports:
     #   - "127.0.0.1:3000:3000"

@@ -28,6 +28,9 @@ services:
       POSTGRES_DB: ${DB_NAME:-fixtura}
       POSTGRES_USER: ${DB_USER:-fixtura}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-fixtura}
+      # TZ explicita asi que CURRENT_DATE coincide con el operador chileno.
+      TZ: ${TZ:-America/Santiago}
+      PGTZ: ${TZ:-America/Santiago}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
