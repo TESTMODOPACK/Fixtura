@@ -185,10 +185,23 @@ export class TarifaAplicadorService {
         partido,
         inc.equipoId,
       );
+      if (!inscripcionId) {
+        // Defensa: si no podemos resolver el club, NO creamos un cobro
+        // huerfano. Mejor un audit log y que el operador cargue la
+        // multa manualmente.
+        await this.audit.record({
+          action: 'cobro.no_generado_sin_inscripcion',
+          tenantId,
+          entityType: 'IncidenciaPartido',
+          entityId: inc.id,
+          metadata: { partidoId: partido.id, tipoTarifa, equipoId: inc.equipoId },
+        });
+        continue;
+      }
       await this.crearCobro({
         tenantId,
         torneoId,
-        inscripcionId: inscripcionId ?? '',
+        inscripcionId,
         partidoId: partido.id,
         sancionId: null,
         tarifa,
@@ -233,10 +246,23 @@ export class TarifaAplicadorService {
     }
 
     const inscripcionId = this.inferirInscripcionPartido(partido, equipoPerdedorId);
+    if (!inscripcionId) {
+      await this.audit.record({
+        action: 'cobro.no_generado_sin_inscripcion',
+        tenantId,
+        entityType: 'Partido',
+        entityId: partido.id,
+        metadata: {
+          tipoTarifa: 'MULTA_WALKOVER',
+          equipoPerdedorId,
+        },
+      });
+      return null;
+    }
     return this.crearCobro({
       tenantId,
       torneoId,
-      inscripcionId: inscripcionId ?? '',
+      inscripcionId,
       partidoId: partido.id,
       sancionId: null,
       tarifa,
@@ -281,7 +307,11 @@ export class TarifaAplicadorService {
     const periodos = this.calcularPeriodosFaltantes(insc, tarifa.frecuencia);
     let creadas = 0;
     for (const p of periodos) {
-      // Anti-duplicado: si ya existe (auto o manual), no creamos.
+      // Anti-duplicado: si ya existe un cobro del periodo (auto o manual,
+      // pagado, cancelado o pendiente), NO regeneramos. Esto evita que el
+      // cron resucite cobros que el operador cancelo a mano — la
+      // cancelacion es una decision explicita del admin que no queremos
+      // pisar en el proximo ciclo del cron.
       const yaExiste = await this.cobroRepo.findOne({
         where: {
           tenantId: insc.tenantId,
@@ -290,7 +320,6 @@ export class TarifaAplicadorService {
           periodoAnio: p.anio,
           periodoMes: p.mes ?? undefined,
           periodoSemana: p.semana ?? undefined,
-          cancelado: false,
         },
       });
       if (yaExiste) continue;
