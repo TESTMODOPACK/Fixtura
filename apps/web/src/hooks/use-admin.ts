@@ -877,13 +877,44 @@ import type {
   UpdateCobroRequest,
 } from '@fixtura/types';
 
-export function useCobros(filtro?: string, equipoId?: string) {
+export interface CobrosFiltros {
+  filtro?: string;
+  equipoId?: string;
+  // Sprint 34E
+  torneoId?: string;
+  clubId?: string;
+  soloAuto?: boolean;
+}
+
+export function useCobros(
+  filtroOrArgs?: string | CobrosFiltros,
+  equipoId?: string,
+) {
+  // Soporta firma vieja useCobros(filtro, equipoId) y nueva useCobros({ ... }).
+  const args: CobrosFiltros =
+    typeof filtroOrArgs === 'string' || filtroOrArgs === undefined
+      ? { filtro: filtroOrArgs, equipoId }
+      : filtroOrArgs;
   const qs = new URLSearchParams();
-  if (filtro) qs.set('filtro', filtro);
-  if (equipoId) qs.set('equipoId', equipoId);
+  if (args.filtro) qs.set('filtro', args.filtro);
+  if (args.equipoId) qs.set('equipoId', args.equipoId);
+  if (args.torneoId) qs.set('torneoId', args.torneoId);
+  if (args.clubId) qs.set('clubId', args.clubId);
+  if (args.soloAuto === true) qs.set('soloAuto', 'true');
+  if (args.soloAuto === false) qs.set('soloAuto', 'false');
   const query = qs.toString();
   return useQuery({
-    queryKey: ['admin', 'cobros', { filtro: filtro ?? null, equipoId: equipoId ?? null }],
+    queryKey: [
+      'admin',
+      'cobros',
+      {
+        filtro: args.filtro ?? null,
+        equipoId: args.equipoId ?? null,
+        torneoId: args.torneoId ?? null,
+        clubId: args.clubId ?? null,
+        soloAuto: args.soloAuto ?? null,
+      },
+    ],
     queryFn: () =>
       apiFetch<CobroAdmin[]>(`/admin/cobros${query ? `?${query}` : ''}`),
   });

@@ -44,6 +44,7 @@ import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
+  useClubes,
   useCobros,
   useCreateCobro,
   useDeleteCobro,
@@ -55,6 +56,7 @@ import {
   useMarcarPagado,
   useReintentarBoleta,
   useRevertirPago,
+  useTorneos,
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -85,7 +87,16 @@ export default function FinanzasPage(): React.ReactElement {
   const [tab, setTab] = useState<Tab>('cobros');
   const [filtro, setFiltro] = useState<Filtro>('pendientes');
   const [adding, setAdding] = useState(false);
-  const { data: cobros, isLoading, error } = useCobros(filtro === 'todos' ? undefined : filtro);
+  // Sprint 34E — filtros nuevos.
+  const [torneoFiltro, setTorneoFiltro] = useState<string>('');
+  const [clubFiltro, setClubFiltro] = useState<string>('');
+  const [soloAuto, setSoloAuto] = useState<'todos' | 'auto' | 'manual'>('todos');
+  const { data: cobros, isLoading, error } = useCobros({
+    filtro: filtro === 'todos' ? undefined : filtro,
+    torneoId: torneoFiltro || undefined,
+    clubId: clubFiltro || undefined,
+    soloAuto: soloAuto === 'auto' ? true : soloAuto === 'manual' ? false : undefined,
+  });
   const apiError = error as ApiError | undefined;
 
   const stats = useMemo(() => {
@@ -144,6 +155,12 @@ export default function FinanzasPage(): React.ReactElement {
           apiError={apiError}
           filtro={filtro}
           setFiltro={setFiltro}
+          torneoFiltro={torneoFiltro}
+          setTorneoFiltro={setTorneoFiltro}
+          clubFiltro={clubFiltro}
+          setClubFiltro={setClubFiltro}
+          soloAuto={soloAuto}
+          setSoloAuto={setSoloAuto}
           adding={adding}
           setAdding={setAdding}
         />
@@ -184,6 +201,13 @@ interface CobrosTabProps {
   apiError: ApiError | undefined;
   filtro: Filtro;
   setFiltro: React.Dispatch<React.SetStateAction<Filtro>>;
+  // Sprint 34E
+  torneoFiltro: string;
+  setTorneoFiltro: React.Dispatch<React.SetStateAction<string>>;
+  clubFiltro: string;
+  setClubFiltro: React.Dispatch<React.SetStateAction<string>>;
+  soloAuto: 'todos' | 'auto' | 'manual';
+  setSoloAuto: React.Dispatch<React.SetStateAction<'todos' | 'auto' | 'manual'>>;
   adding: boolean;
   setAdding: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -195,6 +219,12 @@ function CobrosTab({
   apiError,
   filtro,
   setFiltro,
+  torneoFiltro,
+  setTorneoFiltro,
+  clubFiltro,
+  setClubFiltro,
+  soloAuto,
+  setSoloAuto,
   adding,
   setAdding,
 }: CobrosTabProps): React.ReactElement {
@@ -244,6 +274,16 @@ function CobrosTab({
           <CobroForm onDone={() => setAdding(false)} />
         </Card>
       )}
+
+      {/* Sprint 34E — selectores por torneo / club / origen. */}
+      <FiltrosAvanzados
+        torneoFiltro={torneoFiltro}
+        setTorneoFiltro={setTorneoFiltro}
+        clubFiltro={clubFiltro}
+        setClubFiltro={setClubFiltro}
+        soloAuto={soloAuto}
+        setSoloAuto={setSoloAuto}
+      />
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <Filter size={14} className="text-ink-mute" />
@@ -632,12 +672,31 @@ function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
             <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-mute">
               {CATEGORIA_LABEL[cobro.categoria]}
             </span>
+            {/* Sprint 34E — badge AUTO si el cobro fue generado automaticamente. */}
+            {cobro.generadoAuto && (
+              <span
+                className="text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded bg-accent/15 text-accent"
+                title={
+                  cobro.tarifaTipo
+                    ? `Generado automaticamente · tarifa ${cobro.tarifaTipo}`
+                    : 'Generado automaticamente'
+                }
+              >
+                Auto
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-4 text-xs text-ink-mute flex-wrap">
             <span className="font-display tracking-display text-2xl text-green-deep">
               {formatCLP(cobro.monto)}
             </span>
-            {cobro.equipoNombre && <span>· {cobro.equipoNombre}</span>}
+            {cobro.clubNombre && <span>· {cobro.clubNombre}</span>}
+            {!cobro.clubNombre && cobro.equipoNombre && (
+              <span>· {cobro.equipoNombre}</span>
+            )}
+            {cobro.torneoNombre && (
+              <span className="text-ink-mute/80">en {cobro.torneoNombre}</span>
+            )}
             {cobro.vencimiento && (
               <span>
                 Vence: <span className="font-mono">{cobro.vencimiento}</span>
@@ -940,6 +999,108 @@ function MarcarPagadoForm({
       {error && (
         <div className="w-full text-sm text-danger mt-2">{error.message}</div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Sprint 34E — Selectores torneo + club + origen (auto/manual). Si todos
+ * los selectores estan en default, la fila se ve discreta. Cuando el
+ * operador elige algo, queda marcado con borde accent para que sea claro
+ * que la lista esta filtrada.
+ */
+function FiltrosAvanzados({
+  torneoFiltro,
+  setTorneoFiltro,
+  clubFiltro,
+  setClubFiltro,
+  soloAuto,
+  setSoloAuto,
+}: {
+  torneoFiltro: string;
+  setTorneoFiltro: React.Dispatch<React.SetStateAction<string>>;
+  clubFiltro: string;
+  setClubFiltro: React.Dispatch<React.SetStateAction<string>>;
+  soloAuto: 'todos' | 'auto' | 'manual';
+  setSoloAuto: React.Dispatch<React.SetStateAction<'todos' | 'auto' | 'manual'>>;
+}): React.ReactElement {
+  const { data: torneos } = useTorneos();
+  const { data: clubes } = useClubes();
+  const hayFiltro = !!torneoFiltro || !!clubFiltro || soloAuto !== 'todos';
+
+  return (
+    <div
+      className={cn(
+        'mb-3 p-3 rounded-card border',
+        hayFiltro ? 'border-accent/40 bg-accent/5' : 'border-line bg-paper/40',
+      )}
+    >
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] gap-3 items-end">
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
+            Torneo
+          </label>
+          <select
+            className="input w-full"
+            value={torneoFiltro}
+            onChange={(e) => setTorneoFiltro(e.target.value)}
+          >
+            <option value="">Todos los torneos</option>
+            {torneos?.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
+            Club
+          </label>
+          <select
+            className="input w-full"
+            value={clubFiltro}
+            onChange={(e) => setClubFiltro(e.target.value)}
+          >
+            <option value="">Todos los clubes</option>
+            {clubes?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
+            Origen
+          </label>
+          <select
+            className="input"
+            value={soloAuto}
+            onChange={(e) =>
+              setSoloAuto(e.target.value as 'todos' | 'auto' | 'manual')
+            }
+          >
+            <option value="todos">Auto + manual</option>
+            <option value="auto">Solo automáticos</option>
+            <option value="manual">Solo manuales</option>
+          </select>
+        </div>
+        {hayFiltro && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setTorneoFiltro('');
+              setClubFiltro('');
+              setSoloAuto('todos');
+            }}
+            title="Limpiar filtros"
+          >
+            <X size={14} /> Limpiar
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

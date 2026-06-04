@@ -33,14 +33,33 @@ export class CobrosAdminService {
     tenantId: string,
     filtro?: 'pendientes' | 'vencidos' | 'pagados' | 'cancelados' | 'todos',
     equipoId?: string,
+    // Sprint 34E — filtros nuevos para la vista mejorada de /admin/finanzas.
+    torneoId?: string,
+    clubId?: string,
+    soloAuto?: boolean,
   ): Promise<CobroAdmin[]> {
     const qb = this.repo
       .createQueryBuilder('c')
       .leftJoinAndSelect('c.equipo', 'equipo')
+      .leftJoinAndSelect('c.torneo', 'torneo')
+      .leftJoinAndSelect('c.inscripcion', 'inscripcion')
+      .leftJoinAndSelect('inscripcion.club', 'club')
+      .leftJoinAndSelect('c.tarifa', 'tarifa')
       .where('c.tenant_id = :tenantId', { tenantId });
 
     if (equipoId) {
       qb.andWhere('c.equipo_id = :equipoId', { equipoId });
+    }
+    if (torneoId) {
+      qb.andWhere('c.torneo_id = :torneoId', { torneoId });
+    }
+    if (clubId) {
+      qb.andWhere('inscripcion.club_id = :clubId', { clubId });
+    }
+    if (soloAuto === true) {
+      qb.andWhere('c.generado_auto = TRUE');
+    } else if (soloAuto === false) {
+      qb.andWhere('c.generado_auto = FALSE');
     }
 
     if (filtro === 'pendientes') {
@@ -65,7 +84,12 @@ export class CobrosAdminService {
   async findOne(id: string, tenantId: string): Promise<CobroAdmin> {
     const c = await this.repo.findOne({
       where: { id, tenantId },
-      relations: { equipo: true },
+      relations: {
+        equipo: true,
+        torneo: true,
+        inscripcion: { club: true },
+        tarifa: true,
+      },
     });
     if (!c) throw new NotFoundException(`Cobro ${id} no encontrado`);
     return this.toDto(c);

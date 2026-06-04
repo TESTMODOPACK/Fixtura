@@ -39,6 +39,9 @@ export class CobrosAdminController {
     @CurrentUser() user: UserContext,
     @Query('filtro') filtro?: string,
     @Query('equipoId') equipoId?: string,
+    @Query('torneoId') torneoId?: string,
+    @Query('clubId') clubId?: string,
+    @Query('soloAuto') soloAuto?: string,
   ): Promise<CobroAdmin[]> {
     const filtroValid =
       filtro === 'pendientes' ||
@@ -48,7 +51,18 @@ export class CobrosAdminController {
       filtro === 'todos'
         ? filtro
         : undefined;
-    return this.svc.list(ensureTenant(user), filtroValid, equipoId || undefined);
+    // Sprint 34E — soloAuto admite "true"/"false". Cualquier otro valor
+    // = sin filtro (devuelve auto + manual).
+    const soloAutoValid =
+      soloAuto === 'true' ? true : soloAuto === 'false' ? false : undefined;
+    return this.svc.list(
+      ensureTenant(user),
+      filtroValid,
+      equipoId || undefined,
+      torneoId || undefined,
+      clubId || undefined,
+      soloAutoValid,
+    );
   }
 
   @Get(':id')
