@@ -85,6 +85,7 @@ export const CobroAdminSchema = z.object({
   inscripcionId: z.uuid().nullable(),
   clubId: z.uuid().nullable(),
   clubNombre: z.string().nullable(),
+  partidoId: z.uuid().nullable(),
   sancionId: z.uuid().nullable(),
   tarifaId: z.uuid().nullable(),
   tarifaTipo: z

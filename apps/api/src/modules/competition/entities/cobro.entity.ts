@@ -12,6 +12,7 @@ import {
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Equipo } from './equipo.entity';
 import { InscripcionTorneo } from './inscripcion-torneo.entity';
+import { Partido } from './partido.entity';
 import { SancionActiva } from './sancion-activa.entity';
 import { TarifaTorneo } from './tarifa-torneo.entity';
 import { Torneo } from './torneo.entity';
@@ -69,6 +70,13 @@ export class Cobro {
   @ManyToOne(() => Torneo, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'torneo_id' })
   torneo?: Torneo | null;
+
+  @Column({ name: 'partido_id', type: 'uuid', nullable: true })
+  partidoId!: string | null;
+
+  @ManyToOne(() => Partido, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'partido_id' })
+  partido?: Partido | null;
 
   @Column({ name: 'sancion_id', type: 'uuid', nullable: true })
   sancionId!: string | null;

@@ -221,6 +221,7 @@ export class CobrosAdminService {
       inscripcionId: c.inscripcionId ?? null,
       clubId: c.inscripcion?.clubId ?? null,
       clubNombre: c.inscripcion?.club?.nombre ?? null,
+      partidoId: c.partidoId ?? null,
       sancionId: c.sancionId ?? null,
       tarifaId: c.tarifaId ?? null,
       tarifaTipo: c.tarifa?.tipo ?? null,

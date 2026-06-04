@@ -28,6 +28,7 @@ import { DiaNoJugable } from '../../competition/entities/dia-no-jugable.entity';
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
+import { TarifaAplicadorService } from '../tarifas/tarifa-aplicador.service';
 import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
@@ -51,6 +52,8 @@ export class PartidosAdminService {
     @InjectRepository(DiaNoJugable)
     private readonly diaNoJugableRepo: Repository<DiaNoJugable>,
     private readonly push: PushService,
+    // Sprint 34D — hooks de multas automaticas al cerrar acta y walkover.
+    private readonly tarifaAplicador: TarifaAplicadorService,
   ) {}
 
   /**
@@ -393,6 +396,27 @@ export class PartidosAdminService {
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     await this.aplicarSancionesAutomaticas(partido, fecha.numero, tenantId);
 
+    // Sprint 34D — multas automaticas por tarjetas. Recorre las
+    // incidencias del partido y por cada amarilla/roja genera un cobro
+    // con el monto fijo del tarifario. Si no hay tarifa configurada,
+    // queda audit log y no genera nada (silencioso).
+    try {
+      partido.fecha = fecha;
+      const incidencias = await this.incidenciaRepo.find({
+        where: { partidoId: partido.id, tenantId },
+      });
+      await this.tarifaAplicador.aplicarMultasDePartido(
+        partido,
+        incidencias,
+        tenantId,
+      );
+    } catch (err) {
+      // No bloquear el cierre del acta si la generacion de multas falla.
+      console.warn(
+        `[partido] multas auto fallaron partido=${partido.id}: ${(err as Error).message}`,
+      );
+    }
+
     // 2. Si todos los partidos de la fecha están FINALIZADO/WALKOVER,
     //    marcar la fecha como FINALIZADA + decrementar sanciones
     //    pendientes (regla "el jugador cumple su fecha de suspensión
@@ -648,6 +672,21 @@ export class PartidosAdminService {
     partido.estado = 'EN_CURSO';
     await this.repo.save(partido);
 
+    // Sprint 34D — al reabrir el acta, borrar los cobros auto del
+    // partido (multas amarillas/rojas/walkover) que aun no fueron
+    // pagados ni cancelados manualmente. Cuando se vuelva a cerrar,
+    // se regeneran con las incidencias actualizadas.
+    try {
+      await this.tarifaAplicador.borrarCobrosAutoDelPartido(
+        partido.id,
+        tenantId,
+      );
+    } catch (err) {
+      console.warn(
+        `[partido] cleanup cobros auto fallo partido=${partido.id}: ${(err as Error).message}`,
+      );
+    }
+
     // Solo cambiar fecha a EN_CURSO si estaba FINALIZADA. Si estaba
     // PROGRAMADA / EN_CURSO, dejarla como estaba.
     if (eraFechaFinalizada) {
@@ -851,6 +890,25 @@ export class PartidosAdminService {
       : `[WALKOVER] No se presentó ${perdedorNombre}.`;
 
     await this.repo.save(partido);
+
+    // Sprint 34D — multa automatica al club ausente. Si el torneo tiene
+    // tarifa MULTA_WALKOVER configurada, genera el cobro al club
+    // perdedor. Silencioso si no hay tarifa.
+    try {
+      const fechaWO = await this.fechaRepo.findOneOrFail({
+        where: { id: partido.fechaId },
+      });
+      partido.fecha = fechaWO;
+      await this.tarifaAplicador.aplicarMultaWalkover(
+        partido,
+        input.equipoPerdedorId,
+        partido.tenantId,
+      );
+    } catch (err) {
+      console.warn(
+        `[partido] multa walkover fallo partido=${partido.id}: ${(err as Error).message}`,
+      );
+    }
 
     // Si todos los partidos de la fecha quedaron FINALIZADO/WALKOVER,
     // marcamos la fecha como FINALIZADA y disparamos decremento de

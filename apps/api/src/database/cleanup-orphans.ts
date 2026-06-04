@@ -882,6 +882,19 @@ async function ensureTarifasTorneoTable(
       ))
   `);
   log('tarifas_torneo.tipo: MULTA_FECHA_SANCION removida del enum (Sprint 34C revision).');
+
+  // Sprint 34D — vincular cobros al partido para multas automaticas.
+  // Permite borrar/regenerar al reabrir el acta de un partido sin
+  // afectar cobros de otros partidos.
+  await client.query(`
+    ALTER TABLE cobros
+      ADD COLUMN IF NOT EXISTS partido_id UUID REFERENCES partidos(id) ON DELETE SET NULL
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_cobros_partido
+      ON cobros(partido_id) WHERE partido_id IS NOT NULL
+  `);
+  log('cobros.partido_id asegurada (Sprint 34D).');
 }
 
 async function ensureTransaccionesTable(

@@ -4,7 +4,9 @@ import { Repository } from 'typeorm';
 
 import { AuditLogService } from '../../audit';
 import { Cobro } from '../../competition/entities/cobro.entity';
+import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
+import { Partido } from '../../competition/entities/partido.entity';
 import {
   type FrecuenciaCuota,
   TarifaTorneo,
@@ -138,6 +140,136 @@ export class TarifaAplicadorService {
       inscripcionesProcesadas: inscripciones.length,
       cuotasCreadas,
     };
+  }
+
+  /**
+   * Aplica las multas automáticas de un partido recién cerrado.
+   * Borra cualquier cobro auto previo del partido (para soportar
+   * re-cierre) y crea uno por cada incidencia de tarjeta amarilla o
+   * roja según el tarifario del torneo.
+   *
+   * El cobro se vincula a (partido, inscripción del equipo del
+   * jugador). Si el partido viene del modelo viejo y la incidencia
+   * no tiene inscripcion_id, se hace fallback al equipo local/visita.
+   */
+  async aplicarMultasDePartido(
+    partido: Partido,
+    incidencias: IncidenciaPartido[],
+    tenantId: string,
+  ): Promise<{ creados: number }> {
+    if (!partido.id) return { creados: 0 };
+    const torneoId = partido.fecha?.torneoId ?? null;
+    if (!torneoId) return { creados: 0 };
+
+    // Limpieza de cobros auto previos del partido (idempotencia ante
+    // re-cierre del acta).
+    await this.borrarCobrosAutoDelPartido(partido.id, tenantId);
+
+    let creados = 0;
+    for (const inc of incidencias) {
+      if (inc.tipo !== 'AMARILLA' && inc.tipo !== 'ROJA') continue;
+      const tipoTarifa: TipoTarifa =
+        inc.tipo === 'AMARILLA' ? 'MULTA_AMARILLA' : 'MULTA_ROJA';
+      const tarifa = await this.buscarTarifa(torneoId, tipoTarifa);
+      if (!tarifa) {
+        await this.audit.record({
+          action: 'cobro.no_generado_por_tarifa_faltante',
+          tenantId,
+          entityType: 'IncidenciaPartido',
+          entityId: inc.id,
+          metadata: { partidoId: partido.id, tipoTarifa },
+        });
+        continue;
+      }
+      const inscripcionId = inc.inscripcionId ?? this.inferirInscripcionPartido(
+        partido,
+        inc.equipoId,
+      );
+      await this.crearCobro({
+        tenantId,
+        torneoId,
+        inscripcionId: inscripcionId ?? '',
+        partidoId: partido.id,
+        sancionId: null,
+        tarifa,
+        concepto: this.conceptoMultaIncidencia(inc, tipoTarifa),
+        monto: tarifa.monto,
+        vencimiento: this.calcularVencimientoMatricula(tarifa),
+        periodoAnio: null,
+        periodoMes: null,
+        periodoSemana: null,
+        equipoId: inc.equipoId ?? null,
+      });
+      creados++;
+    }
+    return { creados };
+  }
+
+  /**
+   * Aplica MULTA_WALKOVER al club ausente. Limpia cobros auto del
+   * partido antes (caso re-walkover sobre el mismo partido).
+   */
+  async aplicarMultaWalkover(
+    partido: Partido,
+    equipoPerdedorId: string,
+    tenantId: string,
+  ): Promise<Cobro | null> {
+    if (!partido.id) return null;
+    const torneoId = partido.fecha?.torneoId ?? null;
+    if (!torneoId) return null;
+
+    await this.borrarCobrosAutoDelPartido(partido.id, tenantId);
+
+    const tarifa = await this.buscarTarifa(torneoId, 'MULTA_WALKOVER');
+    if (!tarifa) {
+      await this.audit.record({
+        action: 'cobro.no_generado_por_tarifa_faltante',
+        tenantId,
+        entityType: 'Partido',
+        entityId: partido.id,
+        metadata: { tipoTarifa: 'MULTA_WALKOVER' },
+      });
+      return null;
+    }
+
+    const inscripcionId = this.inferirInscripcionPartido(partido, equipoPerdedorId);
+    return this.crearCobro({
+      tenantId,
+      torneoId,
+      inscripcionId: inscripcionId ?? '',
+      partidoId: partido.id,
+      sancionId: null,
+      tarifa,
+      concepto: `Walkover — partido ${this.etiquetaPartido(partido)}`,
+      monto: tarifa.monto,
+      vencimiento: this.calcularVencimientoMatricula(tarifa),
+      periodoAnio: null,
+      periodoMes: null,
+      periodoSemana: null,
+      equipoId: equipoPerdedorId,
+    });
+  }
+
+  /**
+   * Borra los cobros auto de un partido (multas que aún no fueron
+   * pagadas ni canceladas manualmente). Útil al reabrir el acta y
+   * antes de aplicar nuevas multas para no duplicar.
+   */
+  async borrarCobrosAutoDelPartido(
+    partidoId: string,
+    tenantId: string,
+  ): Promise<number> {
+    const r = await this.cobroRepo
+      .createQueryBuilder()
+      .delete()
+      .from(Cobro)
+      .where('partido_id = :partidoId', { partidoId })
+      .andWhere('tenant_id = :tenantId', { tenantId })
+      .andWhere('generado_auto = TRUE')
+      .andWhere('pagado_at IS NULL')
+      .andWhere('cancelado = FALSE')
+      .execute();
+    return r.affected ?? 0;
   }
 
   // ───────── Lógica de generación ─────────
@@ -302,6 +434,7 @@ export class TarifaAplicadorService {
     periodoMes: number | null;
     periodoSemana: number | null;
     sancionId?: string | null;
+    partidoId?: string | null;
     equipoId?: string | null;
   }): Promise<Cobro> {
     const categoria = this.categoriaCobroParaTipo(args.tarifa.tipo);
@@ -309,7 +442,8 @@ export class TarifaAplicadorService {
       tenantId: args.tenantId,
       equipoId: args.equipoId ?? null,
       torneoId: args.torneoId,
-      inscripcionId: args.inscripcionId,
+      inscripcionId: args.inscripcionId || null,
+      partidoId: args.partidoId ?? null,
       sancionId: args.sancionId ?? null,
       tarifaId: args.tarifa.id,
       concepto: args.concepto,
@@ -395,6 +529,38 @@ export class TarifaAplicadorService {
     const cat = insc.categoria?.nombre ?? 'categoría';
     const torneo = insc.torneo?.nombre ?? 'torneo';
     return `Matrícula — ${torneo} (${club} / ${cat})`;
+  }
+
+  private conceptoMultaIncidencia(
+    inc: IncidenciaPartido,
+    tipoTarifa: 'MULTA_AMARILLA' | 'MULTA_ROJA',
+  ): string {
+    const tipo = tipoTarifa === 'MULTA_AMARILLA' ? 'Amarilla' : 'Roja';
+    const min = inc.minuto != null ? `${inc.minuto}'` : '';
+    return `Multa ${tipo}${min ? ` (${min})` : ''} — partido ${inc.partidoId.slice(0, 8)}`;
+  }
+
+  private etiquetaPartido(p: Partido): string {
+    return p.id ? p.id.slice(0, 8) : '?';
+  }
+
+  /**
+   * Si la incidencia no trae inscripcion_id (modelo viejo), inferimos
+   * cuál inscripción corresponde según si el equipo es local o visita
+   * en ese partido.
+   */
+  private inferirInscripcionPartido(
+    partido: Partido,
+    equipoId: string | null,
+  ): string | null {
+    if (!equipoId) return null;
+    if (partido.equipoLocalId === equipoId) {
+      return partido.inscripcionLocalId ?? null;
+    }
+    if (partido.equipoVisitaId === equipoId) {
+      return partido.inscripcionVisitaId ?? null;
+    }
+    return null;
   }
 
   private conceptoCuota(
