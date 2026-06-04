@@ -7,6 +7,7 @@ import type {
   ResumenLiga,
   SponsorPublico,
   TablaPosiciones,
+  TorneoListaPublico,
 } from '@fixtura/types';
 
 import { Public } from '../../common/decorators/public.decorator';
@@ -43,6 +44,17 @@ export class PublicController {
   async resumen(@Req() req: Request): Promise<ResumenLiga> {
     const slug = await this.resolveSlug(req);
     return this.svc.getResumen(slug);
+  }
+
+  /**
+   * Sprint 36A — Lista de todos los torneos publicos de la liga
+   * (ACTIVO + CERRADO, los DRAFT se omiten). El portal lo usa para el
+   * hub principal donde el hincha elige torneo.
+   */
+  @Get('torneos')
+  async torneos(@Req() req: Request): Promise<TorneoListaPublico[]> {
+    const slug = await this.resolveSlug(req);
+    return this.svc.getTorneos(slug);
   }
 
   @Get('tabla')

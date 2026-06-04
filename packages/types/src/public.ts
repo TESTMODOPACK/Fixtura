@@ -129,6 +129,37 @@ export const RankingSchema = z.object({
 });
 export type Ranking = z.infer<typeof RankingSchema>;
 
+/**
+ * Sprint 36A — Item del hub publico con los datos suficientes para
+ * dibujar una card resumen del torneo. NO incluye tabla ni fixture
+ * completos (esos viven en los endpoints dedicados); solo metadata
+ * + un partido destacado para que el hincha decida si entrar al
+ * detalle.
+ */
+export const TorneoListaPublicoSchema = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  nombre: z.string(),
+  temporadaNombre: z.string(),
+  estado: z.enum(['ACTIVO', 'CERRADO']),
+  fechaActual: z.number().int().min(0),
+  fechasTotales: z.number().int().min(0),
+  equiposCount: z.number().int().min(0),
+  // Categorias (de torneos.categorias_series) — los chips de la card.
+  categorias: z.array(
+    z.object({
+      categoriaId: z.uuid(),
+      nombre: z.string(),
+      series: z.array(z.string()),
+    }),
+  ),
+  // Si esta ACTIVO: proximo partido programado. Si esta CERRADO:
+  // ultimo partido jugado (fecha final del torneo).
+  proximoPartidoAt: z.iso.datetime().nullable(),
+  ultimoPartidoAt: z.iso.datetime().nullable(),
+});
+export type TorneoListaPublico = z.infer<typeof TorneoListaPublicoSchema>;
+
 export const ResumenLigaSchema = z.object({
   liga: LigaPublicaSchema,
   torneoActivo: TorneoPublicoSchema.nullable(),

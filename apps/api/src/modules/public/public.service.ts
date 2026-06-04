@@ -11,9 +11,11 @@ import type {
   ResumenLiga,
   SponsorPublico,
   TablaPosiciones,
+  TorneoListaPublico,
   TorneoPublico,
 } from '@fixtura/types';
 
+import { CategoriaJugadores } from '../competition/entities/categoria-jugadores.entity';
 import { Designacion } from '../competition/entities/designacion.entity';
 import { Equipo } from '../competition/entities/equipo.entity';
 import { Fecha } from '../competition/entities/fecha.entity';
@@ -42,7 +44,117 @@ export class PublicService {
     private readonly designacionRepo: Repository<Designacion>,
     @InjectRepository(Sponsor)
     private readonly sponsorRepo: Repository<Sponsor>,
+    @InjectRepository(CategoriaJugadores)
+    private readonly categoriaRepo: Repository<CategoriaJugadores>,
   ) {}
+
+  /**
+   * Sprint 36A — Lista los torneos publicos del tenant (activos + cerrados,
+   * los DRAFT se excluyen). Devuelve metadata suficiente para dibujar
+   * cards en el hub publico del portal, sin traer tabla/fixture
+   * completos por torneo.
+   */
+  async getTorneos(slug: string): Promise<TorneoListaPublico[]> {
+    // Resolver tenantId del slug — reusa la logica defensiva del helper.
+    const torneoCualquiera = await this.torneoRepo
+      .createQueryBuilder('t')
+      .innerJoin('t.tenant', 'tenant')
+      .where('tenant.slug = :slug', { slug })
+      .getOne();
+    if (!torneoCualquiera) {
+      return [];
+    }
+    const tenantId = torneoCualquiera.tenantId;
+
+    // Map de categorias del tenant — para resolver categoriaId → nombre.
+    const categorias = await this.categoriaRepo.find({ where: { tenantId } });
+    const catById = new Map(categorias.map((c) => [c.id, c]));
+
+    const torneos = await this.torneoRepo
+      .createQueryBuilder('t')
+      .leftJoinAndSelect('t.temporada', 'temporada')
+      .where('t.tenant_id = :tenantId', { tenantId })
+      .andWhere(`t.estado IN ('ACTIVO','CERRADO')`)
+      // ACTIVO primero, despues CERRADO. Dentro de cada grupo, mas
+      // reciente primero.
+      .orderBy(`CASE WHEN t.estado = 'ACTIVO' THEN 0 ELSE 1 END`)
+      .addOrderBy('t.created_at', 'DESC')
+      .getMany();
+
+    if (torneos.length === 0) return [];
+
+    const result: TorneoListaPublico[] = [];
+    for (const t of torneos) {
+      const fechas = await this.fechaRepo.find({ where: { torneoId: t.id } });
+      const fechasFinalizadas = fechas.filter(
+        (f) => f.estado === 'FINALIZADA',
+      ).length;
+      const equiposCount = await this.equipoRepo.count({ where: { torneoId: t.id } });
+
+      // Categorias: agrupar las categorias_series por categoriaId.
+      const cats = Array.isArray(t.categoriasSeries) ? t.categoriasSeries : [];
+      const catGroups = new Map<string, Set<string>>();
+      for (const cs of cats) {
+        if (!cs.categoriaId) continue;
+        if (!catGroups.has(cs.categoriaId)) {
+          catGroups.set(cs.categoriaId, new Set());
+        }
+        if (cs.serieSlug) {
+          catGroups.get(cs.categoriaId)!.add(cs.serieSlug);
+        }
+      }
+      const categoriasDto: TorneoListaPublico['categorias'] = [];
+      for (const [catId, series] of catGroups) {
+        const cat = catById.get(catId);
+        if (!cat) continue;
+        categoriasDto.push({
+          categoriaId: catId,
+          nombre: cat.nombre,
+          series: Array.from(series),
+        });
+      }
+
+      // Proximo partido si activo, ultimo si cerrado.
+      let proximoPartidoAt: string | null = null;
+      let ultimoPartidoAt: string | null = null;
+      if (t.estado === 'ACTIVO') {
+        const prox = await this.partidoRepo
+          .createQueryBuilder('p')
+          .innerJoin('p.fecha', 'f')
+          .where('f.torneo_id = :torneoId', { torneoId: t.id })
+          .andWhere(`p.estado IN ('PROGRAMADO','EN_CURSO')`)
+          .andWhere('p.fecha_hora IS NOT NULL')
+          .orderBy('p.fecha_hora', 'ASC')
+          .getOne();
+        proximoPartidoAt = prox?.fechaHora ? prox.fechaHora.toISOString() : null;
+      } else {
+        const ult = await this.partidoRepo
+          .createQueryBuilder('p')
+          .innerJoin('p.fecha', 'f')
+          .where('f.torneo_id = :torneoId', { torneoId: t.id })
+          .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+          .andWhere('p.fecha_hora IS NOT NULL')
+          .orderBy('p.fecha_hora', 'DESC')
+          .getOne();
+        ultimoPartidoAt = ult?.fechaHora ? ult.fechaHora.toISOString() : null;
+      }
+
+      result.push({
+        id: t.id,
+        slug: t.slug,
+        nombre: t.nombre,
+        temporadaNombre: t.temporada?.nombre ?? String(new Date(t.createdAt).getFullYear()),
+        estado: t.estado as 'ACTIVO' | 'CERRADO',
+        fechaActual: fechasFinalizadas,
+        fechasTotales: fechas.length,
+        equiposCount,
+        categorias: categoriasDto,
+        proximoPartidoAt,
+        ultimoPartidoAt,
+      });
+    }
+    return result;
+  }
 
   /**
    * Lista los sponsors activos y vigentes del tenant indicado. Filtra
