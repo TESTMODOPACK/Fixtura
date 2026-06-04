@@ -194,8 +194,8 @@ export class PublicService {
   }
 
   // ─── Resumen home pública ────────────────────────────────────────
-  async getResumen(slug: string): Promise<ResumenLiga> {
-    const torneo = await this.findTorneoActivo(slug);
+  async getResumen(slug: string, torneoSlug?: string): Promise<ResumenLiga> {
+    const torneo = await this.findTorneoActivo(slug, torneoSlug);
     const liga = torneo.tenant!;
 
     if (!torneo) {
@@ -223,8 +223,8 @@ export class PublicService {
   }
 
   // ─── Tabla de posiciones ──────────────────────────────────────────
-  async getTabla(slug: string): Promise<TablaPosiciones> {
-    const torneo = await this.findTorneoActivo(slug);
+  async getTabla(slug: string, torneoSlug?: string): Promise<TablaPosiciones> {
+    const torneo = await this.findTorneoActivo(slug, torneoSlug);
     const torneoDto = await this.buildTorneoPublico(torneo);
 
     const equipos = await this.equipoRepo.find({ where: { torneoId: torneo.id } });
@@ -412,8 +412,8 @@ export class PublicService {
   }
 
   // ─── Fixture ──────────────────────────────────────────────────────
-  async getFixture(slug: string): Promise<FixturePublico> {
-    const torneo = await this.findTorneoActivo(slug);
+  async getFixture(slug: string, torneoSlug?: string): Promise<FixturePublico> {
+    const torneo = await this.findTorneoActivo(slug, torneoSlug);
     const torneoDto = await this.buildTorneoPublico(torneo);
 
     const fechas = await this.fechaRepo.find({
@@ -497,8 +497,12 @@ export class PublicService {
   }
 
   // ─── Rankings ─────────────────────────────────────────────────────
-  async getRanking(slug: string, tipo: Ranking['tipo']): Promise<Ranking> {
-    const torneo = await this.findTorneoActivo(slug);
+  async getRanking(
+    slug: string,
+    tipo: Ranking['tipo'],
+    torneoSlug?: string,
+  ): Promise<Ranking> {
+    const torneo = await this.findTorneoActivo(slug, torneoSlug);
     const torneoDto = await this.buildTorneoPublico(torneo);
     const items = await this.computeRanking(torneo.id, tipo);
     return { torneo: torneoDto, tipo, items };
@@ -512,18 +516,42 @@ export class PublicService {
    * Esto permite que el portal muestre algo siempre que haya al menos
    * un torneo en la DB.
    */
-  private async findTorneoActivo(slug: string): Promise<Torneo & { tenant: { id: string; slug: string; nombre: string; brandingJson: Record<string, unknown> } }> {
-    // Buscar tenant primero
-    const torneo = await this.torneoRepo
+  /**
+   * Resuelve el torneo a usar:
+   *  - Si `torneoSlug` viene: busca ese torneo específico (debe ser
+   *    ACTIVO o CERRADO; los DRAFT no son públicos).
+   *  - Si no viene: fallback al más activo/reciente (compat sprint 1-35).
+   */
+  private async findTorneoActivo(
+    slug: string,
+    torneoSlug?: string,
+  ): Promise<
+    Torneo & {
+      tenant: { id: string; slug: string; nombre: string; brandingJson: Record<string, unknown> };
+    }
+  > {
+    const qb = this.torneoRepo
       .createQueryBuilder('t')
       .innerJoinAndSelect('t.tenant', 'tenant')
-      .where('tenant.slug = :slug', { slug })
-      .orderBy(`CASE WHEN t.estado = 'ACTIVO' THEN 0 WHEN t.estado = 'DRAFT' THEN 1 ELSE 2 END`)
-      .addOrderBy('t.created_at', 'DESC')
-      .getOne();
+      .where('tenant.slug = :slug', { slug });
+
+    if (torneoSlug) {
+      qb.andWhere('t.slug = :torneoSlug', { torneoSlug }).andWhere(
+        `t.estado IN ('ACTIVO','CERRADO')`,
+      );
+    } else {
+      qb.orderBy(
+        `CASE WHEN t.estado = 'ACTIVO' THEN 0 WHEN t.estado = 'DRAFT' THEN 1 ELSE 2 END`,
+      ).addOrderBy('t.created_at', 'DESC');
+    }
+    const torneo = await qb.getOne();
 
     if (!torneo) {
-      throw new NotFoundException(`Liga "${slug}" no tiene torneos creados aún`);
+      throw new NotFoundException(
+        torneoSlug
+          ? `Torneo "${torneoSlug}" no encontrado en la liga "${slug}"`
+          : `Liga "${slug}" no tiene torneos creados aún`,
+      );
     }
     return torneo as Torneo & {
       tenant: { id: string; slug: string; nombre: string; brandingJson: Record<string, unknown> };

@@ -1,25 +1,53 @@
 'use client';
 
-import { Calendar, Flame, TableProperties, Trophy } from 'lucide-react';
+import {
+  Calendar,
+  Flame,
+  History,
+  TableProperties,
+  Trophy,
+  Users,
+} from 'lucide-react';
 import Link from 'next/link';
 
-import type { PartidoPublico } from '@fixtura/types';
+import type { PartidoPublico, TorneoListaPublico } from '@fixtura/types';
 
 import { PublicHeader } from '@/components/public-header';
 import { SponsorBanner } from '@/components/sponsor-banner';
 import { Card, CardLabel } from '@/components/ui/card';
-import { useResumenLiga } from '@/hooks/use-portal';
+import { usePublicTorneos, useResumenLiga } from '@/hooks/use-portal';
 import { cn } from '@/lib/cn';
 
-export function TenantHome(): React.ReactElement {
-  const { data, isLoading, error } = useResumenLiga();
+/**
+ * Sprint 36B — `torneoSlug` opcional: si se pasa, la vista se arma con
+ * los datos de ese torneo específico (usado en `/torneos/[slug]`). Si no,
+ * comportamiento original: el activo más reciente + grid de "Más torneos".
+ */
+export function TenantHome({
+  torneoSlug,
+}: {
+  torneoSlug?: string;
+} = {}): React.ReactElement {
+  const { data, isLoading, error } = useResumenLiga(torneoSlug);
+  // El listado de "otros torneos" solo se muestra en la home (sin slug).
+  const { data: todosTorneos } = usePublicTorneos();
 
   if (isLoading) return <PageLoading />;
   if (error || !data) return <PageError message={String(error)} />;
 
+  const torneosOtros = (todosTorneos ?? []).filter(
+    (t) => t.id !== data.torneoActivo?.id,
+  );
+  const mostrarMasTorneos = !torneoSlug && torneosOtros.length > 0;
+
+  // Prefijo para las rutas internas: si estamos en `/torneos/[slug]`, los
+  // links a tabla/fixture/goleadores deben quedar bajo el mismo prefijo
+  // para preservar el contexto del torneo elegido.
+  const prefix = torneoSlug ? `/torneos/${torneoSlug}` : '';
+
   return (
     <>
-      <PublicHeader ligaNombre={data.liga.nombre} active="home" />
+      <PublicHeader ligaNombre={data.liga.nombre} active="home" torneoSlug={torneoSlug} />
 
       {/* Banner sponsors HEADER — full width debajo del header */}
       <SponsorBanner
@@ -59,7 +87,7 @@ export function TenantHome(): React.ReactElement {
         )}
 
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-10">
-          <Link href="/tabla" className="contents">
+          <Link href={`${prefix}/tabla`} className="contents">
             <Card className="hover:bg-paper transition-colors cursor-pointer">
               <CardLabel>Posiciones</CardLabel>
               <div className="flex items-center gap-3">
@@ -74,7 +102,7 @@ export function TenantHome(): React.ReactElement {
             </Card>
           </Link>
 
-          <Link href="/fixture" className="contents">
+          <Link href={`${prefix}/fixture`} className="contents">
             <Card className="hover:bg-paper transition-colors cursor-pointer">
               <CardLabel>Calendario</CardLabel>
               <div className="flex items-center gap-3">
@@ -89,7 +117,7 @@ export function TenantHome(): React.ReactElement {
             </Card>
           </Link>
 
-          <Link href="/goleadores" className="contents">
+          <Link href={`${prefix}/goleadores`} className="contents">
             <Card variant="lime" className="cursor-pointer hover:bg-green-lime/80 transition-colors">
               <CardLabel tone="mute">Top scorers</CardLabel>
               <div className="flex items-center gap-3">
@@ -147,6 +175,18 @@ export function TenantHome(): React.ReactElement {
             </Card>
           </div>
         </section>
+        {mostrarMasTorneos && (
+          <section className="mt-12">
+            <div className="eyebrow mb-3">
+              → Otros torneos de {data.liga.nombre}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {torneosOtros.map((t) => (
+                <TorneoCard key={t.id} torneo={t} />
+              ))}
+            </div>
+          </section>
+        )}
       </main>
 
       <footer className="border-t border-line bg-chalk mt-12">
@@ -164,6 +204,79 @@ export function TenantHome(): React.ReactElement {
         </div>
       </footer>
     </>
+  );
+}
+
+function TorneoCard({ torneo }: { torneo: TorneoListaPublico }): React.ReactElement {
+  const esActivo = torneo.estado === 'ACTIVO';
+  const fechaRef = esActivo ? torneo.proximoPartidoAt : torneo.ultimoPartidoAt;
+  const fechaFormat = fechaRef
+    ? new Date(fechaRef).toLocaleDateString('es-CL', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      })
+    : null;
+  return (
+    <Link href={`/torneos/${torneo.slug}`} className="contents">
+      <Card
+        className={cn(
+          'cursor-pointer transition-colors',
+          esActivo ? 'hover:bg-paper' : 'opacity-90 hover:opacity-100 hover:bg-paper',
+        )}
+      >
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <CardLabel>{torneo.temporadaNombre}</CardLabel>
+          <span
+            className={cn(
+              'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-0.5 rounded',
+              esActivo
+                ? 'bg-green-bright/15 text-green-bright'
+                : 'bg-ink-mute/15 text-ink-mute',
+            )}
+          >
+            {esActivo ? 'En curso' : 'Cerrado'}
+          </span>
+        </div>
+        <div className="font-display text-xl text-green-deep tracking-display mb-3">
+          {torneo.nombre.toUpperCase()}
+        </div>
+        {torneo.categorias.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {torneo.categorias.map((c) => (
+              <span
+                key={c.categoriaId}
+                className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-green-deep/10 text-green-deep"
+              >
+                {c.nombre}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="text-xs text-ink-mute font-serif italic flex flex-wrap gap-3">
+          <span className="flex items-center gap-1">
+            <Users size={11} /> {torneo.equiposCount} equipos
+          </span>
+          <span className="flex items-center gap-1">
+            <Calendar size={11} />
+            Fecha {torneo.fechaActual} de {torneo.fechasTotales}
+          </span>
+        </div>
+        {fechaFormat && (
+          <div className="text-[11px] text-ink-mute mt-2 flex items-center gap-1">
+            {esActivo ? (
+              <>
+                <Calendar size={10} /> Próxima: {fechaFormat}
+              </>
+            ) : (
+              <>
+                <History size={10} /> Última fecha: {fechaFormat}
+              </>
+            )}
+          </div>
+        )}
+      </Card>
+    </Link>
   );
 }
 

@@ -12,18 +12,32 @@ import { useAuthStore } from '@/store/auth-store';
 interface PublicHeaderProps {
   ligaNombre: string;
   active?: 'home' | 'tabla' | 'fixture' | 'goleadores' | 'asistencias' | 'mvp';
+  /** Sprint 36C — si está, los tabs apuntan a /torneos/[slug]/... en vez de a las rutas raíz. */
+  torneoSlug?: string;
 }
 
-const TABS: Array<{ key: NonNullable<PublicHeaderProps['active']>; label: string; href: string }> = [
-  { key: 'home', label: 'Inicio', href: '/' },
-  { key: 'tabla', label: 'Tabla', href: '/tabla' },
-  { key: 'fixture', label: 'Fixture', href: '/fixture' },
-  { key: 'goleadores', label: 'Goleadores', href: '/goleadores' },
-  { key: 'asistencias', label: 'Asistencias', href: '/asistencias' },
-  { key: 'mvp', label: 'MVP', href: '/mvp' },
+type TabKey = NonNullable<PublicHeaderProps['active']>;
+
+const TAB_DEFS: Array<{ key: TabKey; label: string; suffix: string }> = [
+  { key: 'home', label: 'Inicio', suffix: '' },
+  { key: 'tabla', label: 'Tabla', suffix: '/tabla' },
+  { key: 'fixture', label: 'Fixture', suffix: '/fixture' },
+  { key: 'goleadores', label: 'Goleadores', suffix: '/goleadores' },
+  { key: 'asistencias', label: 'Asistencias', suffix: '/asistencias' },
+  { key: 'mvp', label: 'MVP', suffix: '/mvp' },
 ];
 
-export function PublicHeader({ ligaNombre, active = 'home' }: PublicHeaderProps): React.ReactElement {
+export function PublicHeader({
+  ligaNombre,
+  active = 'home',
+  torneoSlug,
+}: PublicHeaderProps): React.ReactElement {
+  const homeHref = torneoSlug ? `/torneos/${torneoSlug}` : '/';
+  const tabs = TAB_DEFS.map((t) => ({
+    key: t.key,
+    label: t.label,
+    href: t.key === 'home' ? homeHref : `${torneoSlug ? `/torneos/${torneoSlug}` : ''}${t.suffix}`,
+  }));
   const [loginOpen, setLoginOpen] = useState(false);
   const accessToken = useAuthStore((s) => s.accessToken);
 
@@ -31,7 +45,7 @@ export function PublicHeader({ ligaNombre, active = 'home' }: PublicHeaderProps)
     <>
       <header className="bg-green-deep text-chalk">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-6">
-          <Link href="/" className="flex items-center gap-3 min-w-0">
+          <Link href={homeHref} className="flex items-center gap-3 min-w-0">
             <FixturaMark size={36} variant="lime" />
             <div className="min-w-0">
               <div className="font-display text-xl tracking-[0.12em] truncate">
@@ -58,7 +72,7 @@ export function PublicHeader({ ligaNombre, active = 'home' }: PublicHeaderProps)
 
         <nav className="max-w-7xl mx-auto px-6 border-t border-green-mid">
           <ul className="flex gap-1 overflow-x-auto">
-            {TABS.map((tab) => {
+            {tabs.map((tab) => {
               const isActive = tab.key === active;
               return (
                 <li key={tab.key}>

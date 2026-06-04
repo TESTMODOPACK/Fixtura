@@ -17,11 +17,9 @@ import { PublicService } from './public.service';
 /**
  * Endpoints públicos del portal de una liga.
  *
- * El tenant se identifica por el header `Host` (multi-tenant por dominio):
- *   - liganunoa.cl       → tenant cuyo custom_domain = 'liganunoa.cl'
- *   - en dev sin dominio → fallback al tenant DEV_DEFAULT_TENANT_SLUG
- *
- * El slug ya NO aparece en la URL — el routing puro mira el host.
+ * El tenant se identifica por el header `Host` (multi-tenant por dominio).
+ * El torneo se identifica por `?torneo=<slug>` (opcional). Si no se pasa,
+ * el backend devuelve el torneo más activo/reciente (compat).
  */
 @Controller('public')
 @Public()
@@ -41,15 +39,16 @@ export class PublicController {
   }
 
   @Get()
-  async resumen(@Req() req: Request): Promise<ResumenLiga> {
+  async resumen(
+    @Req() req: Request,
+    @Query('torneo') torneo?: string,
+  ): Promise<ResumenLiga> {
     const slug = await this.resolveSlug(req);
-    return this.svc.getResumen(slug);
+    return this.svc.getResumen(slug, torneo || undefined);
   }
 
   /**
-   * Sprint 36A — Lista de todos los torneos publicos de la liga
-   * (ACTIVO + CERRADO, los DRAFT se omiten). El portal lo usa para el
-   * hub principal donde el hincha elige torneo.
+   * Sprint 36A — Hub publico: lista de torneos ACTIVO + CERRADO.
    */
   @Get('torneos')
   async torneos(@Req() req: Request): Promise<TorneoListaPublico[]> {
@@ -58,39 +57,50 @@ export class PublicController {
   }
 
   @Get('tabla')
-  async tabla(@Req() req: Request): Promise<TablaPosiciones> {
+  async tabla(
+    @Req() req: Request,
+    @Query('torneo') torneo?: string,
+  ): Promise<TablaPosiciones> {
     const slug = await this.resolveSlug(req);
-    return this.svc.getTabla(slug);
+    return this.svc.getTabla(slug, torneo || undefined);
   }
 
   @Get('fixture')
-  async fixture(@Req() req: Request): Promise<FixturePublico> {
+  async fixture(
+    @Req() req: Request,
+    @Query('torneo') torneo?: string,
+  ): Promise<FixturePublico> {
     const slug = await this.resolveSlug(req);
-    return this.svc.getFixture(slug);
+    return this.svc.getFixture(slug, torneo || undefined);
   }
 
   @Get('goleadores')
-  async goleadores(@Req() req: Request): Promise<Ranking> {
+  async goleadores(
+    @Req() req: Request,
+    @Query('torneo') torneo?: string,
+  ): Promise<Ranking> {
     const slug = await this.resolveSlug(req);
-    return this.svc.getRanking(slug, 'GOLEADORES');
+    return this.svc.getRanking(slug, 'GOLEADORES', torneo || undefined);
   }
 
   @Get('asistencias')
-  async asistencias(@Req() req: Request): Promise<Ranking> {
+  async asistencias(
+    @Req() req: Request,
+    @Query('torneo') torneo?: string,
+  ): Promise<Ranking> {
     const slug = await this.resolveSlug(req);
-    return this.svc.getRanking(slug, 'ASISTENCIAS');
+    return this.svc.getRanking(slug, 'ASISTENCIAS', torneo || undefined);
   }
 
   @Get('mvp')
-  async mvp(@Req() req: Request): Promise<Ranking> {
+  async mvp(
+    @Req() req: Request,
+    @Query('torneo') torneo?: string,
+  ): Promise<Ranking> {
     const slug = await this.resolveSlug(req);
-    return this.svc.getRanking(slug, 'MVP');
+    return this.svc.getRanking(slug, 'MVP', torneo || undefined);
   }
 
-  /**
-   * Lista de sponsors activos y vigentes del tenant, ordenados por
-   * prioridad. Opcionalmente filtrá por posición.
-   */
   @Get('sponsors')
   async sponsors(
     @Req() req: Request,

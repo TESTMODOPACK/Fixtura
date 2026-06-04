@@ -12,6 +12,8 @@ interface RankingPageProps {
   titulo: string;
   subtitulo: string;
   metricaLabel: string;
+  /** Sprint 36C — si está, filtra por torneo específico y los tabs llevan a /torneos/[slug]. */
+  torneoSlug?: string;
 }
 
 const ICONS = {
@@ -20,13 +22,13 @@ const ICONS = {
   mvp: Trophy,
 };
 
-export function RankingPage({ tipo, titulo, subtitulo, metricaLabel }: RankingPageProps): React.ReactElement {
-  const { data, isLoading } = useRanking(tipo);
+export function RankingPage({ tipo, titulo, subtitulo, metricaLabel, torneoSlug }: RankingPageProps): React.ReactElement {
+  const { data, isLoading } = useRanking(tipo, torneoSlug);
   const Icon = ICONS[tipo];
 
   return (
     <>
-      <PublicHeader ligaNombre={data?.torneo.nombre ?? 'Cargando…'} active={tipo} />
+      <PublicHeader ligaNombre={data?.torneo.nombre ?? 'Cargando…'} active={tipo} torneoSlug={torneoSlug} />
       <main className="max-w-4xl mx-auto px-6 py-10">
         <div className="eyebrow mb-2">→ {data?.torneo.nombre ?? '...'}</div>
         <h1 className="font-display text-4xl text-green-deep tracking-display flex items-center gap-3">
