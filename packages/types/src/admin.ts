@@ -255,5 +255,17 @@ export const FixtureGenerationResultSchema = z.object({
   partidosSinHorario: z.number().int().default(0),
   slotsUsados: z.number().int().default(0),
   modoGeneracion: z.enum(['HORARIOS_TORNEO', 'INPUT_LEGACY']).default('INPUT_LEGACY'),
+  // Sprint 40 — partidos asignados a slots cuya cancha esta marcada
+  // como NO_DISPONIBLE. El admin decide si re-programar o esperar a que
+  // la cancha vuelva.
+  partidosEnCanchaNoDisponible: z
+    .array(
+      z.object({
+        fechaNumero: z.number().int(),
+        canchaNombre: z.string(),
+        motivo: z.string().nullable(),
+      }),
+    )
+    .default([]),
 });
 export type FixtureGenerationResult = z.infer<typeof FixtureGenerationResultSchema>;

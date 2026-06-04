@@ -12,7 +12,9 @@ import {
 } from '@nestjs/common';
 
 import {
+  CambiarEstadoCanchaSchema,
   ROLE,
+  type CambiarEstadoCanchaRequest,
   type CanchaAdmin,
   type OcupacionCancha,
   type UserContext,
@@ -85,5 +87,25 @@ export class CanchasAdminController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<void> {
     return this.svc.deactivate(id, ensureTenant(user));
+  }
+
+  /**
+   * Sprint 40 — Cambiar estado operativo de la cancha.
+   * PATCH /admin/canchas/:id/estado  body { estado, motivo? }
+   */
+  @Patch(':id/estado')
+  cambiarEstado(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ): Promise<CanchaAdmin> {
+    const parsed: CambiarEstadoCanchaRequest =
+      CambiarEstadoCanchaSchema.parse(body);
+    return this.svc.cambiarEstado(
+      id,
+      ensureTenant(user),
+      parsed.estado,
+      parsed.motivo,
+    );
   }
 }

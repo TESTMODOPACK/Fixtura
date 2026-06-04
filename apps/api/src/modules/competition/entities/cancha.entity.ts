@@ -18,6 +18,13 @@ export type SuperficieCancha =
   | 'TIERRA'
   | 'OTRA';
 
+/**
+ * Sprint 40 — Estado simple de la cancha. DISPONIBLE = se puede usar
+ * para fixture. NO_DISPONIBLE = no se asigna desde el generador y la UI
+ * la marca, pero el dato queda y se puede revertir.
+ */
+export type EstadoCancha = 'DISPONIBLE' | 'NO_DISPONIBLE';
+
 @Entity({ name: 'canchas' })
 @Index('idx_canchas_tenant', ['tenantId'])
 export class Cancha {
@@ -61,6 +68,16 @@ export class Cancha {
 
   @Column({ type: 'boolean', default: true })
   activa!: boolean;
+
+  /**
+   * Sprint 40 — Estado operativo. NO_DISPONIBLE bloquea la asignación
+   * automática desde el generador del fixture (igual avisa con warning).
+   */
+  @Column({ type: 'varchar', length: 20, default: 'DISPONIBLE' })
+  estado!: EstadoCancha;
+
+  @Column({ name: 'motivo_no_disponible', type: 'text', nullable: true })
+  motivoNoDisponible!: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

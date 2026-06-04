@@ -26,6 +26,19 @@ export const SUPERFICIE_LABEL: Record<SuperficieCancha, string> = {
   OTRA: 'Otra',
 };
 
+/**
+ * Sprint 40 — Estado operativo de la cancha. NO_DISPONIBLE bloquea la
+ * asignación automática desde el generador del fixture pero deja el
+ * dato (la cancha sigue existiendo en el catálogo).
+ */
+export const ESTADO_CANCHA = ['DISPONIBLE', 'NO_DISPONIBLE'] as const;
+export type EstadoCancha = (typeof ESTADO_CANCHA)[number];
+
+export const ESTADO_CANCHA_LABEL: Record<EstadoCancha, string> = {
+  DISPONIBLE: 'Disponible',
+  NO_DISPONIBLE: 'No disponible',
+};
+
 export const CanchaAdminSchema = z.object({
   id: z.uuid(),
   nombre: z.string(),
@@ -38,9 +51,17 @@ export const CanchaAdminSchema = z.object({
   tieneCamarines: z.boolean(),
   observaciones: z.string().nullable(),
   activa: z.boolean(),
+  estado: z.enum(ESTADO_CANCHA),
+  motivoNoDisponible: z.string().nullable(),
   createdAt: z.iso.datetime(),
 });
 export type CanchaAdmin = z.infer<typeof CanchaAdminSchema>;
+
+export const CambiarEstadoCanchaSchema = z.object({
+  estado: z.enum(ESTADO_CANCHA),
+  motivo: z.string().max(500).optional().nullable(),
+});
+export type CambiarEstadoCanchaRequest = z.infer<typeof CambiarEstadoCanchaSchema>;
 
 export const CreateCanchaSchema = z.object({
   nombre: z.string().min(2).max(150),

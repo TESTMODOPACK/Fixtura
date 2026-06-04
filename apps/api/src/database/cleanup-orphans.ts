@@ -594,6 +594,26 @@ async function main(): Promise<void> {
     `);
     log('horarios_torneo asegurada (Sprint 39).');
 
+    // Sprint 40 — Simplificacion de canchas. Agregamos estado explicito
+    // DISPONIBLE/NO_DISPONIBLE + motivo opcional. Las columnas viejas
+    // (direccion, latitud, longitud, capacidad_aforo, superficie,
+    // tiene_iluminacion, tiene_camarines) quedan en la tabla pero la UI
+    // las oculta. Backfill: is_active=true → DISPONIBLE.
+    await client.query(`
+      ALTER TABLE canchas
+        ADD COLUMN IF NOT EXISTS estado VARCHAR(20)
+          NOT NULL DEFAULT 'DISPONIBLE'
+          CHECK (estado IN ('DISPONIBLE','NO_DISPONIBLE')),
+        ADD COLUMN IF NOT EXISTS motivo_no_disponible TEXT
+    `);
+    // Backfill: si is_active=false, dejar NO_DISPONIBLE.
+    await client.query(`
+      UPDATE canchas
+      SET estado = 'NO_DISPONIBLE'
+      WHERE is_active = FALSE AND estado = 'DISPONIBLE'
+    `);
+    log('canchas.estado + motivo_no_disponible asegurada (Sprint 40).');
+
     // Sprint 38 — Backfill de planillas vacias. Inscripciones que se
     // crearon antes del auto-copy quedaron con planilla en 0 jugadores
     // aunque el club tuviera plantel cargado. Esta query rellena cada

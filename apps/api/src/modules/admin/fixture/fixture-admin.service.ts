@@ -219,6 +219,11 @@ export class FixtureAdminService {
     let partidosCreados = 0;
     let partidosSinHorario = 0;
     let slotsUsados = 0;
+    const partidosEnCanchaNoDisponible: Array<{
+      fechaNumero: number;
+      canchaNombre: string;
+      motivo: string | null;
+    }> = [];
     const partidosPorFecha = new Map<number, number>();
     for (const p of fixture.partidos) {
       const fechaId = fechaIdByNumero.get(p.fechaNumero)!;
@@ -253,6 +258,16 @@ export class FixtureAdminService {
           canchaId = slot.canchaId;
           canchaNombre = slot.cancha?.nombre ?? null;
           slotsUsados++;
+          // Sprint 40 — Detectar canchas marcadas como NO_DISPONIBLE.
+          // Asignamos igual pero registramos el warning para que la UI
+          // avise al admin (puede decidir re-programar manualmente).
+          if (slot.cancha && slot.cancha.estado === 'NO_DISPONIBLE') {
+            partidosEnCanchaNoDisponible.push({
+              fechaNumero: p.fechaNumero,
+              canchaNombre: slot.cancha.nombre,
+              motivo: slot.cancha.motivoNoDisponible ?? null,
+            });
+          }
         } else {
           // Sin slot disponible para esta posición en esta fecha →
           // partido sin horario. El admin lo asignará a mano.
@@ -298,6 +313,7 @@ export class FixtureAdminService {
       partidosSinHorario,
       slotsUsados,
       modoGeneracion,
+      partidosEnCanchaNoDisponible,
     };
   }
 

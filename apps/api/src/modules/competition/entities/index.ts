@@ -1,5 +1,5 @@
 export { Cancha } from './cancha.entity';
-export type { SuperficieCancha } from './cancha.entity';
+export type { EstadoCancha, SuperficieCancha } from './cancha.entity';
 export { CategoriaJugadores } from './categoria-jugadores.entity';
 export type { SerieEmbedded } from './categoria-jugadores.entity';
 export { Club } from './club.entity';

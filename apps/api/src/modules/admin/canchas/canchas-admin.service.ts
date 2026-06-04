@@ -166,6 +166,25 @@ export class CanchasAdminService {
     await this.repo.save(c);
   }
 
+  /**
+   * Sprint 40 — Cambiar estado operativo (DISPONIBLE/NO_DISPONIBLE).
+   * Con motivo opcional para auditoría. NO afecta `activa` (que es el
+   * soft-delete histórico). El generador del fixture chequea ESTE estado.
+   */
+  async cambiarEstado(
+    id: string,
+    tenantId: string,
+    estado: 'DISPONIBLE' | 'NO_DISPONIBLE',
+    motivo?: string | null,
+  ): Promise<CanchaAdmin> {
+    const c = await this.repo.findOne({ where: { id, tenantId } });
+    if (!c) throw new NotFoundException(`Cancha ${id} no encontrada`);
+    c.estado = estado;
+    c.motivoNoDisponible = estado === 'NO_DISPONIBLE' ? (motivo ?? null) : null;
+    const saved = await this.repo.save(c);
+    return this.toDto(saved);
+  }
+
   private toDto(c: Cancha): CanchaAdmin {
     return {
       id: c.id,
@@ -180,6 +199,8 @@ export class CanchasAdminService {
       tieneCamarines: c.tieneCamarines,
       observaciones: c.observaciones,
       activa: c.activa,
+      estado: c.estado,
+      motivoNoDisponible: c.motivoNoDisponible,
       createdAt: c.createdAt.toISOString(),
     };
   }

@@ -1,419 +1,465 @@
 'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  AlertTriangle,
-  CalendarRange,
-  CheckCircle2,
-  Lightbulb,
-  MapPin,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Trash2,
-  Trophy,
-  Users,
-  X,
-} from 'lucide-react';
-import Link from 'next/link';
-import { useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
+import { AlertTriangle, CheckCircle2, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { useState } from 'react';
 
 import {
-  SUPERFICIE_CANCHA,
-  SUPERFICIE_LABEL,
+  ESTADO_CANCHA_LABEL,
   type CanchaAdmin,
-  type SuperficieCancha,
+  type EstadoCancha,
 } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
-import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
+  useCambiarEstadoCancha,
   useCanchas,
   useCreateCancha,
   useDeactivateCancha,
   useUpdateCancha,
 } from '@/hooks/use-admin';
-import { ApiError } from '@/lib/api';
+import { toastError, toastSuccess } from '@/lib/toast';
 import { cn } from '@/lib/cn';
 
-const SUPERFICIE_BADGE: Record<SuperficieCancha, string> = {
-  PASTO_NATURAL: 'bg-green-bright/15 text-green-bright',
-  PASTO_SINTETICO: 'bg-green-deep/15 text-green-deep',
-  CEMENTO: 'bg-ink-mute/15 text-ink-mute',
-  TIERRA: 'bg-orange-700/15 text-orange-700',
-  OTRA: 'bg-ink-mute/10 text-ink-mute',
-};
-
+/**
+ * Sprint 40 — Canchas simplificadas. El operador solo carga el nombre de
+ * las canchas del complejo; opcional observaciones. Cada cancha tiene un
+ * estado DISPONIBLE/NO_DISPONIBLE para deshabilitarla temporalmente sin
+ * borrarla (mantenimiento, daño, lluvia, etc).
+ *
+ * Las canchas DISPONIBLES se usan en la plantilla de horarios del torneo
+ * (Sprint 39) y en el generador del fixture.
+ */
 export default function CanchasPage(): React.ReactElement {
-  const { data: canchas, isLoading, error } = useCanchas(false);
-  const apiError = error as ApiError | undefined;
-  const [adding, setAdding] = useState(false);
+  const { data, isLoading } = useCanchas();
+  const [editar, setEditar] = useState<CanchaAdmin | null>(null);
+  const [cambiarEstadoTarget, setCambiarEstadoTarget] = useState<CanchaAdmin | null>(null);
 
-  const stats = useMemo(() => {
-    const all = canchas ?? [];
-    return {
-      total: all.length,
-      activas: all.filter((c) => c.activa).length,
-      capacidadTotal: all
-        .filter((c) => c.activa)
-        .reduce((acc, c) => acc + (c.capacidad ?? 0), 0),
-      conIluminacion: all.filter((c) => c.activa && c.iluminacion).length,
-    };
-  }, [canchas]);
+  const disponibles = (data ?? []).filter((c) => c.estado === 'DISPONIBLE').length;
+  const noDisponibles = (data ?? []).filter((c) => c.estado === 'NO_DISPONIBLE').length;
 
   return (
     <>
       <PageHead
         eyebrow="Operaciones"
-        title="Ocupación de canchas"
-        sub="Catálogo de canchas donde se juegan los partidos. Al editar un partido, el sistema avisa si hay choque de horario en la misma cancha."
-      >
-        <Link
-          href="/admin/canchas/ocupacion"
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-card text-sm font-semibold bg-paper border border-line hover:border-green-deep hover:text-green-deep transition-colors"
-        >
-          <CalendarRange size={14} /> Vista calendario
-        </Link>
-        <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
-          <Plus size={14} /> {adding ? 'Cancelar' : 'Nueva cancha'}
-        </Button>
-      </PageHead>
+        title="Canchas"
+        sub="Catálogo de canchas del complejo. Se usan al armar la plantilla de horarios del torneo y al generar el fixture."
+      />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <Card padding="comfortable">
-          <CardLabel>Total</CardLabel>
-          <div className="font-display text-3xl text-green-deep tracking-display">
-            {isLoading ? '…' : stats.total}
-          </div>
-        </Card>
-        <Card padding="comfortable">
-          <CardLabel>Activas</CardLabel>
-          <div className="font-display text-3xl text-green-bright tracking-display">
-            {isLoading ? '…' : stats.activas}
-          </div>
-        </Card>
-        <Card padding="comfortable">
-          <CardLabel>Con iluminación</CardLabel>
-          <div className="font-display text-3xl text-accent tracking-display">
-            {isLoading ? '…' : stats.conIluminacion}
-          </div>
-          <div className="text-xs text-ink-mute font-serif italic mt-1">Permiten horario nocturno</div>
-        </Card>
-        <Card padding="comfortable" variant="lime">
-          <CardLabel tone="mute">Capacidad total</CardLabel>
-          <div className="font-display text-3xl text-green-deep tracking-display">
-            {isLoading ? '…' : stats.capacidadTotal.toLocaleString('es-CL')}
-          </div>
-          <div className="text-xs text-green-deep/70 font-serif italic mt-1">Suma de aforos</div>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+        <StatChip label="Total" value={(data ?? []).length} tone="default" />
+        <StatChip label="Disponibles" value={disponibles} tone="ok" />
+        <StatChip label="No disponibles" value={noDisponibles} tone="warn" />
       </div>
 
-      {apiError && (
-        <Card padding="comfortable" className="border-2 border-danger/40 bg-danger/5 mb-4">
-          <div className="flex items-start gap-3 text-danger">
-            <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
-            <div>
-              <div className="font-semibold">No pudimos cargar las canchas</div>
-              <div className="text-sm mt-1">{apiError.message}</div>
-            </div>
-          </div>
-        </Card>
-      )}
+      <FormularioAgregar />
 
-      {adding && (
-        <Card padding="comfortable" className="mb-5">
-          <CanchaForm onDone={() => setAdding(false)} />
-        </Card>
-      )}
-
-      <Card padding="none" className="overflow-hidden">
+      <div className="mt-5">
         {isLoading && (
-          <div className="p-8 text-center font-serif italic text-ink-mute">Cargando…</div>
+          <div className="font-serif italic text-ink-mute">Cargando canchas…</div>
         )}
-        {!isLoading && !apiError && (canchas?.length ?? 0) === 0 && (
-          <div className="p-12 text-center">
-            <Trophy size={36} className="mx-auto text-line mb-3" />
-            <p className="font-serif italic text-ink-mute">
-              Todavía no hay canchas cargadas. Agregá la primera para empezar a trackear ocupación.
-            </p>
-          </div>
+
+        {data && data.length === 0 && (
+          <Card padding="roomy" className="text-center">
+            <div className="font-display tracking-display text-2xl text-green-deep">
+              SIN CANCHAS CARGADAS
+            </div>
+            <div className="text-sm text-ink-mute mt-1 font-serif italic">
+              Cargá tu primera cancha arriba.
+            </div>
+          </Card>
         )}
-        {canchas && canchas.length > 0 && (
-          <div className="divide-y divide-line">
-            {canchas.map((c) => (
-              <CanchaRow key={c.id} cancha={c} />
-            ))}
-          </div>
+
+        {data && data.length > 0 && (
+          <Card padding="none" className="overflow-hidden">
+            <div className="px-5 py-3 bg-paper-dark border-b border-line">
+              <CardLabel>Canchas del complejo</CardLabel>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-paper border-b border-line">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold text-ink-mute">
+                    Nombre
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold text-ink-mute w-44">
+                    Estado
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold text-ink-mute">
+                    Observaciones
+                  </th>
+                  <th className="px-4 py-3 w-32 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {data.map((c) => (
+                  <FilaCancha
+                    key={c.id}
+                    cancha={c}
+                    onEditar={() => setEditar(c)}
+                    onCambiarEstado={() => setCambiarEstadoTarget(c)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </Card>
         )}
-      </Card>
+      </div>
+
+      {editar && (
+        <ModalEditar cancha={editar} onClose={() => setEditar(null)} />
+      )}
+
+      {cambiarEstadoTarget && (
+        <ModalCambiarEstado
+          cancha={cambiarEstadoTarget}
+          onClose={() => setCambiarEstadoTarget(null)}
+        />
+      )}
     </>
   );
 }
 
-function CanchaRow({ cancha }: { cancha: CanchaAdmin }): React.ReactElement {
-  const deactivate = useDeactivateCancha();
-  const update = useUpdateCancha(cancha.id);
-  const [editing, setEditing] = useState(false);
-
-  if (editing) {
-    return (
-      <div className="p-5 bg-paper-dark">
-        <CanchaForm cancha={cancha} onDone={() => setEditing(false)} />
+function StatChip({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: 'default' | 'ok' | 'warn';
+}): React.ReactElement {
+  return (
+    <Card padding="comfortable" variant={tone === 'ok' ? 'lime' : undefined}>
+      <CardLabel tone="mute">{label}</CardLabel>
+      <div
+        className={cn(
+          'font-display text-3xl tracking-display mt-1',
+          tone === 'ok' && 'text-green-bright',
+          tone === 'warn' && 'text-accent',
+          tone === 'default' && 'text-green-deep',
+        )}
+      >
+        {value}
       </div>
+    </Card>
+  );
+}
+
+function FormularioAgregar(): React.ReactElement {
+  const crear = useCreateCancha();
+  const [nombre, setNombre] = useState('');
+  const [observaciones, setObservaciones] = useState('');
+
+  const handleCrear = (): void => {
+    if (!nombre.trim()) return;
+    crear.mutate(
+      { nombre: nombre.trim(), observaciones: observaciones.trim() || null },
+      {
+        onSuccess: () => {
+          toastSuccess('Cancha creada.');
+          setNombre('');
+          setObservaciones('');
+        },
+        onError: (err) => toastError(err),
+      },
     );
-  }
+  };
 
   return (
-    <div className="p-5 flex items-start gap-3">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-ink">{cancha.nombre}</span>
-          {!cancha.activa && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-ink-mute/15 text-ink-mute">
-              inactiva
-            </span>
-          )}
-          <span
-            className={cn(
-              'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
-              SUPERFICIE_BADGE[cancha.superficie],
-            )}
-          >
-            {SUPERFICIE_LABEL[cancha.superficie]}
+    <Card padding="comfortable">
+      <CardLabel>Agregar cancha</CardLabel>
+      <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-3 items-end">
+        <label className="block">
+          <span className="text-xs font-semibold text-ink-mute mb-1 block">
+            Nombre <span className="text-danger">*</span>
           </span>
-          {cancha.iluminacion && (
-            <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-accent/15 text-accent flex items-center gap-1">
-              <Lightbulb size={11} /> Iluminación
-            </span>
-          )}
-          {cancha.tieneCamarines && (
-            <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-green-deep/10 text-green-deep">
-              Camarines
-            </span>
-          )}
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-mute">
-          {cancha.direccion && (
-            <span className="flex items-center gap-1">
-              <MapPin size={11} /> {cancha.direccion}
-            </span>
-          )}
-          {cancha.capacidad != null && (
-            <span className="flex items-center gap-1">
-              <Users size={11} /> Capacidad {cancha.capacidad.toLocaleString('es-CL')}
-            </span>
-          )}
-          {cancha.observaciones && (
-            <span className="font-serif italic truncate flex-1">{cancha.observaciones}</span>
-          )}
-        </div>
+          <input
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            placeholder="Cancha 1"
+            className="w-full px-3 py-2 border border-line rounded font-sans bg-paper focus:border-accent focus:outline-none"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCrear();
+            }}
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs font-semibold text-ink-mute mb-1 block">
+            Observaciones <span className="text-ink-mute font-normal">(opcional)</span>
+          </span>
+          <input
+            value={observaciones}
+            onChange={(e) => setObservaciones(e.target.value)}
+            placeholder="Ej: cancha 1 sin riego automático"
+            className="w-full px-3 py-2 border border-line rounded font-sans bg-paper focus:border-accent focus:outline-none"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCrear();
+            }}
+          />
+        </label>
+        <Button onClick={handleCrear} disabled={crear.isPending || !nombre.trim()}>
+          <Plus size={14} className="mr-2" />
+          Crear
+        </Button>
       </div>
-      <div className="flex items-center gap-1">
+    </Card>
+  );
+}
+
+function FilaCancha({
+  cancha,
+  onEditar,
+  onCambiarEstado,
+}: {
+  cancha: CanchaAdmin;
+  onEditar: () => void;
+  onCambiarEstado: () => void;
+}): React.ReactElement {
+  const eliminar = useDeactivateCancha();
+
+  const handleEliminar = (): void => {
+    if (!confirm(`¿Eliminar la cancha "${cancha.nombre}"?`)) return;
+    eliminar.mutate(cancha.id, {
+      onSuccess: () => toastSuccess('Cancha eliminada.'),
+      onError: (err) => toastError(err),
+    });
+  };
+
+  const esNoDispo = cancha.estado === 'NO_DISPONIBLE';
+
+  return (
+    <tr className={esNoDispo ? 'bg-accent/5' : ''}>
+      <td className="px-4 py-3 font-semibold text-ink">{cancha.nombre}</td>
+      <td className="px-4 py-3">
         <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="p-1 rounded text-ink-mute hover:text-accent hover:bg-accent/10"
+          onClick={onCambiarEstado}
+          className={cn(
+            'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded inline-flex items-center gap-1',
+            esNoDispo
+              ? 'bg-accent/15 text-accent hover:bg-accent/25'
+              : 'bg-green-bright/15 text-green-bright hover:bg-green-bright/25',
+          )}
+          title="Cambiar estado"
+        >
+          {esNoDispo ? <AlertTriangle size={11} /> : <CheckCircle2 size={11} />}
+          {ESTADO_CANCHA_LABEL[cancha.estado]}
+        </button>
+        {esNoDispo && cancha.motivoNoDisponible && (
+          <div className="text-xs text-ink-mute italic mt-1 max-w-xs truncate">
+            {cancha.motivoNoDisponible}
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-3 text-ink-mute text-xs">
+        {cancha.observaciones ?? <em className="text-ink-mute/60">—</em>}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <button
+          onClick={onEditar}
+          className="text-ink-mute hover:text-green-deep p-1 rounded mr-1"
           title="Editar"
         >
           <Pencil size={14} />
         </button>
-        {cancha.activa ? (
-          <button
-            type="button"
-            onClick={() => {
-              if (window.confirm(`¿Desactivar la cancha "${cancha.nombre}"?`)) {
-                deactivate.mutate(cancha.id);
-              }
-            }}
-            className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
-            title="Desactivar"
-          >
-            <Trash2 size={14} />
+        <button
+          onClick={handleEliminar}
+          className="text-danger hover:bg-danger/10 p-1 rounded"
+          title="Eliminar"
+        >
+          <Trash2 size={14} />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function ModalEditar({
+  cancha,
+  onClose,
+}: {
+  cancha: CanchaAdmin;
+  onClose: () => void;
+}): React.ReactElement {
+  const actualizar = useUpdateCancha(cancha.id);
+  const [nombre, setNombre] = useState(cancha.nombre);
+  const [observaciones, setObservaciones] = useState(cancha.observaciones ?? '');
+
+  const handleGuardar = (): void => {
+    actualizar.mutate(
+      { nombre: nombre.trim(), observaciones: observaciones.trim() || null },
+      {
+        onSuccess: () => {
+          toastSuccess('Cancha actualizada.');
+          onClose();
+        },
+        onError: (err) => toastError(err),
+      },
+    );
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-ink/40 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-paper rounded-card max-w-lg w-full p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <CardLabel>Editar cancha</CardLabel>
+            <div className="font-display text-2xl tracking-display text-green-deep mt-1">
+              {cancha.nombre}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-ink-mute hover:text-ink">
+            <X size={20} />
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => update.mutate({ activa: true })}
-            className="p-1 rounded text-ink-mute hover:text-green-bright hover:bg-green-bright/10"
-            title="Reactivar"
-          >
-            <RotateCcw size={14} />
-          </button>
-        )}
+        </div>
+
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-xs font-semibold text-ink-mute mb-1 block">Nombre</span>
+            <input
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              className="w-full px-3 py-2 border border-line rounded font-sans bg-paper focus:border-accent focus:outline-none"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-ink-mute mb-1 block">
+              Observaciones
+            </span>
+            <textarea
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-line rounded font-sans bg-paper focus:border-accent focus:outline-none"
+            />
+          </label>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={handleGuardar} disabled={actualizar.isPending || !nombre.trim()}>
+            Guardar
+          </Button>
+        </div>
       </div>
     </div>
   );
 }
 
-function CanchaForm({
+function ModalCambiarEstado({
   cancha,
-  onDone,
+  onClose,
 }: {
-  cancha?: CanchaAdmin;
-  onDone: () => void;
+  cancha: CanchaAdmin;
+  onClose: () => void;
 }): React.ReactElement {
-  const create = useCreateCancha();
-  const update = useUpdateCancha(cancha?.id ?? '');
-  const mutation = cancha ? update : create;
-  const error = mutation.error as ApiError | undefined;
+  const cambiar = useCambiarEstadoCancha();
+  const [estado, setEstado] = useState<EstadoCancha>(
+    cancha.estado === 'DISPONIBLE' ? 'NO_DISPONIBLE' : 'DISPONIBLE',
+  );
+  const [motivo, setMotivo] = useState(cancha.motivoNoDisponible ?? '');
 
-  const Schema = z.object({
-    nombre: z.string().min(2).max(150),
-    direccion: z.string().max(500).optional(),
-    lat: z.union([z.literal(''), z.coerce.number().min(-90).max(90)]).optional(),
-    lng: z.union([z.literal(''), z.coerce.number().min(-180).max(180)]).optional(),
-    capacidad: z.union([z.literal(''), z.coerce.number().int().min(0).max(200000)]).optional(),
-    superficie: z.enum(SUPERFICIE_CANCHA),
-    iluminacion: z.boolean(),
-    tieneCamarines: z.boolean(),
-    observaciones: z.string().max(1000).optional(),
-  });
-  type Form = z.infer<typeof Schema>;
-
-  const form = useForm<Form>({
-    resolver: zodResolver(Schema),
-    defaultValues: {
-      nombre: cancha?.nombre ?? '',
-      direccion: cancha?.direccion ?? '',
-      lat: cancha?.lat ?? '',
-      lng: cancha?.lng ?? '',
-      capacidad: cancha?.capacidad ?? '',
-      superficie: cancha?.superficie ?? 'PASTO_NATURAL',
-      iluminacion: cancha?.iluminacion ?? false,
-      tieneCamarines: cancha?.tieneCamarines ?? false,
-      observaciones: cancha?.observaciones ?? '',
-    },
-  });
-
-  const onSubmit = async (vals: Form): Promise<void> => {
-    const payload = {
-      nombre: vals.nombre,
-      direccion: vals.direccion || null,
-      lat: vals.lat === '' || vals.lat === undefined ? null : Number(vals.lat),
-      lng: vals.lng === '' || vals.lng === undefined ? null : Number(vals.lng),
-      capacidad:
-        vals.capacidad === '' || vals.capacidad === undefined ? null : Number(vals.capacidad),
-      superficie: vals.superficie,
-      iluminacion: vals.iluminacion,
-      tieneCamarines: vals.tieneCamarines,
-      observaciones: vals.observaciones || null,
-    };
-    if (cancha) {
-      await update.mutateAsync(payload);
-    } else {
-      await create.mutateAsync(payload);
-    }
-    form.reset();
-    onDone();
+  const handleAplicar = (): void => {
+    cambiar.mutate(
+      { id: cancha.id, estado, motivo: motivo.trim() || null },
+      {
+        onSuccess: () => {
+          toastSuccess(
+            estado === 'DISPONIBLE'
+              ? 'Cancha marcada como disponible.'
+              : 'Cancha marcada como no disponible.',
+          );
+          onClose();
+        },
+        onError: (err) => toastError(err),
+      },
+    );
   };
 
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-3">
-        <MapPin size={18} className="text-accent" />
-        <CardLabel>{cancha ? `Editando · ${cancha.nombre}` : 'Nueva cancha'}</CardLabel>
-      </div>
-
-      <form
-        onSubmit={form.handleSubmit(
-          onSubmit,
-          makeRhfErrorHandler({ formName: 'cancha' }),
-        )}
-        className="grid grid-cols-1 md:grid-cols-2 gap-3"
+    <div
+      className="fixed inset-0 bg-ink/40 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-paper rounded-card max-w-md w-full p-6"
+        onClick={(e) => e.stopPropagation()}
       >
-        <Input
-          label="Nombre"
-          placeholder="Estadio Municipal · Cancha 1"
-          {...form.register('nombre')}
-          error={form.formState.errors.nombre?.message}
-        />
-        <Input
-          label="Dirección (opcional)"
-          placeholder="Av. Irarrázaval 1234, Ñuñoa"
-          {...form.register('direccion')}
-        />
-
-        <div>
-          <label className="label">Superficie</label>
-          <select className="input" {...form.register('superficie')}>
-            {SUPERFICIE_CANCHA.map((s) => (
-              <option key={s} value={s}>
-                {SUPERFICIE_LABEL[s]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <Input
-          label="Capacidad / aforo"
-          type="number"
-          min={0}
-          {...form.register('capacidad', { valueAsNumber: true })}
-        />
-
-        <Input
-          label="Latitud (opcional)"
-          type="number"
-          step="any"
-          {...form.register('lat', { valueAsNumber: true })}
-          error={form.formState.errors.lat?.message}
-        />
-        <Input
-          label="Longitud (opcional)"
-          type="number"
-          step="any"
-          {...form.register('lng', { valueAsNumber: true })}
-          error={form.formState.errors.lng?.message}
-        />
-
-        <div className="md:col-span-2 flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" {...form.register('iluminacion')} />
-            <Lightbulb size={14} className="text-accent" />
-            <span>Tiene iluminación (horario nocturno)</span>
-          </label>
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" {...form.register('tieneCamarines')} />
-            <span>Tiene camarines</span>
-          </label>
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="label">Observaciones</label>
-          <textarea
-            className="input min-h-[60px]"
-            placeholder="Ej: cancha 2 sin riego automático, traer balones de repuesto"
-            {...form.register('observaciones')}
-          />
-        </div>
-
-        {error && (
-          <div className="md:col-span-2 text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
-            {error.message}
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <CardLabel>Estado de la cancha</CardLabel>
+            <div className="font-display text-2xl tracking-display text-green-deep mt-1">
+              {cancha.nombre}
+            </div>
           </div>
-        )}
+          <button onClick={onClose} className="text-ink-mute hover:text-ink">
+            <X size={20} />
+          </button>
+        </div>
 
-        <div className="md:col-span-2 flex gap-2">
-          <Button type="submit" variant="accent" loading={mutation.isPending}>
-            {cancha ? (
-              <>
-                <CheckCircle2 size={14} /> Guardar cambios
-              </>
-            ) : (
-              <>
-                <Plus size={14} /> Crear cancha
-              </>
-            )}
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setEstado('DISPONIBLE')}
+              className={cn(
+                'flex-1 px-3 py-2 text-xs uppercase tracking-[0.18em] font-semibold rounded border-2 transition-colors',
+                estado === 'DISPONIBLE'
+                  ? 'border-green-bright bg-green-bright/10 text-green-bright'
+                  : 'border-line text-ink-mute hover:border-green-bright/50',
+              )}
+            >
+              Disponible
+            </button>
+            <button
+              onClick={() => setEstado('NO_DISPONIBLE')}
+              className={cn(
+                'flex-1 px-3 py-2 text-xs uppercase tracking-[0.18em] font-semibold rounded border-2 transition-colors',
+                estado === 'NO_DISPONIBLE'
+                  ? 'border-accent bg-accent/10 text-accent'
+                  : 'border-line text-ink-mute hover:border-accent/50',
+              )}
+            >
+              No disponible
+            </button>
+          </div>
+
+          {estado === 'NO_DISPONIBLE' && (
+            <label className="block">
+              <span className="text-xs font-semibold text-ink-mute mb-1 block">
+                Motivo <span className="text-ink-mute font-normal">(opcional)</span>
+              </span>
+              <textarea
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                rows={3}
+                placeholder="Ej: mantenimiento del pasto, problema de iluminación, etc."
+                className="w-full px-3 py-2 border border-line rounded font-sans bg-paper focus:border-accent focus:outline-none"
+              />
+              <p className="text-xs text-ink-mute mt-1 font-serif italic">
+                El generador del fixture asigna partidos a la cancha aún si está
+                no disponible, pero deja un aviso para que decidas re-programar.
+              </p>
+            </label>
+          )}
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
           </Button>
-          <Button type="button" variant="ghost" onClick={onDone}>
-            <X size={14} /> Cancelar
+          <Button onClick={handleAplicar} disabled={cambiar.isPending}>
+            Aplicar
           </Button>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

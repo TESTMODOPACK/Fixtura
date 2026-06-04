@@ -768,6 +768,29 @@ export function useDeactivateCancha() {
   });
 }
 
+// Sprint 40 — Cambiar estado DISPONIBLE / NO_DISPONIBLE con motivo opcional.
+export function useCambiarEstadoCancha() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      estado,
+      motivo,
+    }: {
+      id: string;
+      estado: 'DISPONIBLE' | 'NO_DISPONIBLE';
+      motivo?: string | null;
+    }) =>
+      apiFetch<CanchaAdmin>(`/admin/canchas/${id}/estado`, {
+        method: 'PATCH',
+        body: JSON.stringify({ estado, motivo: motivo ?? null }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'canchas'] });
+    },
+  });
+}
+
 // ─── Dunning (cobranza automática) ──────────────────────────────────
 export function useDunningRecalcular() {
   const qc = useQueryClient();

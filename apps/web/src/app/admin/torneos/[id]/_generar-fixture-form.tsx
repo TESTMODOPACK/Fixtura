@@ -77,6 +77,13 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
               o asignalos manualmente desde el fixture.
             </p>
           )}
+          {(mutation.data.partidosEnCanchaNoDisponible ?? []).length > 0 && (
+            <p className="text-xs text-accent font-semibold mt-2">
+              ⚠ {mutation.data.partidosEnCanchaNoDisponible.length} partido(s)
+              asignados a canchas marcadas como NO DISPONIBLE. Revisá el fixture
+              y re-programá manualmente si la cancha no volverá a tiempo.
+            </p>
+          )}
         </div>
       )}
 
