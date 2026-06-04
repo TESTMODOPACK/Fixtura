@@ -65,6 +65,18 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
             programados. {mutation.data.equiposLibres.length > 0 &&
               `${mutation.data.equiposLibres.length} fechas tienen un equipo libre (número impar).`}
           </p>
+          {mutation.data.modoGeneracion === 'HORARIOS_TORNEO' && (
+            <p className="text-xs text-green-deep/70 mt-2 font-serif italic">
+              Modo: plantilla del torneo · {mutation.data.slotsUsados} slot(s) usado(s).
+            </p>
+          )}
+          {(mutation.data.partidosSinHorario ?? 0) > 0 && (
+            <p className="text-xs text-accent font-semibold mt-2">
+              ⚠ {mutation.data.partidosSinHorario} partido(s) quedaron sin horario
+              porque no había slots suficientes para esa fecha. Cargá más slots
+              o asignalos manualmente desde el fixture.
+            </p>
+          )}
         </div>
       )}
 

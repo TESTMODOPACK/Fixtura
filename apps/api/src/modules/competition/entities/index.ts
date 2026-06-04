@@ -22,6 +22,7 @@ export { Equipo } from './equipo.entity';
 export type { EstadoEquipo } from './equipo.entity';
 export { Fecha } from './fecha.entity';
 export type { EstadoFecha } from './fecha.entity';
+export { HorarioTorneo } from './horario-torneo.entity';
 export { IncidenciaPartido } from './incidencia-partido.entity';
 export type { TipoIncidencia } from './incidencia-partido.entity';
 export { JugadorInscrito } from './jugador-inscrito.entity';

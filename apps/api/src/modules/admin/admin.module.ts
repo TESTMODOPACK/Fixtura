@@ -36,6 +36,8 @@ import { DiasNoJugablesService } from './dias-no-jugables/dias-no-jugables.servi
 import { EquiposAdminController, EquiposItemController } from './equipos/equipos-admin.controller';
 import { EquiposAdminService } from './equipos/equipos-admin.service';
 import { FechasAdminService } from './fixture/fechas-admin.service';
+import { HorariosAdminController } from './horarios/horarios-admin.controller';
+import { HorariosAdminService } from './horarios/horarios-admin.service';
 import {
   FechasAdminController,
   FixtureAdminController,
@@ -122,6 +124,7 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     InscripcionesTorneoController,
     InscripcionesItemController,
     VetadosAdminController,
+    HorariosAdminController,
   ],
   providers: [
     TemporadasAdminService,
@@ -153,6 +156,7 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     DiasNoJugablesService,
     InscripcionesAdminService,
     VetadosAdminService,
+    HorariosAdminService,
   ],
   exports: [DiasNoJugablesService, VetadosAdminService],
 })

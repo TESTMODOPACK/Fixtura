@@ -1364,6 +1364,69 @@ export function useMetricasPlataforma() {
   });
 }
 
+// ─── Sprint 39 — Horarios del torneo ────────────────────────────────
+import type {
+  CreateHorarioTorneoRequest,
+  HorarioTorneo,
+  UpdateHorarioTorneoRequest,
+} from '@fixtura/types';
+
+export function useHorariosTorneo(torneoId: string) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'horarios'],
+    queryFn: () =>
+      apiFetch<HorarioTorneo[]>(`/admin/torneos/${torneoId}/horarios`),
+    enabled: !!torneoId,
+  });
+}
+
+export function useCrearHorarioTorneo(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateHorarioTorneoRequest) =>
+      apiFetch<HorarioTorneo>(`/admin/torneos/${torneoId}/horarios`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'torneos', torneoId, 'horarios'],
+      });
+    },
+  });
+}
+
+export function useActualizarHorarioTorneo(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateHorarioTorneoRequest }) =>
+      apiFetch<HorarioTorneo>(`/admin/torneos/${torneoId}/horarios/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'torneos', torneoId, 'horarios'],
+      });
+    },
+  });
+}
+
+export function useEliminarHorarioTorneo(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/torneos/${torneoId}/horarios/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'torneos', torneoId, 'horarios'],
+      });
+    },
+  });
+}
+
 export function useSystemHealth() {
   return useQuery({
     queryKey: ['super-admin', 'health'],

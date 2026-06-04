@@ -13,6 +13,7 @@ import { aplicarConstraintsFixture, generarFixtureBerger } from '@fixtura/domain
 
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
+import { HorarioTorneo } from '../../competition/entities/horario-torneo.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { DiasNoJugablesService } from '../dias-no-jugables/dias-no-jugables.service';
@@ -33,6 +34,8 @@ export class FixtureAdminService {
     @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
+    @InjectRepository(HorarioTorneo)
+    private readonly horarioRepo: Repository<HorarioTorneo>,
     private readonly diasNoJugables: DiasNoJugablesService,
   ) {}
 
@@ -185,30 +188,85 @@ export class FixtureAdminService {
       fechaIdByNumero.set(n, saved.id);
     }
 
+    // Sprint 39 — Modo de generación: si el torneo tiene plantilla de
+    // horarios cargada, ignoramos input.horariosPorFecha/canchas y
+    // asignamos por día de semana. Si no, modo legacy (round-robin
+    // sobre los arrays del input).
+    const horariosTorneo = await this.horarioRepo.find({
+      where: { torneoId, tenantId, activo: true },
+      relations: { cancha: true },
+      order: { diaSemana: 'ASC', hora: 'ASC', orden: 'ASC' },
+    });
+    const usarPlantilla = horariosTorneo.length > 0;
+    const modoGeneracion: 'HORARIOS_TORNEO' | 'INPUT_LEGACY' = usarPlantilla
+      ? 'HORARIOS_TORNEO'
+      : 'INPUT_LEGACY';
+
+    // Pre-agrupar slots por dia_semana (ISO 1-7) para acceso rápido.
+    const slotsPorDiaSemana = new Map<number, HorarioTorneo[]>();
+    if (usarPlantilla) {
+      for (const slot of horariosTorneo) {
+        const lista = slotsPorDiaSemana.get(slot.diaSemana) ?? [];
+        lista.push(slot);
+        slotsPorDiaSemana.set(slot.diaSemana, lista);
+      }
+    }
+
     // Crear partidos
     const horarios = input.horariosPorFecha;
     const canchas = input.canchas;
 
     let partidosCreados = 0;
+    let partidosSinHorario = 0;
+    let slotsUsados = 0;
     const partidosPorFecha = new Map<number, number>();
     for (const p of fixture.partidos) {
       const fechaId = fechaIdByNumero.get(p.fechaNumero)!;
       const idxEnFecha = partidosPorFecha.get(p.fechaNumero) ?? 0;
       partidosPorFecha.set(p.fechaNumero, idxEnFecha + 1);
 
-      const cancha = canchas[idxEnFecha % canchas.length]!;
-      const horario = horarios[idxEnFecha % horarios.length]!;
-
+      // Calcular el día calendario de esta fecha (heredando offset por
+      // días no jugables) — se usa tanto para fechaHora como para
+      // matchear el día de semana contra la plantilla.
       const baseFecha = new Date(fechaInicioBase);
       baseFecha.setDate(fechaInicioBase.getDate() + (p.fechaNumero - 1) * input.diasEntreFechas);
-      // Sprint 16 — RF-13: si la fecha fue corrida por día no jugable,
-      // los partidos heredan el offset para que fecha_hora coincida.
       const offsetExtra = offsetExtraPorFecha.get(p.fechaNumero) ?? 0;
       if (offsetExtra > 0) {
         baseFecha.setDate(baseFecha.getDate() + offsetExtra);
       }
-      const [h, m] = horario.split(':').map(Number);
-      baseFecha.setHours(h!, m!, 0, 0);
+
+      let canchaNombre: string | null = null;
+      let canchaId: string | null = null;
+      let fechaHora: Date | null = null;
+
+      if (usarPlantilla) {
+        // Día de semana ISO: getDay() devuelve 0 (dom) .. 6 (sáb). Lo
+        // convertimos a ISO (1=lun .. 7=dom).
+        const jsDow = baseFecha.getDay();
+        const isoDow = jsDow === 0 ? 7 : jsDow;
+        const slots = slotsPorDiaSemana.get(isoDow) ?? [];
+        const slot = slots[idxEnFecha];
+        if (slot) {
+          const [h, m] = slot.hora.split(':').map(Number);
+          baseFecha.setHours(h!, m!, 0, 0);
+          fechaHora = new Date(baseFecha);
+          canchaId = slot.canchaId;
+          canchaNombre = slot.cancha?.nombre ?? null;
+          slotsUsados++;
+        } else {
+          // Sin slot disponible para esta posición en esta fecha →
+          // partido sin horario. El admin lo asignará a mano.
+          partidosSinHorario++;
+        }
+      } else {
+        // Modo legacy — round-robin sobre input.
+        const cancha = canchas[idxEnFecha % canchas.length]!;
+        const horario = horarios[idxEnFecha % horarios.length]!;
+        const [h, m] = horario.split(':').map(Number);
+        baseFecha.setHours(h!, m!, 0, 0);
+        fechaHora = new Date(baseFecha);
+        canchaNombre = cancha;
+      }
 
       await this.partidoRepo.save(
         this.partidoRepo.create({
@@ -216,8 +274,9 @@ export class FixtureAdminService {
           fechaId,
           equipoLocalId: p.equipoLocalId,
           equipoVisitaId: p.equipoVisitaId,
-          canchaNombre: cancha,
-          fechaHora: baseFecha,
+          canchaNombre,
+          canchaId,
+          fechaHora,
           estado: 'PROGRAMADO',
         }),
       );
@@ -236,6 +295,9 @@ export class FixtureAdminService {
       partidosCreados,
       equiposLibres,
       diasNoJugablesAjustados,
+      partidosSinHorario,
+      slotsUsados,
+      modoGeneracion,
     };
   }
 

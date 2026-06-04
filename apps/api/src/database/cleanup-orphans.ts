@@ -528,6 +528,72 @@ async function main(): Promise<void> {
     `);
     log('app_config asegurada (Sprint 37).');
 
+    // Sprint 39 — Horarios del torneo (plantilla por dia de semana).
+    // Cada slot define un dia_semana (1=lun, 7=dom ISO) + hora + cancha
+    // del catalogo. Al generar el fixture, los partidos se asignan
+    // round-robin a los slots cuyo dia_semana matchee la fecha calculada.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS horarios_torneo (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id    UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        torneo_id    UUID NOT NULL REFERENCES torneos(id) ON DELETE CASCADE,
+        dia_semana   SMALLINT NOT NULL CHECK (dia_semana BETWEEN 1 AND 7),
+        hora         TIME NOT NULL,
+        cancha_id    UUID REFERENCES canchas(id) ON DELETE SET NULL,
+        orden        SMALLINT NOT NULL DEFAULT 0,
+        activo       BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_horarios_torneo ON horarios_torneo(torneo_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_horarios_tenant ON horarios_torneo(tenant_id)`,
+    );
+    // UNIQUE para que no se carguen dos slots iguales por error.
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'uq_horario_slot'
+        ) THEN
+          ALTER TABLE horarios_torneo
+            ADD CONSTRAINT uq_horario_slot
+            UNIQUE (torneo_id, dia_semana, hora, cancha_id);
+        END IF;
+      END $$
+    `);
+    // RLS estandar.
+    await client.query(`ALTER TABLE horarios_torneo ENABLE ROW LEVEL SECURITY`);
+    await client.query(`ALTER TABLE horarios_torneo FORCE ROW LEVEL SECURITY`);
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE tablename = 'horarios_torneo' AND policyname = 'tenant_isolation'
+        ) THEN
+          CREATE POLICY tenant_isolation ON horarios_torneo
+            USING (
+              tenant_id::text = current_setting('app.current_tenant_id', true)
+              OR current_setting('app.current_tenant_id', true) = ''
+            );
+        END IF;
+      END $$
+    `);
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_trigger WHERE tgname = 'trg_horarios_torneo_updated_at'
+        ) THEN
+          CREATE TRIGGER trg_horarios_torneo_updated_at
+            BEFORE UPDATE ON horarios_torneo
+            FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+        END IF;
+      END $$
+    `);
+    log('horarios_torneo asegurada (Sprint 39).');
+
     // Sprint 38 — Backfill de planillas vacias. Inscripciones que se
     // crearon antes del auto-copy quedaron con planilla en 0 jugadores
     // aunque el club tuviera plantel cargado. Esta query rellena cada

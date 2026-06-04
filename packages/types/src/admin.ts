@@ -249,5 +249,11 @@ export const FixtureGenerationResultSchema = z.object({
       }),
     )
     .default([]),
+  // Sprint 39 — partidos que quedaron sin horario asignado porque la
+  // plantilla del torneo no tenia suficientes slots para esa fecha.
+  // El admin tiene que cargar mas slots o asignar manualmente.
+  partidosSinHorario: z.number().int().default(0),
+  slotsUsados: z.number().int().default(0),
+  modoGeneracion: z.enum(['HORARIOS_TORNEO', 'INPUT_LEGACY']).default('INPUT_LEGACY'),
 });
 export type FixtureGenerationResult = z.infer<typeof FixtureGenerationResultSchema>;
