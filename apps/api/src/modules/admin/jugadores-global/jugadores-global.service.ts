@@ -49,9 +49,16 @@ export class JugadoresGlobalService {
     if (query.categoriaId) {
       qb.andWhere('j.categoria_id = :categoriaId', { categoriaId: query.categoriaId });
     }
-    // El filtro 'estado' se aplica DESPUÉS del merge con vetados —
-    // porque VETADO no es un valor de la columna estado, es un derivado
-    // del RUT estar en jugadores_vetados.
+    // Sprint 34G+ — Pre-filtro SQL para INACTIVO. El estado consolidado
+    // ACTIVO|INACTIVO|VETADO se calcula despues con el merge contra
+    // jugadores_vetados, asi que el filtro final por "activos" o
+    // "vetados" tiene que correr en memoria sobre el resultado del map
+    // (ver al final del metodo).
+    //
+    // Optimizacion: si el filtro es 'activos', ya podemos descartar los
+    // INACTIVO del modelo nuevo antes de traerlos. Los VETADOs igual
+    // salen de aca porque su columna estado puede ser 'ACTIVO' — esos
+    // se filtran luego en memoria.
     if (query.estado === 'activos') {
       qb.andWhere(`j.estado = 'ACTIVO'`);
     }
@@ -192,9 +199,16 @@ export class JugadoresGlobalService {
     });
 
     // Filtros que dependen del estado consolidado (no se pueden hacer
-    // en SQL porque VETADO viene de cross-table).
+    // en SQL porque VETADO viene de cross-table contra jugadores_vetados).
     if (query.estado === 'vetados') {
       return result.filter((j) => j.estado === 'VETADO');
+    }
+    if (query.estado === 'activos') {
+      // BUGFIX: el filtro SQL `j.estado = 'ACTIVO'` no descarta los que
+      // estan en jugadores_vetados — el flag VETADO se calcula DESPUES.
+      // Sin este filtro post-consolidado, "Solo activos" mostraba
+      // jugadores con badge VETADO.
+      return result.filter((j) => j.estado === 'ACTIVO');
     }
     return result;
   }
