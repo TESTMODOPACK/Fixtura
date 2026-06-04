@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  ArrowLeft,
   Calendar,
   Flame,
   History,
@@ -38,7 +39,10 @@ export function TenantHome({
   const torneosOtros = (todosTorneos ?? []).filter(
     (t) => t.id !== data.torneoActivo?.id,
   );
-  const mostrarMasTorneos = !torneoSlug && torneosOtros.length > 0;
+  const mostrarMasTorneos = torneosOtros.length > 0;
+  // ¿Hay más de un torneo en el tenant? Si sí mostramos el switcher.
+  const totalTorneos = (todosTorneos ?? []).length;
+  const mostrarSwitcher = totalTorneos > 1;
 
   // Prefijo para las rutas internas: si estamos en `/torneos/[slug]`, los
   // links a tabla/fixture/goleadores deben quedar bajo el mismo prefijo
@@ -56,8 +60,46 @@ export function TenantHome({
       />
 
       <main className="max-w-7xl mx-auto px-6 py-10">
+        {/* Switcher de torneos: solo cuando hay más de uno y estamos dentro
+            de un slug (en home se ve la grilla completa al final). */}
+        {torneoSlug && mostrarSwitcher && (
+          <div className="mb-6 flex flex-wrap items-center gap-2">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1 text-xs uppercase tracking-[0.18em] font-semibold text-ink-mute hover:text-green-deep px-3 py-2 rounded border border-line bg-paper hover:bg-paper-dark transition-colors"
+            >
+              <ArrowLeft size={12} />
+              Todos los torneos
+            </Link>
+            <span className="text-ink-mute/40">·</span>
+            {(todosTorneos ?? []).map((t) => {
+              const esActual = t.id === data.torneoActivo?.id;
+              return (
+                <Link
+                  key={t.id}
+                  href={esActual ? '#' : `/torneos/${t.slug}`}
+                  aria-current={esActual ? 'page' : undefined}
+                  className={cn(
+                    'inline-flex items-center gap-1 text-xs uppercase tracking-[0.18em] font-semibold px-3 py-2 rounded transition-colors',
+                    esActual
+                      ? 'bg-green-deep text-chalk cursor-default'
+                      : 'border border-line text-ink-mute hover:text-green-deep hover:bg-paper-dark',
+                  )}
+                >
+                  {t.nombre}
+                  {t.estado === 'CERRADO' && (
+                    <span className="text-[9px] opacity-70">·CERRADO</span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
         <section className="mb-8">
-          <div className="eyebrow mb-2">→ Torneo en curso</div>
+          <div className="eyebrow mb-2">
+            → {data.torneoActivo?.estado === 'CERRADO' ? 'Torneo cerrado' : 'Torneo en curso'}
+          </div>
           <h1 className="font-display_alt text-5xl md:text-6xl text-green-deep tracking-tight leading-none">
             {data.torneoActivo?.nombre.toUpperCase() ?? 'SIN TORNEO ACTIVO'}
           </h1>
@@ -178,7 +220,9 @@ export function TenantHome({
         {mostrarMasTorneos && (
           <section className="mt-12">
             <div className="eyebrow mb-3">
-              → Otros torneos de {data.liga.nombre}
+              {torneoSlug
+                ? `→ Otros torneos de ${data.liga.nombre}`
+                : `→ Más torneos de ${data.liga.nombre}`}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {torneosOtros.map((t) => (
