@@ -10,6 +10,7 @@ import { PlanSuscripcion } from '../tenants/entities/plan-suscripcion.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.entity';
+import { AppConfigModule } from './app-config.module';
 import { FacturaPlataforma } from './entities/factura-plataforma.entity';
 import { FacturacionPlataformaCron } from './facturacion-plataforma.cron';
 import { FacturacionPlataformaPagosService } from './facturacion-plataforma-pagos.service';
@@ -25,6 +26,7 @@ import {
   SuperAdminFacturasController,
   SuperAdminMetricsController,
   SuperAdminPlanesController,
+  SuperAdminPortalConfigController,
   SuperAdminTenantsController,
 } from './super-admin.controller';
 import { SuperAdminMetricsService } from './super-admin-metrics.service';
@@ -55,12 +57,14 @@ import { SuperAdminTenantsService } from './super-admin-tenants.service';
     PagosModule,
     SIIModule,
     EmailModule,
+    AppConfigModule,
   ],
   controllers: [
     SuperAdminTenantsController,
     SuperAdminPlanesController,
     SuperAdminMetricsController,
     SuperAdminFacturasController,
+    SuperAdminPortalConfigController,
     MiSuscripcionController,
   ],
   providers: [

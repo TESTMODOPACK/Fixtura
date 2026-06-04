@@ -4,11 +4,15 @@ import { Repository } from 'typeorm';
 
 import type { CreateTenantRequest } from '@fixtura/types';
 
+import { AppConfigService } from '../super-admin/app-config.service';
 import { Tenant } from './entities/tenant.entity';
 
 @Injectable()
 export class TenantsService {
-  constructor(@InjectRepository(Tenant) private readonly repo: Repository<Tenant>) {}
+  constructor(
+    @InjectRepository(Tenant) private readonly repo: Repository<Tenant>,
+    private readonly appConfig: AppConfigService,
+  ) {}
 
   async findBySlug(slug: string): Promise<Tenant | null> {
     return this.repo.findOne({ where: { slug } });
@@ -30,18 +34,26 @@ export class TenantsService {
   async findByHost(rawHost: string): Promise<Tenant | null> {
     const host = this.normalizeHost(rawHost);
 
-    // 1. Lookup exacto en custom_domain
+    // 1. Lookup exacto en custom_domain — gana siempre que matchee. Esto
+    //    preserva el aislamiento white-label: cada dominio del cliente
+    //    apunta a SU tenant, sin importar lo que diga el override.
     if (host) {
       const exact = await this.repo.findOne({ where: { customDomain: host } });
       if (exact) return exact;
     }
 
-    // 2. Fallback configurable. Sirve dos casos:
-    //    - Dev local sin dominio (NODE_ENV != production)
-    //    - VPS de staging/preview servido por IP sin dominio configurado
-    //
-    //   Solo aplica si FALLBACK_TENANT_SLUG está explícitamente seteado
-    //   en el entorno, o si estamos fuera de producción (default: liga-demo).
+    // 2. Sprint 37 — Override del super admin desde app_config.
+    //    Sirve mientras los dominios no están apuntados todavía: el super
+    //    admin elige cuál tenant aparece en la IP cruda / dominios sin
+    //    mapear. Se cambia desde /admin/super/portal sin tocar SQL.
+    const defaultTenantId = await this.appConfig.getDefaultTenantId();
+    if (defaultTenantId) {
+      const def = await this.repo.findOne({ where: { id: defaultTenantId } });
+      if (def) return def;
+    }
+
+    // 3. Fallback heredado de dev/staging. Solo aplica si no se setó
+    //    nada desde el mantenedor.
     const explicitFallback = process.env.FALLBACK_TENANT_SLUG;
     if (explicitFallback) {
       return this.repo.findOne({ where: { slug: explicitFallback } });
@@ -50,7 +62,7 @@ export class TenantsService {
       return this.repo.findOne({ where: { slug: 'liga-demo' } });
     }
 
-    // 3. En prod sin fallback explícito, un host sin match es 404.
+    // 4. En prod sin override ni fallback, un host sin match es 404.
     return null;
   }
 

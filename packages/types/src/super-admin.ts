@@ -158,3 +158,23 @@ export const SystemHealthSchema = z.object({
   timestamp: z.iso.datetime(),
 });
 export type SystemHealth = z.infer<typeof SystemHealthSchema>;
+
+// ─── Sprint 37 — Portal config (tenant por defecto) ─────────────────
+export const PortalConfigSchema = z.object({
+  /**
+   * UUID del tenant que se muestra cuando el hostname del request no
+   * matchea ningun `tenants.custom_domain`. Si es null, el sistema usa
+   * los fallbacks heredados (FALLBACK_TENANT_SLUG o `liga-demo` en dev).
+   */
+  defaultTenantId: z.uuid().nullable(),
+  /** Cuándo se actualizó por última vez. */
+  updatedAt: z.iso.datetime().nullable(),
+  /** UUID del super admin que lo cambió. */
+  updatedBy: z.uuid().nullable(),
+});
+export type PortalConfig = z.infer<typeof PortalConfigSchema>;
+
+export const UpdatePortalConfigSchema = z.object({
+  defaultTenantId: z.uuid().nullable(),
+});
+export type UpdatePortalConfigRequest = z.infer<typeof UpdatePortalConfigSchema>;

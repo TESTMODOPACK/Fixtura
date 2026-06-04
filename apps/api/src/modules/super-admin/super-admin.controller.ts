@@ -13,6 +13,7 @@ import {
 
 import {
   ROLE,
+  UpdatePortalConfigSchema,
   type CreatePlanRequest,
   type CreateTenantPlatformRequest,
   type EstadoCuentaLiga,
@@ -21,10 +22,12 @@ import {
   type FacturaPlataforma as FacturaPlataformaDto,
   type MetricasPlataforma,
   type PlanSuscripcion,
+  type PortalConfig,
   type SuspenderTenantRequest,
   type SystemHealth,
   type TenantPlatform,
   type UpdatePlanRequest,
+  type UpdatePortalConfigRequest,
   type UpdateTenantPlatformRequest,
   type UserContext,
 } from '@fixtura/types';
@@ -32,6 +35,7 @@ import {
 import { Audited } from '../audit';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AppConfigService } from './app-config.service';
 import {
   AnularFacturaDto,
   RegistrarPagoManualDto,
@@ -233,5 +237,43 @@ export class SuperAdminFacturasController {
   generarMesActual(): Promise<{ creadas: number; saltadas: number }> {
     const hoy = new Date();
     return this.svc.generarFacturasMes(hoy.getMonth() + 1, hoy.getFullYear());
+  }
+}
+
+/**
+ * Sprint 37 — Mantenedor del portal público a nivel plataforma.
+ *
+ * Sirve para elegir qué tenant aparece en la URL raíz cuando el hostname
+ * del request no matchea ningún `tenants.custom_domain`. Útil mientras
+ * los dominios de los clientes todavía no están apuntados al VPS.
+ *
+ *  GET /super-admin/portal-config           Lee config actual.
+ *  PUT /super-admin/portal-config           Cambia el tenant default.
+ */
+@Controller('super-admin/portal-config')
+@Roles(ROLE.SUPER_ADMIN)
+export class SuperAdminPortalConfigController {
+  constructor(private readonly appConfig: AppConfigService) {}
+
+  @Get()
+  async get(): Promise<PortalConfig> {
+    const record = await this.appConfig.getRecord('default_tenant_id');
+    return {
+      defaultTenantId: record?.value ?? null,
+      updatedAt: record?.updatedAt?.toISOString() ?? null,
+      updatedBy: record?.updatedBy ?? null,
+    };
+  }
+
+  @Patch()
+  @HttpCode(200)
+  @Audited({ action: 'platform.portal_default_tenant_changed' })
+  async update(
+    @CurrentUser() user: UserContext,
+    @Body() body: UpdatePortalConfigRequest,
+  ): Promise<PortalConfig> {
+    const parsed = UpdatePortalConfigSchema.parse(body);
+    await this.appConfig.setDefaultTenantId(parsed.defaultTenantId, user.userId);
+    return this.get();
   }
 }

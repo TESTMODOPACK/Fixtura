@@ -5,6 +5,7 @@ import {
   Building2,
   CircleDollarSign,
   FileText,
+  Globe,
   Heart,
   ListChecks,
   ShieldAlert,
@@ -38,7 +39,7 @@ export default function SuperAdminPanel(): React.ReactElement {
       />
 
       {/* Atajos */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <Link href="/admin/super/tenants">
           <Card padding="comfortable" className="hover:shadow-md transition-shadow cursor-pointer">
             <Building2 size={20} className="text-accent mb-2" />
@@ -58,6 +59,13 @@ export default function SuperAdminPanel(): React.ReactElement {
             <FileText size={20} className="text-accent mb-2" />
             <CardLabel>Facturas</CardLabel>
             <div className="text-sm text-ink-mute mt-1">Cobros a las ligas</div>
+          </Card>
+        </Link>
+        <Link href="/admin/super/portal">
+          <Card padding="comfortable" className="hover:shadow-md transition-shadow cursor-pointer">
+            <Globe size={20} className="text-accent mb-2" />
+            <CardLabel>Portal público</CardLabel>
+            <div className="text-sm text-ink-mute mt-1">Tenant por defecto</div>
           </Card>
         </Link>
         <Link href="/admin/super/impersonate">

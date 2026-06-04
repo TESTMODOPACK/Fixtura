@@ -1222,9 +1222,11 @@ import type {
   EstadoSuscripcion,
   MetricasPlataforma,
   PlanSuscripcion,
+  PortalConfig,
   SystemHealth,
   TenantPlatform,
   UpdatePlanRequest,
+  UpdatePortalConfigRequest,
   UpdateTenantPlatformRequest,
 } from '@fixtura/types';
 
@@ -1367,6 +1369,28 @@ export function useSystemHealth() {
     queryKey: ['super-admin', 'health'],
     queryFn: () => apiFetch<SystemHealth>('/super-admin/metricas/health'),
     refetchInterval: 30_000,
+  });
+}
+
+// ─── Sprint 37 — Portal config (tenant default) ─────────────────────
+export function usePortalConfig() {
+  return useQuery({
+    queryKey: ['super-admin', 'portal-config'],
+    queryFn: () => apiFetch<PortalConfig>('/super-admin/portal-config'),
+  });
+}
+
+export function useUpdatePortalConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdatePortalConfigRequest) =>
+      apiFetch<PortalConfig>('/super-admin/portal-config', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['super-admin', 'portal-config'] });
+    },
   });
 }
 

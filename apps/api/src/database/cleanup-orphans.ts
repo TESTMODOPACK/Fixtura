@@ -513,6 +513,21 @@ async function main(): Promise<void> {
     );
     log('users.scheduled_deletion_at asegurada (Ley 19.628).');
 
+    // Sprint 37 — tabla app_config key/value para configuración de plataforma.
+    // Sin RLS (es metadata global, no datos de tenant). Acceso solo desde
+    // super admin. Caso de uso: tenant por defecto del portal cuando el
+    // hostname del request no matchea ningun custom_domain.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_config (
+        key         VARCHAR(100) PRIMARY KEY,
+        value       TEXT NOT NULL,
+        descripcion TEXT,
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_by  UUID REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    log('app_config asegurada (Sprint 37).');
+
     log('Done.');
   } finally {
     await client.end();
