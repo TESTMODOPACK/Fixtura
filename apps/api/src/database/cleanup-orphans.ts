@@ -528,6 +528,92 @@ async function main(): Promise<void> {
     `);
     log('app_config asegurada (Sprint 37).');
 
+    // Sprint 38 — Backfill de planillas vacias. Inscripciones que se
+    // crearon antes del auto-copy quedaron con planilla en 0 jugadores
+    // aunque el club tuviera plantel cargado. Esta query rellena cada
+    // planilla vacia con TODOS los jugadores ACTIVOS del club en la
+    // categoria correspondiente, respetando el tope del torneo.
+    // Idempotente: ON CONFLICT no duplica.
+    const planillaBackfill = await client.query(`
+      WITH inscripciones_vacias AS (
+        SELECT i.id AS inscripcion_id,
+               i.tenant_id,
+               i.club_id,
+               i.categoria_id,
+               i.torneo_id,
+               t.tope_jugadores_por_equipo AS tope
+        FROM inscripciones_torneo i
+        JOIN torneos t ON t.id = i.torneo_id
+        WHERE NOT EXISTS (
+          SELECT 1 FROM planilla_torneo p
+          WHERE p.inscripcion_id = i.id
+        )
+      ),
+      candidatos AS (
+        SELECT iv.tenant_id,
+               iv.inscripcion_id,
+               j.id AS jugador_id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY iv.inscripcion_id
+                 ORDER BY j.created_at ASC
+               ) AS rn,
+               iv.tope
+        FROM inscripciones_vacias iv
+        JOIN jugadores j
+          ON j.tenant_id = iv.tenant_id
+         AND j.club_id = iv.club_id
+         AND j.categoria_id = iv.categoria_id
+         AND j.estado = 'ACTIVO'
+      )
+      INSERT INTO planilla_torneo (tenant_id, inscripcion_id, jugador_id)
+      SELECT tenant_id, inscripcion_id, jugador_id
+      FROM candidatos
+      WHERE rn <= tope
+      ON CONFLICT (inscripcion_id, jugador_id) DO NOTHING
+    `);
+    if ((planillaBackfill.rowCount ?? 0) > 0) {
+      log(
+        `Sprint 38: planilla_torneo backfill — ${planillaBackfill.rowCount} jugador(es) copiado(s) desde planteles de club.`,
+      );
+    }
+
+    // Sprint 38 — Tambien sincronizar al modelo viejo (jugadores_inscritos)
+    // para los equipos sombra de las inscripciones que acabamos de rellenar.
+    // Si el RUT ya existe en ese equipo, no duplica.
+    const sincronizacionVieja = await client.query(`
+      INSERT INTO jugadores_inscritos (
+        tenant_id, equipo_id, nombre, apellido, apodo, rut,
+        numero_camiseta, posicion, pie_habil, fecha_nac, capitan
+      )
+      SELECT
+        j.tenant_id,
+        i.equipo_sombra_id,
+        j.nombres,
+        j.apellidos,
+        j.apodo,
+        j.rut,
+        j.numero_camiseta,
+        j.posicion,
+        j.pie_habil,
+        j.fecha_nac,
+        j.capitan
+      FROM planilla_torneo p
+      JOIN inscripciones_torneo i ON i.id = p.inscripcion_id
+      JOIN jugadores j ON j.id = p.jugador_id
+      WHERE i.equipo_sombra_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM jugadores_inscritos ji
+          WHERE ji.tenant_id = j.tenant_id
+            AND ji.equipo_id = i.equipo_sombra_id
+            AND ji.rut = j.rut
+        )
+    `);
+    if ((sincronizacionVieja.rowCount ?? 0) > 0) {
+      log(
+        `Sprint 38: jugadores_inscritos shim sincronizado — ${sincronizacionVieja.rowCount} fila(s) en equipo sombra.`,
+      );
+    }
+
     log('Done.');
   } finally {
     await client.end();

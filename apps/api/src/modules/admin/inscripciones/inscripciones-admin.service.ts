@@ -266,7 +266,23 @@ export class InscripcionesAdminService {
 
     // Sprint 26G.2 — Shim: crear equipo sombra en el modelo viejo para
     // que fixture/actas/sanciones puedan operar sobre el equipo "real".
-    await this.ensureEquipoSombra(saved, club, tenantId);
+    const equipoSombraId = await this.ensureEquipoSombra(saved, club, tenantId);
+
+    // Sprint 38 — Precargar planilla del torneo con el plantel del club
+    // en esa categoría. Antes el delegado tenía que cargar uno por uno
+    // y la planilla quedaba en 0 después de inscribir, lo cual era
+    // confuso. Ahora se copia todo el plantel ACTIVO de la categoría;
+    // el delegado puede sacar al que no va a jugar.
+    try {
+      await this.precargarPlanillaDesdeClub(saved, tenantId, equipoSombraId);
+    } catch (err) {
+      // Si falla la pre-carga, no rompe la inscripción — el admin puede
+      // cargar manualmente desde la UI o re-ejecutar el backfill.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[inscripcion] precarga planilla falló insc=${saved.id}: ${(err as Error).message}`,
+      );
+    }
 
     // Sprint 34C — Hook: generar el cobro de MATRICULA si el torneo
     // tiene tarifa configurada. Si no hay tarifa, el aplicador deja
@@ -285,6 +301,69 @@ export class InscripcionesAdminService {
     }
 
     return this.findOne(saved.id, tenantId);
+  }
+
+  /**
+   * Sprint 38 — Copia el plantel ACTIVO del club (filtrado por la
+   * categoría de la inscripción) a planilla_torneo. También sincroniza
+   * al modelo viejo (jugadores_inscritos del equipo sombra) para que
+   * actas/sanciones lo vean. Idempotente: ON CONFLICT no duplica.
+   *
+   * Respeta el tope del torneo: si el plantel del club excede el cupo,
+   * recorta los primeros N por created_at (FIFO).
+   */
+  private async precargarPlanillaDesdeClub(
+    inscripcion: InscripcionTorneo,
+    tenantId: string,
+    equipoSombraId: string,
+  ): Promise<number> {
+    const torneo = await this.torneoRepo.findOne({
+      where: { id: inscripcion.torneoId, tenantId },
+    });
+    const tope = torneo?.topeJugadoresPorEquipo ?? 25;
+
+    const jugadores = await this.jugadorRepo.find({
+      where: {
+        tenantId,
+        clubId: inscripcion.clubId,
+        categoriaId: inscripcion.categoriaId,
+        estado: 'ACTIVO',
+      },
+      order: { createdAt: 'ASC' },
+      take: tope,
+    });
+
+    if (jugadores.length === 0) return 0;
+
+    let copiados = 0;
+    for (const jugador of jugadores) {
+      try {
+        await this.planillaRepo.insert({
+          tenantId,
+          inscripcionId: inscripcion.id,
+          jugadorId: jugador.id,
+        });
+        // Shim modelo viejo — para que actas/sanciones lo vean.
+        await this.sincronizarJugadorAModeloViejo(
+          tenantId,
+          equipoSombraId,
+          jugador,
+        );
+        copiados++;
+      } catch (err) {
+        // UNIQUE violation = ya estaba en la planilla. Ignorar.
+        if (
+          !(
+            err instanceof Error &&
+            (err.message.includes('uq_planilla_jugador') ||
+              err.message.includes('duplicate key'))
+          )
+        ) {
+          throw err;
+        }
+      }
+    }
+    return copiados;
   }
 
   async desinscribir(id: string, tenantId: string): Promise<void> {
