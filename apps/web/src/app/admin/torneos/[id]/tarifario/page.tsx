@@ -197,12 +197,23 @@ function TarifaCard({
     if (!tarifa) return;
     const ok = confirm(
       `¿Eliminar la tarifa "${TIPO_TARIFA_LABEL[tipo]}"?\n\n` +
-        `Los cobros que ya se generaron NO se tocan. El sistema simplemente ` +
-        `dejará de generar nuevos cobros de este tipo en este torneo.`,
+        `Los cobros que ya se generaron NO se tocan, pero quedan sin tarifa ` +
+        `origen vinculada. El sistema simplemente dejará de generar nuevos ` +
+        `cobros de este tipo en este torneo.\n\n` +
+        `Si querés conservar la trazabilidad, podés desactivarla en lugar de ` +
+        `borrarla (editá la tarifa y desmarcá "Tarifa activa").`,
     );
     if (!ok) return;
     deleteTarifa.mutate(tarifa.id, {
-      onSuccess: () => toastSuccess(`Tarifa "${TIPO_TARIFA_LABEL[tipo]}" eliminada.`),
+      onSuccess: (res) => {
+        // Sprint 34G — el backend devuelve cuantos cobros quedaron sin
+        // tarifa origen. Lo mostramos en el toast para que el operador
+        // sepa el impacto historico.
+        const msg = res.cobrosDesvinculados > 0
+          ? `Tarifa "${TIPO_TARIFA_LABEL[tipo]}" eliminada. ${res.cobrosDesvinculados} cobro(s) quedaron sin tarifa origen vinculada.`
+          : `Tarifa "${TIPO_TARIFA_LABEL[tipo]}" eliminada.`;
+        toastSuccess(msg);
+      },
     });
   };
 
@@ -505,6 +516,13 @@ function EditarTarifaModal({
         dia={dia}
         setDia={setDia}
       />
+      {/* Sprint 34G — snapshot del monto. */}
+      <div className="text-[11px] font-serif italic text-ink-mute bg-paper/60 p-2 rounded-card mt-3 flex items-start gap-2">
+        <AlertTriangle size={11} className="text-accent flex-shrink-0 mt-0.5" />
+        El cambio de monto solo afecta cobros futuros. Los cobros ya generados
+        con esta tarifa NO se actualizan automáticamente — si querés ajustarlos,
+        editalos uno por uno desde Finanzas.
+      </div>
       <label className="flex items-center gap-2 text-sm mt-3">
         <input
           type="checkbox"

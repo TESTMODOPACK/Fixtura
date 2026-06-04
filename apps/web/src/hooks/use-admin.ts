@@ -1986,9 +1986,10 @@ export function useDeleteTarifa(torneoId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      apiFetch<void>(`/admin/torneos/${torneoId}/tarifario/${id}`, {
-        method: 'DELETE',
-      }),
+      apiFetch<{ cobrosDesvinculados: number }>(
+        `/admin/torneos/${torneoId}/tarifario/${id}`,
+        { method: 'DELETE' },
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: tarifasKey(torneoId) });
     },

@@ -883,6 +883,30 @@ async function ensureTarifasTorneoTable(
   `);
   log('tarifas_torneo.tipo: MULTA_FECHA_SANCION removida del enum (Sprint 34C revision).');
 
+  // Sprint 34G — validar que cuotas SEMANAL tengan dia_vencimiento en
+  // rango 1..7 (lun..dom). La columna admite 1..31 para uso de tarifas
+  // mensuales/anuales, pero no tiene sentido un "dia 15 semanal".
+  // Idempotente: dropea + crea.
+  await client.query(`
+    DELETE FROM tarifas_torneo
+     WHERE frecuencia = 'SEMANAL'
+       AND dia_vencimiento IS NOT NULL
+       AND dia_vencimiento NOT BETWEEN 1 AND 7
+  `);
+  await client.query(`
+    ALTER TABLE tarifas_torneo
+      DROP CONSTRAINT IF EXISTS tarifas_torneo_dia_semanal_check
+  `);
+  await client.query(`
+    ALTER TABLE tarifas_torneo
+      ADD CONSTRAINT tarifas_torneo_dia_semanal_check CHECK (
+        frecuencia <> 'SEMANAL'
+        OR dia_vencimiento IS NULL
+        OR dia_vencimiento BETWEEN 1 AND 7
+      )
+  `);
+  log('tarifas_torneo: CHECK dia_vencimiento 1..7 para frecuencia SEMANAL (Sprint 34G).');
+
   // Sprint 34D — vincular cobros al partido para multas automaticas.
   // Permite borrar/regenerar al reabrir el acta de un partido sin
   // afectar cobros de otros partidos.

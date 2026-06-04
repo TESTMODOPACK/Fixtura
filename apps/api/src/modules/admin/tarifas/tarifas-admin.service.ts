@@ -112,12 +112,26 @@ export class TarifasAdminService {
     id: string,
     torneoId: string,
     tenantId: string,
-  ): Promise<void> {
+  ): Promise<{ cobrosDesvinculados: number }> {
     await this.ensureTorneo(torneoId, tenantId);
+    // Sprint 34G — contar cobros vinculados ANTES de borrar. La FK
+    // cobros.tarifa_id queda SET NULL automaticamente, pero el operador
+    // necesita saber cuantos cobros van a quedar "huerfanos de tarifa"
+    // para que pueda decidir si quiere mantenerla desactivada en su
+    // lugar (preserva trazabilidad).
+    const cobrosDesvinculados = await this.tarifaRepo.manager
+      .createQueryBuilder()
+      .select('COUNT(*)', 'cnt')
+      .from('cobros', 'c')
+      .where('c.tarifa_id = :id', { id })
+      .andWhere('c.tenant_id = :tenantId', { tenantId })
+      .getRawOne<{ cnt: string }>();
+
     const r = await this.tarifaRepo.delete({ id, torneoId, tenantId });
     if (r.affected === 0) {
       throw new NotFoundException(`Tarifa ${id} no encontrada.`);
     }
+    return { cobrosDesvinculados: Number(cobrosDesvinculados?.cnt ?? 0) };
   }
 
   // ── Helpers ────────────────────────────────────────────────────

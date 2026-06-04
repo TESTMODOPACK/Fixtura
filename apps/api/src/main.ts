@@ -23,6 +23,18 @@ async function bootstrap(): Promise<void> {
 
   trace('1/8 starting bootstrap');
 
+  // Sprint 34G — fijar la TZ del proceso a Chile continental antes de
+  // cualquier uso de Date(). Sin esto, los crons (cuotas recurrentes,
+  // dunning) y los calculos de "dia del mes / dia de la semana" usan
+  // la TZ del container (UTC por default en imagenes Linux), y los
+  // bordes de mes/semana quedan desfasados varias horas respecto al
+  // operador de la liga. Si el deploy elige otra TZ, se puede
+  // sobreescribir con la env var TZ del compose.
+  if (!process.env.TZ) {
+    process.env.TZ = 'America/Santiago';
+  }
+  trace(`1.5/8 timezone = ${process.env.TZ}`);
+
   // Inicializar el contexto transaccional ANTES de crear la app.
   // typeorm-transactional usa AsyncLocalStorage para propagar la transacción
   // activa a todas las queries de TypeORM dentro del request, sin tener que

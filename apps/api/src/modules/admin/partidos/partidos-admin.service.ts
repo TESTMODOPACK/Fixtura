@@ -353,7 +353,20 @@ export class PartidosAdminService {
     actorUserId: string,
     input: CerrarActaRequest,
   ): Promise<PartidoAdmin> {
-    const partido = await this.findPartido(partidoId, tenantId);
+    // Sprint 34G — lock pesimista sobre el partido para evitar que dos
+    // requests simultáneos de cierre de acta generen multas auto
+    // duplicadas. Con SELECT FOR UPDATE, si llega un 2do request mientras
+    // el 1ro está dentro de su transacción, espera al COMMIT del 1ro y
+    // luego ve actaCerradaAt seteado → el check de abajo lo rechaza con
+    // 409. Sin el lock, ambos pasan el check antes del UPDATE y los dos
+    // generan multas (duplicación pura).
+    const partido = await this.repo.findOne({
+      where: { id: partidoId, tenantId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!partido) {
+      throw new NotFoundException(`Partido ${partidoId} no encontrado`);
+    }
     if (partido.actaCerradaAt) {
       throw new ConflictException('El acta ya está cerrada');
     }

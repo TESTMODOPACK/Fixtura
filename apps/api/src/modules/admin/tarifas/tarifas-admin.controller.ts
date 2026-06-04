@@ -4,7 +4,6 @@ import {
   Controller,
   Delete,
   Get,
-  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -74,7 +73,6 @@ export class TarifasAdminController {
   }
 
   @Delete(':id')
-  @HttpCode(204)
   @Audited({
     action: 'torneo.tarifa.eliminada',
     entityType: 'TarifaTorneo',
@@ -84,7 +82,7 @@ export class TarifasAdminController {
     @CurrentUser() user: UserContext,
     @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
     @Param('id', new ParseUUIDPipe()) id: string,
-  ): Promise<void> {
+  ): Promise<{ cobrosDesvinculados: number }> {
     return this.svc.remove(id, torneoId, ensureTenant(user));
   }
 }
