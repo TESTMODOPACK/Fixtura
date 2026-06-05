@@ -24,6 +24,7 @@ import type {
 
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { CategoriaJugadores } from '../../competition/entities/categoria-jugadores.entity';
+import { Fecha } from '../../competition/entities/fecha.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
 import { Partido } from '../../competition/entities/partido.entity';
@@ -45,6 +46,8 @@ export class EquiposAdminService {
     private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Partido)
     private readonly partidoRepo: Repository<Partido>,
+    @InjectRepository(Fecha)
+    private readonly fechaRepo: Repository<Fecha>,
     @Inject(forwardRef(() => PartidosAdminService))
     private readonly partidosSvc: PartidosAdminService,
   ) {}
@@ -185,6 +188,22 @@ export class EquiposAdminService {
     }
 
     await this.repo.delete({ id, tenantId });
+
+    // Sprint 44 fix — Las FK partido→equipo son ON DELETE CASCADE, así
+    // que borrar el equipo borró sus partidos. Pero las FECHAS no tienen
+    // FK al equipo, así que quedaban "fantasma" (fechas vacías sin
+    // partidos). Si tras borrar el torneo queda con menos de 2 equipos,
+    // no puede existir un fixture válido → limpiamos las fechas para que
+    // el torneo vuelva al estado inicial (0 fechas, listo para regenerar
+    // cuando se reinscriban equipos).
+    const equiposRestantes = await this.repo.count({
+      where: { torneoId: equipo.torneoId, tenantId },
+    });
+    if (equiposRestantes < 2) {
+      // delete() de fechas: la FK partido→fecha es ON DELETE CASCADE, así
+      // que esto barre también cualquier partido que hubiera quedado.
+      await this.fechaRepo.delete({ torneoId: equipo.torneoId, tenantId });
+    }
   }
 
   /**
