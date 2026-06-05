@@ -398,19 +398,47 @@ export class FixtureAdminService {
     );
     const canchasDisponiblesCount = canchasDisponibles.length;
 
-    if (canchasDisponiblesCount === 0) {
+    // 3.1 — Catálogo vacío (ninguna cancha cargada en /admin/canchas)
+    if (canchas.length === 0) {
+      advertencias.push({
+        codigo: 'SIN_CANCHAS_CATALOGO',
+        nivel: 'WARN',
+        mensaje:
+          'No hay canchas cargadas en el catálogo. Cargalas desde "Ocupación canchas" → ' +
+          '/admin/canchas. Sin canchas en el catálogo, los partidos van a quedar ' +
+          'con el nombre que escribas en el form (texto libre) y no podemos validar ' +
+          'choques de horario entre partidos.',
+      });
+    } else if (canchasDisponiblesCount === 0) {
+      // 3.2 — Hay canchas pero todas están NO_DISPONIBLE / inactivas
       advertencias.push({
         codigo: 'SIN_CANCHAS_DISPONIBLES',
         nivel: usarPlantilla ? 'ERROR' : 'WARN',
         mensaje:
-          'No hay canchas marcadas como DISPONIBLES en el catálogo. ' +
+          `Hay ${canchas.length} cancha(s) en el catálogo pero ninguna está DISPONIBLE. ` +
           (usarPlantilla
-            ? 'Los slots de horarios no van a tener cancha asignada.'
-            : 'En modo legacy, las canchas vienen del form (texto libre).'),
+            ? 'Marcalas como DISPONIBLE desde /admin/canchas antes de generar el fixture.'
+            : 'Marcá al menos una como DISPONIBLE para poder asignar partidos.'),
+        detalle: { totalCanchas: canchas.length },
       });
     }
 
     if (usarPlantilla) {
+      // 3.3 — Slots de horario sin cancha asignada (slot.canchaId = null)
+      const slotsSinCancha = horarios.filter((h) => h.canchaId === null).length;
+      if (slotsSinCancha > 0) {
+        advertencias.push({
+          codigo: 'SLOTS_SIN_CANCHA',
+          nivel: 'WARN',
+          mensaje:
+            `${slotsSinCancha} slot(s) de horario no tienen cancha asignada. ` +
+            'Los partidos en esos slots van a quedar con cancha vacía. ' +
+            'Editá los horarios y asigná una cancha del catálogo a cada slot.',
+          detalle: { slotsSinCancha },
+        });
+      }
+
+      // 3.4 — Slots con cancha marcada NO_DISPONIBLE
       const canchasNoDispo = horarios
         .filter((h) => h.cancha && h.cancha.estado === 'NO_DISPONIBLE')
         .map((h) => h.cancha!.nombre);
