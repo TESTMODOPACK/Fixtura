@@ -77,7 +77,8 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
   const form = useForm<FixtureForm>({
     resolver: zodResolver(FixtureFormSchema),
     defaultValues: {
-      fechaInicio: new Date().toISOString().slice(0, 10),
+      // TZ fix — en-CA da 'YYYY-MM-DD' local (toISOString daría día UTC).
+      fechaInicio: new Date().toLocaleDateString('en-CA'),
       diasEntreFechas: 7,
     },
   });

@@ -276,10 +276,22 @@ async function main(): Promise<void> {
       const orden = partidosPorFecha.get(p.fechaNumero) ?? 0;
       partidosPorFecha.set(p.fechaNumero, orden + 1);
 
-      const inicio = new Date(base);
-      inicio.setUTCDate(base.getUTCDate() + (p.fechaNumero - 1) * 7);
-      inicio.setUTCHours(horaInicialH, horaInicialM, 0, 0);
-      inicio.setUTCMinutes(inicio.getUTCMinutes() + orden * args.minutosEntre);
+      // TZ fix — el día calendario se calcula en UTC (consistente con la
+      // creación de Fechas arriba), pero la HORA del partido debe ser la
+      // hora LOCAL pedida (ej. 10:00 CLT). Antes setUTCHours(10) guardaba
+      // 10:00 UTC = 06:00 CLT y todos los partidos quedaban corridos -4h.
+      const diaUtc = new Date(base);
+      diaUtc.setUTCDate(base.getUTCDate() + (p.fechaNumero - 1) * 7);
+      const inicio = new Date(
+        diaUtc.getUTCFullYear(),
+        diaUtc.getUTCMonth(),
+        diaUtc.getUTCDate(),
+        horaInicialH,
+        horaInicialM,
+        0,
+        0,
+      );
+      inicio.setMinutes(inicio.getMinutes() + orden * args.minutosEntre);
 
       await AppDataSource.query(
         `INSERT INTO partidos

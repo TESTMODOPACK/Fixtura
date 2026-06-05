@@ -696,7 +696,11 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
 function carnetStatus(p: PersonalAdmin): 'VENCIDO' | 'POR_VENCER' | 'OK' | 'NO_APLICA' {
   if (!ROLES_ARBITRAJE.includes(p.rol)) return 'NO_APLICA';
   if (!p.carnetAnfaVence) return 'NO_APLICA';
-  const vence = new Date(p.carnetAnfaVence).getTime();
+  // TZ fix — carnetAnfaVence es fecha de solo-día. Lo interpretamos como
+  // FIN del día local (T23:59:59), si no new Date('2026-06-06') = medianoche
+  // UTC = 20:00 del día anterior en Chile y el carnet figuraba VENCIDO un
+  // día antes de tiempo.
+  const vence = new Date(p.carnetAnfaVence + 'T23:59:59').getTime();
   if (Number.isNaN(vence)) return 'NO_APLICA';
   const now = Date.now();
   const diff = vence - now;

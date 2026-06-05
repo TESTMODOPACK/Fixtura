@@ -18,8 +18,10 @@ export function RegistrarPagoModal({ factura, onClose }: Props): React.ReactElem
     'TRANSFERENCIA',
   );
   const [observaciones, setObservaciones] = useState('');
+  // TZ fix — 'en-CA' da 'YYYY-MM-DD' en hora local. toISOString() daría
+  // el día UTC (mañana entre 20:00-23:59 en Chile).
   const [fechaPago, setFechaPago] = useState(
-    new Date().toISOString().slice(0, 10),
+    new Date().toLocaleDateString('en-CA'),
   );
   const mut = useRegistrarPagoManual();
 

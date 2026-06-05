@@ -366,7 +366,7 @@ function NuevoJugadorForm({
       <Input
         label="Fecha de nacimiento"
         type="date"
-        max={new Date().toISOString().slice(0, 10)}
+        max={new Date().toLocaleDateString('en-CA')}
         {...form.register('fechaNac')}
         error={form.formState.errors.fechaNac?.message}
       />

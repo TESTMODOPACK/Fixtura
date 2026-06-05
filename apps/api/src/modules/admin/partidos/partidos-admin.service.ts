@@ -201,7 +201,12 @@ export class PartidosAdminService {
     // (ej. amistoso, recuperación pactada). El frontend valida y
     // muestra confirmación antes del submit.
     if (partido.fechaHora) {
-      const fechaIso = partido.fechaHora.toISOString().slice(0, 10);
+      // TZ fix — el día calendario del partido se deriva de componentes
+      // LOCALES, no de toISOString() (que da el día UTC). Sin esto, un
+      // partido jugado de noche en Chile (ej. dom 21:00 CLT = lun 01:00
+      // UTC) matcheaba contra el día no jugable equivocado.
+      const fh = partido.fechaHora;
+      const fechaIso = `${fh.getFullYear()}-${String(fh.getMonth() + 1).padStart(2, '0')}-${String(fh.getDate()).padStart(2, '0')}`;
       const fechaTorneo = await this.fechaRepo.findOneOrFail({
         where: { id: partido.fechaId },
       });

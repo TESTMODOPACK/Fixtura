@@ -50,18 +50,22 @@ export default function SponsorsPage(): React.ReactElement {
 
   const stats = useMemo(() => {
     const all = sponsors ?? [];
-    const hoy = new Date();
+    // TZ fix — vigenteDesde/Hasta son fechas de solo-día (YYYY-MM-DD).
+    // Comparamos como strings contra hoy en hora LOCAL (en-CA da
+    // 'YYYY-MM-DD'). Antes new Date('2026-06-06') se parseaba como UTC y
+    // el badge se corría ±1 día en horario nocturno chileno.
+    const hoyIso = new Date().toLocaleDateString('en-CA');
     const activosVigentes = all.filter((s) => {
       if (!s.activo) return false;
-      if (s.vigenteDesde && new Date(s.vigenteDesde) > hoy) return false;
-      if (s.vigenteHasta && new Date(s.vigenteHasta) < hoy) return false;
+      if (s.vigenteDesde && s.vigenteDesde > hoyIso) return false;
+      if (s.vigenteHasta && s.vigenteHasta < hoyIso) return false;
       return true;
     });
     return {
       total: all.length,
       activosVigentes: activosVigentes.length,
       pausados: all.filter((s) => !s.activo).length,
-      vencidos: all.filter((s) => s.vigenteHasta && new Date(s.vigenteHasta) < hoy).length,
+      vencidos: all.filter((s) => s.vigenteHasta && s.vigenteHasta < hoyIso).length,
     };
   }, [sponsors]);
 
@@ -209,9 +213,10 @@ function SponsorRow({ sponsor }: { sponsor: SponsorAdmin }): React.ReactElement 
     );
   }
 
-  const hoy = new Date();
-  const vencido = sponsor.vigenteHasta && new Date(sponsor.vigenteHasta) < hoy;
-  const proximo = sponsor.vigenteDesde && new Date(sponsor.vigenteDesde) > hoy;
+  // TZ fix — comparación por string YYYY-MM-DD contra hoy local.
+  const hoyIso = new Date().toLocaleDateString('en-CA');
+  const vencido = sponsor.vigenteHasta && sponsor.vigenteHasta < hoyIso;
+  const proximo = sponsor.vigenteDesde && sponsor.vigenteDesde > hoyIso;
 
   return (
     <div className="p-5 flex items-start gap-4">
