@@ -1,6 +1,6 @@
 import { GeistSans } from 'geist/font/sans';
 import type { Metadata, Viewport } from 'next';
-import { Anton, Archivo_Black, Newsreader, Space_Grotesk } from 'next/font/google';
+import localFont from 'next/font/local';
 
 import { OfflineBanner } from '@/components/offline-banner';
 import { ServiceWorkerRegister } from '@/components/service-worker-register';
@@ -8,31 +8,41 @@ import { Providers } from '@/providers/providers';
 
 import './globals.css';
 
-const anton = Anton({
-  subsets: ['latin'],
-  weight: '400',
+// Sprint 44E — Self-hosted via next/font/local (archivos en /public/fonts).
+// Antes usábamos next/font/google que descarga las fuentes en build-time
+// desde fonts.googleapis.com. Eso falla con ETIMEDOUT cuando el VPS de prod
+// no puede llegar a Google (firewall outbound, DNS, o outage transitorio),
+// y rompe el build entero. Self-hosting elimina la dependencia de internet
+// en build-time. Los .woff2 vienen de jsdelivr fontsource (CDN estable).
+const anton = localFont({
+  src: '../../public/fonts/anton-400.woff2',
   variable: '--font-anton',
   display: 'swap',
+  weight: '400',
 });
 
-const archivoBlack = Archivo_Black({
-  subsets: ['latin'],
-  weight: '400',
+const archivoBlack = localFont({
+  src: '../../public/fonts/archivo-black-400.woff2',
   variable: '--font-archivo-black',
   display: 'swap',
+  weight: '400',
 });
 
-const newsreader = Newsreader({
-  subsets: ['latin'],
-  weight: ['400'],
-  style: ['italic', 'normal'],
+const newsreader = localFont({
+  src: [
+    { path: '../../public/fonts/newsreader-400.woff2', weight: '400', style: 'normal' },
+    { path: '../../public/fonts/newsreader-400-italic.woff2', weight: '400', style: 'italic' },
+  ],
   variable: '--font-newsreader',
   display: 'swap',
 });
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ['latin'],
-  weight: ['500', '600', '700'],
+const spaceGrotesk = localFont({
+  src: [
+    { path: '../../public/fonts/space-grotesk-500.woff2', weight: '500', style: 'normal' },
+    { path: '../../public/fonts/space-grotesk-600.woff2', weight: '600', style: 'normal' },
+    { path: '../../public/fonts/space-grotesk-700.woff2', weight: '700', style: 'normal' },
+  ],
   variable: '--font-space-grotesk',
   display: 'swap',
 });
