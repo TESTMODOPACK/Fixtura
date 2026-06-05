@@ -62,11 +62,18 @@ function slugify(s: string): string {
 export function NuevoEquipoForm({
   torneoId,
   series,
+  categoriaIdTorneo,
   onDone,
 }: {
   torneoId: string;
   /** Series disponibles si el torneo tiene categoría. Si no, vacío. */
   series?: SerieOption[];
+  /**
+   * Sprint 43 fix — categoría del torneo. Si está, filtramos los clubes
+   * para mostrar solo los que compiten en esa categoría (más relevante
+   * para el operador). Si es null, mostramos todos (torneo libre).
+   */
+  categoriaIdTorneo?: string | null;
   onDone: () => void;
 }): React.ReactElement {
   const mutation = useCreateEquipo(torneoId);
@@ -78,7 +85,14 @@ export function NuevoEquipoForm({
   //   'manual'  → form completo de creación desde cero
   // Si NO hay clubes cargados, arrancamos directo en 'manual'.
   const [modo, setModo] = useState<'lista' | 'manual'>('lista');
-  const clubesActivos = (clubes ?? []).filter((c) => c.estado === 'ACTIVO');
+  // Sprint 43 fix — filtrar por categoría del torneo si está definida.
+  const clubesActivos = (clubes ?? []).filter((c) => {
+    if (c.estado !== 'ACTIVO') return false;
+    if (categoriaIdTorneo) {
+      return c.categoriaIds.includes(categoriaIdTorneo);
+    }
+    return true;
+  });
 
   // Si después de cargar resulta que no hay clubes, saltamos a 'manual'.
   useEffect(() => {
@@ -164,18 +178,32 @@ export function NuevoEquipoForm({
 
         {!loadingClubes && clubesActivos.length === 0 && (
           <Card padding="comfortable" variant="lime">
-            <p className="text-sm text-green-deep/85">
-              Todavía no hay clubes cargados en la liga. Podés crear el equipo
-              directamente desde cero acá abajo, o ir a{' '}
-              <Link
-                href="/admin/clubes/nuevo"
-                className="text-accent font-semibold hover:underline"
-              >
-                /admin/clubes
-              </Link>{' '}
-              y crear primero la ficha del club (recomendado — los datos te
-              quedan disponibles para futuros torneos).
-            </p>
+            {categoriaIdTorneo ? (
+              <p className="text-sm text-green-deep/85">
+                No hay clubes activos que compitan en la categoría de este
+                torneo. Podés crear el equipo desde cero acá abajo, o ir a{' '}
+                <Link
+                  href="/admin/clubes"
+                  className="text-accent font-semibold hover:underline"
+                >
+                  /admin/clubes
+                </Link>{' '}
+                y habilitar la categoría en algún club existente.
+              </p>
+            ) : (
+              <p className="text-sm text-green-deep/85">
+                Todavía no hay clubes cargados en la liga. Podés crear el equipo
+                directamente desde cero acá abajo, o ir a{' '}
+                <Link
+                  href="/admin/clubes/nuevo"
+                  className="text-accent font-semibold hover:underline"
+                >
+                  /admin/clubes
+                </Link>{' '}
+                y crear primero la ficha del club (recomendado — los datos te
+                quedan disponibles para futuros torneos).
+              </p>
+            )}
           </Card>
         )}
 

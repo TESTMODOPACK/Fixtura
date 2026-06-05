@@ -324,6 +324,7 @@ function EquiposTab({
             <NuevoEquipoForm
               torneoId={torneoId}
               series={series}
+              categoriaIdTorneo={categoriaId}
               onDone={() => setAdding(false)}
             />
           </div>
