@@ -606,11 +606,13 @@ async function main(): Promise<void> {
           CHECK (estado IN ('DISPONIBLE','NO_DISPONIBLE')),
         ADD COLUMN IF NOT EXISTS motivo_no_disponible TEXT
     `);
-    // Backfill: si is_active=false, dejar NO_DISPONIBLE.
+    // Backfill: si activa=false, dejar NO_DISPONIBLE.
+    // (La columna se llama `activa`, no `is_active` — error tipico
+    // entre tablas de plataforma vs core deportivo.)
     await client.query(`
       UPDATE canchas
       SET estado = 'NO_DISPONIBLE'
-      WHERE is_active = FALSE AND estado = 'DISPONIBLE'
+      WHERE activa = FALSE AND estado = 'DISPONIBLE'
     `);
     log('canchas.estado + motivo_no_disponible asegurada (Sprint 40).');
 
