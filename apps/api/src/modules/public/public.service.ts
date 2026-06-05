@@ -195,8 +195,25 @@ export class PublicService {
 
   // ─── Resumen home pública ────────────────────────────────────────
   async getResumen(slug: string, torneoSlug?: string): Promise<ResumenLiga> {
-    const torneo = await this.findTorneoActivo(slug, torneoSlug);
-    const liga = torneo.tenant!;
+    // Si viene torneoSlug específico (rutas /torneos/[slug]) y no existe,
+    // 404 es correcto. Si NO viene slug (home /), toleramos "sin torneos
+    // activos" — la home debe seguir cargando con torneoActivo: null.
+    let torneo:
+      | (Torneo & {
+          tenant: { id: string; slug: string; nombre: string; brandingJson: Record<string, unknown> };
+        })
+      | null;
+    if (torneoSlug) {
+      torneo = await this.findTorneoActivo(slug, torneoSlug);
+    } else {
+      torneo = await this.findTorneoActivoOrNull(slug);
+    }
+
+    // Resolver la liga aunque no haya torneo visible: buscamos el tenant
+    // por slug directamente. Si tampoco existe el tenant, ahí sí 404.
+    const liga = torneo
+      ? torneo.tenant
+      : await this.resolveLigaPorSlug(slug);
 
     if (!torneo) {
       return {
@@ -219,6 +236,41 @@ export class PublicService {
       proximaFecha: proximaFechaData,
       resultadosRecientes,
       topGoleadores,
+    };
+  }
+
+  /**
+   * Sprint 44 fix — resolver el tenant aunque no haya torneo visible.
+   * Usado por getResumen() cuando la liga existe pero todavía no lanzó
+   * ningún torneo (todos en DRAFT).
+   */
+  private async resolveLigaPorSlug(
+    slug: string,
+  ): Promise<{
+    id: string;
+    slug: string;
+    nombre: string;
+    brandingJson: Record<string, unknown>;
+  }> {
+    const result = await this.torneoRepo.manager
+      .createQueryBuilder()
+      .select(['t.id AS id', 't.slug AS slug', 't.nombre AS nombre', 't.branding_json AS "brandingJson"'])
+      .from('tenants', 't')
+      .where('t.slug = :slug', { slug })
+      .getRawOne<{
+        id: string;
+        slug: string;
+        nombre: string;
+        brandingJson: Record<string, unknown> | null;
+      }>();
+    if (!result) {
+      throw new NotFoundException(`Liga "${slug}" no encontrada`);
+    }
+    return {
+      id: result.id,
+      slug: result.slug,
+      nombre: result.nombre,
+      brandingJson: result.brandingJson ?? {},
     };
   }
 
@@ -530,32 +582,55 @@ export class PublicService {
       tenant: { id: string; slug: string; nombre: string; brandingJson: Record<string, unknown> };
     }
   > {
-    const qb = this.torneoRepo
-      .createQueryBuilder('t')
-      .innerJoinAndSelect('t.tenant', 'tenant')
-      .where('tenant.slug = :slug', { slug });
-
-    if (torneoSlug) {
-      qb.andWhere('t.slug = :torneoSlug', { torneoSlug }).andWhere(
-        `t.estado IN ('ACTIVO','CERRADO')`,
-      );
-    } else {
-      qb.orderBy(
-        `CASE WHEN t.estado = 'ACTIVO' THEN 0 WHEN t.estado = 'DRAFT' THEN 1 ELSE 2 END`,
-      ).addOrderBy('t.created_at', 'DESC');
-    }
-    const torneo = await qb.getOne();
-
+    const torneo = await this.findTorneoActivoOrNull(slug, torneoSlug);
     if (!torneo) {
       throw new NotFoundException(
         torneoSlug
           ? `Torneo "${torneoSlug}" no encontrado en la liga "${slug}"`
-          : `Liga "${slug}" no tiene torneos creados aún`,
+          : `Liga "${slug}" no tiene torneos activos para mostrar`,
       );
     }
-    return torneo as Torneo & {
+    return torneo;
+  }
+
+  /**
+   * Misma búsqueda que findTorneoActivo pero retorna null en lugar de
+   * tirar 404 si no hay match. Usado por getResumen() — la home pública
+   * debe seguir cargando aunque la liga todavía no tenga torneos en
+   * estado visible (muestra "SIN TORNEO ACTIVO").
+   *
+   * IMPORTANTE: filtra `estado IN ('ACTIVO','CERRADO')` SIEMPRE. Antes
+   * el caso sin torneoSlug aceptaba cualquier estado y caía a un DRAFT
+   * como fallback — eso publicaba en la home torneos que el admin aún
+   * no había lanzado.
+   */
+  private async findTorneoActivoOrNull(
+    slug: string,
+    torneoSlug?: string,
+  ): Promise<
+    | (Torneo & {
+        tenant: { id: string; slug: string; nombre: string; brandingJson: Record<string, unknown> };
+      })
+    | null
+  > {
+    const qb = this.torneoRepo
+      .createQueryBuilder('t')
+      .innerJoinAndSelect('t.tenant', 'tenant')
+      .where('tenant.slug = :slug', { slug })
+      .andWhere(`t.estado IN ('ACTIVO','CERRADO')`);
+
+    if (torneoSlug) {
+      qb.andWhere('t.slug = :torneoSlug', { torneoSlug });
+    } else {
+      // ACTIVO primero, después CERRADO. Dentro de cada grupo el más
+      // reciente. Coincide con el orden de getTorneos() (grid).
+      qb.orderBy(`CASE WHEN t.estado = 'ACTIVO' THEN 0 ELSE 1 END`)
+        .addOrderBy('t.created_at', 'DESC');
+    }
+    const torneo = await qb.getOne();
+    return torneo as (Torneo & {
       tenant: { id: string; slug: string; nombre: string; brandingJson: Record<string, unknown> };
-    };
+    }) | null;
   }
 
   private async buildTorneoPublico(torneo: Torneo): Promise<TorneoPublico> {
