@@ -22,6 +22,7 @@ import {
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { Audited } from '../../audit';
 import { CanchasAdminService } from './canchas-admin.service';
 import { CreateCanchaDto, UpdateCanchaDto } from './dto';
 
@@ -94,6 +95,11 @@ export class CanchasAdminController {
    * PATCH /admin/canchas/:id/estado  body { estado, motivo? }
    */
   @Patch(':id/estado')
+  @Audited({
+    action: 'cancha.estado_cambiado',
+    entityType: 'Cancha',
+    entityIdFrom: 'params.id',
+  })
   cambiarEstado(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,

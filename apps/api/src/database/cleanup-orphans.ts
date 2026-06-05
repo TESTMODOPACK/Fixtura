@@ -577,6 +577,10 @@ async function main(): Promise<void> {
             USING (
               tenant_id::text = current_setting('app.current_tenant_id', true)
               OR current_setting('app.current_tenant_id', true) = ''
+            )
+            WITH CHECK (
+              tenant_id::text = current_setting('app.current_tenant_id', true)
+              OR current_setting('app.current_tenant_id', true) = ''
             );
         END IF;
       END $$
