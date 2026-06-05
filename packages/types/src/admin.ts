@@ -318,6 +318,16 @@ export const FixtureGenerationResultSchema = z.object({
       }),
     )
     .default([]),
+  // Sprint 44 — si la fecha de inicio del input cae en un día sin
+  // slots cargados, el generador la corre al próximo día con slots
+  // para evitar partidos sin horario. Avisamos en el response.
+  fechaInicioAjustada: z
+    .object({
+      fechaInicioOriginal: z.string(),
+      fechaInicioReal: z.string(),
+    })
+    .nullable()
+    .default(null),
 });
 export type FixtureGenerationResult = z.infer<typeof FixtureGenerationResultSchema>;
 
@@ -342,6 +352,10 @@ export const CODIGO_ADVERTENCIA = [
   'SLOTS_INSUFICIENTES',
   'DIAS_BLOQUEADOS_EN_RANGO',
   'MODO_LEGACY',
+  // Sprint 44 — fechaInicio cae en un día sin slots cargados; el
+  // generador la corre al próximo día con slots para evitar partidos
+  // sin horario.
+  'FECHA_INICIO_AJUSTADA_POR_HORARIOS',
 ] as const;
 export type CodigoAdvertencia = (typeof CODIGO_ADVERTENCIA)[number];
 

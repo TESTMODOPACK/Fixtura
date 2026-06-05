@@ -121,8 +121,45 @@ export class FixtureAdminService {
       );
     }
 
+    // Sprint 39 — cargar horarios del torneo ya acá (antes del loop de
+    // fechas) para que podamos ajustar fechaInicioBase si el día de
+    // semana elegido no tiene slots cargados (Sprint 44 fix).
+    const horariosTorneoTmp = await this.horarioRepo.find({
+      where: { torneoId, tenantId, activo: true },
+      relations: { cancha: true },
+      order: { diaSemana: 'ASC', hora: 'ASC', orden: 'ASC' },
+    });
+    const usarPlantilla = horariosTorneoTmp.length > 0;
+
     // Crear fechas
-    const fechaInicioBase = new Date(input.fechaInicio);
+    let fechaInicioBase = new Date(input.fechaInicio);
+
+    // Sprint 44 — Si hay plantilla de horarios y la fecha de inicio cae
+    // en un día sin slots cargados, avanzar al próximo día (máx 7 días
+    // = una semana completa). Sin esto los partidos quedaban con
+    // fecha_hora=null porque slotsPorDiaSemana.get(isoDow) → vacío.
+    let fechaInicioAjustada = false;
+    let fechaInicioOriginalIso: string | null = null;
+    if (usarPlantilla) {
+      const diasConSlots = new Set(horariosTorneoTmp.map((h) => h.diaSemana));
+      const isoDowDe = (d: Date): number => {
+        const js = d.getDay();
+        return js === 0 ? 7 : js;
+      };
+      if (!diasConSlots.has(isoDowDe(fechaInicioBase))) {
+        fechaInicioOriginalIso = fechaInicioBase.toISOString().slice(0, 10);
+        for (let i = 1; i <= 7; i++) {
+          const probe = new Date(fechaInicioBase);
+          probe.setDate(fechaInicioBase.getDate() + i);
+          if (diasConSlots.has(isoDowDe(probe))) {
+            fechaInicioBase = probe;
+            fechaInicioAjustada = true;
+            break;
+          }
+        }
+      }
+    }
+
     const fechaIdByNumero = new Map<number, string>();
     // Sprint 16 — RF-13: las fechas calculadas se pueden correr si caen
     // en día no jugable. Guardamos el corrimiento por fecha (numero →
@@ -213,12 +250,9 @@ export class FixtureAdminService {
     // horarios cargada, ignoramos input.horariosPorFecha/canchas y
     // asignamos por día de semana. Si no, modo legacy (round-robin
     // sobre los arrays del input).
-    const horariosTorneo = await this.horarioRepo.find({
-      where: { torneoId, tenantId, activo: true },
-      relations: { cancha: true },
-      order: { diaSemana: 'ASC', hora: 'ASC', orden: 'ASC' },
-    });
-    const usarPlantilla = horariosTorneo.length > 0;
+    // Sprint 44 — reusamos horariosTorneoTmp ya cargado arriba (para el
+    // autoshift de fechaInicio). usarPlantilla también ya está calculado.
+    const horariosTorneo = horariosTorneoTmp;
     const modoGeneracion: 'HORARIOS_TORNEO' | 'INPUT_LEGACY' = usarPlantilla
       ? 'HORARIOS_TORNEO'
       : 'INPUT_LEGACY';
@@ -335,6 +369,13 @@ export class FixtureAdminService {
       slotsUsados,
       modoGeneracion,
       partidosEnCanchaNoDisponible,
+      fechaInicioAjustada:
+        fechaInicioAjustada && fechaInicioOriginalIso
+          ? {
+              fechaInicioOriginal: fechaInicioOriginalIso,
+              fechaInicioReal: fechaInicioBase.toISOString().slice(0, 10),
+            }
+          : null,
     };
   }
 
@@ -490,6 +531,55 @@ export class FixtureAdminService {
           detalle: {
             cantidad: bloqueadas.size,
             primerDia: Array.from(bloqueadas.keys()).sort()[0] ?? null,
+          },
+        });
+      }
+    }
+
+    // ── 4.5 FECHA DE INICIO VS DÍAS DE SLOTS ─────────────────────
+    // Sprint 44 — Si la fecha de inicio cae en un día sin slots
+    // cargados, el generador la va a correr al próximo día con slots.
+    // Avisamos al admin para que sepa por qué la "Fecha 1" no es la
+    // que escribió.
+    if (usarPlantilla && params.fechaInicio) {
+      const diasConSlots = new Set(horarios.map((h) => h.diaSemana));
+      const fechaInicio = new Date(params.fechaInicio);
+      const jsDow = fechaInicio.getDay();
+      const isoDow = jsDow === 0 ? 7 : jsDow;
+      if (!diasConSlots.has(isoDow)) {
+        // Buscar el próximo día con slots.
+        let proximaIso = '';
+        for (let i = 1; i <= 7; i++) {
+          const probe = new Date(fechaInicio);
+          probe.setDate(fechaInicio.getDate() + i);
+          const pjs = probe.getDay();
+          const piso = pjs === 0 ? 7 : pjs;
+          if (diasConSlots.has(piso)) {
+            proximaIso = probe.toISOString().slice(0, 10);
+            break;
+          }
+        }
+        const NOMBRES_DIA: Record<number, string> = {
+          1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves',
+          5: 'Viernes', 6: 'Sábado', 7: 'Domingo',
+        };
+        const diasConSlotsNombres = Array.from(diasConSlots)
+          .sort()
+          .map((d) => NOMBRES_DIA[d] ?? `Día ${d}`)
+          .join(', ');
+        advertencias.push({
+          codigo: 'FECHA_INICIO_AJUSTADA_POR_HORARIOS',
+          nivel: 'WARN',
+          mensaje:
+            `La fecha de inicio (${params.fechaInicio}) cae en ${NOMBRES_DIA[isoDow]}, ` +
+            `pero los horarios cargados son solo para: ${diasConSlotsNombres}. ` +
+            (proximaIso
+              ? `La Fecha 1 se va a generar el ${proximaIso}.`
+              : 'No se encontró ningún día con slots en los próximos 7 días.'),
+          detalle: {
+            diaSemanaElegido: isoDow,
+            diasConSlots: Array.from(diasConSlots).sort(),
+            proximaFecha: proximaIso || null,
           },
         });
       }

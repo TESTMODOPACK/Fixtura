@@ -124,6 +124,15 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
               y re-programá manualmente si la cancha no volverá a tiempo.
             </p>
           )}
+          {mutation.data.fechaInicioAjustada && (
+            <p className="text-xs text-accent font-semibold mt-2">
+              ⚠ La fecha de inicio que pediste (
+              {mutation.data.fechaInicioAjustada.fechaInicioOriginal}) caía en
+              un día sin horarios. La Fecha 1 quedó programada para el{' '}
+              {mutation.data.fechaInicioAjustada.fechaInicioReal} (próximo día
+              con slots cargados).
+            </p>
+          )}
         </div>
       )}
 
