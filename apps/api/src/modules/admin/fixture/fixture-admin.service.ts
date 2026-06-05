@@ -62,8 +62,21 @@ export class FixtureAdminService {
   async generar(
     torneoId: string,
     tenantId: string,
-    input: GenerarFixtureRequest,
+    inputRaw: GenerarFixtureRequest,
   ): Promise<FixtureGenerationResult> {
+    // Sprint 44 — horariosPorFecha / canchas / diasEntreFechas son opcionales
+    // en el tipo compartido. Aplicamos defaults acá para que el resto del
+    // service (que asume valores presentes) siga funcionando. En modo
+    // HORARIOS_TORNEO los horarios reales vienen del repo de horarios y
+    // estos defaults solo se usan como fallback legacy.
+    const input: Required<GenerarFixtureRequest> = {
+      fechaInicio: inputRaw.fechaInicio,
+      diasEntreFechas: inputRaw.diasEntreFechas ?? 7,
+      horariosPorFecha:
+        inputRaw.horariosPorFecha ?? ['10:00', '12:00', '14:00', '16:00'],
+      canchas: inputRaw.canchas ?? ['Cancha 1', 'Cancha 2', 'Cancha 3', 'Cancha 4'],
+    };
+
     const torneo = await this.torneoRepo.findOne({ where: { id: torneoId, tenantId } });
     if (!torneo) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);
 

@@ -128,14 +128,8 @@ export default function TorneoDetailPage({
             Configuración
           </TabButton>
           <Link
-            href={`/admin/torneos/${id}/inscripciones`}
-            className="px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold transition-colors border-b-2 -mb-px border-transparent text-ink-mute hover:text-ink ml-auto"
-          >
-            Inscripciones →
-          </Link>
-          <Link
             href={`/admin/torneos/${id}/designaciones`}
-            className="px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold transition-colors border-b-2 -mb-px border-transparent text-ink-mute hover:text-ink"
+            className="px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold transition-colors border-b-2 -mb-px border-transparent text-ink-mute hover:text-ink ml-auto"
           >
             Designaciones →
           </Link>
@@ -336,12 +330,13 @@ function EquiposTab({
       nombre: s.nombre,
     })) ?? [];
 
-  // Sprint 41 — Si el torneo tiene multi-categoría (>1 combo), el form
-  // legacy "Inscribir equipo" no permite elegir categoría — solo serie
-  // de la categoría legacy. Para multi-cat, el admin debe usar la
-  // pestaña "Inscripciones" que sí maneja combo (cat+serie).
+  // Sprint 44 — los torneos multi-categoría legacy (combos.length > 1)
+  // siguen existiendo pero el flujo unificado del tab Equipos cubre el
+  // caso: el operador inscribe clubes y, si necesita serie específica,
+  // la asigna desde el detalle del equipo. La página /inscripciones
+  // dedicada quedó eliminada como duplicada del tab Equipos.
   const esMultiCategoria = combos.length > 1;
-  const inscribirHabilitado = puedeInscribir && !esMultiCategoria;
+  const inscribirHabilitado = puedeInscribir;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -349,16 +344,9 @@ function EquiposTab({
         {esMultiCategoria && (
           <div className="px-5 py-4 bg-accent/10 border-b border-accent/30">
             <div className="text-sm text-ink">
-              <strong>Este torneo es multi-categoría</strong> ({combos.length} combos).
-              Para inscribir clubes a una categoría y serie específicas usá la
-              pestaña{' '}
-              <Link
-                href={`/admin/torneos/${torneoId}/inscripciones`}
-                className="text-accent font-semibold hover:underline"
-              >
-                Inscripciones →
-              </Link>
-              . Acá solo se muestran los equipos sombra generados automáticamente.
+              <strong>Torneo multi-categoría legacy</strong> ({combos.length} combos).
+              Si necesitás asignar serie específica a un equipo, hacelo desde
+              el detalle del equipo (click en la fila).
             </div>
           </div>
         )}
@@ -368,12 +356,6 @@ function EquiposTab({
             <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
               <Plus size={14} /> {adding ? 'Cancelar' : 'Inscribir equipo'}
             </Button>
-          ) : esMultiCategoria ? (
-            <Link href={`/admin/torneos/${torneoId}/inscripciones`}>
-              <Button variant="accent" size="sm">
-                <Plus size={14} /> Ir a Inscripciones
-              </Button>
-            </Link>
           ) : (
             <span className="text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded bg-ink-mute/10 text-ink-mute">
               Torneo {estadoTorneo.toLowerCase()} · inscripciones cerradas

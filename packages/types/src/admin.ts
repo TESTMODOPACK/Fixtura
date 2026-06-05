@@ -270,14 +270,17 @@ export const BulkCreateJugadoresSchema = z.object({
 export type BulkCreateJugadoresRequest = z.infer<typeof BulkCreateJugadoresSchema>;
 
 // ─── Fixture ─────────────────────────────────────────────────────────
+// Sprint 44 — horariosPorFecha y canchas son opcionales: el backend los
+// toma de la plantilla del torneo (Sprint 39) y del catálogo de canchas
+// (Sprint 40). Si vienen en el body, se usan (modo legacy).
 export const GenerarFixtureSchema = z.object({
   fechaInicio: z.iso.date(),
-  diasEntreFechas: z.number().int().min(1).max(30).default(7),
+  diasEntreFechas: z.number().int().min(1).max(30).optional(),
   horariosPorFecha: z
     .array(z.string().regex(/^\d{2}:\d{2}$/, 'HH:mm'))
     .min(1)
-    .default(['10:00', '12:00', '14:00', '16:00']),
-  canchas: z.array(z.string()).min(1).default(['Cancha 1', 'Cancha 2', 'Cancha 3', 'Cancha 4']),
+    .optional(),
+  canchas: z.array(z.string()).min(1).optional(),
 });
 export type GenerarFixtureRequest = z.infer<typeof GenerarFixtureSchema>;
 

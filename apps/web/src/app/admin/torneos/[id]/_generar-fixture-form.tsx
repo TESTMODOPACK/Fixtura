@@ -2,6 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AlertTriangle, CheckCircle2, Info, Sparkles, XCircle } from 'lucide-react';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -17,18 +18,6 @@ import { cn } from '@/lib/cn';
 const FixtureFormSchema = z.object({
   fechaInicio: z.iso.date('Fecha requerida'),
   diasEntreFechas: z.coerce.number().int().min(1).max(30),
-  horariosStr: z
-    .string()
-    .min(1)
-    .refine(
-      (s) =>
-        s
-          .split(',')
-          .map((h) => h.trim())
-          .every((h) => /^\d{2}:\d{2}$/.test(h)),
-      'Cada horario en formato HH:mm separados por coma',
-    ),
-  canchasStr: z.string().min(1),
 });
 type FixtureForm = z.infer<typeof FixtureFormSchema>;
 
@@ -40,8 +29,6 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
     defaultValues: {
       fechaInicio: new Date().toISOString().slice(0, 10),
       diasEntreFechas: 7,
-      horariosStr: '10:00, 12:00, 14:00, 16:00',
-      canchasStr: 'Cancha 1, Cancha 2, Cancha 3, Cancha 4',
     },
   });
 
@@ -56,12 +43,15 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
   });
   const tieneError = prevalidacion?.advertencias.some((a) => a.nivel === 'ERROR') ?? false;
 
+  // Sprint 44 UX — Horarios y canchas YA no se ingresan acá. El backend
+  // los toma de:
+  //   - tab "Horarios →" del torneo (plantilla por día de semana, Sprint 39)
+  //   - módulo /admin/canchas (catálogo con estado DISPONIBLE, Sprint 40)
+  // El DTO los acepta opcionales con defaults; los omitimos al generar.
   const onSubmit = async (vals: FixtureForm): Promise<void> => {
     await mutation.mutateAsync({
       fechaInicio: vals.fechaInicio,
       diasEntreFechas: vals.diasEntreFechas,
-      horariosPorFecha: vals.horariosStr.split(',').map((h) => h.trim()),
-      canchas: vals.canchasStr.split(',').map((c) => c.trim()),
     });
   };
 
@@ -127,19 +117,33 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
           />
         </div>
 
-        <Input
-          label="Horarios (separados por coma)"
-          placeholder="10:00, 12:00, 14:00, 16:00"
-          {...form.register('horariosStr')}
-          error={form.formState.errors.horariosStr?.message}
-        />
-
-        <Input
-          label="Canchas disponibles (separadas por coma)"
-          placeholder="Cancha 1, Cancha 2"
-          {...form.register('canchasStr')}
-          error={form.formState.errors.canchasStr?.message}
-        />
+        <div className="text-xs text-ink-mute bg-paper-dark border border-line rounded-card px-3 py-2 leading-relaxed">
+          <div className="font-semibold text-ink mb-0.5">
+            Los horarios y canchas se toman automáticamente:
+          </div>
+          <ul className="space-y-0.5">
+            <li>
+              · Horarios → tab{' '}
+              <Link
+                href={`/admin/torneos/${torneoId}/horarios`}
+                className="text-accent font-semibold hover:underline"
+              >
+                Horarios
+              </Link>{' '}
+              del torneo (plantilla por día de semana).
+            </li>
+            <li>
+              · Canchas →{' '}
+              <Link
+                href="/admin/canchas"
+                className="text-accent font-semibold hover:underline"
+              >
+                /admin/canchas
+              </Link>{' '}
+              (catálogo con estado DISPONIBLE).
+            </li>
+          </ul>
+        </div>
 
         {error && (
           <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
