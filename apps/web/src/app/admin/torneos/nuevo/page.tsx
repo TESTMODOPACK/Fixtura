@@ -402,6 +402,14 @@ export default function NuevoTorneoPage(): React.ReactElement {
             Senior Segunda = 8.
           </p>
 
+          {combosFields.length >= 2 && (
+            <div className="mb-3 px-3 py-2 bg-accent/10 border border-accent/30 rounded text-xs text-ink">
+              <strong>{combosFields.length} torneos se crearán</strong> al
+              guardar — uno por cada combo, con el nombre y slug derivados.
+              Cada torneo tendrá su propio fixture, tabla y configuración.
+            </div>
+          )}
+
           {categoriasActivas.length === 0 && (
             <div className="text-sm bg-accent/10 border border-accent/30 rounded-card p-3 text-ink">
               No hay categorías activas en la liga.{' '}

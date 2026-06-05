@@ -219,6 +219,17 @@ export class TorneosAdminService {
         where: { id: In(catIds), tenantId },
       });
       categoriasMap = new Map(cats.map((c) => [c.id, c]));
+      // Sprint 42 hotfix — race condition: si alguna categoría se borró
+      // entre la validación de validarCategoriasSeries y este punto, el
+      // fallback a 'sin-categoria' generaría dos slugs idénticos para
+      // distintos combos. Mejor fallar temprano con error claro.
+      for (const combo of categoriasSeries) {
+        if (!categoriasMap.has(combo.categoriaId)) {
+          throw new NotFoundException(
+            `La categoría ${combo.categoriaId} ya no existe. Probá recargar el form de torneo.`,
+          );
+        }
+      }
     }
 
     // Helper común para crear un torneo individual con un set de
@@ -291,6 +302,21 @@ export class TorneosAdminService {
       const sufijoSlug = this.armarSufijoSlug(cat, combo.serieSlug ?? null);
       const nombre = `${input.nombre} · ${sufijoNombre}`;
       const slug = `${input.slug}-${sufijoSlug}`;
+      // Sprint 42 hotfix — validar largo contra el schema. Las columnas
+      // son slug VARCHAR(100) y nombre VARCHAR(200). Mejor fallar con
+      // error claro que con un genérico de Postgres.
+      if (slug.length > 100) {
+        throw new BadRequestException(
+          `El slug derivado "${slug}" (${slug.length} chars) supera el máximo ` +
+            `de 100. Acortá el slug base del torneo.`,
+        );
+      }
+      if (nombre.length > 200) {
+        throw new BadRequestException(
+          `El nombre derivado supera el máximo de 200 caracteres. ` +
+            `Acortá el nombre base del torneo.`,
+        );
+      }
       const saved = await crearTorneo(
         nombre,
         slug,
