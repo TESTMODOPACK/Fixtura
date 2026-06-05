@@ -165,6 +165,10 @@ export class FixtureAdminService {
       order: { diaSemana: 'ASC', hora: 'ASC', orden: 'ASC' },
     });
     const usarPlantilla = horariosTorneoTmp.length > 0;
+    // Días de semana (ISO 1-7) que tienen al menos un horario cargado.
+    // Se usa para el autoshift de la fecha de inicio Y para el
+    // corrimiento por días bloqueados (Sprint 44 — RF feriados).
+    const diasConSlots = new Set(horariosTorneoTmp.map((h) => h.diaSemana));
 
     // Crear fechas. parseFechaLocal evita el desfase UTC (ver helper).
     let fechaInicioBase = FixtureAdminService.parseFechaLocal(input.fechaInicio);
@@ -176,7 +180,6 @@ export class FixtureAdminService {
     let fechaInicioAjustada = false;
     let fechaInicioOriginalIso: string | null = null;
     if (usarPlantilla) {
-      const diasConSlots = new Set(horariosTorneoTmp.map((h) => h.diaSemana));
       if (!diasConSlots.has(FixtureAdminService.isoDow(fechaInicioBase))) {
         fechaInicioOriginalIso = FixtureAdminService.formatFechaLocal(fechaInicioBase);
         for (let i = 1; i <= 7; i++) {
@@ -213,38 +216,53 @@ export class FixtureAdminService {
       FixtureAdminService.formatFechaLocal(ultimaFechaNatural),
     );
 
+    // Sprint 44 — Un día es "jugable" si NO está bloqueado (feriado /
+    // suspendido) Y, cuando hay plantilla de horarios, tiene horarios
+    // cargados para ese día de semana. Antes el corrimiento solo evitaba
+    // días bloqueados: si una fecha caía en feriado un sábado, la corría
+    // al domingo (día +1) que no tenía horarios → partidos sin fecha. Ahora
+    // corre hasta el próximo día realmente jugable (ej. el sábado siguiente).
+    const esDiaJugable = (d: Date): boolean => {
+      if (bloqueadas.has(FixtureAdminService.formatFechaLocal(d))) return false;
+      if (usarPlantilla && !diasConSlots.has(FixtureAdminService.isoDow(d))) {
+        return false;
+      }
+      return true;
+    };
+
     for (let n = 1; n <= fixture.fechas; n++) {
       const fechaNatural = new Date(fechaInicioBase);
       fechaNatural.setDate(fechaInicioBase.getDate() + (n - 1) * input.diasEntreFechas);
       const fechaNaturalIso = FixtureAdminService.formatFechaLocal(fechaNatural);
 
-      // Buscar el próximo día válido dentro del límite máximo.
+      // Buscar el próximo día jugable dentro del límite máximo.
       let candidato = new Date(fechaNatural);
       let saltos = 0;
       while (
-        bloqueadas.has(FixtureAdminService.formatFechaLocal(candidato)) &&
+        !esDiaJugable(candidato) &&
         saltos < FixtureAdminService.MAX_SALTOS_DIA_NO_JUGABLE
       ) {
         candidato.setDate(candidato.getDate() + 1);
         saltos++;
       }
-      // Si tras N saltos seguimos en día bloqueado, dejamos la natural.
+      // Si tras N saltos seguimos sin día jugable, dejamos la natural.
       // El operador podrá moverla manualmente. Es defensa anti-loop.
-      const sigueBloqueada = bloqueadas.has(
-        FixtureAdminService.formatFechaLocal(candidato),
-      );
-      if (sigueBloqueada) {
+      const sigueNoJugable = !esDiaJugable(candidato);
+      if (sigueNoJugable) {
         console.warn(
           `[fixture-gen] tenant=${tenantId} torneo=${torneoId} fecha=${n}: ` +
-            `${FixtureAdminService.MAX_SALTOS_DIA_NO_JUGABLE} días consecutivos bloqueados ` +
+            `${FixtureAdminService.MAX_SALTOS_DIA_NO_JUGABLE} días sin opción jugable ` +
             `desde ${fechaNaturalIso}. Dejando la fecha original — el admin la moverá a mano.`,
         );
       }
-      const fechaInicio = sigueBloqueada ? fechaNatural : candidato;
+      const fechaInicio = sigueNoJugable ? fechaNatural : candidato;
       const fechaInicioIso = FixtureAdminService.formatFechaLocal(fechaInicio);
 
       if (fechaInicioIso !== fechaNaturalIso) {
-        const motivo = bloqueadas.get(fechaNaturalIso) ?? 'Día no jugable';
+        // Si la fecha natural estaba bloqueada, el motivo es el feriado;
+        // si no, se corrió porque ese día de semana no tiene horarios.
+        const motivo =
+          bloqueadas.get(fechaNaturalIso) ?? 'El día no tiene horarios cargados';
         diasNoJugablesAjustados.push({
           fechaNumero: n,
           fechaOriginal: fechaNaturalIso,

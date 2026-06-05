@@ -371,9 +371,14 @@ function PartidoRow({
         <GripVertical size={14} />
       </button>
 
-      <div className="text-xs text-ink-mute font-mono text-right w-24">
+      <div className="text-xs text-ink-mute font-mono text-right w-28">
         <div>{dia ?? 'Sin fecha'}</div>
         <div className="font-semibold text-ink">{hora ?? '—'}</div>
+        {partido.canchaNombre && (
+          <div className="text-[10px] text-green-deep/70 truncate" title={partido.canchaNombre}>
+            {partido.canchaNombre}
+          </div>
+        )}
       </div>
 
       <Link
