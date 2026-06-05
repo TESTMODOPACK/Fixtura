@@ -48,6 +48,41 @@ export class FixtureAdminService {
   ) {}
 
   /**
+   * Sprint 44 fix — Parsear 'YYYY-MM-DD' como medianoche en hora LOCAL.
+   *
+   * `new Date('2026-06-06')` interpreta el string como medianoche UTC.
+   * Como el server corre en America/Santiago (UTC-4/-3), esa fecha se
+   * convierte a viernes 5 a las 20:00 hora local → getDay()/getDate()
+   * devuelven el día anterior. El bug se veía en el mensaje "el 06-06
+   * cae en Viernes" cuando en realidad es Sábado.
+   *
+   * Usando new Date(year, monthIdx, day) la fecha queda en medianoche
+   * LOCAL, así getDay() devuelve el día correcto.
+   */
+  private static parseFechaLocal(iso: string): Date {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y!, (m ?? 1) - 1, d ?? 1, 0, 0, 0, 0);
+  }
+
+  /**
+   * Formatea un Date a 'YYYY-MM-DD' usando los componentes LOCALES, no
+   * UTC. Contraparte de parseFechaLocal — evita el desfase de
+   * toISOString() que convierte a UTC y puede saltar de día.
+   */
+  private static formatFechaLocal(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  /** Día de semana ISO (1=lunes .. 7=domingo) de un Date en hora local. */
+  private static isoDow(d: Date): number {
+    const js = d.getDay();
+    return js === 0 ? 7 : js;
+  }
+
+  /**
    * Genera el fixture completo del torneo usando el motor Berger.
    *
    * Reglas:
@@ -131,8 +166,8 @@ export class FixtureAdminService {
     });
     const usarPlantilla = horariosTorneoTmp.length > 0;
 
-    // Crear fechas
-    let fechaInicioBase = new Date(input.fechaInicio);
+    // Crear fechas. parseFechaLocal evita el desfase UTC (ver helper).
+    let fechaInicioBase = FixtureAdminService.parseFechaLocal(input.fechaInicio);
 
     // Sprint 44 — Si hay plantilla de horarios y la fecha de inicio cae
     // en un día sin slots cargados, avanzar al próximo día (máx 7 días
@@ -142,16 +177,12 @@ export class FixtureAdminService {
     let fechaInicioOriginalIso: string | null = null;
     if (usarPlantilla) {
       const diasConSlots = new Set(horariosTorneoTmp.map((h) => h.diaSemana));
-      const isoDowDe = (d: Date): number => {
-        const js = d.getDay();
-        return js === 0 ? 7 : js;
-      };
-      if (!diasConSlots.has(isoDowDe(fechaInicioBase))) {
-        fechaInicioOriginalIso = fechaInicioBase.toISOString().slice(0, 10);
+      if (!diasConSlots.has(FixtureAdminService.isoDow(fechaInicioBase))) {
+        fechaInicioOriginalIso = FixtureAdminService.formatFechaLocal(fechaInicioBase);
         for (let i = 1; i <= 7; i++) {
           const probe = new Date(fechaInicioBase);
           probe.setDate(fechaInicioBase.getDate() + i);
-          if (diasConSlots.has(isoDowDe(probe))) {
+          if (diasConSlots.has(FixtureAdminService.isoDow(probe))) {
             fechaInicioBase = probe;
             fechaInicioAjustada = true;
             break;
@@ -178,20 +209,20 @@ export class FixtureAdminService {
     const bloqueadas = await this.diasNoJugables.fechasBloqueadasEnRango(
       tenantId,
       torneoId,
-      fechaInicioBase.toISOString().slice(0, 10),
-      ultimaFechaNatural.toISOString().slice(0, 10),
+      FixtureAdminService.formatFechaLocal(fechaInicioBase),
+      FixtureAdminService.formatFechaLocal(ultimaFechaNatural),
     );
 
     for (let n = 1; n <= fixture.fechas; n++) {
       const fechaNatural = new Date(fechaInicioBase);
       fechaNatural.setDate(fechaInicioBase.getDate() + (n - 1) * input.diasEntreFechas);
-      const fechaNaturalIso = fechaNatural.toISOString().slice(0, 10);
+      const fechaNaturalIso = FixtureAdminService.formatFechaLocal(fechaNatural);
 
       // Buscar el próximo día válido dentro del límite máximo.
       let candidato = new Date(fechaNatural);
       let saltos = 0;
       while (
-        bloqueadas.has(candidato.toISOString().slice(0, 10)) &&
+        bloqueadas.has(FixtureAdminService.formatFechaLocal(candidato)) &&
         saltos < FixtureAdminService.MAX_SALTOS_DIA_NO_JUGABLE
       ) {
         candidato.setDate(candidato.getDate() + 1);
@@ -199,7 +230,9 @@ export class FixtureAdminService {
       }
       // Si tras N saltos seguimos en día bloqueado, dejamos la natural.
       // El operador podrá moverla manualmente. Es defensa anti-loop.
-      const sigueBloqueada = bloqueadas.has(candidato.toISOString().slice(0, 10));
+      const sigueBloqueada = bloqueadas.has(
+        FixtureAdminService.formatFechaLocal(candidato),
+      );
       if (sigueBloqueada) {
         console.warn(
           `[fixture-gen] tenant=${tenantId} torneo=${torneoId} fecha=${n}: ` +
@@ -208,7 +241,7 @@ export class FixtureAdminService {
         );
       }
       const fechaInicio = sigueBloqueada ? fechaNatural : candidato;
-      const fechaInicioIso = fechaInicio.toISOString().slice(0, 10);
+      const fechaInicioIso = FixtureAdminService.formatFechaLocal(fechaInicio);
 
       if (fechaInicioIso !== fechaNaturalIso) {
         const motivo = bloqueadas.get(fechaNaturalIso) ?? 'Día no jugable';
@@ -239,7 +272,7 @@ export class FixtureAdminService {
           numero: n,
           etiqueta,
           fechaInicio: fechaInicioIso,
-          fechaFin: fechaFin.toISOString().slice(0, 10),
+          fechaFin: FixtureAdminService.formatFechaLocal(fechaFin),
           estado: 'PROGRAMADA',
         }),
       );
@@ -373,7 +406,7 @@ export class FixtureAdminService {
         fechaInicioAjustada && fechaInicioOriginalIso
           ? {
               fechaInicioOriginal: fechaInicioOriginalIso,
-              fechaInicioReal: fechaInicioBase.toISOString().slice(0, 10),
+              fechaInicioReal: FixtureAdminService.formatFechaLocal(fechaInicioBase),
             }
           : null,
     };
@@ -511,7 +544,7 @@ export class FixtureAdminService {
       const equipos = equiposCount;
       // Estimación rápida: fechas Berger = equipos - 1 (par) o equipos (impar).
       const fechasEstimadas = equipos % 2 === 0 ? equipos - 1 : equipos;
-      const fechaInicio = new Date(params.fechaInicio);
+      const fechaInicio = FixtureAdminService.parseFechaLocal(params.fechaInicio);
       const fechaFin = new Date(fechaInicio);
       fechaFin.setDate(
         fechaInicio.getDate() + fechasEstimadas * params.diasEntreFechas + 30,
@@ -519,8 +552,8 @@ export class FixtureAdminService {
       const bloqueadas = await this.diasNoJugables.fechasBloqueadasEnRango(
         tenantId,
         torneoId,
-        fechaInicio.toISOString().slice(0, 10),
-        fechaFin.toISOString().slice(0, 10),
+        FixtureAdminService.formatFechaLocal(fechaInicio),
+        FixtureAdminService.formatFechaLocal(fechaFin),
       );
       if (bloqueadas.size > 0) {
         const fmt = (d: Date): string =>
@@ -552,19 +585,16 @@ export class FixtureAdminService {
     // que escribió.
     if (usarPlantilla && params.fechaInicio) {
       const diasConSlots = new Set(horarios.map((h) => h.diaSemana));
-      const fechaInicio = new Date(params.fechaInicio);
-      const jsDow = fechaInicio.getDay();
-      const isoDow = jsDow === 0 ? 7 : jsDow;
+      const fechaInicio = FixtureAdminService.parseFechaLocal(params.fechaInicio);
+      const isoDow = FixtureAdminService.isoDow(fechaInicio);
       if (!diasConSlots.has(isoDow)) {
         // Buscar el próximo día con slots.
         let proximaIso = '';
         for (let i = 1; i <= 7; i++) {
           const probe = new Date(fechaInicio);
           probe.setDate(fechaInicio.getDate() + i);
-          const pjs = probe.getDay();
-          const piso = pjs === 0 ? 7 : pjs;
-          if (diasConSlots.has(piso)) {
-            proximaIso = probe.toISOString().slice(0, 10);
+          if (diasConSlots.has(FixtureAdminService.isoDow(probe))) {
+            proximaIso = FixtureAdminService.formatFechaLocal(probe);
             break;
           }
         }
