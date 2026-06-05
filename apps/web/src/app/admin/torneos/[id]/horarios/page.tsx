@@ -2,7 +2,7 @@
 
 import { Calendar, Info, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
-import { use, useState } from 'react';
+import { useState } from 'react';
 
 import { DIAS_SEMANA, type HorarioTorneo } from '@fixtura/types';
 
@@ -27,9 +27,9 @@ import { toastError, toastSuccess } from '@/lib/toast';
 export default function HorariosTorneoPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }): React.ReactElement {
-  const { id } = use(params);
+  const { id } = params;
   const { data: torneo } = useTorneo(id);
   const { data: horarios, isLoading } = useHorariosTorneo(id);
   const { data: canchas } = useCanchas(true);

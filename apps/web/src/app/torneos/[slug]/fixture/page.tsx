@@ -3,11 +3,11 @@ import { FixtureView } from '@/components/fixture-view';
 /**
  * Sprint 36C — Fixture filtrado por torneo específico.
  */
-export default async function FixtureTorneoPage({
+export default function FixtureTorneoPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
-}): Promise<React.ReactElement> {
-  const { slug } = await params;
+  params: { slug: string };
+}): React.ReactElement {
+  const { slug } = params;
   return <FixtureView torneoSlug={slug} />;
 }

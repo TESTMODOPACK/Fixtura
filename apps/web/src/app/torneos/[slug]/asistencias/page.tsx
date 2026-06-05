@@ -3,12 +3,12 @@ import { RankingPage } from '@/components/ranking-page';
 /**
  * Sprint 36C — Asistencias filtradas por torneo específico.
  */
-export default async function AsistenciasTorneoPage({
+export default function AsistenciasTorneoPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
-}): Promise<React.ReactElement> {
-  const { slug } = await params;
+  params: { slug: string };
+}): React.ReactElement {
+  const { slug } = params;
   return (
     <RankingPage
       tipo="asistencias"

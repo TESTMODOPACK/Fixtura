@@ -5,11 +5,11 @@ import { TenantHome } from '@/components/tenant-home';
  * componente TenantHome pasando torneoSlug por prop, así toda la lógica
  * de "resumen + cards + sponsors + footer" queda en un solo lugar.
  */
-export default async function TorneoPage({
+export default function TorneoPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
-}): Promise<React.ReactElement> {
-  const { slug } = await params;
+  params: { slug: string };
+}): React.ReactElement {
+  const { slug } = params;
   return <TenantHome torneoSlug={slug} />;
 }
