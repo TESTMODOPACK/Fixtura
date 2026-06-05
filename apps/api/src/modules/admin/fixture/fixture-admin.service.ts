@@ -8,9 +8,15 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
-import type { FixtureGenerationResult, GenerarFixtureRequest } from '@fixtura/types';
+import type {
+  FixtureAdvertencia,
+  FixtureGenerationResult,
+  FixturePrevalidacion,
+  GenerarFixtureRequest,
+} from '@fixtura/types';
 import { aplicarConstraintsFixture, generarFixtureBerger } from '@fixtura/domain';
 
+import { Cancha } from '../../competition/entities/cancha.entity';
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { HorarioTorneo } from '../../competition/entities/horario-torneo.entity';
@@ -36,6 +42,8 @@ export class FixtureAdminService {
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
     @InjectRepository(HorarioTorneo)
     private readonly horarioRepo: Repository<HorarioTorneo>,
+    @InjectRepository(Cancha)
+    private readonly canchaRepo: Repository<Cancha>,
     private readonly diasNoJugables: DiasNoJugablesService,
   ) {}
 
@@ -314,6 +322,168 @@ export class FixtureAdminService {
       slotsUsados,
       modoGeneracion,
       partidosEnCanchaNoDisponible,
+    };
+  }
+
+  /**
+   * Sprint 43 — Pre-validación del fixture. Evalúa las 4 variables
+   * críticas SIN crear nada todavía: equipos, horarios, días bloqueados,
+   * canchas. Devuelve una lista de advertencias para que la UI las
+   * muestre antes de que el admin haga click en "Generar".
+   *
+   * - ERROR: bloquea la generación (faltan equipos)
+   * - WARN: permite generar pero conviene corregir antes (sin horarios
+   *   cargados, slots insuficientes, canchas no disponibles)
+   * - INFO: simplemente informa (modo legacy, ajustes por feriados)
+   */
+  async prevalidar(
+    torneoId: string,
+    tenantId: string,
+    params: {
+      fechaInicio?: string;
+      diasEntreFechas?: number;
+    },
+  ): Promise<FixturePrevalidacion> {
+    const torneo = await this.torneoRepo.findOne({ where: { id: torneoId, tenantId } });
+    if (!torneo) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);
+
+    const advertencias: FixtureAdvertencia[] = [];
+
+    // ── 1. EQUIPOS ────────────────────────────────────────────────
+    const equiposCount = await this.equipoRepo.count({ where: { torneoId } });
+    if (equiposCount < 2) {
+      advertencias.push({
+        codigo: 'SIN_EQUIPOS_SUFICIENTES',
+        nivel: 'ERROR',
+        mensaje: `Se requieren al menos 2 equipos para generar. Hay ${equiposCount}.`,
+        detalle: { equiposCount },
+      });
+    }
+
+    // ── 2. HORARIOS DEL TORNEO ───────────────────────────────────
+    const horarios = await this.horarioRepo.find({
+      where: { torneoId, tenantId, activo: true },
+      relations: { cancha: true },
+    });
+    const horariosCount = horarios.length;
+    const usarPlantilla = horariosCount > 0;
+    const modoGeneracion: 'HORARIOS_TORNEO' | 'INPUT_LEGACY' = usarPlantilla
+      ? 'HORARIOS_TORNEO'
+      : 'INPUT_LEGACY';
+
+    if (!usarPlantilla) {
+      advertencias.push({
+        codigo: 'SIN_HORARIOS_TORNEO',
+        nivel: 'WARN',
+        mensaje:
+          'No hay horarios cargados para el torneo. Los partidos van a quedar ' +
+          'con horarios y canchas del form (modo legacy). Cargá horarios desde ' +
+          'la pestaña "Horarios" para asignación automática.',
+      });
+      advertencias.push({
+        codigo: 'MODO_LEGACY',
+        nivel: 'INFO',
+        mensaje:
+          'Se va a generar en modo LEGACY (round-robin sobre los horarios y ' +
+          'canchas que escribas en el formulario).',
+      });
+    }
+
+    // ── 3. CANCHAS DISPONIBLES ───────────────────────────────────
+    const canchas = await this.canchaRepo.find({
+      where: { tenantId },
+    });
+    const canchasDisponibles = canchas.filter(
+      (c) => c.activa && c.estado === 'DISPONIBLE',
+    );
+    const canchasDisponiblesCount = canchasDisponibles.length;
+
+    if (canchasDisponiblesCount === 0) {
+      advertencias.push({
+        codigo: 'SIN_CANCHAS_DISPONIBLES',
+        nivel: usarPlantilla ? 'ERROR' : 'WARN',
+        mensaje:
+          'No hay canchas marcadas como DISPONIBLES en el catálogo. ' +
+          (usarPlantilla
+            ? 'Los slots de horarios no van a tener cancha asignada.'
+            : 'En modo legacy, las canchas vienen del form (texto libre).'),
+      });
+    }
+
+    if (usarPlantilla) {
+      const canchasNoDispo = horarios
+        .filter((h) => h.cancha && h.cancha.estado === 'NO_DISPONIBLE')
+        .map((h) => h.cancha!.nombre);
+      if (canchasNoDispo.length > 0) {
+        const unicas = Array.from(new Set(canchasNoDispo));
+        advertencias.push({
+          codigo: 'CANCHAS_NO_DISPONIBLES',
+          nivel: 'WARN',
+          mensaje: `${unicas.length} cancha(s) usada(s) en horarios están NO DISPONIBLES: ${unicas.join(', ')}. Los partidos se asignarán igual pero recibirás un aviso.`,
+          detalle: { canchas: unicas },
+        });
+      }
+    }
+
+    // ── 4. DÍAS BLOQUEADOS EN EL RANGO ───────────────────────────
+    if (params.fechaInicio && params.diasEntreFechas) {
+      const equipos = equiposCount;
+      // Estimación rápida: fechas Berger = equipos - 1 (par) o equipos (impar).
+      const fechasEstimadas = equipos % 2 === 0 ? equipos - 1 : equipos;
+      const fechaInicio = new Date(params.fechaInicio);
+      const fechaFin = new Date(fechaInicio);
+      fechaFin.setDate(
+        fechaInicio.getDate() + fechasEstimadas * params.diasEntreFechas + 30,
+      );
+      const bloqueadas = await this.diasNoJugables.fechasBloqueadasEnRango(
+        tenantId,
+        torneoId,
+        fechaInicio.toISOString().slice(0, 10),
+        fechaFin.toISOString().slice(0, 10),
+      );
+      if (bloqueadas.size > 0) {
+        advertencias.push({
+          codigo: 'DIAS_BLOQUEADOS_EN_RANGO',
+          nivel: 'INFO',
+          mensaje: `Hay ${bloqueadas.size} día(s) no jugable(s) entre ${fechaInicio.toISOString().slice(0, 10)} y ${fechaFin.toISOString().slice(0, 10)}. Las fechas se correrán automáticamente al próximo día válido.`,
+          detalle: {
+            cantidad: bloqueadas.size,
+            primerDia: Array.from(bloqueadas.keys()).sort()[0] ?? null,
+          },
+        });
+      }
+    }
+
+    // ── 5. SLOTS INSUFICIENTES (solo si usa plantilla) ───────────
+    if (usarPlantilla && equiposCount >= 2) {
+      // Partidos por fecha ≈ floor(equipos / 2)
+      const partidosPorFecha = Math.floor(equiposCount / 2);
+      // Para cada día de semana en uso, max slots por fecha
+      const slotsPorDia = new Map<number, number>();
+      for (const h of horarios) {
+        slotsPorDia.set(h.diaSemana, (slotsPorDia.get(h.diaSemana) ?? 0) + 1);
+      }
+      const maxSlots = Math.max(...Array.from(slotsPorDia.values()), 0);
+      if (maxSlots < partidosPorFecha) {
+        advertencias.push({
+          codigo: 'SLOTS_INSUFICIENTES',
+          nivel: 'WARN',
+          mensaje:
+            `Hay ${partidosPorFecha} partido(s) por fecha pero solo ${maxSlots} slot(s) ` +
+            `máximo en un mismo día. ${partidosPorFecha - maxSlots} partido(s) van a quedar sin horario.`,
+          detalle: { partidosPorFecha, maxSlots },
+        });
+      }
+    }
+
+    const ok = !advertencias.some((a) => a.nivel === 'ERROR');
+    return {
+      ok,
+      equiposCount,
+      horariosCount,
+      canchasDisponiblesCount,
+      modoGeneracion,
+      advertencias,
     };
   }
 

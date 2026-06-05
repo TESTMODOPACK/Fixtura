@@ -1,15 +1,18 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Sparkles } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, Sparkles, XCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+
+import type { FixtureAdvertencia } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
-import { useGenerarFixture } from '@/hooks/use-admin';
+import { useFixturePrevalidacion, useGenerarFixture } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
 
 const FixtureFormSchema = z.object({
   fechaInicio: z.iso.date('Fecha requerida'),
@@ -41,6 +44,17 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
       canchasStr: 'Cancha 1, Cancha 2, Cancha 3, Cancha 4',
     },
   });
+
+  // Sprint 43 — Pre-validar al cargar (con la fecha y días default del
+  // form). El backend evalúa horarios, días bloqueados, equipos y
+  // canchas, y devuelve advertencias para mostrar arriba del botón.
+  const fechaInicioValue = form.watch('fechaInicio');
+  const diasValue = form.watch('diasEntreFechas');
+  const { data: prevalidacion } = useFixturePrevalidacion(torneoId, {
+    fechaInicio: fechaInicioValue || undefined,
+    diasEntreFechas: diasValue || undefined,
+  });
+  const tieneError = prevalidacion?.advertencias.some((a) => a.nivel === 'ERROR') ?? false;
 
   const onSubmit = async (vals: FixtureForm): Promise<void> => {
     await mutation.mutateAsync({
@@ -87,6 +101,8 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
         </div>
       )}
 
+      {prevalidacion && <PrevalidacionPanel prevalidacion={prevalidacion} />}
+
       <form
         onSubmit={form.handleSubmit(
           onSubmit,
@@ -131,10 +147,107 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
           </div>
         )}
 
-        <Button type="submit" variant="accent" loading={mutation.isPending}>
+        <Button
+          type="submit"
+          variant="accent"
+          loading={mutation.isPending}
+          disabled={tieneError}
+          title={tieneError ? 'Hay errores que bloquean la generación' : undefined}
+        >
           <Sparkles size={14} /> Generar fixture con Berger
         </Button>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Sprint 43 — Panel con advertencias antes de generar el fixture.
+ * Muestra ERROR (bloquea botón), WARN (permite generar pero advierte)
+ * e INFO (informativo).
+ */
+function PrevalidacionPanel({
+  prevalidacion,
+}: {
+  prevalidacion: {
+    ok: boolean;
+    equiposCount: number;
+    horariosCount: number;
+    canchasDisponiblesCount: number;
+    modoGeneracion: 'HORARIOS_TORNEO' | 'INPUT_LEGACY';
+    advertencias: FixtureAdvertencia[];
+  };
+}): React.ReactElement {
+  const { advertencias, ok, equiposCount, horariosCount, canchasDisponiblesCount, modoGeneracion } =
+    prevalidacion;
+  const errores = advertencias.filter((a) => a.nivel === 'ERROR');
+  const warns = advertencias.filter((a) => a.nivel === 'WARN');
+  const infos = advertencias.filter((a) => a.nivel === 'INFO');
+
+  if (advertencias.length === 0) {
+    return (
+      <div className="mb-4 bg-green-bright/10 border border-green-bright/30 rounded-card px-4 py-3 text-sm flex items-center gap-2">
+        <CheckCircle2 size={16} className="text-green-bright flex-shrink-0" />
+        <span className="text-ink">
+          Todo en orden — {equiposCount} equipos · {horariosCount} slot(s) · {canchasDisponiblesCount} cancha(s) disponible(s) ·{' '}
+          modo {modoGeneracion === 'HORARIOS_TORNEO' ? 'plantilla' : 'legacy'}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 space-y-2">
+      <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-mute">
+        → Pre-validación: {equiposCount} equipos · {horariosCount} slot(s) ·{' '}
+        {canchasDisponiblesCount} cancha(s) disponible(s) · modo{' '}
+        {modoGeneracion === 'HORARIOS_TORNEO' ? 'plantilla' : 'legacy'}
+      </div>
+      {errores.map((a, i) => (
+        <AdvertenciaRow key={`err-${i}`} advertencia={a} />
+      ))}
+      {warns.map((a, i) => (
+        <AdvertenciaRow key={`warn-${i}`} advertencia={a} />
+      ))}
+      {infos.map((a, i) => (
+        <AdvertenciaRow key={`info-${i}`} advertencia={a} />
+      ))}
+      {!ok && (
+        <div className="text-xs font-semibold text-danger px-3 py-2">
+          Corregí los errores antes de generar el fixture.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdvertenciaRow({
+  advertencia,
+}: {
+  advertencia: FixtureAdvertencia;
+}): React.ReactElement {
+  const styles = {
+    ERROR: {
+      bg: 'bg-danger/10 border-danger/30',
+      text: 'text-danger',
+      Icon: XCircle,
+    },
+    WARN: {
+      bg: 'bg-accent/10 border-accent/30',
+      text: 'text-accent',
+      Icon: AlertTriangle,
+    },
+    INFO: {
+      bg: 'bg-paper-dark border-line',
+      text: 'text-ink-mute',
+      Icon: Info,
+    },
+  } as const;
+  const { bg, text, Icon } = styles[advertencia.nivel];
+  return (
+    <div className={cn('border rounded px-3 py-2 text-sm flex items-start gap-2', bg)}>
+      <Icon size={14} className={cn('flex-shrink-0 mt-0.5', text)} />
+      <span className="text-ink leading-snug">{advertencia.mensaje}</span>
     </div>
   );
 }

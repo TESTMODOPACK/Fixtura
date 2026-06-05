@@ -1450,6 +1450,30 @@ export function useEliminarHorarioTorneo(torneoId: string) {
   });
 }
 
+// Sprint 43 — Pre-validación del fixture antes de generar
+import type { FixturePrevalidacion } from '@fixtura/types';
+
+export function useFixturePrevalidacion(
+  torneoId: string,
+  params: { fechaInicio?: string; diasEntreFechas?: number },
+) {
+  const qs = new URLSearchParams();
+  if (params.fechaInicio) qs.set('fechaInicio', params.fechaInicio);
+  if (params.diasEntreFechas !== undefined) {
+    qs.set('diasEntreFechas', String(params.diasEntreFechas));
+  }
+  const q = qs.toString();
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'fixture', 'prevalidacion', params],
+    queryFn: () =>
+      apiFetch<FixturePrevalidacion>(
+        `/admin/torneos/${torneoId}/fixture/prevalidacion${q ? `?${q}` : ''}`,
+      ),
+    enabled: !!torneoId,
+    staleTime: 10_000,
+  });
+}
+
 export function useSystemHealth() {
   return useQuery({
     queryKey: ['super-admin', 'health'],

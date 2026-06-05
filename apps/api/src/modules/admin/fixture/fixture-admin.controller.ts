@@ -3,12 +3,19 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
 } from '@nestjs/common';
 
-import { ROLE, type FixtureGenerationResult, type UserContext } from '@fixtura/types';
+import {
+  ROLE,
+  type FixtureGenerationResult,
+  type FixturePrevalidacion,
+  type UserContext,
+} from '@fixtura/types';
 
 import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
@@ -44,6 +51,27 @@ export class FixtureAdminController {
     @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
   ): Promise<{ deleted: number }> {
     return this.svc.reset(torneoId, ensureTenant(user));
+  }
+
+  /**
+   * Sprint 43 — Pre-validación del fixture. Llamar antes de generar
+   * para detectar problemas con horarios/equipos/canchas/feriados sin
+   * crear nada. La UI muestra las advertencias en el form.
+   *
+   * Query params opcionales: fechaInicio, diasEntreFechas (se usan
+   * solo para evaluar feriados en el rango estimado).
+   */
+  @Get('prevalidacion')
+  prevalidar(
+    @CurrentUser() user: UserContext,
+    @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('diasEntreFechas') diasEntreFechas?: string,
+  ): Promise<FixturePrevalidacion> {
+    return this.svc.prevalidar(torneoId, ensureTenant(user), {
+      fechaInicio,
+      diasEntreFechas: diasEntreFechas ? Number(diasEntreFechas) : undefined,
+    });
   }
 }
 

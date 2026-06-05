@@ -269,3 +269,45 @@ export const FixtureGenerationResultSchema = z.object({
     .default([]),
 });
 export type FixtureGenerationResult = z.infer<typeof FixtureGenerationResultSchema>;
+
+// ─── Sprint 43 — Pre-validación del fixture ─────────────────────────
+/**
+ * Advertencias y errores detectados antes de generar el fixture.
+ * - `ERROR`: bloquea la generación (faltan equipos, sin canchas activas)
+ * - `WARN`: permite generar pero advierte (sin horarios, canchas no
+ *   disponibles, slots insuficientes, días bloqueados en el rango)
+ * - `INFO`: informativo (ej. modo legacy, ajustes de feriados)
+ */
+export const NIVEL_ADVERTENCIA = ['ERROR', 'WARN', 'INFO'] as const;
+export type NivelAdvertencia = (typeof NIVEL_ADVERTENCIA)[number];
+
+export const CODIGO_ADVERTENCIA = [
+  'SIN_EQUIPOS_SUFICIENTES',
+  'SIN_HORARIOS_TORNEO',
+  'SIN_CANCHAS_DISPONIBLES',
+  'CANCHAS_NO_DISPONIBLES',
+  'SLOTS_INSUFICIENTES',
+  'DIAS_BLOQUEADOS_EN_RANGO',
+  'MODO_LEGACY',
+] as const;
+export type CodigoAdvertencia = (typeof CODIGO_ADVERTENCIA)[number];
+
+export const FixtureAdvertenciaSchema = z.object({
+  codigo: z.enum(CODIGO_ADVERTENCIA),
+  nivel: z.enum(NIVEL_ADVERTENCIA),
+  mensaje: z.string(),
+  /** Datos extra opcionales para que la UI pueda render más rico. */
+  detalle: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+export type FixtureAdvertencia = z.infer<typeof FixtureAdvertenciaSchema>;
+
+export const FixturePrevalidacionSchema = z.object({
+  /** True si NO hay errores (puede haber WARN/INFO). */
+  ok: z.boolean(),
+  equiposCount: z.number().int(),
+  horariosCount: z.number().int(),
+  canchasDisponiblesCount: z.number().int(),
+  modoGeneracion: z.enum(['HORARIOS_TORNEO', 'INPUT_LEGACY']),
+  advertencias: z.array(FixtureAdvertenciaSchema),
+});
+export type FixturePrevalidacion = z.infer<typeof FixturePrevalidacionSchema>;
