@@ -562,14 +562,15 @@ function FixtureTab({
 
   return (
     <Card padding="roomy">
-      <CardLabel>Generar fixture automático</CardLabel>
+      <CardLabel>Generar calendario de partidos</CardLabel>
       <div className="font-display text-2xl text-green-deep tracking-display mb-2">
-        ALGORITMO BERGER
+        TODOS CONTRA TODOS
       </div>
       <p className="font-serif italic text-ink-mute mb-6">
-        Round Robin completo con número impar resuelto (un equipo libre por fecha). Las
-        restricciones de no-3-locales-seguidos y conflictos de cancha se aplican después en
-        modo edición manual.
+        Genera el calendario completo del torneo: cada equipo juega contra
+        todos los demás. Si la cantidad de equipos es impar, en cada fecha uno
+        descansa. Después podés editar partidos a mano (cambiar cancha, hora o
+        fecha) desde el detalle de cada partido.
       </p>
       <GenerarFixtureForm torneoId={torneoId} />
     </Card>

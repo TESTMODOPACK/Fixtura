@@ -409,7 +409,10 @@ export class FixtureAdminService {
       advertencias.push({
         codigo: 'SIN_EQUIPOS_SUFICIENTES',
         nivel: 'ERROR',
-        mensaje: `Se requieren al menos 2 equipos para generar. Hay ${equiposCount}.`,
+        mensaje:
+          `Necesitás al menos 2 equipos inscritos para generar el ` +
+          `calendario. En este momento hay ${equiposCount}. Andá al tab ` +
+          'Equipos e inscribí más clubes.',
         detalle: { equiposCount },
       });
     }
@@ -430,16 +433,10 @@ export class FixtureAdminService {
         codigo: 'SIN_HORARIOS_TORNEO',
         nivel: 'WARN',
         mensaje:
-          'No hay horarios cargados para el torneo. Los partidos van a quedar ' +
-          'con horarios y canchas del form (modo legacy). Cargá horarios desde ' +
-          'la pestaña "Horarios" para asignación automática.',
-      });
-      advertencias.push({
-        codigo: 'MODO_LEGACY',
-        nivel: 'INFO',
-        mensaje:
-          'Se va a generar en modo LEGACY (round-robin sobre los horarios y ' +
-          'canchas que escribas en el formulario).',
+          'Todavía no cargaste horarios para este torneo. Si generás el ' +
+          'calendario sin horarios, los partidos quedan sin día ni cancha y ' +
+          'tenés que asignarlos uno por uno. Andá al tab "Horarios" y cargá ' +
+          'qué días y a qué hora se juega.',
       });
     }
 
@@ -458,10 +455,9 @@ export class FixtureAdminService {
         codigo: 'SIN_CANCHAS_CATALOGO',
         nivel: 'WARN',
         mensaje:
-          'No hay canchas cargadas en el catálogo. Cargalas desde "Ocupación canchas" → ' +
-          '/admin/canchas. Sin canchas en el catálogo, los partidos van a quedar ' +
-          'con el nombre que escribas en el form (texto libre) y no podemos validar ' +
-          'choques de horario entre partidos.',
+          'Todavía no cargaste ninguna cancha en la liga. Andá a "Canchas" ' +
+          'del menú y agregá las canchas que tu liga usa. Después vas a poder ' +
+          'asignar una cancha a cada horario de este torneo.',
       });
     } else if (canchasDisponiblesCount === 0) {
       // 3.2 — Hay canchas pero todas están NO_DISPONIBLE / inactivas
@@ -469,10 +465,9 @@ export class FixtureAdminService {
         codigo: 'SIN_CANCHAS_DISPONIBLES',
         nivel: usarPlantilla ? 'ERROR' : 'WARN',
         mensaje:
-          `Hay ${canchas.length} cancha(s) en el catálogo pero ninguna está DISPONIBLE. ` +
-          (usarPlantilla
-            ? 'Marcalas como DISPONIBLE desde /admin/canchas antes de generar el fixture.'
-            : 'Marcá al menos una como DISPONIBLE para poder asignar partidos.'),
+          `Tenés ${canchas.length} cancha(s) cargada(s) pero todas están ` +
+          `marcadas como no disponibles (en mantenimiento o desactivadas). ` +
+          'Andá a "Canchas" y poné al menos una como disponible.',
         detalle: { totalCanchas: canchas.length },
       });
     }
@@ -485,9 +480,9 @@ export class FixtureAdminService {
           codigo: 'SLOTS_SIN_CANCHA',
           nivel: 'WARN',
           mensaje:
-            `${slotsSinCancha} slot(s) de horario no tienen cancha asignada. ` +
-            'Los partidos en esos slots van a quedar con cancha vacía. ' +
-            'Editá los horarios y asigná una cancha del catálogo a cada slot.',
+            `Tenés ${slotsSinCancha} horario(s) sin cancha elegida. Los ` +
+            'partidos asignados a esos horarios van a quedar sin cancha. ' +
+            'Editá cada horario en el tab Horarios y elegí en qué cancha se juega.',
           detalle: { slotsSinCancha },
         });
       }
@@ -501,7 +496,11 @@ export class FixtureAdminService {
         advertencias.push({
           codigo: 'CANCHAS_NO_DISPONIBLES',
           nivel: 'WARN',
-          mensaje: `${unicas.length} cancha(s) usada(s) en horarios están NO DISPONIBLES: ${unicas.join(', ')}. Los partidos se asignarán igual pero recibirás un aviso.`,
+          mensaje:
+            `Hay ${unicas.length} cancha(s) usada(s) en los horarios que ` +
+            `están marcada(s) como no disponibles: ${unicas.join(', ')}. ` +
+            'Los partidos se van a programar igual, pero si la cancha no ' +
+            'se libera vas a tener que reprogramarlos a mano.',
           detalle: { canchas: unicas },
         });
       }
@@ -524,10 +523,20 @@ export class FixtureAdminService {
         fechaFin.toISOString().slice(0, 10),
       );
       if (bloqueadas.size > 0) {
+        const fmt = (d: Date): string =>
+          d.toLocaleDateString('es-CL', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+          });
         advertencias.push({
           codigo: 'DIAS_BLOQUEADOS_EN_RANGO',
           nivel: 'INFO',
-          mensaje: `Hay ${bloqueadas.size} día(s) no jugable(s) entre ${fechaInicio.toISOString().slice(0, 10)} y ${fechaFin.toISOString().slice(0, 10)}. Las fechas se correrán automáticamente al próximo día válido.`,
+          mensaje:
+            `Entre el ${fmt(fechaInicio)} y el ${fmt(fechaFin)} hay ` +
+            `${bloqueadas.size} día(s) bloqueado(s) (feriados o ` +
+            'suspendidos). Cuando una fecha del calendario caiga en uno, ' +
+            'se va a correr al próximo día disponible.',
           detalle: {
             cantidad: bloqueadas.size,
             primerDia: Array.from(bloqueadas.keys()).sort()[0] ?? null,
@@ -567,15 +576,24 @@ export class FixtureAdminService {
           .sort()
           .map((d) => NOMBRES_DIA[d] ?? `Día ${d}`)
           .join(', ');
+        const fmtIso = (iso: string): string => {
+          const d = new Date(iso + 'T00:00:00');
+          return d.toLocaleDateString('es-CL', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+          });
+        };
         advertencias.push({
           codigo: 'FECHA_INICIO_AJUSTADA_POR_HORARIOS',
           nivel: 'WARN',
           mensaje:
-            `La fecha de inicio (${params.fechaInicio}) cae en ${NOMBRES_DIA[isoDow]}, ` +
-            `pero los horarios cargados son solo para: ${diasConSlotsNombres}. ` +
+            `La fecha de inicio que elegiste (${fmtIso(params.fechaInicio)}) ` +
+            `cae en día ${NOMBRES_DIA[isoDow]}, pero solo cargaste horarios ` +
+            `para: ${diasConSlotsNombres}. ` +
             (proximaIso
-              ? `La Fecha 1 se va a generar el ${proximaIso}.`
-              : 'No se encontró ningún día con slots en los próximos 7 días.'),
+              ? `La primera fecha del torneo se va a programar para el ${fmtIso(proximaIso)}.`
+              : 'No encontramos ningún día con horarios cargados en los próximos 7 días.'),
           detalle: {
             diaSemanaElegido: isoDow,
             diasConSlots: Array.from(diasConSlots).sort(),
@@ -600,8 +618,11 @@ export class FixtureAdminService {
           codigo: 'SLOTS_INSUFICIENTES',
           nivel: 'WARN',
           mensaje:
-            `Hay ${partidosPorFecha} partido(s) por fecha pero solo ${maxSlots} slot(s) ` +
-            `máximo en un mismo día. ${partidosPorFecha - maxSlots} partido(s) van a quedar sin horario.`,
+            `Por la cantidad de equipos te van a quedar ${partidosPorFecha} ` +
+            `partidos en cada fecha, pero solo cargaste ${maxSlots} horario(s) ` +
+            `por día. ${partidosPorFecha - maxSlots} partido(s) van a quedar ` +
+            'sin día ni cancha — vas a tener que asignarlos a mano o cargar ' +
+            'más horarios.',
           detalle: { partidosPorFecha, maxSlots },
         });
       }

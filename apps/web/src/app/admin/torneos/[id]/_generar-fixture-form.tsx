@@ -20,7 +20,6 @@ import { Button } from '@/components/ui/button';
 import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import {
-  useCanchas,
   useFixturePrevalidacion,
   useGenerarFixture,
   useHorariosTorneo,
@@ -47,15 +46,32 @@ type FixtureForm = z.infer<typeof FixtureFormSchema>;
 export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.ReactElement {
   const mutation = useGenerarFixture(torneoId);
   const { data: horarios, isLoading: loadingHorarios } = useHorariosTorneo(torneoId);
-  const { data: canchas, isLoading: loadingCanchas } = useCanchas();
 
   const horariosActivos = (horarios ?? []).filter((h) => h.activo);
-  const canchasDisponibles = (canchas ?? []).filter(
-    (c) => c.estado === 'DISPONIBLE',
+
+  // Sprint 44 — Las canchas que se usarán en el torneo son las que el
+  // operador asignó a cada horario (cancha + hora + día). NO se muestra
+  // el catálogo completo, porque la liga puede tener 6 canchas pero usar
+  // solo 2 en este torneo. Se deduplica por canchaId.
+  const canchasDelTorneoMap = new Map<string, { id: string; nombre: string }>();
+  let horariosSinCancha = 0;
+  for (const h of horariosActivos) {
+    if (h.canchaId && h.canchaNombre) {
+      canchasDelTorneoMap.set(h.canchaId, {
+        id: h.canchaId,
+        nombre: h.canchaNombre,
+      });
+    } else {
+      horariosSinCancha++;
+    }
+  }
+  const canchasDelTorneo = Array.from(canchasDelTorneoMap.values()).sort(
+    (a, b) => a.nombre.localeCompare(b.nombre),
   );
 
   const faltanHorarios = !loadingHorarios && horariosActivos.length === 0;
-  const faltanCanchas = !loadingCanchas && canchasDisponibles.length === 0;
+  const faltanCanchas =
+    !loadingHorarios && !faltanHorarios && canchasDelTorneo.length === 0;
   const faltaConfig = faltanHorarios || faltanCanchas;
 
   const form = useForm<FixtureForm>({
@@ -98,39 +114,43 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
       {mutation.isSuccess && mutation.data && (
         <div className="bg-green-lime/30 border border-green-bright rounded-card p-4 mb-4">
           <div className="font-display text-lg text-green-deep tracking-display">
-            ✓ FIXTURE GENERADO
+            ✓ CALENDARIO GENERADO
           </div>
           <p className="text-sm text-green-deep/85 mt-1">
-            {mutation.data.fechasCreadas} fechas y {mutation.data.partidosCreados} partidos
-            programados. {mutation.data.equiposLibres.length > 0 &&
-              `${mutation.data.equiposLibres.length} fechas tienen un equipo libre (número impar).`}
+            Se crearon {mutation.data.fechasCreadas} fechas y{' '}
+            {mutation.data.partidosCreados} partidos.
+            {mutation.data.equiposLibres.length > 0 &&
+              ` En ${mutation.data.equiposLibres.length} fecha(s) un equipo descansa (cantidad impar de equipos).`}
           </p>
           {mutation.data.modoGeneracion === 'HORARIOS_TORNEO' && (
             <p className="text-xs text-green-deep/70 mt-2 font-serif italic">
-              Modo: plantilla del torneo · {mutation.data.slotsUsados} slot(s) usado(s).
+              Día, hora y cancha se asignaron automáticamente desde los
+              horarios del torneo.
             </p>
           )}
           {(mutation.data.partidosSinHorario ?? 0) > 0 && (
             <p className="text-xs text-accent font-semibold mt-2">
-              ⚠ {mutation.data.partidosSinHorario} partido(s) quedaron sin horario
-              porque no había slots suficientes para esa fecha. Cargá más slots
-              o asignalos manualmente desde el fixture.
+              ⚠ {mutation.data.partidosSinHorario} partido(s) quedaron sin
+              día ni cancha porque no alcanzaron los horarios para esa fecha.
+              Cargá más horarios en el tab Horarios o asignalos a mano abriendo
+              cada partido.
             </p>
           )}
           {(mutation.data.partidosEnCanchaNoDisponible ?? []).length > 0 && (
             <p className="text-xs text-accent font-semibold mt-2">
               ⚠ {mutation.data.partidosEnCanchaNoDisponible.length} partido(s)
-              asignados a canchas marcadas como NO DISPONIBLE. Revisá el fixture
-              y re-programá manualmente si la cancha no volverá a tiempo.
+              quedaron en canchas marcadas como no disponibles. Si la cancha
+              no se va a habilitar a tiempo, abrí el partido y elegí otra
+              cancha o reprogramá la fecha.
             </p>
           )}
           {mutation.data.fechaInicioAjustada && (
             <p className="text-xs text-accent font-semibold mt-2">
-              ⚠ La fecha de inicio que pediste (
-              {mutation.data.fechaInicioAjustada.fechaInicioOriginal}) caía en
-              un día sin horarios. La Fecha 1 quedó programada para el{' '}
-              {mutation.data.fechaInicioAjustada.fechaInicioReal} (próximo día
-              con slots cargados).
+              ⚠ La fecha de inicio que elegiste (
+              {mutation.data.fechaInicioAjustada.fechaInicioOriginal}) caía
+              en un día sin horarios cargados. La primera fecha del torneo
+              quedó programada para el{' '}
+              {mutation.data.fechaInicioAjustada.fechaInicioReal}.
             </p>
           )}
         </div>
@@ -169,8 +189,11 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
             torneoId={torneoId}
           />
           <CanchasPanel
-            canchasDisponibles={canchasDisponibles}
-            loading={loadingCanchas}
+            canchasDelTorneo={canchasDelTorneo}
+            horariosSinCancha={horariosSinCancha}
+            torneoId={torneoId}
+            faltanHorarios={faltanHorarios}
+            loading={loadingHorarios}
           />
         </div>
 
@@ -187,15 +210,15 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
           disabled={tieneError}
           title={
             faltanHorarios
-              ? 'Definí al menos un horario en el tab Horarios del torneo.'
+              ? 'Cargá al menos un horario en el tab Horarios.'
               : faltanCanchas
-                ? 'Habilitá al menos una cancha en /admin/canchas.'
+                ? 'Asigná una cancha a cada horario antes de generar.'
                 : tieneErrorPrevalidacion
-                  ? 'Hay errores que bloquean la generación.'
+                  ? 'Resolvé los problemas marcados arriba antes de generar.'
                   : undefined
           }
         >
-          <Sparkles size={14} /> Generar fixture con Berger
+          <Sparkles size={14} /> Generar calendario de partidos
         </Button>
       </form>
     </div>
@@ -230,8 +253,9 @@ function PrevalidacionPanel({
       <div className="mb-4 bg-green-bright/10 border border-green-bright/30 rounded-card px-4 py-3 text-sm flex items-center gap-2">
         <CheckCircle2 size={16} className="text-green-bright flex-shrink-0" />
         <span className="text-ink">
-          Todo en orden — {equiposCount} equipos · {horariosCount} slot(s) · {canchasDisponiblesCount} cancha(s) disponible(s) ·{' '}
-          modo {modoGeneracion === 'HORARIOS_TORNEO' ? 'plantilla' : 'legacy'}
+          Todo listo para generar — {equiposCount} equipos inscritos ·{' '}
+          {horariosCount} horario(s) cargado(s) · {canchasDisponiblesCount}{' '}
+          cancha(s).
         </span>
       </div>
     );
@@ -240,9 +264,8 @@ function PrevalidacionPanel({
   return (
     <div className="mb-4 space-y-2">
       <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-mute">
-        → Pre-validación: {equiposCount} equipos · {horariosCount} slot(s) ·{' '}
-        {canchasDisponiblesCount} cancha(s) disponible(s) · modo{' '}
-        {modoGeneracion === 'HORARIOS_TORNEO' ? 'plantilla' : 'legacy'}
+        → Resumen antes de generar: {equiposCount} equipos · {horariosCount}{' '}
+        horario(s) · {canchasDisponiblesCount} cancha(s)
       </div>
       {errores.map((a, i) => (
         <AdvertenciaRow key={`err-${i}`} advertencia={a} />
@@ -255,7 +278,7 @@ function PrevalidacionPanel({
       ))}
       {!ok && (
         <div className="text-xs font-semibold text-danger px-3 py-2">
-          Corregí los errores antes de generar el fixture.
+          Resolvé los problemas marcados antes de generar el calendario.
         </div>
       )}
     </div>
@@ -346,62 +369,90 @@ function HorariosPanel({
 }
 
 /**
- * Sprint 44 — Panel con canchas DISPONIBLES desde /admin/canchas.
- * Bloquea el botón de generar si no hay ninguna.
+ * Sprint 44 — Panel con las canchas que se van a usar en el torneo.
+ * Las canchas se definen al cargar los horarios (cada horario tiene su
+ * cancha). Si no hay horarios todavía, no podemos saber las canchas.
+ * Si hay horarios pero alguno sin cancha asignada, mostramos aviso.
  */
 function CanchasPanel({
-  canchasDisponibles,
+  canchasDelTorneo,
+  horariosSinCancha,
+  torneoId,
+  faltanHorarios,
   loading,
 }: {
-  canchasDisponibles: Array<{ id: string; nombre: string }>;
+  canchasDelTorneo: Array<{ id: string; nombre: string }>;
+  horariosSinCancha: number;
+  torneoId: string;
+  faltanHorarios: boolean;
   loading: boolean;
 }): React.ReactElement {
   if (loading) {
     return (
       <div className="bg-paper-dark border border-line rounded-card px-3 py-3">
         <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-mute mb-1 flex items-center gap-1.5">
-          <MapPin size={11} /> Canchas disponibles
+          <MapPin size={11} /> Canchas que se van a usar
         </div>
         <p className="text-xs font-serif italic text-ink-mute">Cargando…</p>
       </div>
     );
   }
 
-  if (canchasDisponibles.length === 0) {
+  // Caso 1 — no hay horarios cargados todavía. Las canchas se eligen
+  // al cargar cada horario, así que mientras no haya horarios no se
+  // sabe qué canchas se van a usar.
+  if (faltanHorarios) {
     return (
-      <div className="bg-danger/10 border border-danger/30 rounded-card px-3 py-3">
-        <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-danger mb-1 flex items-center gap-1.5">
-          <XCircle size={11} /> Faltan canchas
+      <div className="bg-paper-dark border border-line rounded-card px-3 py-3">
+        <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-mute mb-1 flex items-center gap-1.5">
+          <MapPin size={11} /> Canchas que se van a usar
         </div>
-        <p className="text-xs text-ink leading-snug">
-          No hay canchas en estado DISPONIBLE.{' '}
-          <Link
-            href="/admin/canchas"
-            className="text-accent font-semibold hover:underline"
-          >
-            Agregalas o reactivalas en /admin/canchas
-          </Link>{' '}
-          antes de generar el fixture.
+        <p className="text-xs text-ink-mute leading-snug font-serif italic">
+          Primero cargá los horarios — al definir cada horario elegís en
+          qué cancha se juega.
         </p>
       </div>
     );
   }
 
+  // Caso 2 — hay horarios pero ninguno tiene cancha asignada.
+  if (canchasDelTorneo.length === 0) {
+    return (
+      <div className="bg-danger/10 border border-danger/30 rounded-card px-3 py-3">
+        <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-danger mb-1 flex items-center gap-1.5">
+          <XCircle size={11} /> Falta asignar canchas
+        </div>
+        <p className="text-xs text-ink leading-snug">
+          Cargaste horarios pero ninguno tiene cancha elegida. Andá al{' '}
+          <Link
+            href={`/admin/torneos/${torneoId}/horarios`}
+            className="text-accent font-semibold hover:underline"
+          >
+            tab Horarios
+          </Link>{' '}
+          y editá cada horario para elegir su cancha.
+        </p>
+      </div>
+    );
+  }
+
+  // Caso 3 — hay canchas asignadas. Mostrar la lista + aviso si algunos
+  // horarios todavía no tienen cancha.
   return (
     <div className="bg-paper-dark border border-line rounded-card px-3 py-3">
       <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-mute mb-2 flex items-center justify-between gap-1.5">
         <span className="flex items-center gap-1.5">
-          <MapPin size={11} /> Canchas disponibles ({canchasDisponibles.length})
+          <MapPin size={11} /> Canchas del torneo ({canchasDelTorneo.length})
         </span>
         <Link
-          href="/admin/canchas"
+          href={`/admin/torneos/${torneoId}/horarios`}
           className="text-accent hover:underline normal-case tracking-normal text-[10px]"
         >
           Editar →
         </Link>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {canchasDisponibles.map((c) => (
+        {canchasDelTorneo.map((c) => (
           <span
             key={c.id}
             className="text-xs px-2 py-0.5 rounded bg-green-deep/10 text-green-deep font-medium"
@@ -410,6 +461,12 @@ function CanchasPanel({
           </span>
         ))}
       </div>
+      {horariosSinCancha > 0 && (
+        <p className="text-[11px] text-accent mt-2 leading-snug">
+          ⚠ {horariosSinCancha} horario(s) todavía sin cancha asignada.
+          Editalos en el tab Horarios.
+        </p>
+      )}
     </div>
   );
 }
