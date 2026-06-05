@@ -166,7 +166,16 @@ export default function TorneoDetailPage({
         <EquiposTab
           torneoId={id}
           estadoTorneo={torneo.estado}
-          categoriaId={torneo.categoriaId}
+          // Sprint 44 fix — usar la categoría efectiva de los combos
+          // (Sprint 26D/42), no torneo.categoriaId (legacy Sprint 25).
+          // En torneos creados con el flujo nuevo, categoriaId puede
+          // estar null pero categoriasSeries[0].categoriaId tiene el ID
+          // real. Si hay multi-cat (>1 combo), no filtramos.
+          categoriaId={
+            combos.length === 1
+              ? combos[0]!.categoriaId
+              : torneo.categoriaId
+          }
           categoriaNombre={torneo.categoriaNombre}
           combos={combos}
         />
