@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -385,15 +385,37 @@ function EditarPartidoCard({
   });
   type Form = z.infer<typeof Schema>;
 
+  // TZ fix — el input datetime-local necesita la hora LOCAL en formato
+  // 'YYYY-MM-DDTHH:mm'. partido.fechaHora es un ISO en UTC; .slice(0,16)
+  // mostraba la hora UTC (14:00) en vez de la hora real del partido en
+  // Chile (10:00). Convertimos con componentes locales.
+  const fechaHoraLocal = (() => {
+    if (!partido.fechaHora) return '';
+    const d = new Date(partido.fechaHora);
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  })();
+
   const form = useForm<Form>({
     resolver: zodResolver(Schema),
     defaultValues: {
       canchaId: partido.canchaId,
       canchaNombre: partido.canchaNombre,
-      fechaHora: partido.fechaHora ? partido.fechaHora.slice(0, 16) : '',
+      fechaHora: fechaHoraLocal,
       estado: partido.estado as Form['estado'],
     },
   });
+
+  // Fix select cancha — el <select> se monta con defaultValue=canchaId
+  // ANTES de que useCanchas cargue las opciones. Sin la option
+  // correspondiente, el browser cae a "Sin cancha" y RHF captura "".
+  // Cuando las canchas terminan de cargar, re-aplicamos el valor real.
+  useEffect(() => {
+    if (canchas && partido.canchaId) {
+      form.setValue('canchaId', partido.canchaId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canchas]);
 
   const canchaIdSeleccionada = form.watch('canchaId');
   const error = mutation.error as ApiError | undefined;
