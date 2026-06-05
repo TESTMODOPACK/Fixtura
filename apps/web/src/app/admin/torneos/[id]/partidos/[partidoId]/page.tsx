@@ -398,9 +398,26 @@ function EditarPartidoCard({
   const canchaIdSeleccionada = form.watch('canchaId');
   const error = mutation.error as ApiError | undefined;
 
+  // Sprint 44 — Aviso si el partido vino sin horario o cancha asignados.
+  // Suele pasar cuando el generador del fixture corrió en un día sin
+  // slots cargados (bug del Sprint 44 ya corregido) — los fixtures
+  // generados ANTES del fix quedan así. La opción más rápida es borrar
+  // el fixture y regenerar; si solo es 1-2 partidos, asignar a mano acá.
+  const faltaConfigPartido =
+    !partido.fechaHora || (!partido.canchaId && !partido.canchaNombre);
+
   return (
     <Card padding="comfortable" className="mb-5">
       <CardLabel>Detalles del partido</CardLabel>
+      {faltaConfigPartido && !cerrada && (
+        <div className="mb-3 bg-accent/10 border border-accent/30 rounded-card px-3 py-2 text-sm text-ink leading-snug">
+          <strong>Este partido quedó sin horario o cancha al generar el
+          fixture.</strong>{' '}
+          Asignalos manualmente abajo, o borrá el fixture entero desde el
+          tab Fixture y regenerá — si configuraste los horarios y canchas
+          después, el generador los va a tomar.
+        </div>
+      )}
       <form
         onSubmit={form.handleSubmit(
           (vals) => {
