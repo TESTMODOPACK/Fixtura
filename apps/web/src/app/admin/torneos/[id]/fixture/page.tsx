@@ -18,6 +18,7 @@ import {
   GripVertical,
   Lock,
   Play,
+  Trash2,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -38,8 +39,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import { apiFetch, ApiError } from '@/lib/api';
-import { useFixtureDetail, useReactivarFecha, useSuspenderFecha } from '@/hooks/use-admin';
+import {
+  useFixtureDetail,
+  useReactivarFecha,
+  useResetFixture,
+  useSuspenderFecha,
+  useTorneo,
+} from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
+import { toastError, toastSuccess } from '@/lib/toast';
 import { useQueryClient } from '@tanstack/react-query';
 
 export default function FixtureAdminPage({
@@ -49,9 +57,35 @@ export default function FixtureAdminPage({
 }): React.ReactElement {
   const torneoId = params.id;
   const { data, isLoading } = useFixtureDetail(torneoId);
+  const { data: torneo } = useTorneo(torneoId);
+  const resetFixture = useResetFixture(torneoId);
   const qc = useQueryClient();
   const [moveError, setMoveError] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
+
+  // Borrar el fixture completo. Solo se ofrece en DRAFT: una vez que el
+  // torneo arrancó (ACTIVO) hay actas/sanciones colgando del fixture y
+  // borrarlo a ciegas perdería historia. El backend igual valida.
+  const puedeBorrarFixture = torneo?.estado === 'DRAFT' && (data?.fechas.length ?? 0) > 0;
+
+  const handleBorrarFixture = async (): Promise<void> => {
+    const ok = window.confirm(
+      '¿Borrar todo el calendario de partidos de este torneo?\n\n' +
+        'Se eliminan todas las fechas y partidos generados. Los equipos ' +
+        'inscritos NO se tocan. Después podés volver a generar el ' +
+        'calendario.\n\nEsta acción no se puede deshacer.',
+    );
+    if (!ok) return;
+    try {
+      const r = await resetFixture.mutateAsync();
+      toastSuccess(
+        `Calendario borrado (${r.deleted} fecha${r.deleted === 1 ? '' : 's'}). ` +
+          'Podés generarlo de nuevo desde el torneo.',
+      );
+    } catch (err) {
+      toastError(err);
+    }
+  };
 
   // PointerSensor con activationConstraint para evitar capturar clicks
   // accidentales — solo arrastra cuando el usuario mueve ≥6px.
@@ -101,11 +135,25 @@ export default function FixtureAdminPage({
         title="Fixture completo"
         sub="Cargá actas, editá horarios y canchas. Arrastrá un partido a otra fecha para reprogramarlo."
       >
-        <Link href={`/admin/torneos/${torneoId}`}>
-          <Button variant="default" size="sm">
-            <ArrowLeft size={14} /> Volver al torneo
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {puedeBorrarFixture && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleBorrarFixture}
+              loading={resetFixture.isPending}
+              className="text-danger hover:bg-danger/10"
+              title="Borra todas las fechas y partidos. Solo disponible mientras el torneo está en borrador."
+            >
+              <Trash2 size={14} /> Borrar calendario
+            </Button>
+          )}
+          <Link href={`/admin/torneos/${torneoId}`}>
+            <Button variant="default" size="sm">
+              <ArrowLeft size={14} /> Volver al torneo
+            </Button>
+          </Link>
+        </div>
       </PageHead>
 
       {moveError && (
