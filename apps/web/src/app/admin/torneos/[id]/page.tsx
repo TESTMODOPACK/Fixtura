@@ -22,13 +22,14 @@ import { PageHead } from '@/components/ui/page-head';
 import { ApiError } from '@/lib/api';
 import {
   useCategorias,
+  useDeleteEquipo,
   useDeleteTorneo,
   useEquipos,
   useTorneo,
   useUpdateTorneo,
 } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
-import { toastSuccess } from '@/lib/toast';
+import { toastError, toastSuccess } from '@/lib/toast';
 
 import { GenerarFixtureForm } from './_generar-fixture-form';
 import { NuevoEquipoForm } from './_nuevo-equipo-form';
@@ -260,8 +261,30 @@ function EquiposTab({
   const { data: equipos, isLoading } = useEquipos(torneoId);
   const { data: categorias } = useCategorias();
   const [adding, setAdding] = useState(false);
+  const deleteEquipo = useDeleteEquipo(torneoId);
   // Solo se pueden inscribir equipos en DRAFT.
   const puedeInscribir = estadoTorneo === 'DRAFT';
+
+  const handleEliminar = async (
+    id: string,
+    nombre: string,
+    jugadoresCount: number,
+  ): Promise<void> => {
+    const advertencia =
+      jugadoresCount > 0
+        ? `\n\nATENCIÓN: este equipo tiene ${jugadoresCount} jugador(es) inscrito(s). Se borrarán todos junto con el equipo.`
+        : '';
+    const ok = window.confirm(
+      `¿Eliminar "${nombre}" de este torneo?${advertencia}\n\nEsta acción no se puede deshacer.`,
+    );
+    if (!ok) return;
+    try {
+      await deleteEquipo.mutateAsync(id);
+      toastSuccess(`"${nombre}" eliminado del torneo.`);
+    } catch (err) {
+      toastError(err);
+    }
+  };
 
   // Series disponibles según la categoría del torneo. Si el torneo no tiene
   // categoría, no mostramos selector de serie en el form.
@@ -346,26 +369,46 @@ function EquiposTab({
         {equipos && equipos.length > 0 && (
           <div className="divide-y divide-line">
             {equipos.map((e) => (
-              <Link
+              <div
                 key={e.id}
-                href={`/admin/equipos/${e.id}`}
                 className="px-5 py-3 flex items-center gap-3 hover:bg-paper transition-colors"
               >
-                <div
-                  className="w-8 h-8 rounded-full flex-shrink-0 border border-line"
-                  style={{ backgroundColor: e.colorPrimario ?? '#888278' }}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink truncate">{e.nombre}</div>
-                  <div className="text-xs text-ink-mute font-mono">{e.slug}</div>
-                </div>
-                {e.serieNombre && (
-                  <span className="text-[10px] uppercase tracking-[0.15em] font-semibold px-2 py-0.5 rounded bg-green-deep/10 text-green-deep">
-                    {e.serieNombre}
-                  </span>
+                <Link
+                  href={`/admin/equipos/${e.id}`}
+                  className="flex-1 min-w-0 flex items-center gap-3"
+                >
+                  <div
+                    className="w-8 h-8 rounded-full flex-shrink-0 border border-line"
+                    style={{ backgroundColor: e.colorPrimario ?? '#888278' }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-ink truncate">{e.nombre}</div>
+                    <div className="text-xs text-ink-mute font-mono">{e.slug}</div>
+                  </div>
+                  {e.serieNombre && (
+                    <span className="text-[10px] uppercase tracking-[0.15em] font-semibold px-2 py-0.5 rounded bg-green-deep/10 text-green-deep">
+                      {e.serieNombre}
+                    </span>
+                  )}
+                  <div className="text-xs text-ink-mute">
+                    {e.jugadoresCount} jugadores
+                  </div>
+                </Link>
+                {puedeInscribir && (
+                  <button
+                    type="button"
+                    onClick={() => handleEliminar(e.id, e.nombre, e.jugadoresCount)}
+                    disabled={deleteEquipo.isPending}
+                    title="Eliminar del torneo"
+                    className={cn(
+                      'flex-shrink-0 p-2 rounded text-ink-mute hover:bg-danger/10 hover:text-danger transition-colors',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                    )}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 )}
-                <div className="text-xs text-ink-mute">{e.jugadoresCount} jugadores</div>
-              </Link>
+              </div>
             ))}
           </div>
         )}

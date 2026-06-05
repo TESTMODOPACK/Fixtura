@@ -139,6 +139,18 @@ export function useCreateEquipo(torneoId: string) {
   });
 }
 
+export function useDeleteEquipo(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (equipoId: string) =>
+      apiFetch<void>(`/admin/equipos/${equipoId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'equipos'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
+    },
+  });
+}
+
 // ─── Jugadores ───────────────────────────────────────────────────────
 export function useJugadores(equipoId: string | null | undefined) {
   return useQuery({

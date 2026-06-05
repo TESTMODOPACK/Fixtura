@@ -2,7 +2,9 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
@@ -15,6 +17,7 @@ import {
   type ValidarPlantelResult,
 } from '@fixtura/types';
 
+import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { CreateEquipoDto } from './dto';
@@ -58,6 +61,16 @@ export class EquiposItemController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<ValidarPlantelResult> {
     return this.svc.validarPlantel(id, ensureTenant(user));
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @Audited({ action: 'equipo.eliminado', entityType: 'Equipo', entityIdFrom: 'params.id' })
+  remove(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<void> {
+    return this.svc.delete(id, ensureTenant(user));
   }
 }
 

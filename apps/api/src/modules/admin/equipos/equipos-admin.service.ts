@@ -19,6 +19,7 @@ import type {
 
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { CategoriaJugadores } from '../../competition/entities/categoria-jugadores.entity';
+import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 
@@ -31,6 +32,8 @@ export class EquiposAdminService {
     private readonly jugadorRepo: Repository<JugadorInscrito>,
     @InjectRepository(CategoriaJugadores)
     private readonly categoriaRepo: Repository<CategoriaJugadores>,
+    @InjectRepository(InscripcionTorneo)
+    private readonly inscRepo: Repository<InscripcionTorneo>,
   ) {}
 
   async listByTorneo(torneoId: string, tenantId: string): Promise<EquipoAdmin[]> {
@@ -124,6 +127,51 @@ export class EquiposAdminService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Eliminar un equipo del torneo. Solo permitido si el torneo está en
+   * DRAFT (sin fixture activo) — un equipo con partidos jugados rompe
+   * historial e integridad de actas/sanciones.
+   *
+   * Si el equipo es "sombra" de una inscripción de club (modelo 26),
+   * lo bloqueamos y derivamos al flujo de desinscripción que mantiene
+   * la consistencia de inscripciones_torneo + planilla.
+   *
+   * Las FKs de partidos son ON DELETE CASCADE — al borrar el equipo,
+   * los partidos del fixture asociados se borran en cascada. En DRAFT
+   * eso significa que no hay actas cerradas que perder.
+   */
+  async delete(id: string, tenantId: string): Promise<void> {
+    const equipo = await this.repo.findOne({ where: { id, tenantId } });
+    if (!equipo) throw new NotFoundException(`Equipo ${id} no encontrado`);
+
+    const torneo = await this.torneoRepo.findOne({
+      where: { id: equipo.torneoId, tenantId },
+    });
+    if (!torneo) {
+      throw new NotFoundException('Torneo del equipo no encontrado');
+    }
+    if (torneo.estado !== 'DRAFT') {
+      throw new ConflictException(
+        `No se pueden eliminar equipos de un torneo ${torneo.estado}. ` +
+          'Para retirar un equipo en competición, suspendelo desde su ficha.',
+      );
+    }
+
+    const inscrip = await this.inscRepo.findOne({
+      where: { equipoSombraId: id, tenantId },
+      select: ['id'],
+    });
+    if (inscrip) {
+      throw new ConflictException(
+        'Este equipo está vinculado a una inscripción de club. ' +
+          'Eliminalo desde la pestaña "Inscripciones" del torneo para ' +
+          'mantener la planilla consistente.',
+      );
+    }
+
+    await this.repo.delete({ id, tenantId });
   }
 
   /**
