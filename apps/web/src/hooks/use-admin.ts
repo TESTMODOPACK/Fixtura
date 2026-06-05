@@ -151,6 +151,64 @@ export function useDeleteEquipo(torneoId: string) {
   });
 }
 
+/**
+ * Sprint 44 — Suspender un equipo del torneo. El backend dispara walkover
+ * 3-0 en partidos PROGRAMADO/EN_CURSO. Devuelve resumen.
+ */
+export function useSuspenderEquipo(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      equipoId,
+      motivo,
+      observaciones,
+      aplicarMultaWalkover,
+    }: {
+      equipoId: string;
+      motivo: 'DEPORTIVA' | 'ECONOMICA' | 'OTRA';
+      observaciones?: string | null;
+      aplicarMultaWalkover?: boolean;
+    }) =>
+      apiFetch<{ equipoId: string; partidosWalkover: number; partidosCancelados: number }>(
+        `/admin/equipos/${equipoId}/suspender`,
+        {
+          method: 'POST',
+          body: {
+            motivo,
+            observaciones: observaciones ?? null,
+            aplicarMultaWalkover: aplicarMultaWalkover === true,
+          },
+        },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'equipos'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture'] });
+      // Multas walkover impactan en finanzas si el operador activó el flag.
+      qc.invalidateQueries({ queryKey: ['admin', 'cobros'] });
+    },
+  });
+}
+
+/**
+ * Sprint 44 — Reactivar un equipo suspendido (vuelve a INSCRITO).
+ */
+export function useReactivarEquipo(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (equipoId: string) =>
+      apiFetch(`/admin/equipos/${equipoId}/reactivar`, { method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'equipos'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
+      // Sprint 44 fix I4 — la UI del fixture muestra el equipo. Si volvió
+      // a INSCRITO necesitamos refrescarlo (los walkovers ya disparados
+      // siguen como historia, eso no cambia).
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture'] });
+    },
+  });
+}
+
 // ─── Jugadores ───────────────────────────────────────────────────────
 export function useJugadores(equipoId: string | null | undefined) {
   return useQuery({

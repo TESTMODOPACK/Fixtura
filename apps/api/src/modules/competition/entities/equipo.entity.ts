@@ -81,6 +81,21 @@ export class Equipo {
   @Column({ type: 'varchar', length: 20, default: 'INSCRITO' })
   estado!: EstadoEquipo;
 
+  // Sprint 44 — Contexto de la suspensión. Solo poblados si estado=SUSPENDIDO.
+  // Reactivar() los pone en null pero los walkovers ya disparados se mantienen
+  // en partidos (son historia).
+  @Column({ name: 'motivo_suspension', type: 'varchar', length: 20, nullable: true })
+  motivoSuspension!: 'DEPORTIVA' | 'ECONOMICA' | 'OTRA' | null;
+
+  @Column({ name: 'observaciones_suspension', type: 'text', nullable: true })
+  observacionesSuspension!: string | null;
+
+  @Column({ name: 'suspendido_en', type: 'timestamptz', nullable: true })
+  suspendidoEn!: Date | null;
+
+  @Column({ name: 'suspendido_por', type: 'uuid', nullable: true })
+  suspendidoPor!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

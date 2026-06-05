@@ -1,4 +1,15 @@
-import { IsOptional, IsString, IsUUID, Length, Matches } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Matches,
+  MaxLength,
+} from 'class-validator';
+
+import { MOTIVO_SUSPENSION_EQUIPO, type MotivoSuspensionEquipo } from '@fixtura/types';
 
 export class CreateEquipoDto {
   @IsString()
@@ -34,4 +45,28 @@ export class CreateEquipoDto {
   @Length(2, 50)
   @Matches(/^[a-z0-9-]+$/, { message: 'Slug solo admite minúsculas, números y guiones' })
   serieSlug?: string | null;
+}
+
+/**
+ * Sprint 44 — Suspender un equipo del torneo. Dispara walkover automático
+ * en los partidos pendientes y deja al equipo fuera de competencia.
+ */
+export class SuspenderEquipoDto {
+  @IsIn(MOTIVO_SUSPENSION_EQUIPO)
+  motivo!: MotivoSuspensionEquipo;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  observaciones?: string | null;
+
+  /**
+   * Sprint 44 — Si está en true y el torneo tiene tarifa MULTA_WALKOVER
+   * configurada, se aplica un cobro de multa por cada partido que pasa a
+   * walkover. Default false: la UI lo deja apagado porque suspender ya
+   * es castigo suficiente y para motivos económicos genera doble cobro.
+   */
+  @IsOptional()
+  @IsBoolean()
+  aplicarMultaWalkover?: boolean;
 }

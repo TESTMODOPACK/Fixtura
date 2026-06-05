@@ -2,10 +2,12 @@
 
 import {
   ArrowLeft,
+  Ban,
   CalendarRange,
   Check,
   type LucideIcon,
   Plus,
+  RotateCcw,
   Trash2,
   Trophy,
   Users,
@@ -14,7 +16,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import type { CategoriaJugadores, TorneoAdmin } from '@fixtura/types';
+import {
+  MotivoSuspensionEquipoLabel,
+  type CategoriaJugadores,
+  type TorneoAdmin,
+} from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
@@ -25,6 +31,7 @@ import {
   useDeleteEquipo,
   useDeleteTorneo,
   useEquipos,
+  useReactivarEquipo,
   useTorneo,
   useUpdateTorneo,
 } from '@/hooks/use-admin';
@@ -33,6 +40,7 @@ import { toastError, toastSuccess } from '@/lib/toast';
 
 import { GenerarFixtureForm } from './_generar-fixture-form';
 import { NuevoEquipoForm } from './_nuevo-equipo-form';
+import { SuspenderEquipoModal } from './_suspender-equipo-modal';
 
 type Tab = 'equipos' | 'fixture' | 'configuracion';
 
@@ -261,9 +269,31 @@ function EquiposTab({
   const { data: equipos, isLoading } = useEquipos(torneoId);
   const { data: categorias } = useCategorias();
   const [adding, setAdding] = useState(false);
+  const [suspendiendo, setSuspendiendo] = useState<
+    { id: string; nombre: string } | null
+  >(null);
   const deleteEquipo = useDeleteEquipo(torneoId);
+  const reactivarEquipo = useReactivarEquipo(torneoId);
   // Solo se pueden inscribir equipos en DRAFT.
   const puedeInscribir = estadoTorneo === 'DRAFT';
+  // Sprint 44 — suspender solo aplica con torneo ACTIVO (en DRAFT no hay
+  // fixture; en CERRADO el torneo terminó).
+  const puedeSuspender = estadoTorneo === 'ACTIVO';
+
+  const handleReactivar = async (id: string, nombre: string): Promise<void> => {
+    const ok = window.confirm(
+      `¿Reactivar "${nombre}"?\n\nVuelve a INSCRITO. Los walkovers ya disparados al ` +
+        `suspenderlo NO se revierten — siguen como historia. Si querés que vuelva ` +
+        `a jugar fechas futuras, lo hacés desde el fixture.`,
+    );
+    if (!ok) return;
+    try {
+      await reactivarEquipo.mutateAsync(id);
+      toastSuccess(`"${nombre}" reactivado.`);
+    } catch (err) {
+      toastError(err);
+    }
+  };
 
   const handleEliminar = async (
     id: string,
@@ -368,49 +398,112 @@ function EquiposTab({
 
         {equipos && equipos.length > 0 && (
           <div className="divide-y divide-line">
-            {equipos.map((e) => (
-              <div
-                key={e.id}
-                className="px-5 py-3 flex items-center gap-3 hover:bg-paper transition-colors"
-              >
-                <Link
-                  href={`/admin/equipos/${e.id}`}
-                  className="flex-1 min-w-0 flex items-center gap-3"
-                >
-                  <div
-                    className="w-8 h-8 rounded-full flex-shrink-0 border border-line"
-                    style={{ backgroundColor: e.colorPrimario ?? '#888278' }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-ink truncate">{e.nombre}</div>
-                    <div className="text-xs text-ink-mute font-mono">{e.slug}</div>
-                  </div>
-                  {e.serieNombre && (
-                    <span className="text-[10px] uppercase tracking-[0.15em] font-semibold px-2 py-0.5 rounded bg-green-deep/10 text-green-deep">
-                      {e.serieNombre}
-                    </span>
+            {equipos.map((e) => {
+              const suspendido = e.estado === 'SUSPENDIDO';
+              const tooltipMotivo = suspendido && e.motivoSuspension
+                ? `${MotivoSuspensionEquipoLabel[e.motivoSuspension]}${
+                    e.observacionesSuspension ? `\n\n${e.observacionesSuspension}` : ''
+                  }`
+                : undefined;
+              return (
+                <div
+                  key={e.id}
+                  className={cn(
+                    'px-5 py-3 flex items-center gap-3 hover:bg-paper transition-colors',
+                    suspendido && 'bg-danger/5',
                   )}
-                  <div className="text-xs text-ink-mute">
-                    {e.jugadoresCount} jugadores
-                  </div>
-                </Link>
-                {puedeInscribir && (
-                  <button
-                    type="button"
-                    onClick={() => handleEliminar(e.id, e.nombre, e.jugadoresCount)}
-                    disabled={deleteEquipo.isPending}
-                    title="Eliminar del torneo"
-                    className={cn(
-                      'flex-shrink-0 p-2 rounded text-ink-mute hover:bg-danger/10 hover:text-danger transition-colors',
-                      'disabled:opacity-50 disabled:cursor-not-allowed',
-                    )}
+                >
+                  <Link
+                    href={`/admin/equipos/${e.id}`}
+                    className="flex-1 min-w-0 flex items-center gap-3"
                   >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-            ))}
+                    <div
+                      className={cn(
+                        'w-8 h-8 rounded-full flex-shrink-0 border border-line',
+                        suspendido && 'opacity-50 grayscale',
+                      )}
+                      style={{ backgroundColor: e.colorPrimario ?? '#888278' }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className={cn(
+                          'font-semibold truncate',
+                          suspendido ? 'text-ink-mute line-through' : 'text-ink',
+                        )}
+                      >
+                        {e.nombre}
+                      </div>
+                      <div className="text-xs text-ink-mute font-mono">{e.slug}</div>
+                    </div>
+                    {suspendido && (
+                      <span
+                        title={tooltipMotivo}
+                        className="text-[10px] uppercase tracking-[0.15em] font-semibold px-2 py-0.5 rounded bg-danger/15 text-danger"
+                      >
+                        Suspendido
+                      </span>
+                    )}
+                    {!suspendido && e.serieNombre && (
+                      <span className="text-[10px] uppercase tracking-[0.15em] font-semibold px-2 py-0.5 rounded bg-green-deep/10 text-green-deep">
+                        {e.serieNombre}
+                      </span>
+                    )}
+                    <div className="text-xs text-ink-mute">
+                      {e.jugadoresCount} jugadores
+                    </div>
+                  </Link>
+                  {!suspendido && puedeSuspender && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSuspendiendo({ id: e.id, nombre: e.nombre })
+                      }
+                      title="Suspender del torneo (walkover 3-0 a rivales)"
+                      className="flex-shrink-0 p-2 rounded text-ink-mute hover:bg-accent/10 hover:text-accent transition-colors"
+                    >
+                      <Ban size={14} />
+                    </button>
+                  )}
+                  {suspendido && (
+                    <button
+                      type="button"
+                      onClick={() => handleReactivar(e.id, e.nombre)}
+                      disabled={reactivarEquipo.isPending}
+                      title="Reactivar (vuelve a INSCRITO)"
+                      className={cn(
+                        'flex-shrink-0 p-2 rounded text-ink-mute hover:bg-green-bright/10 hover:text-green-deep transition-colors',
+                        'disabled:opacity-50 disabled:cursor-not-allowed',
+                      )}
+                    >
+                      <RotateCcw size={14} />
+                    </button>
+                  )}
+                  {puedeInscribir && !suspendido && (
+                    <button
+                      type="button"
+                      onClick={() => handleEliminar(e.id, e.nombre, e.jugadoresCount)}
+                      disabled={deleteEquipo.isPending}
+                      title="Eliminar del torneo"
+                      className={cn(
+                        'flex-shrink-0 p-2 rounded text-ink-mute hover:bg-danger/10 hover:text-danger transition-colors',
+                        'disabled:opacity-50 disabled:cursor-not-allowed',
+                      )}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
+        )}
+        {suspendiendo && (
+          <SuspenderEquipoModal
+            torneoId={torneoId}
+            equipoId={suspendiendo.id}
+            equipoNombre={suspendiendo.nombre}
+            onClose={() => setSuspendiendo(null)}
+          />
         )}
       </Card>
 

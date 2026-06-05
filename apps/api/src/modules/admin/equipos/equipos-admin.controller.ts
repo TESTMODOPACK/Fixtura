@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
@@ -13,6 +14,7 @@ import {
 import {
   ROLE,
   type EquipoAdmin,
+  type SuspenderEquipoResult,
   type UserContext,
   type ValidarPlantelResult,
 } from '@fixtura/types';
@@ -20,7 +22,7 @@ import {
 import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
-import { CreateEquipoDto } from './dto';
+import { CreateEquipoDto, SuspenderEquipoDto } from './dto';
 import { EquiposAdminService } from './equipos-admin.service';
 
 @Controller('admin/torneos/:torneoId/equipos')
@@ -71,6 +73,43 @@ export class EquiposItemController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<void> {
     return this.svc.delete(id, ensureTenant(user));
+  }
+
+  /**
+   * Sprint 44 — Suspender un equipo del torneo (conducta antideportiva,
+   * deuda económica, otros). Dispara walkover 3-0 automático en partidos
+   * PROGRAMADO/EN_CURSO. Devuelve resumen de cuántos partidos pasaron a
+   * walkover vs cuántos quedaron cancelados (rival también suspendido).
+   */
+  @Post(':id/suspender')
+  @HttpCode(HttpStatus.OK)
+  @Audited({ action: 'equipo.suspendido', entityType: 'Equipo', entityIdFrom: 'params.id' })
+  suspender(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: SuspenderEquipoDto,
+  ): Promise<SuspenderEquipoResult> {
+    return this.svc.suspender(id, ensureTenant(user), user.userId, {
+      motivo: dto.motivo,
+      observaciones: dto.observaciones ?? null,
+      aplicarMultaWalkover: dto.aplicarMultaWalkover === true,
+    });
+  }
+
+  /**
+   * Sprint 44 — Reactivar un equipo suspendido. Vuelve a INSCRITO. Los
+   * walkovers ya disparados se mantienen como historia (no se revierten
+   * automáticamente — si necesitás corregir partidos puntuales, hacelo
+   * desde el fixture).
+   */
+  @Post(':id/reactivar')
+  @HttpCode(HttpStatus.OK)
+  @Audited({ action: 'equipo.reactivado', entityType: 'Equipo', entityIdFrom: 'params.id' })
+  reactivar(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<EquipoAdmin> {
+    return this.svc.reactivar(id, ensureTenant(user));
   }
 }
 

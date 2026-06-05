@@ -1,11 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  forwardRef,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import {
   validarPlantelCategoria,
@@ -14,6 +17,8 @@ import {
 import type {
   CreateEquipoRequest,
   EquipoAdmin,
+  MotivoSuspensionEquipo,
+  SuspenderEquipoResult,
   ValidarPlantelResult,
 } from '@fixtura/types';
 
@@ -21,10 +26,14 @@ import { Equipo } from '../../competition/entities/equipo.entity';
 import { CategoriaJugadores } from '../../competition/entities/categoria-jugadores.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
+import { Partido } from '../../competition/entities/partido.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { PartidosAdminService } from '../partidos/partidos-admin.service';
 
 @Injectable()
 export class EquiposAdminService {
+  private readonly logger = new Logger(EquiposAdminService.name);
+
   constructor(
     @InjectRepository(Equipo) private readonly repo: Repository<Equipo>,
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
@@ -34,6 +43,10 @@ export class EquiposAdminService {
     private readonly categoriaRepo: Repository<CategoriaJugadores>,
     @InjectRepository(InscripcionTorneo)
     private readonly inscRepo: Repository<InscripcionTorneo>,
+    @InjectRepository(Partido)
+    private readonly partidoRepo: Repository<Partido>,
+    @Inject(forwardRef(() => PartidosAdminService))
+    private readonly partidosSvc: PartidosAdminService,
   ) {}
 
   async listByTorneo(torneoId: string, tenantId: string): Promise<EquipoAdmin[]> {
@@ -332,7 +345,186 @@ export class EquiposAdminService {
       jugadoresCount,
       serieSlug: e.serieSlug,
       serieNombre: serie?.nombre ?? null,
+      motivoSuspension: e.motivoSuspension,
+      observacionesSuspension: e.observacionesSuspension,
+      suspendidoEn: e.suspendidoEn ? e.suspendidoEn.toISOString() : null,
       createdAt: e.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * Sprint 44 — Suspender un equipo del torneo (conducta antideportiva,
+   * deuda económica, otros). Solo aplica si el torneo está ACTIVO (en
+   * DRAFT no hay partidos en juego — borrar el equipo es la operación
+   * correcta; en CERRADO el torneo terminó). Reversible vía reactivar().
+   *
+   * Efecto sobre partidos pendientes (PROGRAMADO / EN_CURSO):
+   *   - Partido con rival NO suspendido → walkover 3-0 al rival, con
+   *     observación que registra la suspensión.
+   *   - Partido con rival también SUSPENDIDO → no tiene sentido un
+   *     walkover (ninguno se presenta). Se marca SUSPENDIDO_FUERZA_MAYOR
+   *     con observación "ambos equipos suspendidos del torneo".
+   *
+   * Los partidos ya FINALIZADO / WALKOVER / SUSPENDIDO_FUERZA_MAYOR /
+   * REPROGRAMADO no se tocan — son historia.
+   */
+  async suspender(
+    equipoId: string,
+    tenantId: string,
+    actorUserId: string | null,
+    input: {
+      motivo: MotivoSuspensionEquipo;
+      observaciones?: string | null;
+      // Sprint 44 revisión — Si el torneo tiene tarifa MULTA_WALKOVER
+      // configurada, declararWalkover() genera una multa por cada partido
+      // pendiente. Para motivo=ECONOMICA esto puede ser doble castigo. Por
+      // eso lo dejamos opt-in: la UI default a false y el operador lo
+      // activa explícitamente si quiere multar.
+      aplicarMultaWalkover?: boolean;
+    },
+  ): Promise<SuspenderEquipoResult> {
+    const equipo = await this.repo.findOne({ where: { id: equipoId, tenantId } });
+    if (!equipo) throw new NotFoundException(`Equipo ${equipoId} no encontrado`);
+
+    if (equipo.estado === 'SUSPENDIDO') {
+      throw new ConflictException(
+        'El equipo ya está suspendido. Reactivalo primero si querés cambiar el motivo.',
+      );
+    }
+
+    const torneo = await this.torneoRepo.findOne({
+      where: { id: equipo.torneoId, tenantId },
+    });
+    if (!torneo) throw new NotFoundException('Torneo del equipo no encontrado');
+    if (torneo.estado === 'DRAFT') {
+      throw new BadRequestException(
+        'El torneo está en DRAFT — no hay fixture activo. Para sacar el ' +
+          'equipo, eliminalo directamente desde la lista.',
+      );
+    }
+    if (torneo.estado === 'CERRADO') {
+      throw new BadRequestException(
+        'El torneo ya está cerrado — no se puede suspender un equipo en ' +
+          'esta etapa.',
+      );
+    }
+
+    const pendientes = await this.partidoRepo.find({
+      where: [
+        {
+          tenantId,
+          equipoLocalId: equipoId,
+          estado: In(['PROGRAMADO', 'EN_CURSO']),
+        },
+        {
+          tenantId,
+          equipoVisitaId: equipoId,
+          estado: In(['PROGRAMADO', 'EN_CURSO']),
+        },
+      ],
+    });
+
+    const obsRaw = input.observaciones?.trim() ?? '';
+    const obsTxt = obsRaw.length > 0 ? obsRaw : null;
+    const walkoverObs = obsTxt
+      ? `[Equipo suspendido del torneo: ${input.motivo}] ${obsTxt}`
+      : `[Equipo suspendido del torneo: ${input.motivo}]`;
+
+    let partidosWalkover = 0;
+    let partidosCancelados = 0;
+
+    const aplicarMulta = input.aplicarMultaWalkover === true;
+    const ahora = new Date();
+
+    for (const partido of pendientes) {
+      const rivalId =
+        partido.equipoLocalId === equipoId
+          ? partido.equipoVisitaId
+          : partido.equipoLocalId;
+      const rival = await this.repo.findOne({
+        where: { id: rivalId, tenantId },
+        select: ['id', 'estado'],
+      });
+
+      if (rival && rival.estado === 'SUSPENDIDO') {
+        // Ambos equipos suspendidos — ningún walkover tiene sentido.
+        // Marcamos el partido como SUSPENDIDO_FUERZA_MAYOR con motivo
+        // DECISION_LIGA + audit para que quede trazado quién y cuándo.
+        partido.estado = 'SUSPENDIDO_FUERZA_MAYOR';
+        partido.motivoSuspension = 'DECISION_LIGA';
+        partido.suspendidoAt = ahora;
+        partido.suspendidoByUserId = actorUserId;
+        partido.observaciones = walkoverObs.replace(
+          'Equipo suspendido',
+          'Ambos equipos suspendidos',
+        );
+        await this.partidoRepo.save(partido);
+        partidosCancelados++;
+      } else {
+        try {
+          await this.partidosSvc.declararWalkover(
+            partido.id,
+            tenantId,
+            actorUserId,
+            {
+              equipoPerdedorId: equipoId,
+              observaciones: walkoverObs,
+              aplicarMulta,
+            },
+          );
+          partidosWalkover++;
+        } catch (err) {
+          // Race condition esperable: otro admin cerró el acta o
+          // declaró walkover en paralelo entre el find() y este punto.
+          // No detenemos el batch — registramos y seguimos con el
+          // resto. La UI reportará partidosWalkover < pendientes.
+          this.logger.warn(
+            `[suspender] no se pudo declarar walkover partido=${partido.id}: ${
+              (err as Error).message
+            }`,
+          );
+        }
+      }
+    }
+
+    equipo.estado = 'SUSPENDIDO';
+    equipo.motivoSuspension = input.motivo;
+    equipo.observacionesSuspension = obsTxt;
+    equipo.suspendidoEn = new Date();
+    equipo.suspendidoPor = actorUserId;
+    await this.repo.save(equipo);
+
+    return {
+      equipoId,
+      partidosWalkover,
+      partidosCancelados,
+    };
+  }
+
+  /**
+   * Sprint 44 — Reactivar un equipo previamente suspendido. Vuelve a
+   * estado INSCRITO y blanquea motivo/observaciones/audit. NO regenera
+   * los walkovers ya disparados — esos quedan como historia del torneo.
+   * Si el operador necesita restablecer partidos puntuales, lo hace
+   * desde el fixture (editar partido, reabrir acta).
+   */
+  async reactivar(equipoId: string, tenantId: string): Promise<EquipoAdmin> {
+    const equipo = await this.repo.findOne({ where: { id: equipoId, tenantId } });
+    if (!equipo) throw new NotFoundException(`Equipo ${equipoId} no encontrado`);
+
+    if (equipo.estado !== 'SUSPENDIDO') {
+      throw new ConflictException(
+        'El equipo no está suspendido — no hay nada que reactivar.',
+      );
+    }
+
+    equipo.estado = 'INSCRITO';
+    equipo.motivoSuspension = null;
+    equipo.observacionesSuspension = null;
+    equipo.suspendidoEn = null;
+    equipo.suspendidoPor = null;
+    await this.repo.save(equipo);
+
+    return this.findOne(equipoId, tenantId);
   }
 }

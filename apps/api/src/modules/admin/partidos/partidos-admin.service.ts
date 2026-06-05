@@ -859,7 +859,16 @@ export class PartidosAdminService {
     partidoId: string,
     tenantId: string,
     actorUserId: string | null,
-    input: { equipoPerdedorId: string; observaciones?: string | null },
+    input: {
+      equipoPerdedorId: string;
+      observaciones?: string | null;
+      // Sprint 44 — opt-out de la multa automática. Por default sigue
+      // generando el cobro MULTA_WALKOVER (comportamiento histórico),
+      // pero cuando el walkover viene de "suspender equipo" el operador
+      // puede preferir no multar al club (especialmente si la suspensión
+      // ES económica). EquiposAdminService.suspender() pasa este flag.
+      aplicarMulta?: boolean;
+    },
   ): Promise<PartidoAdmin> {
     const partido = await this.findPartido(partidoId, tenantId);
 
@@ -907,20 +916,23 @@ export class PartidosAdminService {
     // Sprint 34D — multa automatica al club ausente. Si el torneo tiene
     // tarifa MULTA_WALKOVER configurada, genera el cobro al club
     // perdedor. Silencioso si no hay tarifa.
-    try {
-      const fechaWO = await this.fechaRepo.findOneOrFail({
-        where: { id: partido.fechaId },
-      });
-      partido.fecha = fechaWO;
-      await this.tarifaAplicador.aplicarMultaWalkover(
-        partido,
-        input.equipoPerdedorId,
-        partido.tenantId,
-      );
-    } catch (err) {
-      console.warn(
-        `[partido] multa walkover fallo partido=${partido.id}: ${(err as Error).message}`,
-      );
+    // Sprint 44 — opt-out via input.aplicarMulta = false (default true).
+    if (input.aplicarMulta !== false) {
+      try {
+        const fechaWO = await this.fechaRepo.findOneOrFail({
+          where: { id: partido.fechaId },
+        });
+        partido.fecha = fechaWO;
+        await this.tarifaAplicador.aplicarMultaWalkover(
+          partido,
+          input.equipoPerdedorId,
+          partido.tenantId,
+        );
+      } catch (err) {
+        console.warn(
+          `[partido] multa walkover fallo partido=${partido.id}: ${(err as Error).message}`,
+        );
+      }
     }
 
     // Si todos los partidos de la fecha quedaron FINALIZADO/WALKOVER,

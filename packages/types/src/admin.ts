@@ -152,6 +152,20 @@ export const CreateEquipoSchema = z.object({
 });
 export type CreateEquipoRequest = z.infer<typeof CreateEquipoSchema>;
 
+/**
+ * Sprint 44 — Motivo de la suspensión del equipo:
+ *   DEPORTIVA — conducta antideportiva, mal comportamiento del club
+ *   ECONOMICA — no pago de cuotas, deuda con la liga
+ *   OTRA      — fuerza mayor, renuncia voluntaria, otros
+ */
+export const MOTIVO_SUSPENSION_EQUIPO = ['DEPORTIVA', 'ECONOMICA', 'OTRA'] as const;
+export type MotivoSuspensionEquipo = (typeof MOTIVO_SUSPENSION_EQUIPO)[number];
+export const MotivoSuspensionEquipoLabel: Record<MotivoSuspensionEquipo, string> = {
+  DEPORTIVA: 'Conducta antideportiva',
+  ECONOMICA: 'Razón económica (no pago)',
+  OTRA: 'Otra razón',
+};
+
 export const EquipoAdminSchema = z.object({
   id: z.uuid(),
   torneoId: z.uuid(),
@@ -167,9 +181,43 @@ export const EquipoAdminSchema = z.object({
   // cache (lookup en la categoría del torneo) para evitar fetch extra.
   serieSlug: z.string().nullable(),
   serieNombre: z.string().nullable(),
+  // Sprint 44 — Solo poblados si estado=SUSPENDIDO. Cuando se reactiva
+  // se blanquean a null (los walkovers ya disparados quedan en la historia).
+  motivoSuspension: z.enum(MOTIVO_SUSPENSION_EQUIPO).nullable(),
+  observacionesSuspension: z.string().nullable(),
+  suspendidoEn: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
 });
 export type EquipoAdmin = z.infer<typeof EquipoAdminSchema>;
+
+/**
+ * Sprint 44 — Request para suspender un equipo del torneo. Dispara
+ * walkover automático 3-0 en todos los partidos PROGRAMADO/EN_CURSO
+ * del equipo (los YA jugados se preservan).
+ */
+export const SuspenderEquipoSchema = z.object({
+  motivo: z.enum(MOTIVO_SUSPENSION_EQUIPO),
+  observaciones: z.string().trim().max(500).nullable().optional(),
+  /**
+   * Si true, se cobra MULTA_WALKOVER por cada partido pendiente (si la
+   * tarifa está configurada). Default false — la UI deja un checkbox
+   * apagado y el operador lo activa explícitamente. Sin esto, suspender
+   * por motivo ECONOMICA sumaría multas adicionales sobre la deuda original.
+   */
+  aplicarMultaWalkover: z.boolean().optional(),
+});
+export type SuspenderEquipoRequest = z.infer<typeof SuspenderEquipoSchema>;
+
+/**
+ * Sprint 44 — Resumen del resultado de suspender. La UI lo usa para
+ * informar exactamente cuántos partidos pasaron a walkover.
+ */
+export const SuspenderEquipoResultSchema = z.object({
+  equipoId: z.uuid(),
+  partidosWalkover: z.number().int().min(0),
+  partidosCancelados: z.number().int().min(0),
+});
+export type SuspenderEquipoResult = z.infer<typeof SuspenderEquipoResultSchema>;
 
 // ─── Jugadores ───────────────────────────────────────────────────────
 export const CreateJugadorSchema = z

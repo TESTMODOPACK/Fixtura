@@ -620,6 +620,24 @@ async function main(): Promise<void> {
     `);
     log('canchas.estado + motivo_no_disponible asegurada (Sprint 40).');
 
+    // Sprint 44 — Suspension/expulsion de equipos del torneo (conducta
+    // antideportiva, no pago, otros). El estado SUSPENDIDO ya existe en
+    // el enum del equipo. Sumamos contexto: motivo categorizado para
+    // poder filtrar/reportar despues, observaciones libres, timestamp
+    // y autor de la accion. Reversible: reactivar() blanquea estos
+    // campos y vuelve estado a INSCRITO. Los walkovers que se hayan
+    // disparado al suspender se mantienen (son historia).
+    await client.query(`
+      ALTER TABLE equipos
+        ADD COLUMN IF NOT EXISTS motivo_suspension VARCHAR(20)
+          CHECK (motivo_suspension IS NULL
+            OR motivo_suspension IN ('DEPORTIVA','ECONOMICA','OTRA')),
+        ADD COLUMN IF NOT EXISTS observaciones_suspension TEXT,
+        ADD COLUMN IF NOT EXISTS suspendido_en TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS suspendido_por UUID
+    `);
+    log('equipos.motivo_suspension + observaciones + audit asegurados (Sprint 44).');
+
     // Sprint 38 — Backfill de planillas vacias. Inscripciones que se
     // crearon antes del auto-copy quedaron con planilla en 0 jugadores
     // aunque el club tuviera plantel cargado. Esta query rellena cada
