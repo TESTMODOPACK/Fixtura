@@ -198,8 +198,19 @@ export default function NuevoTorneoPage(): React.ReactElement {
       duracionPeriodoMinutos: vals.duracionPeriodoMinutos,
       duracionEntretiempoMinutos: vals.duracionEntretiempoMinutos,
     });
-      toastSuccess(`Torneo "${torneo.nombre}" creado correctamente.`);
-      router.push(`/admin/torneos/${torneo.id}`);
+      // Sprint 42 — Si el form tenía N combos (>=2), el backend creó N
+      // torneos. La respuesta solo trae el primero, así que mostramos
+      // un toast con el conteo y redirigimos al listado para que el
+      // user vea a todos juntos.
+      if (categoriasSeries.length >= 2) {
+        toastSuccess(
+          `${categoriasSeries.length} torneos creados (uno por categoría/serie).`,
+        );
+        router.push('/admin/torneos');
+      } else {
+        toastSuccess(`Torneo "${torneo.nombre}" creado correctamente.`);
+        router.push(`/admin/torneos/${torneo.id}`);
+      }
     } catch (err) {
       toastError(err);
       // El banner arriba tambien muestra el error via createTorneo.error;

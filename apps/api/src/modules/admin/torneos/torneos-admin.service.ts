@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Transactional } from 'typeorm-transactional';
 
 import { In } from 'typeorm';
 
@@ -162,6 +163,17 @@ export class TorneosAdminService {
     return this.toDto(t);
   }
 
+  /**
+   * Sprint 42 — Si el input trae N combos (>=2), creamos N torneos
+   * separados, cada uno con su propio nombre+slug derivados del original.
+   * Cada torneo tiene UN solo combo. Si trae 0 o 1 combo, comportamiento
+   * legacy: un solo torneo.
+   *
+   * Devolvemos el PRIMERO creado (shape compat con el endpoint público).
+   * El frontend después de recibir la respuesta consulta /admin/torneos
+   * y se entera de los hermanos.
+   */
+  @Transactional()
   async create(tenantId: string, input: CreateTorneoRequest): Promise<TorneoAdmin> {
     // Validar que la temporada existe en este tenant (RLS lo respalda
     // pero damos error claro al cliente).
@@ -181,71 +193,136 @@ export class TorneosAdminService {
       input.categoriasSeries,
     );
 
-    // Sprint 30 fix — si el admin solo definió la categoría legacy
-    // (sin armar combos categoría+serie+cupo) y no vino nada en
-    // categoriasSeries, autogeneramos un combo único con cupo amplio.
-    // Sin esto la página de Inscripciones muestra "TORNEO SIN
-    // CATEGORÍAS" pese a que el form de Configuración sí muestra la
-    // categoría guardada.
+    // Sprint 30 fix — si solo viene categoría legacy, sintetizamos
+    // un combo único.
     if (categoriasSeries.length === 0 && input.categoriaId) {
       categoriasSeries = [
         { categoriaId: input.categoriaId, serieSlug: null, cupoEquipos: 99 },
       ];
     }
 
-    // Refuerzos: si están deshabilitados, ignorar fechaLimite que venga.
+    // Refuerzos
     const refuerzosHabilitados = input.refuerzosHabilitados ?? true;
     const fechaLimiteRefuerzosNumero = refuerzosHabilitados
       ? (input.fechaLimiteRefuerzosNumero ?? null)
       : null;
 
-    // Unique (tenant, slug)
-    const dup = await this.repo.findOne({ where: { tenantId, slug: input.slug } });
-    if (dup) {
-      throw new ConflictException(`Ya existe un torneo con slug "${input.slug}"`);
+    // Sprint 42 — Determinar si vamos a split en N torneos.
+    const splitEnMultiples = categoriasSeries.length >= 2;
+
+    // Cargar categorías (con series) para resolver nombres y slugs de
+    // los sufijos cuando hagamos split.
+    let categoriasMap = new Map<string, CategoriaJugadores>();
+    if (splitEnMultiples) {
+      const catIds = Array.from(new Set(categoriasSeries.map((c) => c.categoriaId)));
+      const cats = await this.categoriaRepo.find({
+        where: { id: In(catIds), tenantId },
+      });
+      categoriasMap = new Map(cats.map((c) => [c.id, c]));
     }
 
-    const t = this.repo.create({
-      tenantId,
-      temporadaId: input.temporadaId,
-      nombre: input.nombre,
-      slug: input.slug,
-      tipoFormato: input.tipoFormato,
-      ruedas: input.ruedas,
-      puntosVictoria: input.puntosVictoria,
-      puntosEmpate: input.puntosEmpate,
-      puntosDerrota: input.puntosDerrota,
-      tablaTiebreakers: input.tablaTiebreakers ?? ['pts', 'dg', 'gf', 'nombre'],
-      estado: 'DRAFT',
-      fechaInicio: input.fechaInicio ?? null,
-      fechaFin: input.fechaFin ?? null,
-      reglamentoUrl: input.reglamentoUrl ?? null,
-      categoriaId: input.categoriaId ?? null,
-      categoriasSeries,
-      topeJugadoresPorEquipo: input.topeJugadoresPorEquipo ?? 25,
-      refuerzosHabilitados,
-      fechaLimiteRefuerzosNumero,
-      duracionPeriodoMinutos: input.duracionPeriodoMinutos ?? 40,
-      duracionEntretiempoMinutos: input.duracionEntretiempoMinutos ?? 10,
-    });
-    try {
-      const saved = await this.repo.save(t);
-      return this.findOne(saved.id, tenantId);
-    } catch (err) {
-      // Race condition con UNIQUE (tenant, slug) — atrapamos para
-      // devolver 409 limpio en vez de un 500 con stack de Postgres.
-      if (
-        err instanceof Error &&
-        (err.message.includes('duplicate key') ||
-          err.message.includes('IDX_') ||
-          err.message.includes('UQ_'))
-      ) {
-        throw new ConflictException(
-          `Ya existe un torneo con slug "${input.slug}"`,
-        );
+    // Helper común para crear un torneo individual con un set de
+    // categoriasSeries (1 elemento en modo split, N en modo legacy).
+    const crearTorneo = async (
+      nombre: string,
+      slug: string,
+      combos: CategoriaSerieInput[],
+      categoriaIdLegacy: string | null,
+    ): Promise<Torneo> => {
+      // Unique (tenant, slug) — chequeo previo para error legible.
+      const dup = await this.repo.findOne({ where: { tenantId, slug } });
+      if (dup) {
+        throw new ConflictException(`Ya existe un torneo con slug "${slug}"`);
       }
-      throw err;
+      const t = this.repo.create({
+        tenantId,
+        temporadaId: input.temporadaId,
+        nombre,
+        slug,
+        tipoFormato: input.tipoFormato,
+        ruedas: input.ruedas,
+        puntosVictoria: input.puntosVictoria,
+        puntosEmpate: input.puntosEmpate,
+        puntosDerrota: input.puntosDerrota,
+        tablaTiebreakers: input.tablaTiebreakers ?? ['pts', 'dg', 'gf', 'nombre'],
+        estado: 'DRAFT',
+        fechaInicio: input.fechaInicio ?? null,
+        fechaFin: input.fechaFin ?? null,
+        reglamentoUrl: input.reglamentoUrl ?? null,
+        categoriaId: categoriaIdLegacy,
+        categoriasSeries: combos,
+        topeJugadoresPorEquipo: input.topeJugadoresPorEquipo ?? 25,
+        refuerzosHabilitados,
+        fechaLimiteRefuerzosNumero,
+        duracionPeriodoMinutos: input.duracionPeriodoMinutos ?? 40,
+        duracionEntretiempoMinutos: input.duracionEntretiempoMinutos ?? 10,
+      });
+      try {
+        return await this.repo.save(t);
+      } catch (err) {
+        if (
+          err instanceof Error &&
+          (err.message.includes('duplicate key') ||
+            err.message.includes('IDX_') ||
+            err.message.includes('UQ_'))
+        ) {
+          throw new ConflictException(`Ya existe un torneo con slug "${slug}"`);
+        }
+        throw err;
+      }
+    };
+
+    if (!splitEnMultiples) {
+      // Modo clásico — un torneo único.
+      const saved = await crearTorneo(
+        input.nombre,
+        input.slug,
+        categoriasSeries,
+        input.categoriaId ?? null,
+      );
+      return this.findOne(saved.id, tenantId);
     }
+
+    // Modo split — uno por combo.
+    const creados: Torneo[] = [];
+    for (const combo of categoriasSeries) {
+      const cat = categoriasMap.get(combo.categoriaId);
+      const sufijoNombre = this.armarSufijoNombre(cat, combo.serieSlug ?? null);
+      const sufijoSlug = this.armarSufijoSlug(cat, combo.serieSlug ?? null);
+      const nombre = `${input.nombre} · ${sufijoNombre}`;
+      const slug = `${input.slug}-${sufijoSlug}`;
+      const saved = await crearTorneo(
+        nombre,
+        slug,
+        [combo],
+        combo.categoriaId, // legacy categoriaId también queda poblado
+      );
+      creados.push(saved);
+    }
+
+    // Devolvemos el primero para mantener shape del endpoint.
+    return this.findOne(creados[0]!.id, tenantId);
+  }
+
+  private armarSufijoNombre(
+    cat: CategoriaJugadores | undefined,
+    serieSlug: string | null,
+  ): string {
+    if (!cat) return 'Sin categoría';
+    const serieNombre = serieSlug
+      ? (Array.isArray(cat.series) ? cat.series : []).find(
+          (s) => s.slug === serieSlug,
+        )?.nombre
+      : null;
+    return serieNombre ? `${cat.nombre} · ${serieNombre}` : cat.nombre;
+  }
+
+  private armarSufijoSlug(
+    cat: CategoriaJugadores | undefined,
+    serieSlug: string | null,
+  ): string {
+    const catSlug = cat?.slug ?? 'sin-categoria';
+    return serieSlug ? `${catSlug}-${serieSlug}` : catSlug;
   }
 
   async update(
