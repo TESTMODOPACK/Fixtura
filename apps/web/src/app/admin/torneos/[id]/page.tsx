@@ -14,6 +14,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import type { CategoriaJugadores, TorneoAdmin } from '@fixtura/types';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
@@ -42,6 +44,7 @@ export default function TorneoDetailPage({
   const [tab, setTab] = useState<Tab>('equipos');
   const { data: torneo, isLoading } = useTorneo(id);
   const { data: equipos } = useEquipos(id);
+  const { data: categorias } = useCategorias();
 
   if (isLoading) {
     return (
@@ -63,10 +66,15 @@ export default function TorneoDetailPage({
     );
   }
 
+  // Sprint 41 — Combos efectivos: usar categoriasSeries del Sprint 26D;
+  // si está vacío y hay categoriaId legacy, sintetizar (mismo patrón que
+  // hace el backend en toDto).
+  const combos = computeCombosEfectivos(torneo);
+
   return (
     <>
       <PageHead
-        eyebrow={`Torneo · ${torneo.temporadaNombre}${torneo.categoriaNombre ? ` · ${torneo.categoriaNombre}` : ''}`}
+        eyebrow={`Torneo · ${torneo.temporadaNombre}${eyebrowCategoria(torneo, categorias ?? [])}`}
         title={torneo.nombre}
         sub={`${torneo.tipoFormato.replace('_', ' ')} · ${torneo.ruedas === 2 ? 'ida y vuelta' : 'solo ida'} · ${torneo.puntosVictoria}/${torneo.puntosEmpate}/${torneo.puntosDerrota} pts`}
       >
@@ -151,6 +159,7 @@ export default function TorneoDetailPage({
           estadoTorneo={torneo.estado}
           categoriaId={torneo.categoriaId}
           categoriaNombre={torneo.categoriaNombre}
+          combos={combos}
         />
       )}
       {tab === 'fixture' && (
@@ -239,12 +248,14 @@ function EquiposTab({
   torneoId,
   estadoTorneo,
   categoriaId,
-  categoriaNombre,
+  categoriaNombre: _categoriaNombre,
+  combos,
 }: {
   torneoId: string;
   estadoTorneo: 'DRAFT' | 'ACTIVO' | 'CERRADO';
   categoriaId: string | null;
   categoriaNombre: string | null;
+  combos: ComboEfectivo[];
 }): React.ReactElement {
   const { data: equipos, isLoading } = useEquipos(torneoId);
   const { data: categorias } = useCategorias();
@@ -331,45 +342,7 @@ function EquiposTab({
       </Card>
 
       <div className="space-y-4">
-        {categoriaNombre ? (
-          <Card variant="lime" padding="comfortable">
-            <CardLabel tone="mute">Categoría del torneo</CardLabel>
-            <div className="font-display text-lg text-green-deep tracking-display mb-2">
-              {categoriaNombre.toUpperCase()}
-            </div>
-            {categoria && (
-              <div className="text-sm text-green-deep/85 space-y-1">
-                <div>
-                  Edad mínima:{' '}
-                  <span className="font-semibold">{categoria.edadMinimaGeneral} años</span>
-                </div>
-                {categoria.cupoExcepcionesPorEquipo > 0 &&
-                  categoria.edadMinimaExcepcion != null && (
-                    <div>
-                      Hasta {categoria.cupoExcepcionesPorEquipo} excepciones desde{' '}
-                      {categoria.edadMinimaExcepcion} años.
-                    </div>
-                  )}
-                {series.length > 0 && (
-                  <div>
-                    Series: {series.map((s) => s.nombre).join(', ')}
-                  </div>
-                )}
-              </div>
-            )}
-          </Card>
-        ) : (
-          <Card variant="lime" padding="comfortable">
-            <CardLabel tone="mute">Sin categoría</CardLabel>
-            <div className="font-display text-lg text-green-deep tracking-display mb-2">
-              LIBRE
-            </div>
-            <p className="text-sm text-green-deep/85">
-              Este torneo no tiene categoría asignada — no se valida edad de jugadores.
-              Asignala desde la pestaña <span className="font-semibold">Configuración</span>.
-            </p>
-          </Card>
-        )}
+        <CombosCard combos={combos} categorias={categorias ?? []} />
 
         <Card variant="lime" padding="comfortable">
           <CardLabel tone="mute">Recordatorio</CardLabel>
@@ -705,5 +678,123 @@ function ConfiguracionTab({
         </p>
       </Card>
     </div>
+  );
+}
+
+// ─── Sprint 41 — Multi-categoría helpers ─────────────────────────────
+
+type ComboEfectivo = {
+  categoriaId: string;
+  serieSlug: string | null;
+  cupoEquipos: number;
+};
+
+/**
+ * Devuelve los combos (categoría + serie) efectivos del torneo.
+ * Prioridad: categoriasSeries del Sprint 26D. Si está vacío y hay
+ * categoriaId legacy, sintetizamos un combo único (mismo patrón que el
+ * backend usa en toDto).
+ */
+function computeCombosEfectivos(torneo: TorneoAdmin): ComboEfectivo[] {
+  if (torneo.categoriasSeries && torneo.categoriasSeries.length > 0) {
+    return torneo.categoriasSeries.map((c) => ({
+      categoriaId: c.categoriaId,
+      serieSlug: c.serieSlug ?? null,
+      cupoEquipos: c.cupoEquipos,
+    }));
+  }
+  if (torneo.categoriaId) {
+    return [{ categoriaId: torneo.categoriaId, serieSlug: null, cupoEquipos: 99 }];
+  }
+  return [];
+}
+
+/**
+ * Texto que se concatena al eyebrow del header. Soporta los 3 casos:
+ *   - Sin categoría → ''
+ *   - Una sola → ' · Senior'
+ *   - Multi-categoría → ' · MULTI-CATEGORÍA (4 combos)'
+ */
+function eyebrowCategoria(
+  torneo: TorneoAdmin,
+  categorias: CategoriaJugadores[],
+): string {
+  const combos = computeCombosEfectivos(torneo);
+  if (combos.length === 0) return '';
+  if (combos.length === 1) {
+    const c = categorias.find((cat) => cat.id === combos[0]!.categoriaId);
+    return c ? ` · ${c.nombre}` : '';
+  }
+  // Más de uno: contar categorías únicas
+  const catsUnicas = new Set(combos.map((c) => c.categoriaId));
+  return ` · ${catsUnicas.size} categorías (${combos.length} combos)`;
+}
+
+/**
+ * Card del sidebar con la lista de combinaciones categoría+serie+cupo.
+ * Reemplaza la card legacy que solo mostraba una categoría.
+ */
+function CombosCard({
+  combos,
+  categorias,
+}: {
+  combos: ComboEfectivo[];
+  categorias: CategoriaJugadores[];
+}): React.ReactElement {
+  if (combos.length === 0) {
+    return (
+      <Card variant="lime" padding="comfortable">
+        <CardLabel tone="mute">Sin categoría</CardLabel>
+        <div className="font-display text-lg text-green-deep tracking-display mb-2">
+          LIBRE
+        </div>
+        <p className="text-sm text-green-deep/85">
+          Este torneo no tiene categorías asignadas — no se valida edad de
+          jugadores. Asignalas desde la pestaña{' '}
+          <span className="font-semibold">Configuración</span>.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card variant="lime" padding="comfortable">
+      <CardLabel tone="mute">
+        {combos.length === 1 ? 'Categoría del torneo' : `Categorías del torneo (${combos.length})`}
+      </CardLabel>
+      <div className="mt-2 space-y-2">
+        {combos.map((combo, idx) => {
+          const categoria = categorias.find((c) => c.id === combo.categoriaId);
+          const nombreCat = categoria?.nombre ?? 'Categoría desconocida';
+          const serie = combo.serieSlug
+            ? categoria?.series?.find((s) => s.slug === combo.serieSlug)
+            : null;
+          return (
+            <div
+              key={`${combo.categoriaId}-${combo.serieSlug ?? 'null'}-${idx}`}
+              className="border-l-2 border-green-bright/40 pl-3 py-1"
+            >
+              <div className="font-display text-base text-green-deep tracking-display">
+                {nombreCat.toUpperCase()}
+                {serie && (
+                  <span className="ml-2 text-xs uppercase tracking-[0.15em] font-semibold px-2 py-0.5 rounded bg-green-deep/10 text-green-deep">
+                    {serie.nombre}
+                  </span>
+                )}
+              </div>
+              {categoria && (
+                <div className="text-xs text-green-deep/85 mt-0.5">
+                  Edad mínima:{' '}
+                  <span className="font-semibold">{categoria.edadMinimaGeneral} años</span>
+                  {' · '}
+                  Cupo:{' '}
+                  <span className="font-semibold">{combo.cupoEquipos} equipos</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
