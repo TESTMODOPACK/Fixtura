@@ -783,7 +783,7 @@ export function useCambiarEstadoCancha() {
     }) =>
       apiFetch<CanchaAdmin>(`/admin/canchas/${id}/estado`, {
         method: 'PATCH',
-        body: JSON.stringify({ estado, motivo: motivo ?? null }),
+        body: { estado, motivo: motivo ?? null },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'canchas'] });
@@ -1409,7 +1409,7 @@ export function useCrearHorarioTorneo(torneoId: string) {
     mutationFn: (body: CreateHorarioTorneoRequest) =>
       apiFetch<HorarioTorneo>(`/admin/torneos/${torneoId}/horarios`, {
         method: 'POST',
-        body: JSON.stringify(body),
+        body,
       }),
     onSuccess: () => {
       qc.invalidateQueries({
@@ -1425,7 +1425,7 @@ export function useActualizarHorarioTorneo(torneoId: string) {
     mutationFn: ({ id, body }: { id: string; body: UpdateHorarioTorneoRequest }) =>
       apiFetch<HorarioTorneo>(`/admin/torneos/${torneoId}/horarios/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify(body),
+        body,
       }),
     onSuccess: () => {
       qc.invalidateQueries({
@@ -1472,7 +1472,7 @@ export function useUpdatePortalConfig() {
     mutationFn: (body: UpdatePortalConfigRequest) =>
       apiFetch<PortalConfig>('/super-admin/portal-config', {
         method: 'PATCH',
-        body: JSON.stringify(body),
+        body,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['super-admin', 'portal-config'] });
