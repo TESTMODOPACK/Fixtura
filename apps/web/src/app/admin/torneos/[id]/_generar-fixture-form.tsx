@@ -1,19 +1,42 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertTriangle, CheckCircle2, Info, Sparkles, XCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  Info,
+  MapPin,
+  Sparkles,
+  XCircle,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import type { FixtureAdvertencia } from '@fixtura/types';
+import type { FixtureAdvertencia, HorarioTorneo } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
-import { useFixturePrevalidacion, useGenerarFixture } from '@/hooks/use-admin';
+import {
+  useCanchas,
+  useFixturePrevalidacion,
+  useGenerarFixture,
+  useHorariosTorneo,
+} from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+
+const DIAS_SEMANA_CORTO: Record<number, string> = {
+  1: 'Lun',
+  2: 'Mar',
+  3: 'Mié',
+  4: 'Jue',
+  5: 'Vie',
+  6: 'Sáb',
+  7: 'Dom',
+};
 
 const FixtureFormSchema = z.object({
   fechaInicio: z.iso.date('Fecha requerida'),
@@ -23,6 +46,17 @@ type FixtureForm = z.infer<typeof FixtureFormSchema>;
 
 export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.ReactElement {
   const mutation = useGenerarFixture(torneoId);
+  const { data: horarios, isLoading: loadingHorarios } = useHorariosTorneo(torneoId);
+  const { data: canchas, isLoading: loadingCanchas } = useCanchas();
+
+  const horariosActivos = (horarios ?? []).filter((h) => h.activo);
+  const canchasDisponibles = (canchas ?? []).filter(
+    (c) => c.estado === 'DISPONIBLE',
+  );
+
+  const faltanHorarios = !loadingHorarios && horariosActivos.length === 0;
+  const faltanCanchas = !loadingCanchas && canchasDisponibles.length === 0;
+  const faltaConfig = faltanHorarios || faltanCanchas;
 
   const form = useForm<FixtureForm>({
     resolver: zodResolver(FixtureFormSchema),
@@ -41,7 +75,9 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
     fechaInicio: fechaInicioValue || undefined,
     diasEntreFechas: diasValue || undefined,
   });
-  const tieneError = prevalidacion?.advertencias.some((a) => a.nivel === 'ERROR') ?? false;
+  const tieneErrorPrevalidacion =
+    prevalidacion?.advertencias.some((a) => a.nivel === 'ERROR') ?? false;
+  const tieneError = tieneErrorPrevalidacion || faltaConfig;
 
   // Sprint 44 UX — Horarios y canchas YA no se ingresan acá. El backend
   // los toma de:
@@ -117,32 +153,16 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
           />
         </div>
 
-        <div className="text-xs text-ink-mute bg-paper-dark border border-line rounded-card px-3 py-2 leading-relaxed">
-          <div className="font-semibold text-ink mb-0.5">
-            Los horarios y canchas se toman automáticamente:
-          </div>
-          <ul className="space-y-0.5">
-            <li>
-              · Horarios → tab{' '}
-              <Link
-                href={`/admin/torneos/${torneoId}/horarios`}
-                className="text-accent font-semibold hover:underline"
-              >
-                Horarios
-              </Link>{' '}
-              del torneo (plantilla por día de semana).
-            </li>
-            <li>
-              · Canchas →{' '}
-              <Link
-                href="/admin/canchas"
-                className="text-accent font-semibold hover:underline"
-              >
-                /admin/canchas
-              </Link>{' '}
-              (catálogo con estado DISPONIBLE).
-            </li>
-          </ul>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <HorariosPanel
+            horarios={horariosActivos}
+            loading={loadingHorarios}
+            torneoId={torneoId}
+          />
+          <CanchasPanel
+            canchasDisponibles={canchasDisponibles}
+            loading={loadingCanchas}
+          />
         </div>
 
         {error && (
@@ -156,7 +176,15 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
           variant="accent"
           loading={mutation.isPending}
           disabled={tieneError}
-          title={tieneError ? 'Hay errores que bloquean la generación' : undefined}
+          title={
+            faltanHorarios
+              ? 'Definí al menos un horario en el tab Horarios del torneo.'
+              : faltanCanchas
+                ? 'Habilitá al menos una cancha en /admin/canchas.'
+                : tieneErrorPrevalidacion
+                  ? 'Hay errores que bloquean la generación.'
+                  : undefined
+          }
         >
           <Sparkles size={14} /> Generar fixture con Berger
         </Button>
@@ -221,6 +249,158 @@ function PrevalidacionPanel({
           Corregí los errores antes de generar el fixture.
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Sprint 44 — Panel con horarios cargados desde el tab "Horarios →".
+ * Bloquea el botón de generar si no hay ninguno activo.
+ */
+function HorariosPanel({
+  horarios,
+  loading,
+  torneoId,
+}: {
+  horarios: HorarioTorneo[];
+  loading: boolean;
+  torneoId: string;
+}): React.ReactElement {
+  const horariosPorDia = new Map<number, string[]>();
+  for (const h of horarios) {
+    if (!horariosPorDia.has(h.diaSemana)) {
+      horariosPorDia.set(h.diaSemana, []);
+    }
+    horariosPorDia.get(h.diaSemana)!.push(h.hora);
+  }
+  const diasOrdenados = Array.from(horariosPorDia.keys()).sort();
+
+  if (loading) {
+    return (
+      <div className="bg-paper-dark border border-line rounded-card px-3 py-3">
+        <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-mute mb-1 flex items-center gap-1.5">
+          <CalendarClock size={11} /> Horarios del torneo
+        </div>
+        <p className="text-xs font-serif italic text-ink-mute">Cargando…</p>
+      </div>
+    );
+  }
+
+  if (horarios.length === 0) {
+    return (
+      <div className="bg-danger/10 border border-danger/30 rounded-card px-3 py-3">
+        <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-danger mb-1 flex items-center gap-1.5">
+          <XCircle size={11} /> Faltan horarios
+        </div>
+        <p className="text-xs text-ink leading-snug">
+          No definiste horarios para este torneo.{' '}
+          <Link
+            href={`/admin/torneos/${torneoId}/horarios`}
+            className="text-accent font-semibold hover:underline"
+          >
+            Agregalos en el tab Horarios →
+          </Link>{' '}
+          antes de generar el fixture.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-paper-dark border border-line rounded-card px-3 py-3">
+      <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-mute mb-2 flex items-center justify-between gap-1.5">
+        <span className="flex items-center gap-1.5">
+          <CalendarClock size={11} /> Horarios del torneo
+        </span>
+        <Link
+          href={`/admin/torneos/${torneoId}/horarios`}
+          className="text-accent hover:underline normal-case tracking-normal text-[10px]"
+        >
+          Editar →
+        </Link>
+      </div>
+      <div className="space-y-1">
+        {diasOrdenados.map((dia) => {
+          const horas = horariosPorDia.get(dia)!.sort();
+          return (
+            <div key={dia} className="flex items-baseline gap-2 text-xs">
+              <span className="font-semibold text-green-deep w-9 flex-shrink-0">
+                {DIAS_SEMANA_CORTO[dia] ?? `Día ${dia}`}
+              </span>
+              <span className="text-ink-mute font-mono">{horas.join(' · ')}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Sprint 44 — Panel con canchas DISPONIBLES desde /admin/canchas.
+ * Bloquea el botón de generar si no hay ninguna.
+ */
+function CanchasPanel({
+  canchasDisponibles,
+  loading,
+}: {
+  canchasDisponibles: Array<{ id: string; nombre: string }>;
+  loading: boolean;
+}): React.ReactElement {
+  if (loading) {
+    return (
+      <div className="bg-paper-dark border border-line rounded-card px-3 py-3">
+        <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-mute mb-1 flex items-center gap-1.5">
+          <MapPin size={11} /> Canchas disponibles
+        </div>
+        <p className="text-xs font-serif italic text-ink-mute">Cargando…</p>
+      </div>
+    );
+  }
+
+  if (canchasDisponibles.length === 0) {
+    return (
+      <div className="bg-danger/10 border border-danger/30 rounded-card px-3 py-3">
+        <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-danger mb-1 flex items-center gap-1.5">
+          <XCircle size={11} /> Faltan canchas
+        </div>
+        <p className="text-xs text-ink leading-snug">
+          No hay canchas en estado DISPONIBLE.{' '}
+          <Link
+            href="/admin/canchas"
+            className="text-accent font-semibold hover:underline"
+          >
+            Agregalas o reactivalas en /admin/canchas
+          </Link>{' '}
+          antes de generar el fixture.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-paper-dark border border-line rounded-card px-3 py-3">
+      <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-mute mb-2 flex items-center justify-between gap-1.5">
+        <span className="flex items-center gap-1.5">
+          <MapPin size={11} /> Canchas disponibles ({canchasDisponibles.length})
+        </span>
+        <Link
+          href="/admin/canchas"
+          className="text-accent hover:underline normal-case tracking-normal text-[10px]"
+        >
+          Editar →
+        </Link>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {canchasDisponibles.map((c) => (
+          <span
+            key={c.id}
+            className="text-xs px-2 py-0.5 rounded bg-green-deep/10 text-green-deep font-medium"
+          >
+            {c.nombre}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
