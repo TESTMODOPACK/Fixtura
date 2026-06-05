@@ -274,15 +274,44 @@ function EquiposTab({
       nombre: s.nombre,
     })) ?? [];
 
+  // Sprint 41 — Si el torneo tiene multi-categoría (>1 combo), el form
+  // legacy "Inscribir equipo" no permite elegir categoría — solo serie
+  // de la categoría legacy. Para multi-cat, el admin debe usar la
+  // pestaña "Inscripciones" que sí maneja combo (cat+serie).
+  const esMultiCategoria = combos.length > 1;
+  const inscribirHabilitado = puedeInscribir && !esMultiCategoria;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <Card padding="none" className="lg:col-span-2 overflow-hidden">
+        {esMultiCategoria && (
+          <div className="px-5 py-4 bg-accent/10 border-b border-accent/30">
+            <div className="text-sm text-ink">
+              <strong>Este torneo es multi-categoría</strong> ({combos.length} combos).
+              Para inscribir clubes a una categoría y serie específicas usá la
+              pestaña{' '}
+              <Link
+                href={`/admin/torneos/${torneoId}/inscripciones`}
+                className="text-accent font-semibold hover:underline"
+              >
+                Inscripciones →
+              </Link>
+              . Acá solo se muestran los equipos sombra generados automáticamente.
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between px-5 py-3 border-b border-line">
           <CardLabel>Equipos inscritos</CardLabel>
-          {puedeInscribir ? (
+          {inscribirHabilitado ? (
             <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
               <Plus size={14} /> {adding ? 'Cancelar' : 'Inscribir equipo'}
             </Button>
+          ) : esMultiCategoria ? (
+            <Link href={`/admin/torneos/${torneoId}/inscripciones`}>
+              <Button variant="accent" size="sm">
+                <Plus size={14} /> Ir a Inscripciones
+              </Button>
+            </Link>
           ) : (
             <span className="text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded bg-ink-mute/10 text-ink-mute">
               Torneo {estadoTorneo.toLowerCase()} · inscripciones cerradas
@@ -290,7 +319,7 @@ function EquiposTab({
           )}
         </div>
 
-        {adding && puedeInscribir && (
+        {adding && inscribirHabilitado && (
           <div className="px-5 py-4 bg-paper-dark border-b border-line">
             <NuevoEquipoForm
               torneoId={torneoId}
