@@ -51,7 +51,12 @@ export class TarifasAdminService {
     await this.ensureTorneo(torneoId, tenantId);
 
     const frecuencia = input.frecuencia ?? 'UNICO';
-    this.validarReglas(input.tipo, frecuencia, input.diaVencimiento ?? null);
+    this.validarReglas(
+      input.tipo,
+      frecuencia,
+      input.diaVencimiento ?? null,
+      input.cantidadCuotas ?? null,
+    );
 
     // Check explícito de duplicado para devolver mensaje claro en vez
     // de un 500 por la UNIQUE constraint.
@@ -74,6 +79,8 @@ export class TarifasAdminService {
         monto: input.monto,
         frecuencia,
         diaVencimiento: input.diaVencimiento ?? null,
+        cantidadCuotas: input.cantidadCuotas ?? null,
+        diasPlazoPago: input.diasPlazoPago ?? null,
         activo: input.activo ?? true,
       }),
     );
@@ -100,9 +107,15 @@ export class TarifasAdminService {
     if (input.diaVencimiento !== undefined) {
       t.diaVencimiento = input.diaVencimiento;
     }
+    if (input.cantidadCuotas !== undefined) {
+      t.cantidadCuotas = input.cantidadCuotas;
+    }
+    if (input.diasPlazoPago !== undefined) {
+      t.diasPlazoPago = input.diasPlazoPago;
+    }
     if (input.activo !== undefined) t.activo = input.activo;
 
-    this.validarReglas(t.tipo, t.frecuencia, t.diaVencimiento);
+    this.validarReglas(t.tipo, t.frecuencia, t.diaVencimiento, t.cantidadCuotas);
 
     const saved = await this.tarifaRepo.save(t);
     return this.toDto(saved);
@@ -155,6 +168,7 @@ export class TarifasAdminService {
     tipo: string,
     frecuencia: string,
     diaVencimiento: number | null,
+    cantidadCuotas: number | null,
   ): void {
     if (tipo !== 'CUOTA' && frecuencia !== 'UNICO') {
       throw new BadRequestException(
@@ -175,6 +189,14 @@ export class TarifasAdminService {
           'Para frecuencia semanal el día debe ser 1 (lunes) a 7 (domingo).',
         );
       }
+      // Sprint 45 — cuota recurrente necesita saber cuántas cuotas generar
+      // al activar el torneo. Sin esto el generador de cobros no sabe el N.
+      if (cantidadCuotas == null) {
+        throw new BadRequestException(
+          'Indicá cuántas cuotas se cobran en total durante el torneo ' +
+            '(por ejemplo, 5 cuotas mensuales).',
+        );
+      }
     }
   }
 
@@ -188,6 +210,8 @@ export class TarifasAdminService {
       monto: t.monto,
       frecuencia: t.frecuencia,
       diaVencimiento: t.diaVencimiento,
+      cantidadCuotas: t.cantidadCuotas,
+      diasPlazoPago: t.diasPlazoPago,
       activo: t.activo,
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),

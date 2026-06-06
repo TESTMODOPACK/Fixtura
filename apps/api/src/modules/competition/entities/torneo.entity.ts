@@ -69,6 +69,14 @@ export class Torneo {
   @Column({ type: 'varchar', length: 20, default: 'DRAFT' })
   estado!: EstadoTorneo;
 
+  /**
+   * Sprint 45 — Marca de cuándo se generaron los cobros (matrícula +
+   * cuotas) de este torneo. Se setea al pasar el torneo a ACTIVO por
+   * primera vez. Idempotencia: si ya está seteada, no regeneramos.
+   */
+  @Column({ name: 'cobros_generados_at', type: 'timestamptz', nullable: true })
+  cobrosGeneradosAt!: Date | null;
+
   @Column({ name: 'fecha_inicio', type: 'date', nullable: true })
   fechaInicio!: string | null;
 

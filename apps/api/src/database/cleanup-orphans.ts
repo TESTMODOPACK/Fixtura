@@ -638,6 +638,47 @@ async function main(): Promise<void> {
     `);
     log('equipos.motivo_suspension + observaciones + audit asegurados (Sprint 44).');
 
+    // Sprint 45 — Cobros al iniciar el torneo. Dos campos nuevos en el
+    // tarifario:
+    //   cantidad_cuotas: solo para tarifa CUOTA. Cuántas cuotas se
+    //     generan en total al activar el torneo (ej. 5 cuotas mensuales).
+    //   dias_plazo_pago: solo para tarifa MATRICULA. Días de plazo desde
+    //     la activación del torneo para pagar la matrícula. Vencida si pasa.
+    await client.query(`
+      ALTER TABLE tarifas_torneo
+        ADD COLUMN IF NOT EXISTS cantidad_cuotas SMALLINT,
+        ADD COLUMN IF NOT EXISTS dias_plazo_pago SMALLINT
+    `);
+    log('tarifas_torneo.cantidad_cuotas + dias_plazo_pago asegurados (Sprint 45).');
+
+    // Sprint 45 — Marca de idempotencia: cuándo se generaron los cobros
+    // (matrícula + cuotas) de este torneo. Se setea al pasar el torneo a
+    // ACTIVO por primera vez. Sirve para no regenerar cobros si el torneo
+    // se desactiva/reactiva.
+    await client.query(`
+      ALTER TABLE torneos
+        ADD COLUMN IF NOT EXISTS cobros_generados_at TIMESTAMPTZ
+    `);
+    log('torneos.cobros_generados_at asegurada (Sprint 45).');
+
+    // Sprint 45 — Anti-duplicado de cuotas ancladas a EQUIPO. El índice
+    // uq_cobro_cuota_periodo es por inscripcion_id; los cobros generados
+    // al iniciar el torneo se anclan a equipo_id (inscripcion_id NULL), así
+    // que necesitan su propio índice único o dos activaciones en paralelo
+    // podrían duplicar. COALESCE trata NULL como 0 igual que el de inscripción.
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_cobro_cuota_periodo_equipo
+        ON cobros (
+          equipo_id,
+          tarifa_id,
+          periodo_anio,
+          COALESCE(periodo_mes, 0),
+          COALESCE(periodo_semana, 0)
+        )
+        WHERE generado_auto = TRUE AND cancelado = FALSE AND equipo_id IS NOT NULL
+    `);
+    log('cobros UNIQUE(equipo, tarifa, periodo) asegurado (Sprint 45).');
+
     // Sprint 38 — Backfill de planillas vacias. Inscripciones que se
     // crearon antes del auto-copy quedaron con planilla en 0 jugadores
     // aunque el club tuviera plantel cargado. Esta query rellena cada

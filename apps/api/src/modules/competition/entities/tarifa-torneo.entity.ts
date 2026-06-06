@@ -86,6 +86,22 @@ export class TarifaTorneo {
   @Column({ name: 'dia_vencimiento', type: 'smallint', nullable: true })
   diaVencimiento!: number | null;
 
+  /**
+   * Sprint 45 — Solo tarifa CUOTA. Cuántas cuotas se generan en total
+   * al activar el torneo (ej. 5 cuotas mensuales). Null = comportamiento
+   * legacy (cron retroactivo).
+   */
+  @Column({ name: 'cantidad_cuotas', type: 'smallint', nullable: true })
+  cantidadCuotas!: number | null;
+
+  /**
+   * Sprint 45 — Solo tarifa MATRICULA. Días de plazo desde la activación
+   * del torneo para pagar la matrícula. Si pasa sin pago, queda vencida
+   * (y el dunning la marca morosa). Null = default 7 días (legacy).
+   */
+  @Column({ name: 'dias_plazo_pago', type: 'smallint', nullable: true })
+  diasPlazoPago!: number | null;
+
   @Column({ type: 'boolean', default: true })
   activo!: boolean;
 

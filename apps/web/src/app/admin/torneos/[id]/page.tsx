@@ -5,6 +5,7 @@ import {
   Ban,
   CalendarRange,
   Check,
+  CircleDollarSign,
   type LucideIcon,
   Plus,
   RotateCcw,
@@ -673,6 +674,24 @@ function ConfiguracionTab({
 
   const transition = transitions[estado];
 
+  // Sprint 45 — al activar el torneo (DRAFT→ACTIVO) se generan los cobros
+  // del tarifario (matrícula + cuotas) para todos los equipos. Confirmamos
+  // para que el operador sepa que es una acción con efecto financiero.
+  const ejecutarTransicion = (): void => {
+    if (!transition) return;
+    if (estado === 'DRAFT' && transition.next === 'ACTIVO') {
+      const ok = window.confirm(
+        `Al activar el torneo se van a generar los cobros del tarifario ` +
+          `(matrícula y cuotas) para los ${equiposCount} equipo(s) inscriptos.\n\n` +
+          `Asegurate de tener el tarifario configurado antes de continuar. ` +
+          `Si todavía no cargaste matrícula ni cuotas, podés activarlo igual y ` +
+          `no se genera ningún cobro.\n\n¿Activar el torneo ahora?`,
+      );
+      if (!ok) return;
+    }
+    mutation.mutate({ estado: transition.next });
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <Card padding="roomy">
@@ -687,11 +706,26 @@ function ConfiguracionTab({
             'Torneo cerrado. No se aceptan nuevas actas. Sigue visible como histórico en el portal.'}
         </p>
 
+        {/* Sprint 45 — aviso de cobros antes de activar. */}
+        {estado === 'DRAFT' && (
+          <div className="mb-4 text-xs font-serif text-ink-mute bg-accent/5 border border-accent/30 rounded-card p-3 flex items-start gap-2">
+            <CircleDollarSign size={14} className="text-accent flex-shrink-0 mt-0.5" />
+            <span>
+              Al activar el torneo se generan los cobros del{' '}
+              <Link href={`/admin/torneos/${torneoId}/tarifario`} className="text-accent underline">
+                tarifario
+              </Link>{' '}
+              (matrícula y cuotas) para los {equiposCount} equipo(s). Dejá el
+              tarifario listo antes de activar.
+            </span>
+          </div>
+        )}
+
         {transition && (
           <div className="space-y-2">
             <Button
               variant="accent"
-              onClick={() => mutation.mutate({ estado: transition.next })}
+              onClick={ejecutarTransicion}
               loading={mutation.isPending}
               disabled={!!transition.disabled}
             >

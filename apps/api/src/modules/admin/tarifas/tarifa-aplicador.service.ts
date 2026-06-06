@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 
 import { AuditLogService } from '../../audit';
 import { Cobro } from '../../competition/entities/cobro.entity';
+import { Equipo } from '../../competition/entities/equipo.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Partido } from '../../competition/entities/partido.entity';
@@ -45,12 +46,20 @@ export class TarifaAplicadorService {
     private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Torneo)
     private readonly torneoRepo: Repository<Torneo>,
+    @InjectRepository(Equipo)
+    private readonly equipoRepo: Repository<Equipo>,
     private readonly audit: AuditLogService,
   ) {}
 
   // ───────── API pública ─────────
 
   /**
+   * @deprecated Sprint 45 — La matrícula ya no se genera al inscribir, sino
+   * al iniciar el torneo (generarCobrosInicioTorneo), anclada a equipo. Este
+   * método quedó sin caller automático: NO lo invoques en el flujo normal o
+   * crearías una matrícula anclada a inscripción que el anti-duplicado por
+   * equipo no detecta. Se conserva solo como utilidad puntual de soporte.
+   *
    * Genera el cobro de MATRICULA para una inscripción recién creada.
    * Idempotente: si ya hay matrícula generada para esa inscripción, no
    * crea otro.
@@ -132,12 +141,96 @@ export class TarifaAplicadorService {
       });
       for (const tarifa of tarifasCuota) {
         if (tarifa.frecuencia === 'UNICO') continue;
+        // Sprint 45 — si la tarifa define cantidad de cuotas, los cobros
+        // se generan por adelantado al iniciar el torneo (anclados a
+        // equipo). El cron retroactivo NO debe tocarlas o duplicaría.
+        if (tarifa.cantidadCuotas != null) continue;
         const creadas = await this.generarCuotasFaltantes(insc, tarifa);
         cuotasCreadas += creadas;
       }
     }
     return {
       inscripcionesProcesadas: inscripciones.length,
+      cuotasCreadas,
+    };
+  }
+
+  /**
+   * Sprint 45 — Genera los cobros del torneo al iniciarlo (DRAFT→ACTIVO).
+   *
+   * Para cada equipo participante (estado INSCRITO o ACTIVO) genera de una
+   * sola vez:
+   *   - 1 cobro de MATRICULA, con vencimiento = fechaBase + diasPlazoPago.
+   *   - N cobros de CUOTA mensual, donde N = tarifa.cantidadCuotas, con
+   *     vencimiento en el día del mes configurado (diaVencimiento).
+   *
+   * Idempotente a dos niveles:
+   *   - Por equipo+tarifa para la matrícula.
+   *   - Por equipo+tarifa+periodo para cada cuota (más el índice único
+   *     uq_cobro_cuota_periodo_equipo como red de seguridad).
+   * Esto permite reactivar el torneo (volver a DRAFT, sumar un equipo y
+   * reactivar) sin duplicar cobros de los equipos ya cargados: solo el
+   * equipo nuevo recibe cobros.
+   *
+   * Los cobros se anclan a `equipo_id` (no inscripción) porque la pestaña
+   * Equipos crea equipos directos sin inscripción, y /admin/finanzas ya
+   * filtra por equipo.
+   */
+  async generarCobrosInicioTorneo(
+    torneoId: string,
+    tenantId: string,
+  ): Promise<{
+    equiposProcesados: number;
+    matriculasCreadas: number;
+    cuotasCreadas: number;
+  }> {
+    const torneo = await this.torneoRepo.findOne({
+      where: { id: torneoId, tenantId },
+    });
+    if (!torneo) {
+      return { equiposProcesados: 0, matriculasCreadas: 0, cuotasCreadas: 0 };
+    }
+
+    const equipos = await this.equipoRepo.find({
+      where: [
+        { torneoId, tenantId, estado: 'INSCRITO' },
+        { torneoId, tenantId, estado: 'ACTIVO' },
+      ],
+    });
+
+    const tarifaMatricula = await this.buscarTarifa(torneoId, 'MATRICULA');
+    const tarifaCuota = await this.buscarTarifaCuota(torneoId);
+    const fechaBase = new Date();
+
+    let matriculasCreadas = 0;
+    let cuotasCreadas = 0;
+    for (const equipo of equipos) {
+      const r = await this.generarCobrosParaEquipo(
+        equipo,
+        torneo,
+        tarifaMatricula,
+        tarifaCuota,
+        fechaBase,
+      );
+      matriculasCreadas += r.matriculasCreadas;
+      cuotasCreadas += r.cuotasCreadas;
+    }
+
+    await this.audit.record({
+      action: 'cobros.generados_inicio_torneo',
+      tenantId,
+      entityType: 'Torneo',
+      entityId: torneoId,
+      metadata: {
+        equiposProcesados: equipos.length,
+        matriculasCreadas,
+        cuotasCreadas,
+      },
+    });
+
+    return {
+      equiposProcesados: equipos.length,
+      matriculasCreadas,
       cuotasCreadas,
     };
   }
@@ -449,12 +542,191 @@ export class TarifaAplicadorService {
     return null;
   }
 
+  // ───────── Sprint 45: cobros al iniciar el torneo ─────────
+
+  /**
+   * Genera matrícula + cuotas de un equipo, idempotente. Reutilizado por
+   * el batch de inicio de torneo y por la inscripción tardía.
+   */
+  private async generarCobrosParaEquipo(
+    equipo: Equipo,
+    torneo: Torneo,
+    tarifaMatricula: TarifaTorneo | null,
+    tarifaCuota: TarifaTorneo | null,
+    fechaBase: Date,
+  ): Promise<{ matriculasCreadas: number; cuotasCreadas: number }> {
+    let matriculasCreadas = 0;
+    let cuotasCreadas = 0;
+
+    // Matrícula — un único cobro por equipo+tarifa. No filtramos por
+    // cancelado/generadoAuto: si ya existe cualquier matrícula (manual,
+    // auto o cancelada a mano) NO regeneramos. Así respetamos la decisión
+    // del operador que la canceló y no la resucitamos al reactivar el
+    // torneo — mismo criterio que las cuotas.
+    if (tarifaMatricula) {
+      const yaExiste = await this.cobroRepo.findOne({
+        where: {
+          tenantId: equipo.tenantId,
+          equipoId: equipo.id,
+          tarifaId: tarifaMatricula.id,
+        },
+      });
+      if (!yaExiste) {
+        await this.crearCobro({
+          tenantId: equipo.tenantId,
+          torneoId: torneo.id,
+          equipoId: equipo.id,
+          tarifa: tarifaMatricula,
+          concepto: this.conceptoEquipo('Matrícula', equipo, torneo),
+          monto: tarifaMatricula.monto,
+          vencimiento: this.calcularVencimientoMatriculaInicio(
+            tarifaMatricula,
+            fechaBase,
+          ),
+          periodoAnio: null,
+          periodoMes: null,
+          periodoSemana: null,
+        });
+        matriculasCreadas++;
+      }
+    }
+
+    // Cuotas — N mensuales según cantidadCuotas.
+    if (tarifaCuota && tarifaCuota.cantidadCuotas && tarifaCuota.cantidadCuotas > 0) {
+      const vencimientos = this.vencimientosCuotasInicio(
+        tarifaCuota,
+        tarifaCuota.cantidadCuotas,
+        fechaBase,
+      );
+      for (const v of vencimientos) {
+        const yaExiste = await this.cobroRepo.findOne({
+          where: {
+            tenantId: equipo.tenantId,
+            equipoId: equipo.id,
+            tarifaId: tarifaCuota.id,
+            periodoAnio: v.anio,
+            periodoMes: v.mes,
+          },
+        });
+        if (yaExiste) continue;
+        try {
+          await this.crearCobro({
+            tenantId: equipo.tenantId,
+            torneoId: torneo.id,
+            equipoId: equipo.id,
+            tarifa: tarifaCuota,
+            concepto: this.conceptoCuotaEquipo(
+              equipo,
+              torneo,
+              v.indice,
+              tarifaCuota.cantidadCuotas,
+            ),
+            monto: tarifaCuota.monto,
+            vencimiento: v.vencimiento,
+            periodoAnio: v.anio,
+            periodoMes: v.mes,
+            periodoSemana: null,
+          });
+          cuotasCreadas++;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (
+            msg.includes('uq_cobro_cuota_periodo') ||
+            msg.includes('duplicate key')
+          ) {
+            continue;
+          }
+          this.log.warn(
+            `cuota inicio equipo=${equipo.id} tarifa=${tarifaCuota.id} periodo=${v.anio}-${v.mes} falló: ${msg}`,
+          );
+        }
+      }
+    }
+
+    return { matriculasCreadas, cuotasCreadas };
+  }
+
+  /** Busca la tarifa CUOTA activa del torneo (la del modelo nuevo upfront). */
+  private async buscarTarifaCuota(
+    torneoId: string,
+  ): Promise<TarifaTorneo | null> {
+    return this.tarifaRepo.findOne({
+      where: { torneoId, tipo: 'CUOTA', activo: true },
+    });
+  }
+
+  /**
+   * Vencimiento de la matrícula generada al iniciar: fechaBase + plazo en
+   * días. Default 7 días si la tarifa no define diasPlazoPago.
+   */
+  private calcularVencimientoMatriculaInicio(
+    tarifa: TarifaTorneo,
+    fechaBase: Date,
+  ): string {
+    const dias = tarifa.diasPlazoPago ?? 7;
+    const v = new Date(
+      fechaBase.getFullYear(),
+      fechaBase.getMonth(),
+      fechaBase.getDate(),
+    );
+    v.setDate(v.getDate() + dias);
+    return iso(v);
+  }
+
+  /**
+   * Calcula las N cuotas mensuales a generar al iniciar el torneo. La
+   * primera vence en el próximo día de vencimiento (si el día del mes ya
+   * pasó, salta al mes siguiente); cada cuota siguiente cae un mes después.
+   */
+  private vencimientosCuotasInicio(
+    tarifa: TarifaTorneo,
+    cantidad: number,
+    fechaBase: Date,
+  ): Array<{ vencimiento: string; anio: number; mes: number; indice: number }> {
+    const dia = tarifa.diaVencimiento ?? 5;
+    const primer = diaDeMesProximo(fechaBase, dia);
+    const out: Array<{
+      vencimiento: string;
+      anio: number;
+      mes: number;
+      indice: number;
+    }> = [];
+    for (let i = 0; i < cantidad; i++) {
+      // new Date(anio, mesIdx+i, 1) maneja overflow de mes (mes 13 → enero
+      // del año siguiente) sin que tengamos que normalizar a mano.
+      const venc = new Date(primer.getFullYear(), primer.getMonth() + i, 1);
+      venc.setDate(
+        Math.min(dia, ultimoDiaDeMes(venc.getFullYear(), venc.getMonth() + 1)),
+      );
+      out.push({
+        vencimiento: iso(venc),
+        anio: venc.getFullYear(),
+        mes: venc.getMonth() + 1,
+        indice: i + 1,
+      });
+    }
+    return out;
+  }
+
+  private conceptoEquipo(prefijo: string, equipo: Equipo, torneo: Torneo): string {
+    return `${prefijo} — ${torneo.nombre} (${equipo.nombre})`;
+  }
+
+  private conceptoCuotaEquipo(
+    equipo: Equipo,
+    torneo: Torneo,
+    indice: number,
+    total: number,
+  ): string {
+    return `Cuota ${indice}/${total} — ${torneo.nombre} (${equipo.nombre})`;
+  }
+
   // ───────── Persistencia + audit ─────────
 
   private async crearCobro(args: {
     tenantId: string;
     torneoId: string;
-    inscripcionId: string;
+    inscripcionId?: string | null;
     tarifa: TarifaTorneo;
     concepto: string;
     monto: number;

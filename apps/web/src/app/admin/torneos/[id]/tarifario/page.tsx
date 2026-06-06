@@ -15,7 +15,6 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import {
-  FRECUENCIA_CUOTA_LABEL,
   TIPO_TARIFA_LABEL,
   type FrecuenciaCuota,
   type TarifaTorneo,
@@ -59,9 +58,9 @@ const TIPOS_ORDEN: TipoTarifa[] = [
 
 const DESCRIPCION_BREVE: Record<TipoTarifa, string> = {
   MATRICULA:
-    'Pago único al inscribir un club al torneo. Se cobra automáticamente al confirmar la inscripción.',
+    'Pago único por equipo. Se cobra cuando el torneo arranca (al ponerlo "En curso"). Definí en cuántos días vence; si pasa sin pago, queda atrasado.',
   CUOTA:
-    'Pago recurrente (semanal, mensual o anual) por inscripción. Lo genera el cron diario según la frecuencia y día de vencimiento.',
+    'Cuota mensual por equipo. Al arrancar el torneo se generan todas las cuotas de una vez. Definí cuántas cuotas y qué día del mes vencen.',
   MULTA_AMARILLA:
     'Monto fijo por cada tarjeta amarilla. Se carga al club al cerrar el acta del partido.',
   MULTA_ROJA:
@@ -126,10 +125,11 @@ export default function TarifarioPage({
             <div className="font-semibold mb-1">Cómo funciona</div>
             <p className="font-serif italic text-ink-mute">
               Cada fila configura un concepto del torneo. Si no la cargás, el
-              sistema no genera cobro para ese caso. La <b>matrícula</b> se
-              cobra al inscribir un club; la <b>cuota</b> recurrente se genera
-              cada período en un cron diario. Las <b>multas</b> se aplican
-              automáticamente al cerrar el acta. <b>Eliminar una tarifa no toca
+              sistema no genera ese cobro. La <b>matrícula</b> y las{' '}
+              <b>cuotas</b> se generan para todos los equipos cuando el torneo
+              arranca (al ponerlo <b>“En curso”</b>). Las <b>multas</b> se
+              aplican solas al cerrar el acta. Dejá el tarifario listo{' '}
+              <b>antes</b> de arrancar el torneo. <b>Eliminar una tarifa no toca
               los cobros que ya se generaron con ella</b> — solo deja de generar
               nuevos.
             </p>
@@ -270,11 +270,25 @@ function TarifaCard({
                 valor={`$${tarifa!.monto.toLocaleString('es-CL')}`}
                 destacado
               />
+              {tipo === 'MATRICULA' && (
+                <Dato
+                  label="Vence a los"
+                  valor={
+                    tarifa!.diasPlazoPago != null
+                      ? `${tarifa!.diasPlazoPago} día${tarifa!.diasPlazoPago === 1 ? '' : 's'}`
+                      : '7 días'
+                  }
+                />
+              )}
               {tipo === 'CUOTA' && (
                 <>
                   <Dato
-                    label="Frecuencia"
-                    valor={FRECUENCIA_CUOTA_LABEL[tarifa!.frecuencia]}
+                    label="Cantidad de cuotas"
+                    valor={
+                      tarifa!.cantidadCuotas != null
+                        ? String(tarifa!.cantidadCuotas)
+                        : '—'
+                    }
                   />
                   <Dato
                     label={
@@ -374,6 +388,51 @@ function formatDia(frec: FrecuenciaCuota, n: number): string {
   return `Día ${n}`;
 }
 
+/**
+ * Valida y normaliza los campos específicos por tipo de tarifa antes de
+ * enviar al backend. Devuelve { error } si hay un problema de validación
+ * (con mensaje para el operador), o los tres campos ya parseados a número
+ * o null. Evita el caso silencioso de input vacío → Number('') = 0.
+ */
+type CamposTarifa =
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      diaVencimiento: number | null;
+      cantidadCuotas: number | null;
+      diasPlazoPago: number | null;
+    };
+
+function validarCamposTarifa(
+  tipo: TipoTarifa,
+  raw: { dia: string; cantidadCuotas: string; diasPlazo: string },
+): CamposTarifa {
+  if (tipo === 'CUOTA') {
+    const n = Number(raw.cantidadCuotas);
+    if (!Number.isInteger(n) || n < 1 || n > 60) {
+      return { ok: false, error: 'Indicá cuántas cuotas se cobran (entre 1 y 60).' };
+    }
+    const d = Number(raw.dia);
+    if (!Number.isInteger(d) || d < 1 || d > 31) {
+      return {
+        ok: false,
+        error: 'El día del mes en que vence la cuota debe estar entre 1 y 31.',
+      };
+    }
+    return { ok: true, diaVencimiento: d, cantidadCuotas: n, diasPlazoPago: null };
+  }
+  if (tipo === 'MATRICULA') {
+    // Campo vacío → default 7 días (no "vence hoy" por un 0 silencioso).
+    const dias = raw.diasPlazo.trim() === '' ? 7 : Number(raw.diasPlazo);
+    if (!Number.isInteger(dias) || dias < 0 || dias > 365) {
+      return { ok: false, error: 'El plazo de pago debe estar entre 0 y 365 días.' };
+    }
+    return { ok: true, diaVencimiento: null, cantidadCuotas: null, diasPlazoPago: dias };
+  }
+  // Multas y OTRO: sin campos extra de vencimiento/cuotas.
+  return { ok: true, diaVencimiento: null, cantidadCuotas: null, diasPlazoPago: null };
+}
+
 // ─── Modales ─────────────────────────────────────────────────────
 
 function CrearTarifaModal({
@@ -390,10 +449,9 @@ function CrearTarifaModal({
 
   const [monto, setMonto] = useState<string>('');
   const [descripcion, setDescripcion] = useState('');
-  const [frecuencia, setFrecuencia] = useState<FrecuenciaCuota>(
-    esCuota ? 'MENSUAL' : 'UNICO',
-  );
   const [dia, setDia] = useState<string>('5');
+  const [cantidadCuotas, setCantidadCuotas] = useState<string>('1');
+  const [diasPlazo, setDiasPlazo] = useState<string>('7');
 
   const onGuardar = async (): Promise<void> => {
     const montoNum = Number(monto);
@@ -401,14 +459,21 @@ function CrearTarifaModal({
       toastError('Ingresá un monto válido.');
       return;
     }
+    const campos = validarCamposTarifa(tipo, { dia, cantidadCuotas, diasPlazo });
+    if (!campos.ok) {
+      toastError(campos.error);
+      return;
+    }
     try {
       await createTarifa.mutateAsync({
         tipo,
         monto: montoNum,
         descripcion: descripcion.trim() || null,
-        frecuencia: esCuota ? frecuencia : 'UNICO',
-        diaVencimiento:
-          esCuota && frecuencia !== 'UNICO' ? Number(dia) : null,
+        // El modelo nuevo solo genera cuotas mensuales por adelantado.
+        frecuencia: esCuota ? 'MENSUAL' : 'UNICO',
+        diaVencimiento: campos.diaVencimiento,
+        cantidadCuotas: campos.cantidadCuotas,
+        diasPlazoPago: campos.diasPlazoPago,
         activo: true,
       });
       toastSuccess(`Tarifa "${TIPO_TARIFA_LABEL[tipo]}" configurada.`);
@@ -431,10 +496,12 @@ function CrearTarifaModal({
         setMonto={setMonto}
         descripcion={descripcion}
         setDescripcion={setDescripcion}
-        frecuencia={frecuencia}
-        setFrecuencia={setFrecuencia}
         dia={dia}
         setDia={setDia}
+        cantidadCuotas={cantidadCuotas}
+        setCantidadCuotas={setCantidadCuotas}
+        diasPlazo={diasPlazo}
+        setDiasPlazo={setDiasPlazo}
       />
       <div className="flex items-center justify-end gap-2 pt-4 border-t border-line mt-4">
         <Button variant="ghost" size="sm" onClick={onClose}>
@@ -467,9 +534,14 @@ function EditarTarifaModal({
 
   const [monto, setMonto] = useState<string>(String(tarifa.monto));
   const [descripcion, setDescripcion] = useState(tarifa.descripcion ?? '');
-  const [frecuencia, setFrecuencia] = useState<FrecuenciaCuota>(tarifa.frecuencia);
   const [dia, setDia] = useState<string>(
     tarifa.diaVencimiento != null ? String(tarifa.diaVencimiento) : '5',
+  );
+  const [cantidadCuotas, setCantidadCuotas] = useState<string>(
+    tarifa.cantidadCuotas != null ? String(tarifa.cantidadCuotas) : '1',
+  );
+  const [diasPlazo, setDiasPlazo] = useState<string>(
+    tarifa.diasPlazoPago != null ? String(tarifa.diasPlazoPago) : '7',
   );
   const [activo, setActivo] = useState<boolean>(tarifa.activo);
 
@@ -479,15 +551,25 @@ function EditarTarifaModal({
       toastError('Ingresá un monto válido.');
       return;
     }
+    const campos = validarCamposTarifa(tarifa.tipo, {
+      dia,
+      cantidadCuotas,
+      diasPlazo,
+    });
+    if (!campos.ok) {
+      toastError(campos.error);
+      return;
+    }
     try {
       await updateTarifa.mutateAsync({
         id: tarifa.id,
         input: {
           monto: montoNum,
           descripcion: descripcion.trim() || null,
-          frecuencia: esCuota ? frecuencia : 'UNICO',
-          diaVencimiento:
-            esCuota && frecuencia !== 'UNICO' ? Number(dia) : null,
+          frecuencia: esCuota ? 'MENSUAL' : 'UNICO',
+          diaVencimiento: campos.diaVencimiento,
+          cantidadCuotas: campos.cantidadCuotas,
+          diasPlazoPago: campos.diasPlazoPago,
           activo,
         },
       });
@@ -511,10 +593,12 @@ function EditarTarifaModal({
         setMonto={setMonto}
         descripcion={descripcion}
         setDescripcion={setDescripcion}
-        frecuencia={frecuencia}
-        setFrecuencia={setFrecuencia}
         dia={dia}
         setDia={setDia}
+        cantidadCuotas={cantidadCuotas}
+        setCantidadCuotas={setCantidadCuotas}
+        diasPlazo={diasPlazo}
+        setDiasPlazo={setDiasPlazo}
       />
       {/* Sprint 34G — snapshot del monto. */}
       <div className="text-[11px] font-serif italic text-ink-mute bg-paper/60 p-2 rounded-card mt-3 flex items-start gap-2">
@@ -562,10 +646,12 @@ function FormFields({
   setMonto,
   descripcion,
   setDescripcion,
-  frecuencia,
-  setFrecuencia,
   dia,
   setDia,
+  cantidadCuotas,
+  setCantidadCuotas,
+  diasPlazo,
+  setDiasPlazo,
 }: {
   tipo: TipoTarifa;
   esCuota: boolean;
@@ -573,11 +659,14 @@ function FormFields({
   setMonto: (v: string) => void;
   descripcion: string;
   setDescripcion: (v: string) => void;
-  frecuencia: FrecuenciaCuota;
-  setFrecuencia: (v: FrecuenciaCuota) => void;
   dia: string;
   setDia: (v: string) => void;
+  cantidadCuotas: string;
+  setCantidadCuotas: (v: string) => void;
+  diasPlazo: string;
+  setDiasPlazo: (v: string) => void;
 }): React.ReactElement {
+  const esMatricula = tipo === 'MATRICULA';
   return (
     <div className="space-y-3">
       <p className="text-xs font-serif italic text-ink-mute">
@@ -593,55 +682,47 @@ function FormFields({
         onChange={(e) => setMonto(e.target.value)}
       />
 
+      {esMatricula && (
+        <Input
+          label="¿En cuántos días vence? (desde que arranca el torneo)"
+          type="number"
+          min={0}
+          max={365}
+          placeholder="ej. 15"
+          value={diasPlazo}
+          onChange={(e) => setDiasPlazo(e.target.value)}
+        />
+      )}
+
       {esCuota && (
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Frecuencia</label>
-            <select
-              className="input"
-              value={frecuencia}
-              onChange={(e) => setFrecuencia(e.target.value as FrecuenciaCuota)}
-            >
-              <option value="UNICO">Pago único</option>
-              <option value="SEMANAL">Semanal</option>
-              <option value="MENSUAL">Mensual</option>
-              <option value="ANUAL">Anual</option>
-            </select>
-          </div>
-          {frecuencia !== 'UNICO' && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Cantidad de cuotas"
+              type="number"
+              min={1}
+              max={60}
+              placeholder="ej. 5"
+              value={cantidadCuotas}
+              onChange={(e) => setCantidadCuotas(e.target.value)}
+            />
             <div>
-              <label className="label">
-                {frecuencia === 'SEMANAL'
-                  ? 'Día de la semana'
-                  : 'Día del mes'}
-              </label>
-              {frecuencia === 'SEMANAL' ? (
-                <select
-                  className="input"
-                  value={dia}
-                  onChange={(e) => setDia(e.target.value)}
-                >
-                  <option value="1">Lunes</option>
-                  <option value="2">Martes</option>
-                  <option value="3">Miércoles</option>
-                  <option value="4">Jueves</option>
-                  <option value="5">Viernes</option>
-                  <option value="6">Sábado</option>
-                  <option value="7">Domingo</option>
-                </select>
-              ) : (
-                <input
-                  type="number"
-                  min={1}
-                  max={31}
-                  className="input"
-                  value={dia}
-                  onChange={(e) => setDia(e.target.value)}
-                />
-              )}
+              <label className="label">Día del mes en que vence</label>
+              <input
+                type="number"
+                min={1}
+                max={31}
+                className="input"
+                value={dia}
+                onChange={(e) => setDia(e.target.value)}
+              />
             </div>
-          )}
-        </div>
+          </div>
+          <p className="text-[11px] font-serif italic text-ink-mute">
+            Ejemplo: 5 cuotas con vencimiento el día 10 genera, al arrancar el
+            torneo, 5 cobros por equipo que vencen el 10 de cada mes.
+          </p>
+        </>
       )}
 
       <Input

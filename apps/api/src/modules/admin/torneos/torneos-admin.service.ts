@@ -2,6 +2,8 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -27,9 +29,12 @@ import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { Temporada } from '../../competition/entities/temporada.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { TarifaAplicadorService } from '../tarifas/tarifa-aplicador.service';
 
 @Injectable()
 export class TorneosAdminService {
+  private readonly logger = new Logger(TorneosAdminService.name);
+
   constructor(
     @InjectRepository(Torneo) private readonly repo: Repository<Torneo>,
     @InjectRepository(Temporada) private readonly temporadaRepo: Repository<Temporada>,
@@ -37,6 +42,8 @@ export class TorneosAdminService {
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(CategoriaJugadores)
     private readonly categoriaRepo: Repository<CategoriaJugadores>,
+    // Sprint 45 — al activar el torneo generamos los cobros del tarifario.
+    private readonly tarifaAplicador: TarifaAplicadorService,
   ) {}
 
   /**
@@ -351,6 +358,11 @@ export class TorneosAdminService {
     return serieSlug ? `${catSlug}-${serieSlug}` : catSlug;
   }
 
+  // Sprint 45 — @Transactional para que la activación (cambio de estado +
+  // generación de cobros) sea atómica. Si la generación falla, se revierte
+  // el cambio de estado y el operador puede reintentar; evitamos un torneo
+  // "ACTIVO pero sin cobros" que no se podría reintentar (ya no es DRAFT).
+  @Transactional()
   async update(
     id: string,
     tenantId: string,
@@ -358,6 +370,9 @@ export class TorneosAdminService {
   ): Promise<TorneoAdmin> {
     const existing = await this.repo.findOne({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException(`Torneo ${id} no encontrado`);
+
+    // Sprint 45 — capturamos el estado previo para detectar la activación.
+    const estadoPrevio = existing.estado;
 
     if (input.slug && input.slug !== existing.slug) {
       const dup = await this.repo.findOne({ where: { tenantId, slug: input.slug } });
@@ -463,6 +478,43 @@ export class TorneosAdminService {
     }
 
     await this.repo.save(existing);
+
+    // Sprint 45 — Al pasar el torneo a ACTIVO (típicamente desde DRAFT),
+    // generamos los cobros del tarifario: matrícula + N cuotas por equipo.
+    // generarCobrosInicioTorneo es idempotente por equipo, así que correrlo
+    // en cada activación es seguro: reactivar tras sumar un equipo en DRAFT
+    // solo le genera cobros al equipo nuevo. cobros_generados_at marca la
+    // primera vez (para mostrarlo en la UI). No bloqueamos el cambio de
+    // estado si la generación falla — los cobros se reponen manualmente.
+    if (estadoPrevio !== 'ACTIVO' && existing.estado === 'ACTIVO') {
+      try {
+        const r = await this.tarifaAplicador.generarCobrosInicioTorneo(
+          id,
+          tenantId,
+        );
+        if (existing.cobrosGeneradosAt == null) {
+          existing.cobrosGeneradosAt = new Date();
+          await this.repo.save(existing);
+        }
+        this.logger.log(
+          `[activar torneo ${id}] cobros generados: equipos=${r.equiposProcesados} matriculas=${r.matriculasCreadas} cuotas=${r.cuotasCreadas}`,
+        );
+      } catch (err) {
+        // Atómico (ver @Transactional): re-lanzamos para revertir también el
+        // cambio de estado. Mejor fallar fuerte y que el operador reintente
+        // que dejar el torneo activo con cobros a medias.
+        this.logger.error(
+          `[activar torneo ${id}] falló la generación de cobros, se revierte la activación: ${
+            (err as Error).message
+          }`,
+        );
+        throw new InternalServerErrorException(
+          'No se pudieron generar los cobros del torneo, así que la activación se ' +
+            'revirtió. Reintentá; si el problema persiste, revisá el tarifario.',
+        );
+      }
+    }
+
     return this.findOne(id, tenantId);
   }
 

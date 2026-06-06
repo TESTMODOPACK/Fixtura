@@ -55,6 +55,10 @@ export const TarifaTorneoSchema = z.object({
   monto: z.number().int().min(0),
   frecuencia: z.enum(FRECUENCIA_CUOTA),
   diaVencimiento: z.number().int().min(1).max(31).nullable(),
+  // Sprint 45 — solo CUOTA: cuántas cuotas se generan al activar el torneo.
+  cantidadCuotas: z.number().int().min(1).max(60).nullable(),
+  // Sprint 45 — solo MATRICULA: días de plazo para pagar desde la activación.
+  diasPlazoPago: z.number().int().min(0).max(365).nullable(),
   activo: z.boolean(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -68,6 +72,10 @@ export const CreateTarifaSchema = z
     monto: z.number().int().min(0).max(100_000_000),
     frecuencia: z.enum(FRECUENCIA_CUOTA).default('UNICO'),
     diaVencimiento: z.number().int().min(1).max(31).optional().nullable(),
+    // Sprint 45 — CUOTA: cuántas cuotas se generan al activar el torneo.
+    cantidadCuotas: z.number().int().min(1).max(60).optional().nullable(),
+    // Sprint 45 — MATRICULA: días de plazo para pagar desde la activación.
+    diasPlazoPago: z.number().int().min(0).max(365).optional().nullable(),
     activo: z.boolean().default(true),
   })
   .superRefine((data, ctx) => {
@@ -90,6 +98,14 @@ export const CreateTarifaSchema = z
           });
         }
       }
+      // Sprint 45 — CUOTA recurrente requiere cantidad de cuotas.
+      if (data.cantidadCuotas == null) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['cantidadCuotas'],
+          message: 'Indicá cuántas cuotas se cobran en total en el torneo.',
+        });
+      }
     }
     // Frecuencia distinta de UNICO solo aplica a CUOTA.
     if (data.tipo !== 'CUOTA' && data.frecuencia !== 'UNICO') {
@@ -107,6 +123,8 @@ export const UpdateTarifaSchema = z.object({
   monto: z.number().int().min(0).max(100_000_000).optional(),
   frecuencia: z.enum(FRECUENCIA_CUOTA).optional(),
   diaVencimiento: z.number().int().min(1).max(31).optional().nullable(),
+  cantidadCuotas: z.number().int().min(1).max(60).optional().nullable(),
+  diasPlazoPago: z.number().int().min(0).max(365).optional().nullable(),
   activo: z.boolean().optional(),
 });
 export type UpdateTarifaRequest = z.infer<typeof UpdateTarifaSchema>;

@@ -52,6 +52,20 @@ export class CreateTarifaDto {
   @Max(31)
   diaVencimiento?: number | null;
 
+  // Sprint 45 — CUOTA: cantidad total de cuotas a generar al activar.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  cantidadCuotas?: number | null;
+
+  // Sprint 45 — MATRICULA: días de plazo para pagar desde la activación.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  diasPlazoPago?: number | null;
+
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
@@ -78,6 +92,18 @@ export class UpdateTarifaDto {
   @Min(1)
   @Max(31)
   diaVencimiento?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  cantidadCuotas?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  diasPlazoPago?: number | null;
 
   @IsOptional()
   @IsBoolean()
