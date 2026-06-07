@@ -7,6 +7,7 @@ import {
   Calendar,
   CheckCircle2,
   CloudRain,
+  FileText,
   Flag,
   Lock,
   MapPin,
@@ -58,8 +59,10 @@ import {
   useSuspenderPartido,
   useUpdatePartido,
 } from '@/hooks/use-admin';
-import { ApiError } from '@/lib/api';
+import { ApiError, API_URL } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { toastError } from '@/lib/toast';
+import { useAuthStore } from '@/store/auth-store';
 
 export default function PartidoDetallePage({
   params,
@@ -87,6 +90,24 @@ export default function PartidoDetallePage({
 
   const cerrada = !!partido.actaCerradaAt;
 
+  const descargarPlantilla = async (): Promise<void> => {
+    const token = useAuthStore.getState().accessToken;
+    const res = await fetch(`${API_URL}/admin/partidos/${partidoId}/plantilla.pdf`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      toastError(new Error('No se pudo generar la plantilla PDF. Revisá tu sesión.'));
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `plantilla-F${partido.fechaNumero}-${partido.equipoLocalNombre}-vs-${partido.equipoVisitaNombre}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       <PageHead
@@ -99,6 +120,9 @@ export default function PartidoDetallePage({
             <ArrowLeft size={14} /> Fixture
           </Button>
         </Link>
+        <Button variant="default" size="sm" onClick={descargarPlantilla}>
+          <FileText size={14} /> Plantilla PDF
+        </Button>
         {!partido.actaCerradaAt && (
           <Link href={`/admin/torneos/${torneoId}/partidos/${partidoId}/centro`}>
             <Button variant="accent" size="sm">

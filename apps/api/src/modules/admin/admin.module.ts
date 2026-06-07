@@ -55,6 +55,7 @@ import {
   PartidosAdminController,
 } from './partidos/partidos-admin.controller';
 import { PartidosAdminService } from './partidos/partidos-admin.service';
+import { PlantillaPdfService } from './partidos/plantilla-pdf.service';
 import {
   PersonalAdminController,
   PersonalPublicController,
@@ -136,6 +137,7 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     FechasAdminService,
     FixtureAdminService,
     PartidosAdminService,
+    PlantillaPdfService,
     TribunalAdminService,
     PersonalAdminService,
     AusenciasAdminService,

@@ -4,11 +4,14 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 
 import {
   ROLE,
@@ -33,6 +36,7 @@ import {
   UpdatePartidoDto,
 } from './dto';
 import { PartidosAdminService } from './partidos-admin.service';
+import { PlantillaPdfService } from './plantilla-pdf.service';
 
 function ensureTenant(user: UserContext): string {
   if (!user.tenantId) {
@@ -73,7 +77,23 @@ export class FixtureDetailController {
   ROLE.SUPER_ADMIN,
 )
 export class PartidosAdminController {
-  constructor(private readonly svc: PartidosAdminService) {}
+  constructor(
+    private readonly svc: PartidosAdminService,
+    private readonly plantillaPdf: PlantillaPdfService,
+  ) {}
+
+  // ── F46.5 — Plantilla física (PDF para imprimir y completar a mano) ──
+  @Get(':id/plantilla.pdf')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="plantilla-partido.pdf"')
+  async descargarPlantillaPdf(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const buffer = await this.plantillaPdf.generar(id, ensureTenant(user));
+    res.send(buffer);
+  }
 
   @Get(':id')
   getOne(
