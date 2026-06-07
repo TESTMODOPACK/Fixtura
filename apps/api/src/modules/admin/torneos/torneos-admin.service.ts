@@ -12,8 +12,11 @@ import { Transactional } from 'typeorm-transactional';
 
 import { In } from 'typeorm';
 
+import { calcularTablaPosiciones } from '@fixtura/domain';
+
 import type {
   CreateTorneoRequest,
+  TablaPosicionesAdmin,
   TorneoAdmin,
   UpdateTorneoRequest,
 } from '@fixtura/types';
@@ -27,6 +30,7 @@ interface CategoriaSerieInput {
 import { CategoriaJugadores } from '../../competition/entities/categoria-jugadores.entity';
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
+import { Partido } from '../../competition/entities/partido.entity';
 import { Temporada } from '../../competition/entities/temporada.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { TarifaAplicadorService } from '../tarifas/tarifa-aplicador.service';
@@ -40,6 +44,7 @@ export class TorneosAdminService {
     @InjectRepository(Temporada) private readonly temporadaRepo: Repository<Temporada>,
     @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
+    @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
     @InjectRepository(CategoriaJugadores)
     private readonly categoriaRepo: Repository<CategoriaJugadores>,
     // Sprint 45 — al activar el torneo generamos los cobros del tarifario.
@@ -168,6 +173,49 @@ export class TorneosAdminService {
     });
     if (!t) throw new NotFoundException(`Torneo ${id} no encontrado`);
     return this.toDto(t);
+  }
+
+  /**
+   * Tabla de posiciones del torneo para el panel admin. Usa la MISMA
+   * lógica de dominio que el portal público (packages/domain), así no hay
+   * drift entre lo que ve el operador y lo que ven los hinchas. A
+   * diferencia del público, acá funciona para cualquier estado del torneo
+   * (incluido DRAFT, donde sale en ceros porque no hay partidos jugados).
+   */
+  async getTabla(id: string, tenantId: string): Promise<TablaPosicionesAdmin> {
+    const torneo = await this.repo.findOne({ where: { id, tenantId } });
+    if (!torneo) throw new NotFoundException(`Torneo ${id} no encontrado`);
+
+    const equipos = await this.equipoRepo.find({
+      where: { torneoId: id, tenantId },
+    });
+    // Solo partidos ya jugados: FINALIZADO o WALKOVER (mismo criterio que
+    // el portal público — el walkover ya persiste 3-0).
+    const partidos = await this.partidoRepo
+      .createQueryBuilder('p')
+      .innerJoin('p.fecha', 'f')
+      .where('f.torneo_id = :id', { id })
+      .andWhere('p.tenant_id = :tenantId', { tenantId })
+      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .getMany();
+
+    const tiebreakers =
+      Array.isArray(torneo.tablaTiebreakers) && torneo.tablaTiebreakers.length > 0
+        ? torneo.tablaTiebreakers
+        : ['pts', 'dg', 'gf', 'nombre'];
+
+    const filas = calcularTablaPosiciones(equipos, partidos, {
+      puntosVictoria: torneo.puntosVictoria,
+      puntosEmpate: torneo.puntosEmpate,
+      puntosDerrota: torneo.puntosDerrota,
+      tiebreakers,
+    });
+
+    return {
+      filas,
+      tiebreakers,
+      hayResultados: partidos.length > 0,
+    };
   }
 
   /**

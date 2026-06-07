@@ -1,9 +1,15 @@
 import { z } from 'zod';
 
+import { FilaTablaSchema, type FilaTabla } from './public';
+
 /**
  * DTOs admin — compartidos cliente↔servidor para evitar drift.
  * Validados con Zod en ambos lados.
  */
+
+// Re-export para que los consumers del admin tengan FilaTabla a mano.
+export { FilaTablaSchema };
+export type { FilaTabla };
 
 // ─── Temporadas ──────────────────────────────────────────────────────
 export const CreateTemporadaSchema = z.object({
@@ -118,6 +124,18 @@ export const TorneoAdminSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 export type TorneoAdmin = z.infer<typeof TorneoAdminSchema>;
+
+// ─── Tabla de posiciones (admin) ─────────────────────────────────────
+// Reutiliza FilaTabla del portal público — misma forma de fila. El admin
+// la ve para cualquier torneo (incluido DRAFT, donde sale en ceros).
+export const TablaPosicionesAdminSchema = z.object({
+  filas: z.array(FilaTablaSchema),
+  // Orden de desempate efectivo usado para calcular la tabla.
+  tiebreakers: z.array(z.string()),
+  // True si hay al menos un partido jugado (FINALIZADO/WALKOVER).
+  hayResultados: z.boolean(),
+});
+export type TablaPosicionesAdmin = z.infer<typeof TablaPosicionesAdminSchema>;
 
 // ─── Equipos ─────────────────────────────────────────────────────────
 export const CreateEquipoSchema = z.object({

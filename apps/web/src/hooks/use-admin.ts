@@ -34,6 +34,7 @@ import type {
   PartidoDetalle,
   PersonalAdmin,
   SancionAdmin,
+  TablaPosicionesAdmin,
   Temporada,
   TorneoAdmin,
   UpdatePartidoRequest,
@@ -75,6 +76,15 @@ export function useTorneo(id: string | null | undefined) {
     queryKey: ['admin', 'torneos', id],
     queryFn: () => apiFetch<TorneoAdmin>(`/admin/torneos/${id}`),
     enabled: !!id,
+  });
+}
+
+export function useTablaAdmin(torneoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'tabla'],
+    queryFn: () =>
+      apiFetch<TablaPosicionesAdmin>(`/admin/torneos/${torneoId}/tabla`),
+    enabled: !!torneoId,
   });
 }
 

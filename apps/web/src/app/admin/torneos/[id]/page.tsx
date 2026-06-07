@@ -6,6 +6,7 @@ import {
   CalendarRange,
   Check,
   CircleDollarSign,
+  ListOrdered,
   type LucideIcon,
   Plus,
   RotateCcw,
@@ -33,6 +34,7 @@ import {
   useDeleteTorneo,
   useEquipos,
   useReactivarEquipo,
+  useTablaAdmin,
   useTorneo,
   useUpdateTorneo,
 } from '@/hooks/use-admin';
@@ -43,7 +45,7 @@ import { GenerarFixtureForm } from './_generar-fixture-form';
 import { NuevoEquipoForm } from './_nuevo-equipo-form';
 import { SuspenderEquipoModal } from './_suspender-equipo-modal';
 
-type Tab = 'equipos' | 'fixture' | 'configuracion';
+type Tab = 'equipos' | 'fixture' | 'posiciones' | 'configuracion';
 
 export default function TorneoDetailPage({
   params,
@@ -125,6 +127,9 @@ export default function TorneoDetailPage({
               Fixture <span className="text-ink-mute">({torneo.fechasCount})</span>
             </TabButton>
           )}
+          <TabButton active={tab === 'posiciones'} onClick={() => setTab('posiciones')}>
+            Posiciones
+          </TabButton>
           <TabButton active={tab === 'configuracion'} onClick={() => setTab('configuracion')}>
             Configuración
           </TabButton>
@@ -182,6 +187,7 @@ export default function TorneoDetailPage({
           hasEquipos={(equipos?.length ?? 0) >= 2}
         />
       )}
+      {tab === 'posiciones' && <PosicionesTab torneoId={id} />}
       {tab === 'configuracion' && (
         <ConfiguracionTab
           torneoId={id}
@@ -574,6 +580,102 @@ function FixtureTab({
         fecha) desde el detalle de cada partido.
       </p>
       <GenerarFixtureForm torneoId={torneoId} />
+    </Card>
+  );
+}
+
+// ─── Tab: Tabla de posiciones ──────────────────────────────────────
+function PosicionesTab({ torneoId }: { torneoId: string }): React.ReactElement {
+  const { data, isLoading, error } = useTablaAdmin(torneoId);
+  const apiError = error as ApiError | undefined;
+
+  if (isLoading) {
+    return (
+      <Card padding="roomy" className="text-center">
+        <p className="font-serif italic text-ink-mute">Cargando tabla…</p>
+      </Card>
+    );
+  }
+  if (apiError) {
+    return (
+      <Card padding="roomy" className="border-danger/40 bg-danger/5">
+        <p className="text-sm text-danger">{apiError.message}</p>
+      </Card>
+    );
+  }
+  if (!data || data.filas.length === 0) {
+    return (
+      <Card padding="roomy" className="text-center">
+        <ListOrdered size={36} className="mx-auto text-line mb-3" />
+        <p className="font-serif italic text-ink-mute">
+          Todavía no hay equipos en este torneo. La tabla se arma con los
+          equipos inscriptos y los resultados de las actas cerradas.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="px-5 py-3 bg-paper-dark border-b border-line flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <CardLabel tone="mute">Tabla de posiciones</CardLabel>
+          <div className="font-display text-lg text-green-deep tracking-display">
+            {data.filas.length} EQUIPOS
+          </div>
+        </div>
+        {!data.hayResultados && (
+          <span className="text-xs font-serif italic text-ink-mute">
+            Aún sin partidos jugados — la tabla arranca en cero y se actualiza
+            al cerrar cada acta.
+          </span>
+        )}
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wider text-ink-mute border-b border-line">
+              <th className="px-3 py-2 text-left font-semibold">#</th>
+              <th className="px-3 py-2 text-left font-semibold">Equipo</th>
+              <th className="px-2 py-2 text-center font-semibold" title="Partidos jugados">PJ</th>
+              <th className="px-2 py-2 text-center font-semibold" title="Ganados">G</th>
+              <th className="px-2 py-2 text-center font-semibold" title="Empatados">E</th>
+              <th className="px-2 py-2 text-center font-semibold" title="Perdidos">P</th>
+              <th className="px-2 py-2 text-center font-semibold" title="Goles a favor">GF</th>
+              <th className="px-2 py-2 text-center font-semibold" title="Goles en contra">GC</th>
+              <th className="px-2 py-2 text-center font-semibold" title="Diferencia de gol">DG</th>
+              <th className="px-3 py-2 text-center font-semibold" title="Puntos">Pts</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {data.filas.map((f) => (
+              <tr key={f.equipoId} className="hover:bg-paper/50">
+                <td className="px-3 py-2 font-mono text-ink-mute">{f.posicion}</td>
+                <td className="px-3 py-2 font-semibold text-ink">{f.equipoNombre}</td>
+                <td className="px-2 py-2 text-center text-ink-mute">{f.pj}</td>
+                <td className="px-2 py-2 text-center text-ink-mute">{f.pg}</td>
+                <td className="px-2 py-2 text-center text-ink-mute">{f.pe}</td>
+                <td className="px-2 py-2 text-center text-ink-mute">{f.pp}</td>
+                <td className="px-2 py-2 text-center text-ink-mute">{f.gf}</td>
+                <td className="px-2 py-2 text-center text-ink-mute">{f.gc}</td>
+                <td className="px-2 py-2 text-center text-ink-mute">
+                  {f.dg > 0 ? `+${f.dg}` : f.dg}
+                </td>
+                <td className="px-3 py-2 text-center font-display text-lg text-green-deep tracking-display">
+                  {f.pts}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="px-5 py-3 border-t border-line text-[11px] font-serif italic text-ink-mute">
+        PJ jugados · G/E/P ganados, empatados, perdidos · GF/GC goles a favor y
+        en contra · DG diferencia · Pts puntos. Desempate por:{' '}
+        {data.tiebreakers.join(' → ')}.
+      </div>
     </Card>
   );
 }

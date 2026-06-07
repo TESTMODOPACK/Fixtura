@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { calcularTablaPosiciones } from '@fixtura/domain';
+
 import type {
   FilaTabla,
   FixturePublico,
@@ -291,176 +293,23 @@ export class PublicService {
       .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
       .getMany();
 
-    // Calcular stats por equipo en JS — simple y suficiente para volúmenes
-    // de torneo amateur (8-20 equipos × 14-28 partidos). Para escala mayor
-    // se mueve a una vista materializada.
-    const stats = new Map<string, { pj: number; pg: number; pe: number; pp: number; gf: number; gc: number }>();
-    for (const eq of equipos) {
-      stats.set(eq.id, { pj: 0, pg: 0, pe: 0, pp: 0, gf: 0, gc: 0 });
-    }
-
-    for (const p of partidos) {
-      const gl = p.golesLocal ?? 0;
-      const gv = p.golesVisita ?? 0;
-      const sL = stats.get(p.equipoLocalId);
-      const sV = stats.get(p.equipoVisitaId);
-      if (!sL || !sV) continue;
-      sL.pj++;
-      sV.pj++;
-      sL.gf += gl;
-      sL.gc += gv;
-      sV.gf += gv;
-      sV.gc += gl;
-      if (gl > gv) {
-        sL.pg++;
-        sV.pp++;
-      } else if (gl < gv) {
-        sV.pg++;
-        sL.pp++;
-      } else {
-        sL.pe++;
-        sV.pe++;
-      }
-    }
-
-    const filasSinOrdenar: FilaTabla[] = equipos.map((eq) => {
-      const s = stats.get(eq.id)!;
-      return {
-        posicion: 0,
-        equipoId: eq.id,
-        equipoNombre: eq.nombre,
-        equipoSlug: eq.slug,
-        escudoUrl: eq.escudoUrl,
-        pj: s.pj,
-        pg: s.pg,
-        pe: s.pe,
-        pp: s.pp,
-        gf: s.gf,
-        gc: s.gc,
-        dg: s.gf - s.gc,
-        pts: s.pg * torneo.puntosVictoria + s.pe * torneo.puntosEmpate + s.pp * torneo.puntosDerrota,
-      };
-    });
-
-    // Sprint 12: orden configurable de tiebreakers.
-    // Default: ["pts","dg","gf","nombre"]. Cada key compara DESC excepto
-    // "gc" (menos goles en contra es mejor) y "nombre" (ASC, último recurso).
-    const orden =
-      Array.isArray(torneo.tablaTiebreakers) && torneo.tablaTiebreakers.length > 0
+    // Cálculo de la tabla en lógica de dominio compartida (packages/domain),
+    // así el admin y el portal público calculan idéntico. Los partidos ya
+    // vienen filtrados a FINALIZADO/WALKOVER por la query de arriba.
+    const filas: FilaTabla[] = calcularTablaPosiciones(equipos, partidos, {
+      puntosVictoria: torneo.puntosVictoria,
+      puntosEmpate: torneo.puntosEmpate,
+      puntosDerrota: torneo.puntosDerrota,
+      tiebreakers: Array.isArray(torneo.tablaTiebreakers)
         ? torneo.tablaTiebreakers
-        : ['pts', 'dg', 'gf', 'nombre'];
-
-    // AUDIT-4: precomputar head-to-head map para tiebreaker 'ed'.
-    // headToHead.get(eqA).get(eqB) = puntos que eqA hizo VS eqB en
-    // todos los partidos entre ellos (suma de ambos si jugaron 2x en
-    // formato ida y vuelta). En desempates 2-equipos resuelve bien; en
-    // grupos de 3+ funciona razonable porque el sort N×N evalúa pares.
-    const headToHead = this.calcularHeadToHead(
-      partidos,
-      torneo.puntosVictoria,
-      torneo.puntosEmpate,
-      torneo.puntosDerrota,
-    );
-
-    filasSinOrdenar.sort((a, b) => {
-      for (const key of orden) {
-        const cmp = this.compararTiebreaker(a, b, key, headToHead);
-        if (cmp !== 0) return cmp;
-      }
-      // Fallback determinístico si todo empata.
-      return a.equipoNombre.localeCompare(b.equipoNombre);
+        : [],
     });
-
-    const filas = filasSinOrdenar.map((f, idx) => ({ ...f, posicion: idx + 1 }));
 
     return {
       torneo: torneoDto,
       filas,
       actualizadaAt: new Date().toISOString(),
     };
-  }
-
-  /**
-   * Sprint 12 + AUDIT-4: compara dos filas según un criterio de tiebreaker.
-   * Devuelve >0 si b va antes que a, <0 si a va antes, 0 si empata.
-   * Casi todos DESC (mayor es mejor) excepto `gc` y `nombre`.
-   *
-   * `headToHead` se pasa para que el criterio 'ed' (enfrentamiento
-   * directo) pueda comparar puntos en partidos entre los dos equipos.
-   */
-  private compararTiebreaker(
-    a: FilaTabla,
-    b: FilaTabla,
-    key: string,
-    headToHead: Map<string, Map<string, number>>,
-  ): number {
-    switch (key) {
-      case 'pts':
-        return b.pts - a.pts;
-      case 'dg':
-        return b.dg - a.dg;
-      case 'gf':
-        return b.gf - a.gf;
-      case 'gc':
-        // Menos goles en contra es mejor.
-        return a.gc - b.gc;
-      case 'pg':
-        return b.pg - a.pg;
-      case 'ed': {
-        // AUDIT-4: enfrentamiento directo. Comparamos puntos que cada
-        // equipo hizo en los partidos entre ellos. Si A le ganó a B
-        // y B no le ganó a A (en ida y vuelta el agregado puede ser
-        // 6-3, 4-4, etc.), gana A.
-        const ptsAvsB = headToHead.get(a.equipoId)?.get(b.equipoId) ?? 0;
-        const ptsBvsA = headToHead.get(b.equipoId)?.get(a.equipoId) ?? 0;
-        return ptsBvsA - ptsAvsB;
-      }
-      case 'nombre':
-        return a.equipoNombre.localeCompare(b.equipoNombre);
-      default:
-        return 0;
-    }
-  }
-
-  /**
-   * AUDIT-4: precomputa puntos head-to-head para tiebreaker 'ed'.
-   * Devuelve map[equipoA][equipoB] = pts que equipoA hizo CONTRA equipoB
-   * en todos los partidos entre ellos. Considera FINALIZADO y WALKOVER.
-   *
-   * Para grupos de 3+ equipos empatados, JavaScript Array.sort
-   * (TimSort) compara pares O(N log N); este map cubre todos los pares
-   * relevantes.
-   */
-  private calcularHeadToHead(
-    partidos: Partido[],
-    puntosVictoria: number,
-    puntosEmpate: number,
-    puntosDerrota: number,
-  ): Map<string, Map<string, number>> {
-    const m = new Map<string, Map<string, number>>();
-    const sumar = (de: string, contra: string, pts: number): void => {
-      let inner = m.get(de);
-      if (!inner) {
-        inner = new Map();
-        m.set(de, inner);
-      }
-      inner.set(contra, (inner.get(contra) ?? 0) + pts);
-    };
-    for (const p of partidos) {
-      const gl = p.golesLocal ?? 0;
-      const gv = p.golesVisita ?? 0;
-      if (gl > gv) {
-        sumar(p.equipoLocalId, p.equipoVisitaId, puntosVictoria);
-        sumar(p.equipoVisitaId, p.equipoLocalId, puntosDerrota);
-      } else if (gl < gv) {
-        sumar(p.equipoVisitaId, p.equipoLocalId, puntosVictoria);
-        sumar(p.equipoLocalId, p.equipoVisitaId, puntosDerrota);
-      } else {
-        sumar(p.equipoLocalId, p.equipoVisitaId, puntosEmpate);
-        sumar(p.equipoVisitaId, p.equipoLocalId, puntosEmpate);
-      }
-    }
-    return m;
   }
 
   // ─── Fixture ──────────────────────────────────────────────────────

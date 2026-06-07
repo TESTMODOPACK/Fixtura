@@ -14,6 +14,7 @@ import {
 import {
   ROLE,
   type CreateTorneoRequest,
+  type TablaPosicionesAdmin,
   type TorneoAdmin,
   type UpdateTorneoRequest,
   type UserContext,
@@ -41,6 +42,14 @@ export class TorneosAdminController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<TorneoAdmin> {
     return this.svc.findOne(id, ensureTenant(user));
+  }
+
+  @Get(':id/tabla')
+  getTabla(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<TablaPosicionesAdmin> {
+    return this.svc.getTabla(id, ensureTenant(user));
   }
 
   @Post()
