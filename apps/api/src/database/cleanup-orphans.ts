@@ -728,42 +728,11 @@ async function main(): Promise<void> {
       );
     }
 
-    // Sprint 38 — Tambien sincronizar al modelo viejo (jugadores_inscritos)
-    // para los equipos sombra de las inscripciones que acabamos de rellenar.
-    // Si el RUT ya existe en ese equipo, no duplica.
-    const sincronizacionVieja = await client.query(`
-      INSERT INTO jugadores_inscritos (
-        tenant_id, equipo_id, nombre, apellido, apodo, rut,
-        numero_camiseta, posicion, pie_habil, fecha_nac, capitan
-      )
-      SELECT
-        j.tenant_id,
-        i.equipo_sombra_id,
-        j.nombres,
-        j.apellidos,
-        j.apodo,
-        j.rut,
-        j.numero_camiseta,
-        j.posicion,
-        j.pie_habil,
-        j.fecha_nac,
-        j.capitan
-      FROM planilla_torneo p
-      JOIN inscripciones_torneo i ON i.id = p.inscripcion_id
-      JOIN jugadores j ON j.id = p.jugador_id
-      WHERE i.equipo_sombra_id IS NOT NULL
-        AND NOT EXISTS (
-          SELECT 1 FROM jugadores_inscritos ji
-          WHERE ji.tenant_id = j.tenant_id
-            AND ji.equipo_id = i.equipo_sombra_id
-            AND ji.rut = j.rut
-        )
-    `);
-    if ((sincronizacionVieja.rowCount ?? 0) > 0) {
-      log(
-        `Sprint 38: jugadores_inscritos shim sincronizado — ${sincronizacionVieja.rowCount} fila(s) en equipo sombra.`,
-      );
-    }
+    // Sprint 46 (ADR-0005) — ELIMINADO el sync a jugadores_inscritos del
+    // modelo viejo. Ya nada lee esa tabla (todos los lectores leen jugadores
+    // vía planilla). Además ese INSERT no seteaba torneo_id (NOT NULL) y
+    // crasheaba el arranque del API. El modelo viejo queda como backup
+    // congelado hasta el drop de la Fase 2.
 
     // ====================================================================
     // Sprint 46 (ADR-0005) — Fase 1: promover el modelo nuevo a fuente de

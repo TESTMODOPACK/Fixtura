@@ -715,40 +715,16 @@ export class InscripcionesAdminService {
    * lógica para sanciones — por eso la sincronización pasa por RUT.
    */
   private async sincronizarJugadorAModeloViejo(
-    tenantId: string,
-    equipoId: string,
-    jugadorNuevo: Jugador,
+    _tenantId: string,
+    _equipoId: string,
+    _jugadorNuevo: Jugador,
   ): Promise<void> {
-    const existente = await this.jugadorInscritoRepo.findOne({
-      where: { tenantId, equipoId, rut: jugadorNuevo.rut },
-    });
-    if (existente) {
-      // Actualizar datos por si cambió algo en el modelo nuevo
-      existente.nombre = jugadorNuevo.nombres;
-      existente.apellido = jugadorNuevo.apellidos;
-      existente.fechaNac = jugadorNuevo.fechaNac;
-      existente.numeroCamiseta = jugadorNuevo.numeroCamiseta;
-      existente.posicion = jugadorNuevo.posicion;
-      existente.pieHabil = jugadorNuevo.pieHabil;
-      existente.apodo = jugadorNuevo.apodo;
-      existente.capitan = jugadorNuevo.capitan;
-      await this.jugadorInscritoRepo.save(existente);
-      return;
-    }
-    const inscrito = this.jugadorInscritoRepo.create({
-      tenantId,
-      equipoId,
-      nombre: jugadorNuevo.nombres,
-      apellido: jugadorNuevo.apellidos,
-      apodo: jugadorNuevo.apodo,
-      rut: jugadorNuevo.rut,
-      numeroCamiseta: jugadorNuevo.numeroCamiseta,
-      posicion: jugadorNuevo.posicion,
-      pieHabil: jugadorNuevo.pieHabil,
-      fechaNac: jugadorNuevo.fechaNac,
-      capitan: jugadorNuevo.capitan,
-    });
-    await this.jugadorInscritoRepo.save(inscrito);
+    // Sprint 46 (ADR-0005) — NO-OP. Dejamos de mantener jugadores_inscritos:
+    // ya nada lo lee (todos los lectores usan jugadores vía planilla) y el
+    // INSERT no seteaba torneo_id (NOT NULL), lo que crasheaba inscribir /
+    // resync. El equipo sombra se sigue creando (lo usa generarCobros); sus
+    // jugadores_inscritos quedan congelados como backup hasta la Fase 2.
+    return;
   }
 
   private toDto(i: InscripcionTorneo, jugadoresEnPlanilla: number): InscripcionDto {
