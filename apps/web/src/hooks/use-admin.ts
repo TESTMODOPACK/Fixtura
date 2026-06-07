@@ -2229,3 +2229,22 @@ export function useDeleteTarifa(torneoId: string) {
     },
   });
 }
+
+/**
+ * Recuperación manual: genera los cobros del tarifario para un torneo ya
+ * activo (cuando se configuró el tarifario después de iniciarlo). Idempotente.
+ */
+export function useGenerarCobros(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        equiposProcesados: number;
+        matriculasCreadas: number;
+        cuotasCreadas: number;
+      }>(`/admin/torneos/${torneoId}/generar-cobros`, { method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'cobros'] });
+    },
+  });
+}

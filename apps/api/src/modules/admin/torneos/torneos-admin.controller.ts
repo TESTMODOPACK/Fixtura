@@ -85,6 +85,28 @@ export class TorneosAdminController {
     );
   }
 
+  /**
+   * Recuperación manual: genera los cobros del tarifario para un torneo ya
+   * activo (cuando el tarifario se configuró después de iniciarlo).
+   * Idempotente.
+   */
+  @Post(':id/generar-cobros')
+  @Audited({
+    action: 'torneo.cobros.generados_manual',
+    entityType: 'Torneo',
+    entityIdFrom: 'params.id',
+  })
+  generarCobros(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<{
+    equiposProcesados: number;
+    matriculasCreadas: number;
+    cuotasCreadas: number;
+  }> {
+    return this.svc.generarCobros(id, ensureTenant(user));
+  }
+
   @Delete(':id')
   @HttpCode(204)
   @Audited({

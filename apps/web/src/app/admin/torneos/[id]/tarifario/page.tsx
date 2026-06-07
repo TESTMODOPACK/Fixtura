@@ -28,6 +28,7 @@ import { PageHead } from '@/components/ui/page-head';
 import {
   useCreateTarifa,
   useDeleteTarifa,
+  useGenerarCobros,
   useTarifas,
   useTorneo,
   useUpdateTarifa,
@@ -79,8 +80,27 @@ export default function TarifarioPage({
   const { id } = params;
   const { data: torneo, isLoading: loadingTorneo } = useTorneo(id);
   const { data: tarifas, isLoading } = useTarifas(id);
+  const generarCobros = useGenerarCobros(id);
   const [tipoActivo, setTipoActivo] = useState<TipoTarifa | null>(null);
   const [editando, setEditando] = useState<TarifaTorneo | null>(null);
+
+  const onGenerarCobros = async (): Promise<void> => {
+    const ok = confirm(
+      'Generar los cobros del tarifario (matrícula + cuotas) para todos los ' +
+        'equipos del torneo.\n\nEs seguro: no duplica los cobros que ya existan. ' +
+        'Útil si configuraste el tarifario DESPUÉS de iniciar el torneo.\n\n¿Continuar?',
+    );
+    if (!ok) return;
+    try {
+      const r = await generarCobros.mutateAsync();
+      toastSuccess(
+        `Listo: ${r.matriculasCreadas} matrícula(s) + ${r.cuotasCreadas} cuota(s) ` +
+          `en ${r.equiposProcesados} equipo(s).`,
+      );
+    } catch (err) {
+      toastError(err);
+    }
+  };
 
   if (loadingTorneo) {
     return (
@@ -116,6 +136,17 @@ export default function TarifarioPage({
             <ArrowLeft size={14} /> Volver al torneo
           </Button>
         </Link>
+        {torneo.estado === 'ACTIVO' && (
+          <Button
+            variant="accent"
+            size="sm"
+            onClick={onGenerarCobros}
+            loading={generarCobros.isPending}
+            title="Genera matrícula + cuotas para los equipos (idempotente). Útil si configuraste el tarifario después de iniciar el torneo."
+          >
+            <CircleDollarSign size={14} /> Generar cobros
+          </Button>
+        )}
       </PageHead>
 
       <Card padding="roomy" className="mb-5 border-accent/30 bg-accent/5">

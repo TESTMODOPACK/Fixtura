@@ -585,6 +585,43 @@ export class TorneosAdminService {
   }
 
   /**
+   * Genera (o completa) los cobros del tarifario para un torneo ya ACTIVO.
+   *
+   * Recuperación manual para el caso común: el operador configuró el
+   * tarifario DESPUÉS de iniciar el torneo (la generación automática solo
+   * corre en la transición DRAFT→ACTIVO, así que esos cobros nunca nacían
+   * y no había forma de recuperarlos sin volver a DRAFT — lo que resetea el
+   * fixture). Idempotente: no duplica cobros que ya existan.
+   */
+  async generarCobros(
+    id: string,
+    tenantId: string,
+  ): Promise<{
+    equiposProcesados: number;
+    matriculasCreadas: number;
+    cuotasCreadas: number;
+  }> {
+    const torneo = await this.repo.findOne({ where: { id, tenantId } });
+    if (!torneo) throw new NotFoundException(`Torneo ${id} no encontrado`);
+    if (torneo.estado === 'DRAFT') {
+      throw new BadRequestException(
+        'El torneo está en DRAFT. Configurá el tarifario y después iniciálo ' +
+          '(ponelo "En curso"): los cobros se generan solos al arrancar.',
+      );
+    }
+    const r = await this.tarifaAplicador.generarCobrosInicioTorneo(id, tenantId);
+    if (torneo.cobrosGeneradosAt == null) {
+      torneo.cobrosGeneradosAt = new Date();
+      await this.repo.save(torneo);
+    }
+    this.logger.log(
+      `[generar-cobros manual torneo ${id}] equipos=${r.equiposProcesados} ` +
+        `matriculas=${r.matriculasCreadas} cuotas=${r.cuotasCreadas}`,
+    );
+    return r;
+  }
+
+  /**
    * Sprint 31 — eliminar torneo. Solo permitido en estado DRAFT.
    *
    * Por qué no permitir borrar ACTIVO/CERRADO:
