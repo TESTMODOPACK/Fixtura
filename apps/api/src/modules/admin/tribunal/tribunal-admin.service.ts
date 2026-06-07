@@ -55,7 +55,15 @@ export class TribunalAdminService {
     tenantId: string,
     input: CreateSancionTribunalRequest,
   ): Promise<SancionAdmin> {
-    await this.ensureTorneo(torneoId, tenantId);
+    const torneo = await this.ensureTorneo(torneoId, tenantId);
+    // DRAFT: el torneo no arrancó, no hay partidos ni disciplina que aplicar.
+    // ACTIVO: operación normal. CERRADO: se permite (resolución de cierre).
+    if (torneo.estado === 'DRAFT') {
+      throw new BadRequestException(
+        'El torneo está en DRAFT — el tribunal opera cuando el torneo arranca. ' +
+          'Iniciá el torneo para imponer sanciones.',
+      );
+    }
 
     const jugador = await this.jugadorRepo.findOne({
       where: { id: input.jugadorInscritoId, tenantId },
@@ -159,9 +167,10 @@ export class TribunalAdminService {
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────
-  private async ensureTorneo(torneoId: string, tenantId: string): Promise<void> {
+  private async ensureTorneo(torneoId: string, tenantId: string): Promise<Torneo> {
     const t = await this.torneoRepo.findOne({ where: { id: torneoId, tenantId } });
     if (!t) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);
+    return t;
   }
 
   private async proximaFechaNumero(torneoId: string): Promise<number | null> {

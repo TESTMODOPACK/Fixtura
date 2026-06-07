@@ -7,6 +7,7 @@ import {
   Ban,
   CheckCircle2,
   Gavel,
+  Lock,
   Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -59,6 +60,15 @@ export default function TribunalPage({
   const activas = sanciones?.filter((s) => !s.cumplida && s.fechasPendientes > 0) ?? [];
   const cumplidas = sanciones?.filter((s) => s.cumplida || s.fechasPendientes === 0) ?? [];
 
+  // Gate por estado del torneo:
+  //   DRAFT   → sin tribunal (no se ingresa nada).
+  //   ACTIVO  → operación normal.
+  //   CERRADO → solo resoluciones de cierre (mismo mecanismo, otro encuadre).
+  const estado = torneo?.estado;
+  const esDraft = estado === 'DRAFT';
+  const esCierre = estado === 'CERRADO';
+  const puedeIngresar = estado === 'ACTIVO' || estado === 'CERRADO';
+
   return (
     <>
       <PageHead
@@ -71,10 +81,49 @@ export default function TribunalPage({
             <ArrowLeft size={14} /> Torneo
           </Button>
         </Link>
-        <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
-          <Gavel size={14} /> {adding ? 'Cancelar' : 'Sanción manual'}
-        </Button>
+        {puedeIngresar && (
+          <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
+            <Gavel size={14} />{' '}
+            {adding
+              ? 'Cancelar'
+              : esCierre
+                ? 'Resolución de cierre'
+                : 'Sanción manual'}
+          </Button>
+        )}
       </PageHead>
+
+      {esDraft && (
+        <Card padding="comfortable" className="mb-5 border-orange-700/30 bg-orange-700/5">
+          <div className="flex items-start gap-3">
+            <Lock size={18} className="text-orange-700 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-ink">
+              <div className="font-semibold mb-0.5">Torneo en borrador</div>
+              <p className="font-serif italic text-ink-mute">
+                El tribunal opera cuando el torneo arranca. Iniciá el torneo
+                (ponelo “En curso”) para imponer sanciones — todavía no hay
+                partidos ni disciplina que registrar.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {esCierre && (
+        <Card padding="comfortable" className="mb-5 border-line bg-paper/60">
+          <div className="flex items-start gap-3">
+            <Gavel size={18} className="text-ink-mute flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-ink">
+              <div className="font-semibold mb-0.5">Torneo cerrado</div>
+              <p className="font-serif italic text-ink-mute">
+                El torneo terminó. Solo se admiten <b>resoluciones de cierre</b>
+                {' '}(fallos posteriores del tribunal). Las sanciones por fecha ya
+                no afectan partidos — quedan como registro disciplinario.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
         <Card padding="comfortable">
@@ -107,10 +156,11 @@ export default function TribunalPage({
         </Card>
       </div>
 
-      {adding && (
+      {adding && puedeIngresar && (
         <Card padding="comfortable" className="mb-5">
           <NuevaSancionTribunalForm
             torneoId={torneoId}
+            esCierre={esCierre}
             onDone={() => setAdding(false)}
           />
         </Card>
@@ -229,9 +279,11 @@ function SancionesSection({
 
 function NuevaSancionTribunalForm({
   torneoId,
+  esCierre,
   onDone,
 }: {
   torneoId: string;
+  esCierre?: boolean;
   onDone: () => void;
 }): React.ReactElement {
   const equiposQ = useEquipos(torneoId);
@@ -285,7 +337,9 @@ function NuevaSancionTribunalForm({
     <div>
       <div className="flex items-center gap-2 mb-3">
         <AlertTriangle size={18} className="text-accent" />
-        <CardLabel>Nueva sanción del tribunal</CardLabel>
+        <CardLabel>
+          {esCierre ? 'Resolución de cierre del torneo' : 'Nueva sanción del tribunal'}
+        </CardLabel>
       </div>
 
       <form
@@ -388,7 +442,7 @@ function NuevaSancionTribunalForm({
 
         <div className="md:col-span-2 flex gap-2">
           <Button type="submit" variant="accent" loading={mutation.isPending}>
-            <Gavel size={14} /> Imponer sanción
+            <Gavel size={14} /> {esCierre ? 'Registrar resolución' : 'Imponer sanción'}
           </Button>
           <Button type="button" variant="ghost" onClick={onDone}>
             Cancelar
