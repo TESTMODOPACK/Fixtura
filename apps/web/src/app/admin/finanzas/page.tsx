@@ -228,6 +228,56 @@ function CobrosTab({
   adding,
   setAdding,
 }: CobrosTabProps): React.ReactElement {
+  // Desglose por concepto de cobro (sobre la lista actualmente visible, que
+  // por default son los pendientes): count + monto por categoría.
+  const desglose = useMemo(() => {
+    const map = new Map<CategoriaCobro, { count: number; monto: number }>();
+    for (const c of cobros ?? []) {
+      const cur = map.get(c.categoria) ?? { count: 0, monto: 0 };
+      cur.count += 1;
+      cur.monto += c.monto;
+      map.set(c.categoria, cur);
+    }
+    return CATEGORIA_COBRO.filter((cat) => map.has(cat)).map((cat) => ({
+      categoria: cat,
+      ...map.get(cat)!,
+    }));
+  }, [cobros]);
+
+  // Lista agrupada por concepto, ordenada: las CUOTAS de menor a mayor
+  // (por club, año, mes); el resto por club + vencimiento.
+  const grupos = useMemo(() => {
+    const byCat = new Map<CategoriaCobro, CobroAdmin[]>();
+    for (const c of cobros ?? []) {
+      const arr = byCat.get(c.categoria) ?? [];
+      arr.push(c);
+      byCat.set(c.categoria, arr);
+    }
+    const cmpClub = (a: CobroAdmin, b: CobroAdmin): number =>
+      (a.clubNombre ?? a.equipoNombre ?? '').localeCompare(
+        b.clubNombre ?? b.equipoNombre ?? '',
+        'es',
+      );
+    const cmpCuota = (a: CobroAdmin, b: CobroAdmin): number =>
+      cmpClub(a, b) ||
+      (a.periodoAnio ?? 0) - (b.periodoAnio ?? 0) ||
+      (a.periodoMes ?? 0) - (b.periodoMes ?? 0) ||
+      (a.periodoSemana ?? 0) - (b.periodoSemana ?? 0);
+    const cmpOtros = (a: CobroAdmin, b: CobroAdmin): number =>
+      cmpClub(a, b) || (a.vencimiento ?? '').localeCompare(b.vencimiento ?? '');
+    return CATEGORIA_COBRO.filter((cat) => byCat.has(cat)).map((cat) => {
+      const items = byCat
+        .get(cat)!
+        .slice()
+        .sort(cat === 'CUOTA' ? cmpCuota : cmpOtros);
+      return {
+        categoria: cat,
+        items,
+        subtotal: items.reduce((acc, c) => acc + c.monto, 0),
+      };
+    });
+  }, [cobros]);
+
   return (
     <>
 
@@ -268,6 +318,36 @@ function CobrosTab({
           <div className="text-xs text-ink-mute font-serif italic mt-1">Cobros vencidos</div>
         </Card>
       </div>
+
+      {/* Desglose por concepto de cobro (sobre lo que muestra el filtro). */}
+      {!isLoading && desglose.length > 0 && (
+        <Card padding="comfortable" className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <CardLabel>Desglose por concepto</CardLabel>
+            <span className="text-[10px] uppercase tracking-wider text-ink-mute font-semibold">
+              {filtro === 'todos' ? 'Todos' : filtro}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {desglose.map((d) => (
+              <div
+                key={d.categoria}
+                className="rounded-card border border-line bg-paper/50 px-3 py-2"
+              >
+                <div className="text-[10px] uppercase tracking-wider text-ink-mute font-semibold truncate">
+                  {CATEGORIA_LABEL[d.categoria]}
+                </div>
+                <div className="font-display text-lg text-green-deep tracking-display leading-tight">
+                  {formatCLP(d.monto)}
+                </div>
+                <div className="text-xs text-ink-mute">
+                  {d.count} cobro{d.count === 1 ? '' : 's'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {adding && (
         <Card padding="comfortable" className="mb-5">
@@ -323,9 +403,24 @@ function CobrosTab({
           </div>
         )}
         {!isLoading && cobros && cobros.length > 0 && (
-          <div className="divide-y divide-line">
-            {cobros.map((c) => (
-              <CobroRow key={c.id} cobro={c} />
+          <div>
+            {grupos.map((g) => (
+              <div key={g.categoria}>
+                <div className="px-5 py-2 bg-green-deep/5 border-y border-line flex items-center justify-between gap-3">
+                  <span className="text-[11px] uppercase tracking-[0.18em] font-semibold text-green-deep">
+                    {CATEGORIA_LABEL[g.categoria]}
+                    <span className="text-ink-mute font-normal"> · {g.items.length}</span>
+                  </span>
+                  <span className="text-xs font-semibold text-ink-mute">
+                    {formatCLP(g.subtotal)}
+                  </span>
+                </div>
+                <div className="divide-y divide-line">
+                  {g.items.map((c) => (
+                    <CobroRow key={c.id} cobro={c} />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}
