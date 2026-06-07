@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Designacion } from '../competition/entities/designacion.entity';
 import { Fecha } from '../competition/entities/fecha.entity';
+import { IncidenciaPartido } from '../competition/entities/incidencia-partido.entity';
 import { Partido } from '../competition/entities/partido.entity';
 import { PlanillaTorneo } from '../competition/entities/planilla-torneo.entity';
 import { Torneo } from '../competition/entities/torneo.entity';
@@ -27,7 +28,14 @@ import { MatchCenterService } from './match-center.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Partido, Designacion, PlanillaTorneo, Fecha, Torneo]),
+    TypeOrmModule.forFeature([
+      Partido,
+      Designacion,
+      PlanillaTorneo,
+      Fecha,
+      Torneo,
+      IncidenciaPartido,
+    ]),
   ],
   controllers: [MatchCenterAdminController, MatchCenterPublicController],
   providers: [MatchCenterService, MatchCenterGateway],

@@ -11,6 +11,7 @@ import type { MatchCenterSnapshot } from '@fixtura/types';
 
 import { Designacion } from '../competition/entities/designacion.entity';
 import { Fecha } from '../competition/entities/fecha.entity';
+import { IncidenciaPartido } from '../competition/entities/incidencia-partido.entity';
 import { Partido } from '../competition/entities/partido.entity';
 import { PlanillaTorneo } from '../competition/entities/planilla-torneo.entity';
 import { Torneo } from '../competition/entities/torneo.entity';
@@ -40,6 +41,8 @@ export class MatchCenterService {
     private readonly planillaRepo: Repository<PlanillaTorneo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
+    @InjectRepository(IncidenciaPartido)
+    private readonly incidenciaRepo: Repository<IncidenciaPartido>,
   ) {}
 
   /**
@@ -201,13 +204,74 @@ export class MatchCenterService {
     if (partido.centroEstado === 'FINALIZADO_CENTRO') {
       throw new BadRequestException('El partido en vivo ya finalizó.');
     }
-    if (equipo === 'LOCAL') {
-      partido.golesLocal = (partido.golesLocal ?? 0) + 1;
-    } else {
-      partido.golesVisita = (partido.golesVisita ?? 0) + 1;
+    const inscripcionId =
+      equipo === 'LOCAL' ? partido.inscripcionLocalId : partido.inscripcionVisitaId;
+    if (!inscripcionId) {
+      throw new BadRequestException('El partido no tiene equipo asignado en ese lado.');
     }
-    await this.repo.save(partido);
+    // F46.6 — el marcador se DERIVA de las incidencias (fuente única). "+GOL"
+    // crea una incidencia de gol "sin jugador" que se puede atribuir luego en
+    // el detalle del acta. Así el botón y el registro de incidencias nunca
+    // desincronizan el marcador.
+    await this.incidenciaRepo.save(
+      this.incidenciaRepo.create({
+        tenantId,
+        partidoId,
+        inscripcionId,
+        jugadorId: null,
+        tipo: 'GOL',
+        minuto: null,
+        detalle: {},
+      }),
+    );
+    await this.recomputarMarcador(partido);
     return this.toSnapshot(partido);
+  }
+
+  /**
+   * Quita un gol del equipo (botón "−"). Borra la incidencia de gol más
+   * reciente, priorizando las "sin jugador" (las del botón +GOL) para no
+   * borrar goles ya atribuidos a un jugador.
+   */
+  async quitarGol(
+    partidoId: string,
+    tenantId: string,
+    equipo: 'LOCAL' | 'VISITA',
+  ): Promise<MatchCenterSnapshot> {
+    const partido = await this.ensure(partidoId, tenantId);
+    const inscripcionId =
+      equipo === 'LOCAL' ? partido.inscripcionLocalId : partido.inscripcionVisitaId;
+    if (!inscripcionId) return this.toSnapshot(partido);
+    const goles = await this.incidenciaRepo.find({
+      where: { partidoId, tenantId, inscripcionId, tipo: 'GOL' },
+      order: { createdAt: 'DESC' },
+    });
+    if (goles.length === 0) return this.toSnapshot(partido);
+    const target = goles.find((g) => !g.jugadorId) ?? goles[0];
+    await this.incidenciaRepo.delete(target!.id);
+    await this.recomputarMarcador(partido);
+    return this.toSnapshot(partido);
+  }
+
+  /**
+   * Recalcula golesLocal/Visita del partido contando las incidencias
+   * GOL/AUTOGOL por inscripción (misma convención que el cierre de acta).
+   */
+  private async recomputarMarcador(partido: Partido): Promise<void> {
+    const incs = await this.incidenciaRepo.find({
+      where: { partidoId: partido.id, tenantId: partido.tenantId },
+    });
+    const contar = (inscId: string | null): number =>
+      inscId
+        ? incs.filter(
+            (i) =>
+              i.inscripcionId === inscId &&
+              (i.tipo === 'GOL' || i.tipo === 'AUTOGOL'),
+          ).length
+        : 0;
+    partido.golesLocal = contar(partido.inscripcionLocalId);
+    partido.golesVisita = contar(partido.inscripcionVisitaId);
+    await this.repo.save(partido);
   }
 
   /**

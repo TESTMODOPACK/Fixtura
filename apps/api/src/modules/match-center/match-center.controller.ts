@@ -97,6 +97,18 @@ export class MatchCenterAdminController {
     return snap;
   }
 
+  @Post('quitar-gol')
+  @HttpCode(200)
+  async quitarGol(
+    @CurrentUser() user: UserContext,
+    @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
+    @Body() dto: SumarGolRequest,
+  ): Promise<MatchCenterSnapshot> {
+    const snap = await this.svc.quitarGol(partidoId, ensureTenant(user), dto.equipo);
+    void this.gateway.broadcast(partidoId);
+    return snap;
+  }
+
   @Post('ajustar-goles')
   @HttpCode(200)
   async ajustarGoles(

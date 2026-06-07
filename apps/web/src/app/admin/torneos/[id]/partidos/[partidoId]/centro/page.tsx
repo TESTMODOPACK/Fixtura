@@ -27,10 +27,10 @@ import {
 } from '@/hooks/use-admin';
 import {
   useArrancarCentro,
-  useAjustarGolesCentro,
   useFinalizarCentro,
   useMatchCenter,
   usePausarCentro,
+  useQuitarGolCentro,
   useReanudarCentro,
   useSegundosCronometro,
   useSiguientePeriodoCentro,
@@ -53,7 +53,7 @@ export default function CentroPage({
   const pausar = usePausarCentro(partidoId);
   const reanudar = useReanudarCentro(partidoId);
   const sumarGol = useSumarGolCentro(partidoId);
-  const ajustar = useAjustarGolesCentro(partidoId);
+  const quitarGol = useQuitarGolCentro(partidoId);
   const siguientePeriodo = useSiguientePeriodoCentro(partidoId);
   const finalizar = useFinalizarCentro(partidoId);
 
@@ -124,13 +124,8 @@ export default function CentroPage({
                 nombre={snapshot.equipoLocalNombre}
                 goles={snapshot.golesLocal}
                 onMas={() => sumarGol.mutate('LOCAL')}
-                onMenos={() =>
-                  ajustar.mutate({
-                    golesLocal: Math.max(0, snapshot.golesLocal - 1),
-                    golesVisita: snapshot.golesVisita,
-                  })
-                }
-                disabled={sumarGol.isPending || ajustar.isPending || !enJuego}
+                onMenos={() => quitarGol.mutate('LOCAL')}
+                disabled={sumarGol.isPending || quitarGol.isPending || !enJuego}
               />
               <div className="text-center">
                 <div className="font-mono text-6xl md:text-7xl text-ink font-bold tabular-nums">
@@ -152,13 +147,8 @@ export default function CentroPage({
                 nombre={snapshot.equipoVisitaNombre}
                 goles={snapshot.golesVisita}
                 onMas={() => sumarGol.mutate('VISITA')}
-                onMenos={() =>
-                  ajustar.mutate({
-                    golesLocal: snapshot.golesLocal,
-                    golesVisita: Math.max(0, snapshot.golesVisita - 1),
-                  })
-                }
-                disabled={sumarGol.isPending || ajustar.isPending || !enJuego}
+                onMenos={() => quitarGol.mutate('VISITA')}
+                disabled={sumarGol.isPending || quitarGol.isPending || !enJuego}
               />
             </div>
             {snapshot.estado === 'IDLE' && (
@@ -276,7 +266,6 @@ export default function CentroPage({
               equipoVisitaId={partido.equipoVisitaId}
               equipoVisitaNombre={partido.equipoVisitaNombre}
               minutoSugerido={minutoJuego}
-              onGolMarcador={(lado) => sumarGol.mutate(lado)}
             />
           )}
 
@@ -336,10 +325,10 @@ function EquipoColumn({
 }
 
 // ─── Carga de incidencias en vivo ───────────────────────────────────
-// Tipos que el planillero suele registrar durante el partido. GOL suma
-// también al marcador (un solo gesto: gol + goleador). Las tarjetas no
-// tocan el marcador. El resto (autogol, asistencia, MVP) se carga en el
-// detalle del partido.
+// Tipos que el planillero suele registrar durante el partido. F46.6 — el
+// marcador se deriva de las incidencias de gol (fuente única): registrar un
+// GOL suma al marcador en el backend. Las tarjetas no tocan el marcador. El
+// resto (autogol, asistencia, MVP) se carga en el detalle del partido.
 const TIPOS_RAPIDOS: Array<{ value: TipoIncidencia; label: string }> = [
   { value: 'GOL', label: '⚽ Gol' },
   { value: 'AMARILLA', label: '🟨 Amarilla' },
@@ -354,7 +343,6 @@ function IncidenciasPanel({
   equipoVisitaId,
   equipoVisitaNombre,
   minutoSugerido,
-  onGolMarcador,
 }: {
   partidoId: string;
   equipoLocalId: string;
@@ -362,7 +350,6 @@ function IncidenciasPanel({
   equipoVisitaId: string;
   equipoVisitaNombre: string;
   minutoSugerido: number;
-  onGolMarcador: (lado: 'LOCAL' | 'VISITA') => void;
 }): React.ReactElement {
   const [equipoSel, setEquipoSel] = useState<string>(equipoLocalId);
   const [jugadorId, setJugadorId] = useState<string>('');
@@ -384,10 +371,8 @@ function IncidenciasPanel({
         tipo,
         minuto: Number.isFinite(minutoFinal) ? minutoFinal : null,
       });
-      // GOL: además del registro del goleador, sube el marcador del equipo.
-      if (tipo === 'GOL') {
-        onGolMarcador(equipoSel === equipoLocalId ? 'LOCAL' : 'VISITA');
-      }
+      // F46.6 — el marcador se deriva de las incidencias en el backend; no
+      // tocamos el marcador acá (evita el doble conteo con el botón +GOL).
       setJugadorId('');
       setMinuto('');
     } catch (err) {
@@ -477,9 +462,10 @@ function IncidenciasPanel({
         </Button>
       </div>
       <p className="mt-3 text-[11px] font-serif italic text-ink-mute">
-        El gol suma también al marcador (no uses además el botón “+ GOL” para
-        el mismo gol). El minuto se autocompleta con el del partido; podés
-        cambiarlo.
+        El marcador se arma con las incidencias de gol: registrar un GOL acá
+        suma 1 al marcador, y el botón “+ GOL” de arriba crea un gol sin
+        jugador (lo podés atribuir después). Borrar una incidencia de gol
+        baja el marcador. El minuto se autocompleta; podés cambiarlo.
       </p>
     </Card>
   );

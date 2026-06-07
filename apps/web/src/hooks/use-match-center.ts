@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { io, type Socket } from 'socket.io-client';
 
 import type { MatchCenterSnapshot } from '@fixtura/types';
@@ -183,12 +183,32 @@ export function useReanudarCentro(partidoId: string) {
 }
 
 export function useSumarGolCentro(partidoId: string) {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (equipo: 'LOCAL' | 'VISITA') =>
       apiFetch<MatchCenterSnapshot>(`/admin/match-center/${partidoId}/sumar-gol`, {
         method: 'POST',
         body: { equipo },
       }),
+    // F46.6 — +GOL crea una incidencia (marcador derivado); refrescar la
+    // lista de incidencias del partido.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
+    },
+  });
+}
+
+export function useQuitarGolCentro(partidoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (equipo: 'LOCAL' | 'VISITA') =>
+      apiFetch<MatchCenterSnapshot>(`/admin/match-center/${partidoId}/quitar-gol`, {
+        method: 'POST',
+        body: { equipo },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
+    },
   });
 }
 

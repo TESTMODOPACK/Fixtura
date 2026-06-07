@@ -388,8 +388,36 @@ export class PartidosAdminService {
       }),
     );
 
+    // F46.6 — marcador derivado: recalcular goles desde las incidencias.
+    if (input.tipo === 'GOL' || input.tipo === 'AUTOGOL') {
+      await this.recomputarMarcador(partido);
+    }
+
     const incidencias = await this.listIncidencias(partidoId);
     return incidencias.find((i) => i.id === created.id)!;
+  }
+
+  /**
+   * F46.6 — Recalcula golesLocal/Visita del partido contando las
+   * incidencias GOL/AUTOGOL por inscripción. Las incidencias son la fuente
+   * única de verdad del marcador (el botón +GOL del match-center también
+   * crea incidencias). Misma convención que el sanity-check de cerrarActa.
+   */
+  private async recomputarMarcador(partido: Partido): Promise<void> {
+    const incs = await this.incidenciaRepo.find({
+      where: { partidoId: partido.id, tenantId: partido.tenantId },
+    });
+    const contar = (inscId: string | null): number =>
+      inscId
+        ? incs.filter(
+            (i) =>
+              i.inscripcionId === inscId &&
+              (i.tipo === 'GOL' || i.tipo === 'AUTOGOL'),
+          ).length
+        : 0;
+    partido.golesLocal = contar(partido.inscripcionLocalId);
+    partido.golesVisita = contar(partido.inscripcionVisitaId);
+    await this.repo.save(partido);
   }
 
   async removeIncidencia(incidenciaId: string, tenantId: string): Promise<void> {
@@ -401,7 +429,12 @@ export class PartidosAdminService {
     if (inc.partido?.actaCerradaAt) {
       throw new ConflictException('No se pueden borrar incidencias de un acta cerrada');
     }
+    const eraGol = inc.tipo === 'GOL' || inc.tipo === 'AUTOGOL';
     await this.incidenciaRepo.delete(incidenciaId);
+    // F46.6 — marcador derivado: recalcular goles tras borrar un gol.
+    if (eraGol && inc.partido) {
+      await this.recomputarMarcador(inc.partido);
+    }
   }
 
   // ─── Cierre de acta ─────────────────────────────────────────────────
