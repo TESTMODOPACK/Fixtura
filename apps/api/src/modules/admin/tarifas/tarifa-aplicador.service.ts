@@ -1,12 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { AuditLogService } from '../../audit';
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
+import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import {
   type FrecuenciaCuota,
@@ -48,6 +49,8 @@ export class TarifaAplicadorService {
     private readonly torneoRepo: Repository<Torneo>,
     @InjectRepository(Equipo)
     private readonly equipoRepo: Repository<Equipo>,
+    @InjectRepository(JugadorInscrito)
+    private readonly jugadorRepo: Repository<JugadorInscrito>,
     private readonly audit: AuditLogService,
   ) {}
 
@@ -270,6 +273,23 @@ export class TarifaAplicadorService {
       tenantId,
     );
 
+    // C3 — datos para un concepto legible (jugador · fecha · rival) en vez
+    // del fragmento de UUID del partido.
+    const numeroFecha = partido.fecha?.numero ?? null;
+    const equiposNombre = await this.cargarNombresEquipos(
+      [partido.equipoLocalId, partido.equipoVisitaId],
+      tenantId,
+    );
+    const jugadoresNombre = await this.cargarNombresJugadores(
+      incidencias
+        .filter(
+          (i) =>
+            (i.tipo === 'AMARILLA' || i.tipo === 'ROJA') && i.jugadorInscritoId,
+        )
+        .map((i) => i.jugadorInscritoId as string),
+      tenantId,
+    );
+
     let creados = 0;
     for (const inc of incidencias) {
       if (inc.tipo !== 'AMARILLA' && inc.tipo !== 'ROJA') continue;
@@ -317,7 +337,13 @@ export class TarifaAplicadorService {
         partidoId: partido.id,
         sancionId: null,
         tarifa,
-        concepto: this.conceptoMultaIncidencia(inc, tipoTarifa),
+        concepto: this.conceptoMultaIncidencia(inc, tipoTarifa, {
+          jugador: inc.jugadorInscritoId
+            ? jugadoresNombre.get(inc.jugadorInscritoId) ?? null
+            : null,
+          rival: this.rivalNombre(partido, inc.equipoId, equiposNombre),
+          numeroFecha,
+        }),
         monto: tarifa.monto,
         vencimiento: this.calcularVencimientoMatricula(tarifa),
         periodoAnio: null,
@@ -382,6 +408,12 @@ export class TarifaAplicadorService {
       });
       return null;
     }
+
+    // C3 — concepto legible (equipo · fecha · rival).
+    const equiposNombre = await this.cargarNombresEquipos(
+      [partido.equipoLocalId, partido.equipoVisitaId],
+      tenantId,
+    );
     return this.crearCobro({
       tenantId,
       torneoId,
@@ -389,7 +421,11 @@ export class TarifaAplicadorService {
       partidoId: partido.id,
       sancionId: null,
       tarifa,
-      concepto: `Walkover — partido ${this.etiquetaPartido(partido)}`,
+      concepto: this.conceptoWalkover(
+        equiposNombre.get(equipoPerdedorId) ?? null,
+        this.rivalNombre(partido, equipoPerdedorId, equiposNombre),
+        partido.fecha?.numero ?? null,
+      ),
       monto: tarifa.monto,
       vencimiento: this.calcularVencimientoMatricula(tarifa),
       periodoAnio: null,
@@ -921,17 +957,89 @@ export class TarifaAplicadorService {
     return `Matrícula — ${torneo} (${club} / ${cat})`;
   }
 
+  /**
+   * C3 — Concepto legible de una multa de tarjeta. Ej:
+   *   "Tarjeta roja — Juan Pérez (45') · Fecha 3 vs Halcones FC"
+   * Las partes que no se puedan resolver se omiten (jugador, fecha o rival).
+   */
   private conceptoMultaIncidencia(
     inc: IncidenciaPartido,
     tipoTarifa: 'MULTA_AMARILLA' | 'MULTA_ROJA',
+    ctx: { jugador: string | null; rival: string | null; numeroFecha: number | null },
   ): string {
-    const tipo = tipoTarifa === 'MULTA_AMARILLA' ? 'Amarilla' : 'Roja';
-    const min = inc.minuto != null ? `${inc.minuto}'` : '';
-    return `Multa ${tipo}${min ? ` (${min})` : ''} — partido ${inc.partidoId.slice(0, 8)}`;
+    const tipo =
+      tipoTarifa === 'MULTA_AMARILLA' ? 'Tarjeta amarilla' : 'Tarjeta roja';
+    const min = inc.minuto != null ? ` (${inc.minuto}')` : '';
+    let s = tipo;
+    if (ctx.jugador) s += ` — ${ctx.jugador}${min}`;
+    else s += min;
+    const contexto: string[] = [];
+    if (ctx.numeroFecha != null) contexto.push(`Fecha ${ctx.numeroFecha}`);
+    if (ctx.rival) contexto.push(`vs ${ctx.rival}`);
+    if (contexto.length > 0) s += ` · ${contexto.join(' ')}`;
+    return s;
   }
 
-  private etiquetaPartido(p: Partido): string {
-    return p.id ? p.id.slice(0, 8) : '?';
+  /**
+   * C3 — Concepto legible de un walkover. Ej:
+   *   "Walkover (no se presentó) — Tigres FC · Fecha 3 vs Halcones FC"
+   */
+  private conceptoWalkover(
+    equipoPerdedor: string | null,
+    rival: string | null,
+    numeroFecha: number | null,
+  ): string {
+    let s = 'Walkover (no se presentó)';
+    if (equipoPerdedor) s += ` — ${equipoPerdedor}`;
+    const contexto: string[] = [];
+    if (numeroFecha != null) contexto.push(`Fecha ${numeroFecha}`);
+    if (rival) contexto.push(`vs ${rival}`);
+    if (contexto.length > 0) s += ` · ${contexto.join(' ')}`;
+    return s;
+  }
+
+  /** Nombre del rival del equipo dado en el partido (el otro lado). */
+  private rivalNombre(
+    partido: Partido,
+    equipoId: string | null,
+    equiposNombre: Map<string, string>,
+  ): string | null {
+    if (!equipoId) return null;
+    const rivalId =
+      partido.equipoLocalId === equipoId
+        ? partido.equipoVisitaId
+        : partido.equipoLocalId;
+    return rivalId ? equiposNombre.get(rivalId) ?? null : null;
+  }
+
+  /** Carga nombres de equipos por id (dedupe, ignora nulls). */
+  private async cargarNombresEquipos(
+    ids: Array<string | null | undefined>,
+    tenantId: string,
+  ): Promise<Map<string, string>> {
+    const unicos = Array.from(new Set(ids.filter((x): x is string => !!x)));
+    if (unicos.length === 0) return new Map();
+    const rows = await this.equipoRepo.find({
+      where: { id: In(unicos), tenantId },
+      select: ['id', 'nombre'],
+    });
+    return new Map(rows.map((e) => [e.id, e.nombre]));
+  }
+
+  /** Carga "Nombre Apellido" de jugadores inscritos por id (dedupe). */
+  private async cargarNombresJugadores(
+    ids: Array<string | null | undefined>,
+    tenantId: string,
+  ): Promise<Map<string, string>> {
+    const unicos = Array.from(new Set(ids.filter((x): x is string => !!x)));
+    if (unicos.length === 0) return new Map();
+    const rows = await this.jugadorRepo.find({
+      where: { id: In(unicos), tenantId },
+      select: ['id', 'nombre', 'apellido'],
+    });
+    return new Map(
+      rows.map((j) => [j.id, `${j.nombre} ${j.apellido}`.trim()]),
+    );
   }
 
   /**
