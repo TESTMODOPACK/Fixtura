@@ -340,6 +340,7 @@ export class TorneosAdminService {
         fechaLimiteRefuerzosNumero,
         duracionPeriodoMinutos: input.duracionPeriodoMinutos ?? 40,
         duracionEntretiempoMinutos: input.duracionEntretiempoMinutos ?? 10,
+        minJugadoresParaIniciar: input.minJugadoresParaIniciar ?? 7,
       });
       try {
         return await this.repo.save(t);
@@ -534,6 +535,9 @@ export class TorneosAdminService {
       ...(input.duracionEntretiempoMinutos !== undefined && {
         duracionEntretiempoMinutos: input.duracionEntretiempoMinutos,
       }),
+      ...(input.minJugadoresParaIniciar !== undefined && {
+        minJugadoresParaIniciar: input.minJugadoresParaIniciar,
+      }),
     });
 
     // Si se desactivan los refuerzos, limpiar la fecha límite para
@@ -707,6 +711,7 @@ export class TorneosAdminService {
       fechaLimiteRefuerzosNumero: t.fechaLimiteRefuerzosNumero,
       duracionPeriodoMinutos: t.duracionPeriodoMinutos ?? 40,
       duracionEntretiempoMinutos: t.duracionEntretiempoMinutos ?? 10,
+      minJugadoresParaIniciar: t.minJugadoresParaIniciar ?? 7,
       createdAt: t.createdAt.toISOString(),
     };
   }

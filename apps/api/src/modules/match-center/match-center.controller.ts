@@ -57,6 +57,7 @@ export class MatchCenterAdminController {
       partidoId,
       ensureTenant(user),
       dto.minutosPorPeriodo,
+      dto.forzarDia ?? false,
     );
     void this.gateway.broadcast(partidoId);
     return snap;

@@ -156,7 +156,7 @@ export function useSegundosCronometro(
  */
 export function useArrancarCentro(partidoId: string) {
   return useMutation({
-    mutationFn: (input: { minutosPorPeriodo?: number }) =>
+    mutationFn: (input: { minutosPorPeriodo?: number; forzarDia?: boolean }) =>
       apiFetch<MatchCenterSnapshot>(`/admin/match-center/${partidoId}/arrancar`, {
         method: 'POST',
         body: input,

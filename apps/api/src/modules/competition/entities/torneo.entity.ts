@@ -143,6 +143,11 @@ export class Torneo {
   @Column({ name: 'duracion_entretiempo_minutos', type: 'smallint', default: 10 })
   duracionEntretiempoMinutos!: number;
 
+  // F46.3 — mínimo de jugadores en planilla por equipo para iniciar un
+  // partido. Default 7 (fútbol amateur). Lo valida match-center al arrancar.
+  @Column({ name: 'min_jugadores_para_iniciar', type: 'smallint', default: 7 })
+  minJugadoresParaIniciar!: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

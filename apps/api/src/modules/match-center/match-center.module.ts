@@ -1,7 +1,11 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { Designacion } from '../competition/entities/designacion.entity';
+import { Fecha } from '../competition/entities/fecha.entity';
 import { Partido } from '../competition/entities/partido.entity';
+import { PlanillaTorneo } from '../competition/entities/planilla-torneo.entity';
+import { Torneo } from '../competition/entities/torneo.entity';
 import {
   MatchCenterAdminController,
   MatchCenterPublicController,
@@ -22,7 +26,9 @@ import { MatchCenterService } from './match-center.service';
  * para que `wss://fixtura.cl/socket.io/` funcione en prod.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([Partido])],
+  imports: [
+    TypeOrmModule.forFeature([Partido, Designacion, PlanillaTorneo, Fecha, Torneo]),
+  ],
   controllers: [MatchCenterAdminController, MatchCenterPublicController],
   providers: [MatchCenterService, MatchCenterGateway],
   exports: [MatchCenterService, MatchCenterGateway],

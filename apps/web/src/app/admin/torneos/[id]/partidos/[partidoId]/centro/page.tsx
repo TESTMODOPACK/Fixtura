@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   Flag,
   Pause,
@@ -172,13 +173,46 @@ export default function CentroPage({
             <CardLabel>Controles del cronómetro</CardLabel>
             <div className="mt-4 flex flex-wrap gap-3">
               {snapshot.estado === 'IDLE' && (
-                <Button
-                  variant="accent"
-                  onClick={() => arrancar.mutate({})}
-                  disabled={arrancar.isPending}
-                >
-                  <Play size={16} /> Iniciar partido
-                </Button>
+                <div className="flex flex-col gap-2 basis-full">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      variant="accent"
+                      onClick={() => arrancar.mutate({})}
+                      disabled={arrancar.isPending}
+                      loading={arrancar.isPending}
+                    >
+                      <Play size={16} /> Iniciar partido
+                    </Button>
+                    {arrancar.error && (
+                      <Button
+                        variant="default"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              '¿Forzar el inicio fuera de la fecha agendada? ' +
+                                'Quedará registrado en las observaciones del partido. ' +
+                                '(No omite la falta de personal ni de plantel.)',
+                            )
+                          ) {
+                            arrancar.mutate({ forzarDia: true });
+                          }
+                        }}
+                        disabled={arrancar.isPending}
+                      >
+                        <AlertTriangle size={14} /> Forzar inicio
+                      </Button>
+                    )}
+                  </div>
+                  {arrancar.error && (
+                    <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
+                      {(arrancar.error as ApiError).message}
+                    </div>
+                  )}
+                  <p className="text-xs font-serif italic text-ink-mute">
+                    Para iniciar: árbitro principal + planillero designados, el día
+                    agendado y plantel mínimo registrado por equipo.
+                  </p>
+                </div>
               )}
               {snapshot.estado === 'EN_VIVO' && (
                 <Button onClick={() => pausar.mutate()} disabled={pausar.isPending}>

@@ -9,7 +9,11 @@ import { Repository } from 'typeorm';
 
 import type { MatchCenterSnapshot } from '@fixtura/types';
 
+import { Designacion } from '../competition/entities/designacion.entity';
+import { Fecha } from '../competition/entities/fecha.entity';
 import { Partido } from '../competition/entities/partido.entity';
+import { PlanillaTorneo } from '../competition/entities/planilla-torneo.entity';
+import { Torneo } from '../competition/entities/torneo.entity';
 
 /**
  * Sprint 18 — RF-17. Lógica del cronómetro Match Center.
@@ -28,7 +32,15 @@ import { Partido } from '../competition/entities/partido.entity';
 export class MatchCenterService {
   private readonly log = new Logger(MatchCenterService.name);
 
-  constructor(@InjectRepository(Partido) private readonly repo: Repository<Partido>) {}
+  constructor(
+    @InjectRepository(Partido) private readonly repo: Repository<Partido>,
+    @InjectRepository(Designacion)
+    private readonly designacionRepo: Repository<Designacion>,
+    @InjectRepository(PlanillaTorneo)
+    private readonly planillaRepo: Repository<PlanillaTorneo>,
+    @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
+    @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
+  ) {}
 
   /**
    * Snapshot actual del partido para emitir vía websocket.
@@ -68,6 +80,7 @@ export class MatchCenterService {
     partidoId: string,
     tenantId: string,
     minutosPorPeriodo?: number,
+    forzarDia = false,
   ): Promise<MatchCenterSnapshot> {
     const partido = await this.ensure(partidoId, tenantId);
     if (partido.actaCerradaAt) {
@@ -78,6 +91,16 @@ export class MatchCenterService {
       return this.toSnapshot(partido);
     }
     if (partido.centroEstado === 'IDLE') {
+      // F46.1–F46.3 — validaciones de inicio (bloquean el arranque). Solo
+      // en la transición IDLE→EN_VIVO (primer arranque). Reanudar un
+      // partido FINALIZADO_CENTRO/PAUSADO no re-valida.
+      const notaForzado = await this.validarInicio(partido, tenantId, forzarDia);
+      if (notaForzado) {
+        partido.observaciones = partido.observaciones
+          ? `${partido.observaciones}\n${notaForzado}`
+          : notaForzado;
+      }
+
       partido.centroPeriodo = 1;
       partido.centroSegundosAcumulados = 0;
 
@@ -241,6 +264,125 @@ export class MatchCenterService {
     await this.repo.save(partido);
     this.log.log(`[match-center] partido=${partidoId} FINALIZADO_CENTRO`);
     return this.toSnapshot(partido);
+  }
+
+  /**
+   * F46.1–F46.3 — Validaciones de inicio. Lanza BadRequestException con
+   * mensaje claro si algo falta. Devuelve una nota para anexar a
+   * observaciones cuando el inicio se forzó fuera de fecha, o null.
+   */
+  private async validarInicio(
+    partido: Partido,
+    tenantId: string,
+    forzarDia: boolean,
+  ): Promise<string | null> {
+    // F46.1 — personal mínimo: árbitro principal + planillero designados
+    // (ignorando designaciones rechazadas/ausentes).
+    const desigs = await this.designacionRepo.find({
+      where: { partidoId: partido.id, tenantId },
+    });
+    const activas = desigs.filter(
+      (d) => d.estado !== 'RECHAZADA' && d.estado !== 'AUSENTE',
+    );
+    const faltaPersonal: string[] = [];
+    if (!activas.some((d) => d.rolAsignado === 'ARBITRO_PRINCIPAL')) {
+      faltaPersonal.push('árbitro principal');
+    }
+    if (!activas.some((d) => d.rolAsignado === 'PLANILLERO')) {
+      faltaPersonal.push('planillero');
+    }
+    if (faltaPersonal.length > 0) {
+      throw new BadRequestException(
+        `No se puede iniciar: falta designar ${faltaPersonal.join(' y ')}. ` +
+          'Asigná el personal en "Designación de personal".',
+      );
+    }
+
+    // F46.2 — debe iniciarse el día agendado (zona America/Santiago).
+    const fecha = await this.fechaRepo.findOne({
+      where: { id: partido.fechaId, tenantId },
+    });
+    const agendadaISO = this.fechaPartidoISO(partido, fecha);
+    if (!agendadaISO) {
+      throw new BadRequestException(
+        'El partido no tiene fecha programada. Agendá fecha/hora antes de iniciar.',
+      );
+    }
+    const hoyISO = this.hoySantiagoISO();
+    let notaForzado: string | null = null;
+    if (agendadaISO !== hoyISO) {
+      if (!forzarDia) {
+        throw new BadRequestException(
+          `El partido está agendado para el ${agendadaISO}, no para hoy (${hoyISO}). ` +
+            'Usá "Forzar inicio" para iniciarlo igual, o reprogramá el partido.',
+        );
+      }
+      notaForzado = `[INICIO FORZADO] Iniciado el ${hoyISO}; estaba agendado para ${agendadaISO}.`;
+    }
+
+    // F46.3 — plantel mínimo por equipo (configurable por torneo).
+    const torneo = fecha
+      ? await this.torneoRepo.findOne({ where: { id: fecha.torneoId, tenantId } })
+      : null;
+    const min = torneo?.minJugadoresParaIniciar ?? 7;
+    const faltaPlantel: string[] = [];
+    const lados: Array<['local' | 'visita', string | null]> = [
+      ['local', partido.inscripcionLocalId],
+      ['visita', partido.inscripcionVisitaId],
+    ];
+    for (const [lado, inscId] of lados) {
+      if (!inscId) {
+        faltaPlantel.push(`${lado}: sin inscripción`);
+        continue;
+      }
+      const count = await this.contarPlantelActivo(inscId, tenantId);
+      if (count < min) {
+        faltaPlantel.push(`${lado}: ${count} de ${min}`);
+      }
+    }
+    if (faltaPlantel.length > 0) {
+      throw new BadRequestException(
+        `Plantel insuficiente para iniciar (mínimo ${min} jugadores por equipo): ` +
+          `${faltaPlantel.join('; ')}.`,
+      );
+    }
+
+    return notaForzado;
+  }
+
+  private async contarPlantelActivo(
+    inscripcionId: string,
+    tenantId: string,
+  ): Promise<number> {
+    return this.planillaRepo
+      .createQueryBuilder('pl')
+      .innerJoin('pl.jugador', 'j')
+      .where('pl.inscripcion_id = :inscripcionId', { inscripcionId })
+      .andWhere('pl.tenant_id = :tenantId', { tenantId })
+      .andWhere(`j.estado = 'ACTIVO'`)
+      .getCount();
+  }
+
+  /** Fecha calendario (YYYY-MM-DD) del partido en zona Santiago. */
+  private fechaPartidoISO(partido: Partido, fecha: Fecha | null): string | null {
+    if (partido.fechaHora) {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Santiago',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(partido.fechaHora);
+    }
+    return fecha?.fechaInicio ?? null;
+  }
+
+  private hoySantiagoISO(): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Santiago',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
   }
 
   private async ensure(partidoId: string, tenantId: string): Promise<Partido> {

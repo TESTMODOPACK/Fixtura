@@ -183,6 +183,16 @@ async function main(): Promise<void> {
     `);
     log('torneos.tabla_tiebreakers asegurada.');
 
+    // F46.3 — mínimo de jugadores en planilla por equipo para iniciar un
+    // partido. Configurable por torneo (default 7, fútbol amateur). Aditiva.
+    await client.query(`
+      ALTER TABLE torneos
+        ADD COLUMN IF NOT EXISTS min_jugadores_para_iniciar SMALLINT
+          NOT NULL DEFAULT 7
+          CHECK (min_jugadores_para_iniciar BETWEEN 1 AND 30)
+    `);
+    log('torneos.min_jugadores_para_iniciar asegurada (F46.3).');
+
     // Sprint 14: tabla push_subscriptions (notificaciones FCM/WebPush).
     await ensurePushSubscriptionsTable(client, log);
 

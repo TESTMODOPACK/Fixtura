@@ -58,6 +58,7 @@ const TORNEO_FIELD_LABEL: Record<string, string> = {
   fechaLimiteRefuerzosNumero: 'Cierre de refuerzos',
   duracionPeriodoMinutos: 'Minutos por tiempo',
   duracionEntretiempoMinutos: 'Minutos de entretiempo',
+  minJugadoresParaIniciar: 'Mínimo de jugadores para iniciar',
 };
 
 const TorneoFormSchema = z.object({
@@ -83,6 +84,8 @@ const TorneoFormSchema = z.object({
   // Sprint 29A — duración del partido configurable por torneo.
   duracionPeriodoMinutos: z.coerce.number().int().min(1).max(120),
   duracionEntretiempoMinutos: z.coerce.number().int().min(0).max(60),
+  // F46.3 — mínimo de jugadores en planilla por equipo para iniciar.
+  minJugadoresParaIniciar: z.coerce.number().int().min(1).max(30),
 });
 type TorneoForm = z.infer<typeof TorneoFormSchema>;
 
@@ -120,6 +123,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
       fechaLimiteRefuerzosNumero: '' as unknown as number,
       duracionPeriodoMinutos: 40,
       duracionEntretiempoMinutos: 10,
+      minJugadoresParaIniciar: 7,
     },
     mode: 'onChange',
   });
@@ -197,6 +201,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
       fechaLimiteRefuerzosNumero: vals.refuerzosHabilitados ? fechaLimite : null,
       duracionPeriodoMinutos: vals.duracionPeriodoMinutos,
       duracionEntretiempoMinutos: vals.duracionEntretiempoMinutos,
+      minJugadoresParaIniciar: vals.minJugadoresParaIniciar,
     });
       // Sprint 42 — Si el form tenía N combos (>=2), el backend creó N
       // torneos. La respuesta solo trae el primero, así que mostramos
@@ -506,10 +511,18 @@ export default function NuevoTorneoPage(): React.ReactElement {
               max={60}
               {...form.register('duracionEntretiempoMinutos', { valueAsNumber: true })}
             />
+            <Input
+              label="Mínimo de jugadores para iniciar"
+              type="number"
+              min={1}
+              max={30}
+              {...form.register('minJugadoresParaIniciar', { valueAsNumber: true })}
+            />
           </div>
           <p className="text-xs font-serif italic text-ink-mute mt-3">
             Default: 40 min por tiempo, 10 min de entretiempo (estándar amateur).
-            Cambialo según el reglamento de tu liga.
+            El mínimo de jugadores (default 7) bloquea el inicio de un partido si
+            algún equipo no tiene suficiente plantel registrado.
           </p>
         </Card>
 

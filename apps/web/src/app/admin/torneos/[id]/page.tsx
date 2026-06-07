@@ -199,6 +199,7 @@ export default function TorneoDetailPage({
           categoriaId={torneo.categoriaId}
           duracionPeriodoMinutos={torneo.duracionPeriodoMinutos}
           duracionEntretiempoMinutos={torneo.duracionEntretiempoMinutos}
+          minJugadoresParaIniciar={torneo.minJugadoresParaIniciar}
         />
       )}
     </>
@@ -747,6 +748,7 @@ function ConfiguracionTab({
   categoriaId,
   duracionPeriodoMinutos,
   duracionEntretiempoMinutos,
+  minJugadoresParaIniciar,
 }: {
   torneoId: string;
   estado: string;
@@ -755,6 +757,7 @@ function ConfiguracionTab({
   categoriaId: string | null;
   duracionPeriodoMinutos: number;
   duracionEntretiempoMinutos: number;
+  minJugadoresParaIniciar: number;
 }): React.ReactElement {
   const mutation = useUpdateTorneo(torneoId);
   const deleteTorneo = useDeleteTorneo();
@@ -778,25 +781,29 @@ function ConfiguracionTab({
     });
   };
 
-  // Sprint 29A — duración del partido editable.
+  // Sprint 29A — duración del partido editable. F46.3 — mínimo de jugadores.
   const [duracionPeriodo, setDuracionPeriodo] = useState<number>(duracionPeriodoMinutos);
   const [duracionEntretiempo, setDuracionEntretiempo] = useState<number>(
     duracionEntretiempoMinutos,
   );
+  const [minJugadores, setMinJugadores] = useState<number>(minJugadoresParaIniciar);
   useEffect(() => {
     setDuracionPeriodo(duracionPeriodoMinutos);
     setDuracionEntretiempo(duracionEntretiempoMinutos);
-  }, [duracionPeriodoMinutos, duracionEntretiempoMinutos]);
+    setMinJugadores(minJugadoresParaIniciar);
+  }, [duracionPeriodoMinutos, duracionEntretiempoMinutos, minJugadoresParaIniciar]);
 
   const cambioDuracion =
     duracionPeriodo !== duracionPeriodoMinutos ||
-    duracionEntretiempo !== duracionEntretiempoMinutos;
+    duracionEntretiempo !== duracionEntretiempoMinutos ||
+    minJugadores !== minJugadoresParaIniciar;
 
   const guardarDuracion = (): void => {
     if (!cambioDuracion) return;
     mutation.mutate({
       duracionPeriodoMinutos: duracionPeriodo,
       duracionEntretiempoMinutos: duracionEntretiempo,
+      minJugadoresParaIniciar: minJugadores,
     });
   };
 
@@ -988,7 +995,7 @@ function ConfiguracionTab({
           Cuánto dura cada tiempo y el descanso. El match center y la vista en
           vivo van a heredar estos valores al arrancar el cronómetro.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
           <div>
             <label className="block text-xs uppercase tracking-wider text-ink-mute font-semibold mb-1">
               Minutos por tiempo
@@ -1015,6 +1022,21 @@ function ConfiguracionTab({
               onChange={(e) => setDuracionEntretiempo(Number(e.target.value))}
             />
           </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-ink-mute font-semibold mb-1">
+              Mín. jugadores para iniciar
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={30}
+              className="input w-full"
+              value={minJugadores}
+              onChange={(e) => setMinJugadores(Number(e.target.value))}
+            />
+          </div>
+        </div>
+        <div className="mt-3">
           <Button
             variant="accent"
             size="sm"
@@ -1026,8 +1048,9 @@ function ConfiguracionTab({
           </Button>
         </div>
         <p className="text-xs font-serif italic text-ink-mute mt-3">
-          Default: 40 min / 10 min entretiempo. El cambio aplica solo a
-          partidos que todavía no arrancaron el match center.
+          Default: 40 min / 10 min entretiempo · mínimo 7 jugadores por equipo
+          para iniciar. La duración aplica solo a partidos que todavía no
+          arrancaron el match center.
         </p>
       </Card>
     </div>

@@ -138,6 +138,14 @@ export class CreateTorneoDto {
   @Min(0)
   @Max(60)
   duracionEntretiempoMinutos?: number;
+
+  // F46.3 — mínimo de jugadores en planilla por equipo para iniciar.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  minJugadoresParaIniciar?: number;
 }
 
 export class UpdateTorneoDto {
@@ -250,4 +258,12 @@ export class UpdateTorneoDto {
   @Min(0)
   @Max(60)
   duracionEntretiempoMinutos?: number;
+
+  // F46.3 — mínimo de jugadores en planilla por equipo para iniciar.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  minJugadoresParaIniciar?: number;
 }

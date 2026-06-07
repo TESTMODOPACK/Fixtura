@@ -40,6 +40,9 @@ export type MatchCenterSnapshot = z.infer<typeof MatchCenterSnapshotSchema>;
 
 export const StartMatchCenterRequestSchema = z.object({
   minutosPorPeriodo: z.number().int().min(1).max(120).optional(),
+  // F46.2 — el admin fuerza el inicio aunque hoy no sea el día agendado.
+  // Queda registrado en observaciones del partido.
+  forzarDia: z.boolean().optional(),
 });
 export type StartMatchCenterRequest = z.infer<typeof StartMatchCenterRequestSchema>;
 
