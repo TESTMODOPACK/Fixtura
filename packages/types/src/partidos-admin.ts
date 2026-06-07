@@ -28,6 +28,8 @@ export const PartidoAdminSchema = z.object({
   motivoSuspension: z.enum(MOTIVO_SUSPENSION).nullable(),
   suspendidoAt: z.iso.datetime().nullable(),
   observacionesSuspension: z.string().nullable(),
+  // F46.4 — certificación de jugadores presentes (requisito para cerrar acta)
+  presentesCertificadosAt: z.iso.datetime().nullable(),
 });
 export type PartidoAdmin = z.infer<typeof PartidoAdminSchema>;
 
@@ -88,6 +90,47 @@ export const CerrarActaSchema = z.object({
   observaciones: z.string().max(2000).nullable().optional(),
 });
 export type CerrarActaRequest = z.infer<typeof CerrarActaSchema>;
+
+// ─── F46.4 — Certificación de jugadores presentes (roster del acta) ──────
+export const MOTIVO_INHABILITACION = ['SANCIONADO', 'VETADO', 'INACTIVO'] as const;
+export type MotivoInhabilitacion = (typeof MOTIVO_INHABILITACION)[number];
+
+export const RosterJugadorSchema = z.object({
+  jugadorId: z.uuid(),
+  nombre: z.string(),
+  apellido: z.string(),
+  numeroCamiseta: z.number().int().nullable(),
+  rut: z.string().nullable(),
+  capitan: z.boolean(),
+  presente: z.boolean(),
+  habilitado: z.boolean(),
+  // null si está habilitado; si no, el porqué.
+  motivoInhabilitacion: z.enum(MOTIVO_INHABILITACION).nullable(),
+});
+export type RosterJugador = z.infer<typeof RosterJugadorSchema>;
+
+export const RosterEquipoSchema = z.object({
+  inscripcionId: z.uuid(),
+  equipoNombre: z.string(),
+  jugadores: z.array(RosterJugadorSchema),
+});
+export type RosterEquipo = z.infer<typeof RosterEquipoSchema>;
+
+export const ActaRosterSchema = z.object({
+  partidoId: z.uuid(),
+  actaCerradaAt: z.iso.datetime().nullable(),
+  presentesCertificadosAt: z.iso.datetime().nullable(),
+  local: RosterEquipoSchema,
+  visita: RosterEquipoSchema,
+});
+export type ActaRoster = z.infer<typeof ActaRosterSchema>;
+
+export const CertificarPresentesSchema = z.object({
+  // jugadorIds presentes en el partido (ambos equipos). Los no incluidos
+  // quedan como NO presentes. Bloquea si alguno no está habilitado.
+  jugadorIds: z.array(z.uuid()),
+});
+export type CertificarPresentesRequest = z.infer<typeof CertificarPresentesSchema>;
 
 /** Listado del fixture en admin: agrupa partidos por fecha. */
 export const FechaAdminSchema = z.object({

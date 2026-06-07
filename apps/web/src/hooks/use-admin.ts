@@ -401,6 +401,33 @@ export function useReabrirActa(partidoId: string, torneoId: string) {
   });
 }
 
+// ─── F46.4 — Roster del acta + certificación de presentes ─────────────
+import type { ActaRoster, CertificarPresentesRequest } from '@fixtura/types';
+
+export function useRosterActa(partidoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'partidos', partidoId, 'roster'],
+    queryFn: () => apiFetch<ActaRoster>(`/admin/partidos/${partidoId}/roster`),
+    enabled: !!partidoId,
+  });
+}
+
+export function useCertificarPresentes(partidoId: string, torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CertificarPresentesRequest) =>
+      apiFetch<ActaRoster>(`/admin/partidos/${partidoId}/certificar-presentes`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId, 'roster'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'] });
+    },
+  });
+}
+
 // ─── Sanciones / Tribunal ────────────────────────────────────────────
 export function useSanciones(torneoId: string | null | undefined) {
   return useQuery({

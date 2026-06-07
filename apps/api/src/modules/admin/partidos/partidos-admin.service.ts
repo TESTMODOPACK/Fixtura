@@ -14,12 +14,17 @@ import {
   type SancionPropuesta,
 } from '@fixtura/domain';
 import type {
+  ActaRoster,
   CerrarActaRequest,
+  CertificarPresentesRequest,
   CreateIncidenciaRequest,
   FixtureAdminFull,
   IncidenciaAdmin,
+  MotivoInhabilitacion,
   PartidoAdmin,
   PartidoDetalle,
+  RosterEquipo,
+  RosterJugador,
   UpdatePartidoRequest,
 } from '@fixtura/types';
 
@@ -29,8 +34,10 @@ import { Fecha } from '../../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { TarifaAplicadorService } from '../tarifas/tarifa-aplicador.service';
 import { Jugador } from '../../competition/entities/jugador.entity';
+import { JugadorVetado } from '../../competition/entities/jugador-vetado.entity';
 import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entity';
 import { Partido } from '../../competition/entities/partido.entity';
+import { PartidoJugador } from '../../competition/entities/partido-jugador.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { PushService } from '../push/push.service';
@@ -48,6 +55,10 @@ export class PartidosAdminService {
     private readonly jugadorRepo: Repository<Jugador>,
     @InjectRepository(PlanillaTorneo)
     private readonly planillaRepo: Repository<PlanillaTorneo>,
+    @InjectRepository(PartidoJugador)
+    private readonly partidoJugadorRepo: Repository<PartidoJugador>,
+    @InjectRepository(JugadorVetado)
+    private readonly vetadoRepo: Repository<JugadorVetado>,
     @InjectRepository(SancionActiva)
     private readonly sancionRepo: Repository<SancionActiva>,
     @InjectRepository(Cancha) private readonly canchaRepo: Repository<Cancha>,
@@ -332,11 +343,36 @@ export class PartidosAdminService {
           jugadorId: input.jugadorInscritoId,
           tenantId,
         },
+        relations: { jugador: true },
       });
       if (!enPlanilla) {
         throw new BadRequestException(
           'El jugador no está en la planilla del equipo indicado',
         );
+      }
+      // F46.4 — no se cargan incidencias de jugadores no habilitados
+      // (sancionados esta fecha / vetados / inactivos).
+      if (enPlanilla.jugador) {
+        const fechaInc = await this.fechaRepo.findOneOrFail({
+          where: { id: partido.fechaId },
+        });
+        const inh = await this.cargarInhabilitados(
+          fechaInc.torneoId,
+          fechaInc.numero,
+          tenantId,
+        );
+        const motivo = this.motivoInhabilitacion(enPlanilla.jugador, inh);
+        if (motivo) {
+          const etiqueta =
+            motivo === 'VETADO'
+              ? 'está vetado'
+              : motivo === 'SANCIONADO'
+                ? 'tiene una sanción activa esta fecha'
+                : 'está inactivo';
+          throw new BadRequestException(
+            `No se pueden cargar incidencias: el jugador ${etiqueta}.`,
+          );
+        }
       }
     }
 
@@ -392,6 +428,14 @@ export class PartidosAdminService {
     }
     if (partido.actaCerradaAt) {
       throw new ConflictException('El acta ya está cerrada');
+    }
+
+    // F46.4 — la certificación de jugadores presentes es requisito para
+    // cerrar el acta (deja registro de quién jugó y bloquea inhabilitados).
+    if (!partido.presentesCertificadosAt) {
+      throw new BadRequestException(
+        'Certificá los jugadores presentes de ambos equipos antes de cerrar el acta.',
+      );
     }
 
     // Sanity check: los goles del acta deberían coincidir con la cantidad
@@ -1073,6 +1117,215 @@ export class PartidosAdminService {
       motivoSuspension: p.motivoSuspension ?? null,
       suspendidoAt: p.suspendidoAt?.toISOString() ?? null,
       observacionesSuspension: p.observacionesSuspension ?? null,
+      presentesCertificadosAt: p.presentesCertificadosAt?.toISOString() ?? null,
     };
+  }
+
+  // ─── F46.4 — Roster del acta + certificación de presentes ────────────
+  /**
+   * Conjunto de jugadores inhabilitados para jugar este partido:
+   *   - sancionados: sanción activa del torneo que cubre esta fecha
+   *     (por jugadorId o por RUT — cambiar de club no evade).
+   *   - vetados: RUT en la lista negra del tenant.
+   * (Los INACTIVO se derivan del estado del propio jugador.)
+   */
+  private async cargarInhabilitados(
+    torneoId: string,
+    fechaNumero: number,
+    tenantId: string,
+  ): Promise<{
+    sancionadosJugadorIds: Set<string>;
+    sancionadosRuts: Set<string>;
+    vetadosRuts: Set<string>;
+  }> {
+    const sanc = await this.sancionRepo
+      .createQueryBuilder('s')
+      .select(['s.jugador_id AS "jugadorId"', 's.rut AS "rut"'])
+      .where('s.tenant_id = :tenantId', { tenantId })
+      .andWhere('s.torneo_id = :torneoId', { torneoId })
+      .andWhere('s.cumplida = false')
+      .andWhere('s.fechas_pendientes > 0')
+      .andWhere('s.desde_fecha_numero <= :n', { n: fechaNumero })
+      .getRawMany<{ jugadorId: string | null; rut: string | null }>();
+
+    const vet = await this.vetadoRepo.find({
+      where: { tenantId },
+      select: { rut: true },
+    });
+
+    return {
+      sancionadosJugadorIds: new Set(
+        sanc.map((r) => r.jugadorId).filter((v): v is string => !!v),
+      ),
+      sancionadosRuts: new Set(
+        sanc.map((r) => r.rut).filter((v): v is string => !!v),
+      ),
+      vetadosRuts: new Set(vet.map((v) => v.rut)),
+    };
+  }
+
+  private motivoInhabilitacion(
+    jugador: Jugador,
+    inh: {
+      sancionadosJugadorIds: Set<string>;
+      sancionadosRuts: Set<string>;
+      vetadosRuts: Set<string>;
+    },
+  ): MotivoInhabilitacion | null {
+    if (jugador.rut && inh.vetadosRuts.has(jugador.rut)) return 'VETADO';
+    if (jugador.estado !== 'ACTIVO') return 'INACTIVO';
+    if (
+      inh.sancionadosJugadorIds.has(jugador.id) ||
+      (jugador.rut ? inh.sancionadosRuts.has(jugador.rut) : false)
+    ) {
+      return 'SANCIONADO';
+    }
+    return null;
+  }
+
+  async getRosterActa(partidoId: string, tenantId: string): Promise<ActaRoster> {
+    const partido = await this.findPartido(partidoId, tenantId);
+    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    const inh = await this.cargarInhabilitados(fecha.torneoId, fecha.numero, tenantId);
+
+    const presentes = await this.partidoJugadorRepo.find({
+      where: { partidoId, tenantId },
+    });
+    const presenteSet = new Set(
+      presentes.filter((p) => p.presente).map((p) => p.jugadorId),
+    );
+
+    const equipoRoster = async (
+      inscripcionId: string | null,
+      equipoNombre: string,
+    ): Promise<RosterEquipo> => {
+      if (!inscripcionId) return { inscripcionId: '', equipoNombre, jugadores: [] };
+      const planilla = await this.planillaRepo.find({
+        where: { inscripcionId, tenantId },
+        relations: { jugador: true },
+      });
+      const jugadores: RosterJugador[] = planilla
+        .filter((p) => p.jugador)
+        .map((p) => {
+          const j = p.jugador!;
+          const motivo = this.motivoInhabilitacion(j, inh);
+          return {
+            jugadorId: j.id,
+            nombre: j.nombres,
+            apellido: j.apellidos,
+            numeroCamiseta: j.numeroCamiseta,
+            rut: j.rut,
+            capitan: j.capitan,
+            presente: presenteSet.has(j.id),
+            habilitado: motivo === null,
+            motivoInhabilitacion: motivo,
+          };
+        })
+        .sort(
+          (a, b) =>
+            Number(b.capitan) - Number(a.capitan) ||
+            (a.numeroCamiseta ?? 999) - (b.numeroCamiseta ?? 999) ||
+            a.apellido.localeCompare(b.apellido, 'es'),
+        );
+      return { inscripcionId, equipoNombre, jugadores };
+    };
+
+    return {
+      partidoId: partido.id,
+      actaCerradaAt: partido.actaCerradaAt?.toISOString() ?? null,
+      presentesCertificadosAt: partido.presentesCertificadosAt?.toISOString() ?? null,
+      local: await equipoRoster(
+        partido.inscripcionLocalId,
+        partido.inscripcionLocal?.club?.nombre ?? 'Local',
+      ),
+      visita: await equipoRoster(
+        partido.inscripcionVisitaId,
+        partido.inscripcionVisita?.club?.nombre ?? 'Visita',
+      ),
+    };
+  }
+
+  /**
+   * Certifica los jugadores presentes del partido (ambos equipos). Bloquea
+   * si alguno no está habilitado (sancionado/vetado/inactivo). Reemplaza el
+   * roster previo y marca la certificación (requisito para cerrar el acta).
+   */
+  @Transactional()
+  async certificarPresentes(
+    partidoId: string,
+    tenantId: string,
+    actorUserId: string,
+    input: CertificarPresentesRequest,
+  ): Promise<ActaRoster> {
+    const partido = await this.findPartido(partidoId, tenantId);
+    if (partido.actaCerradaAt) {
+      throw new ConflictException(
+        'El acta está cerrada. Reabrila para cambiar la certificación.',
+      );
+    }
+    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    const inscIds = [partido.inscripcionLocalId, partido.inscripcionVisitaId].filter(
+      (v): v is string => !!v,
+    );
+
+    // Planilla de ambos equipos → mapa jugadorId → { inscripcionId, jugador }.
+    const planilla = inscIds.length
+      ? await this.planillaRepo.find({
+          where: inscIds.map((inscripcionId) => ({ inscripcionId, tenantId })),
+          relations: { jugador: true },
+        })
+      : [];
+    const mapa = new Map<string, { inscripcionId: string; jugador: Jugador }>();
+    for (const p of planilla) {
+      if (p.jugador) mapa.set(p.jugador.id, { inscripcionId: p.inscripcionId, jugador: p.jugador });
+    }
+
+    const inh = await this.cargarInhabilitados(fecha.torneoId, fecha.numero, tenantId);
+    const ids = Array.from(new Set(input.jugadorIds));
+    const noEnPlanilla: string[] = [];
+    const inhabilitados: string[] = [];
+    for (const id of ids) {
+      const entry = mapa.get(id);
+      if (!entry) {
+        noEnPlanilla.push(id);
+        continue;
+      }
+      if (this.motivoInhabilitacion(entry.jugador, inh) !== null) {
+        inhabilitados.push(`${entry.jugador.nombres} ${entry.jugador.apellidos}`);
+      }
+    }
+    if (noEnPlanilla.length > 0) {
+      throw new BadRequestException(
+        'Hay jugadores que no pertenecen a la planilla de este partido.',
+      );
+    }
+    if (inhabilitados.length > 0) {
+      throw new BadRequestException(
+        `No se puede certificar como presentes a jugadores inhabilitados ` +
+          `(sancionados o vetados): ${inhabilitados.join(', ')}.`,
+      );
+    }
+
+    // Reemplazar el roster: borrar el previo e insertar los presentes.
+    await this.partidoJugadorRepo.delete({ partidoId, tenantId });
+    if (ids.length > 0) {
+      await this.partidoJugadorRepo.save(
+        ids.map((jugadorId) =>
+          this.partidoJugadorRepo.create({
+            tenantId,
+            partidoId,
+            inscripcionId: mapa.get(jugadorId)!.inscripcionId,
+            jugadorId,
+            presente: true,
+          }),
+        ),
+      );
+    }
+
+    partido.presentesCertificadosAt = new Date();
+    partido.presentesCertificadosPor = actorUserId;
+    await this.repo.save(partido);
+
+    return this.getRosterActa(partidoId, tenantId);
   }
 }

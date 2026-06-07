@@ -12,6 +12,7 @@ import {
 
 import {
   ROLE,
+  type ActaRoster,
   type FixtureAdminFull,
   type IncidenciaAdmin,
   type PartidoAdmin,
@@ -24,6 +25,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import {
   CerrarActaDto,
+  CertificarPresentesDto,
   CreateIncidenciaDto,
   DeclararWalkoverDto,
   ReprogramarPartidoDto,
@@ -111,6 +113,31 @@ export class PartidosAdminController {
     @Param('incidenciaId', new ParseUUIDPipe()) incidenciaId: string,
   ): Promise<void> {
     return this.svc.removeIncidencia(incidenciaId, ensureTenant(user));
+  }
+
+  // ── F46.4 — Roster del acta + certificación de presentes ───────────
+  @Get(':id/roster')
+  getRoster(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<ActaRoster> {
+    return this.svc.getRosterActa(id, ensureTenant(user));
+  }
+
+  @Post(':id/certificar-presentes')
+  @Audited({
+    action: 'partido.presentes_certificados',
+    entityType: 'Partido',
+    entityIdFrom: 'params.id',
+  })
+  certificarPresentes(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: CertificarPresentesDto,
+  ): Promise<ActaRoster> {
+    return this.svc.certificarPresentes(id, ensureTenant(user), user.userId, {
+      jugadorIds: dto.jugadorIds,
+    });
   }
 
   @Post(':id/cerrar-acta')

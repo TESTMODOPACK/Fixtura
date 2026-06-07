@@ -41,6 +41,7 @@ export type { EstadoInscripcion } from './inscripcion-torneo.entity';
 export { PlanillaTorneo } from './planilla-torneo.entity';
 export { Partido } from './partido.entity';
 export type { EstadoPartido } from './partido.entity';
+export { PartidoJugador } from './partido-jugador.entity';
 export { Personal } from './personal.entity';
 export type { RolPersonal } from './personal.entity';
 export { SancionActiva } from './sancion-activa.entity';

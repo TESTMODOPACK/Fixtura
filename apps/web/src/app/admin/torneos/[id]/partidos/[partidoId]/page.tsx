@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Calendar,
+  CheckCircle2,
   CloudRain,
   Flag,
   Lock,
@@ -13,6 +14,7 @@ import {
   Save,
   Trash2,
   Unlock,
+  UserCheck,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -23,7 +25,9 @@ import { z } from 'zod';
 import {
   MOTIVO_SUSPENSION,
   MOTIVO_SUSPENSION_LABEL,
+  type MotivoInhabilitacion,
   type MotivoSuspension,
+  type RosterEquipo,
   type TipoIncidencia,
 } from '@fixtura/types';
 
@@ -39,6 +43,7 @@ import { PageHead } from '@/components/ui/page-head';
 import {
   useAddIncidencia,
   useCanchas,
+  useCertificarPresentes,
   useCerrarActa,
   useDeclararWalkover,
   useDesignacionesPorPartido,
@@ -49,6 +54,7 @@ import {
   useReactivarPartido,
   useRemoveIncidencia,
   useReprogramarPartido,
+  useRosterActa,
   useSuspenderPartido,
   useUpdatePartido,
 } from '@/hooks/use-admin';
@@ -166,6 +172,10 @@ export default function PartidoDetallePage({
 
       <DesignacionesSection partidoId={partido.id} torneoId={torneoId} />
 
+      {!cerrada && partido.estado !== 'WALKOVER' && (
+        <CertificacionSection partido={partido} torneoId={torneoId} />
+      )}
+
       {!cerrada && (
         <IncidenciasSection
           partido={partido}
@@ -184,7 +194,14 @@ function ActaSection({
   partido,
   torneoId,
 }: {
-  partido: { id: string; golesLocal: number | null; golesVisita: number | null; actaCerradaAt: string | null };
+  partido: {
+    id: string;
+    golesLocal: number | null;
+    golesVisita: number | null;
+    actaCerradaAt: string | null;
+    presentesCertificadosAt: string | null;
+    estado: string;
+  };
   torneoId: string;
 }): React.ReactElement {
   const cerrarActa = useCerrarActa(partido.id, torneoId);
@@ -251,9 +268,22 @@ function ActaSection({
     );
   }
 
+  // F46.4 — el walkover cierra solo (no requiere certificación de roster).
+  const requiereCertificacion =
+    partido.estado !== 'WALKOVER' && !partido.presentesCertificadosAt;
+
   return (
     <Card padding="comfortable">
       <CardLabel>Cerrar acta</CardLabel>
+      {requiereCertificacion && (
+        <div className="mt-3 text-xs bg-orange-700/10 border border-orange-700/30 rounded-card px-3 py-2 text-ink leading-snug flex items-start gap-2">
+          <UserCheck size={14} className="text-orange-700 flex-shrink-0 mt-0.5" />
+          <span>
+            Certificá los jugadores presentes de ambos equipos (sección más
+            abajo) antes de cerrar el acta.
+          </span>
+        </div>
+      )}
       <form
         onSubmit={form.handleSubmit(
           (vals) => cerrarActa.mutate(vals),
@@ -279,7 +309,13 @@ function ActaSection({
             error={form.formState.errors.golesVisita?.message}
           />
         </div>
-        <Button type="submit" variant="accent" loading={cerrarActa.isPending} className="w-full">
+        <Button
+          type="submit"
+          variant="accent"
+          loading={cerrarActa.isPending}
+          disabled={requiereCertificacion}
+          className="w-full"
+        >
           <Lock size={14} /> Cerrar acta
         </Button>
         <div className="text-center">
@@ -947,6 +983,150 @@ function WalkoverCard({
               {err.message}
             </div>
           )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── F46.4 — Certificación de jugadores presentes ───────────────────
+const MOTIVO_INHAB_LABEL: Record<MotivoInhabilitacion, string> = {
+  SANCIONADO: 'Sancionado',
+  VETADO: 'Vetado',
+  INACTIVO: 'Inactivo',
+};
+
+function CertificacionSection({
+  partido,
+  torneoId,
+}: {
+  partido: { id: string };
+  torneoId: string;
+}): React.ReactElement {
+  const { data: roster, isLoading } = useRosterActa(partido.id);
+  const certificar = useCertificarPresentes(partido.id, torneoId);
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
+  const [inicializado, setInicializado] = useState(false);
+  const error = certificar.error as ApiError | undefined;
+
+  // Sembrar la selección con los presentes ya marcados (1ra carga).
+  useEffect(() => {
+    if (roster && !inicializado) {
+      const s = new Set<string>();
+      for (const eq of [roster.local, roster.visita]) {
+        for (const j of eq.jugadores) if (j.presente) s.add(j.jugadorId);
+      }
+      setSeleccion(s);
+      setInicializado(true);
+    }
+  }, [roster, inicializado]);
+
+  if (isLoading || !roster) {
+    return (
+      <Card padding="comfortable" className="mb-5">
+        <CardLabel>Certificación de jugadores presentes</CardLabel>
+        <div className="font-serif italic text-ink-mute text-sm mt-2">
+          Cargando planteles…
+        </div>
+      </Card>
+    );
+  }
+
+  const toggle = (jugadorId: string, habilitado: boolean): void => {
+    if (!habilitado) return;
+    setSeleccion((prev) => {
+      const s = new Set(prev);
+      if (s.has(jugadorId)) s.delete(jugadorId);
+      else s.add(jugadorId);
+      return s;
+    });
+  };
+
+  const equipoBlock = (eq: RosterEquipo): React.ReactElement => (
+    <div>
+      <div className="text-[10px] uppercase tracking-[0.18em] text-ink-mute font-semibold mb-2">
+        {eq.equipoNombre}
+      </div>
+      {eq.jugadores.length === 0 && (
+        <div className="text-sm text-ink-mute italic font-serif">Sin planilla cargada.</div>
+      )}
+      <div className="space-y-1">
+        {eq.jugadores.map((j) => (
+          <label
+            key={j.jugadorId}
+            className={cn(
+              'flex items-center gap-2 text-sm rounded px-2 py-1',
+              j.habilitado
+                ? 'hover:bg-paper-dark cursor-pointer'
+                : 'opacity-70 cursor-not-allowed bg-danger/5',
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={seleccion.has(j.jugadorId)}
+              disabled={!j.habilitado}
+              onChange={() => toggle(j.jugadorId, j.habilitado)}
+            />
+            <span className="font-mono text-xs text-ink-mute w-8">
+              {j.numeroCamiseta != null ? `#${j.numeroCamiseta}` : '—'}
+            </span>
+            <span className="font-semibold text-ink truncate">
+              {j.nombre} {j.apellido}
+              {j.capitan ? ' (C)' : ''}
+            </span>
+            {!j.habilitado && j.motivoInhabilitacion && (
+              <span className="ml-auto text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-danger/15 text-danger flex-shrink-0">
+                {MOTIVO_INHAB_LABEL[j.motivoInhabilitacion]}
+              </span>
+            )}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <Card padding="comfortable" className="mb-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+        <CardLabel>Certificación de jugadores presentes</CardLabel>
+        {roster.presentesCertificadosAt ? (
+          <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-green-bright/15 text-green-bright flex items-center gap-1">
+            <CheckCircle2 size={12} /> Certificado
+          </span>
+        ) : (
+          <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-orange-700/15 text-orange-700">
+            Pendiente
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-ink-mute font-serif italic mb-4">
+        Marcá quién jugó en cada equipo. Los sancionados (esta fecha) y vetados
+        no se pueden certificar. Es requisito para cerrar el acta.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {equipoBlock(roster.local)}
+        {equipoBlock(roster.visita)}
+      </div>
+      <div className="flex items-center gap-3 mt-4 flex-wrap">
+        <Button
+          type="button"
+          variant="accent"
+          size="sm"
+          loading={certificar.isPending}
+          onClick={() => certificar.mutate({ jugadorIds: Array.from(seleccion) })}
+        >
+          <UserCheck size={14} /> Certificar presentes ({seleccion.size})
+        </Button>
+        {roster.presentesCertificadosAt && (
+          <span className="text-xs text-ink-mute">
+            Última certificación:{' '}
+            {new Date(roster.presentesCertificadosAt).toLocaleString('es-CL')}
+          </span>
+        )}
+      </div>
+      {error && (
+        <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mt-3">
+          {error.message}
         </div>
       )}
     </Card>

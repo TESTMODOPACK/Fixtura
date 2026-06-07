@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -108,6 +110,14 @@ export class CerrarActaDto {
   @IsString()
   @MaxLength(2000)
   observaciones?: string | null;
+}
+
+// ── F46.4 — Certificación de jugadores presentes ─────────────────────
+export class CertificarPresentesDto {
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsUUID('4', { each: true })
+  jugadorIds!: string[];
 }
 
 // ── Sprint 8 DTOs ────────────────────────────────────────────────────

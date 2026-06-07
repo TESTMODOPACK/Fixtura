@@ -120,6 +120,14 @@ export class Partido {
   @Column({ name: 'acta_cerrada_by', type: 'uuid', nullable: true })
   actaCerradaBy!: string | null;
 
+  // F46.4 — certificación de jugadores presentes (roster del acta).
+  // Requisito para cerrar el acta. Se setea al certificar presentes.
+  @Column({ name: 'presentes_certificados_at', type: 'timestamptz', nullable: true })
+  presentesCertificadosAt!: Date | null;
+
+  @Column({ name: 'presentes_certificados_por', type: 'uuid', nullable: true })
+  presentesCertificadosPor!: string | null;
+
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'acta_cerrada_by' })
   actaCerradaByUser?: User | null;

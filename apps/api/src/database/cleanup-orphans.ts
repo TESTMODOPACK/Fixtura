@@ -193,6 +193,36 @@ async function main(): Promise<void> {
     `);
     log('torneos.min_jugadores_para_iniciar asegurada (F46.3).');
 
+    // F46.4 — Certificación de jugadores presentes por partido (roster del
+    // acta) + timestamp de certificación en partidos. Aditivo e idempotente.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS partido_jugadores (
+        id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id      UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        partido_id     UUID NOT NULL REFERENCES partidos(id) ON DELETE CASCADE,
+        inscripcion_id UUID NOT NULL,
+        jugador_id     UUID NOT NULL REFERENCES jugadores(id) ON DELETE CASCADE,
+        presente       BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_partido_jugador UNIQUE (partido_id, jugador_id)
+      )
+    `);
+    await ensureRls(client, 'partido_jugadores');
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_partido_jugadores_tenant ON partido_jugadores(tenant_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_partido_jugadores_partido ON partido_jugadores(partido_id)`,
+    );
+    await ensureTrigger(client, 'partido_jugadores');
+    await client.query(`
+      ALTER TABLE partidos
+        ADD COLUMN IF NOT EXISTS presentes_certificados_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS presentes_certificados_por UUID
+    `);
+    log('partido_jugadores + partidos.presentes_certificados_* asegurados (F46.4).');
+
     // Sprint 14: tabla push_subscriptions (notificaciones FCM/WebPush).
     await ensurePushSubscriptionsTable(client, log);
 
