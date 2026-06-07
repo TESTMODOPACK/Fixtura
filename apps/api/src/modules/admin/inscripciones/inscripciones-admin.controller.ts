@@ -64,6 +64,24 @@ export class InscripcionesTorneoController {
       dto as unknown as CreateInscripcionTorneoRequest,
     );
   }
+
+  /**
+   * Re-sincroniza los planteles del torneo desde los clubes. Útil cuando
+   * se cargaron jugadores al club DESPUÉS de inscribirlo (la planilla del
+   * torneo y el equipo sombra quedaron en 0). Idempotente.
+   */
+  @Post('resync-planteles')
+  @Audited({
+    action: 'torneo.planteles.resincronizados',
+    entityType: 'Torneo',
+    entityIdFrom: 'params.torneoId',
+  })
+  resyncPlanteles(
+    @CurrentUser() user: UserContext,
+    @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
+  ): Promise<{ inscripcionesProcesadas: number; jugadoresSincronizados: number }> {
+    return this.svc.resyncPlantelesTorneo(torneoId, ensureTenant(user));
+  }
 }
 
 @Controller('admin/inscripciones')

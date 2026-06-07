@@ -9,6 +9,7 @@ import {
   ListOrdered,
   type LucideIcon,
   Plus,
+  RefreshCw,
   RotateCcw,
   Trash2,
   Trophy,
@@ -34,6 +35,7 @@ import {
   useDeleteTorneo,
   useEquipos,
   useReactivarEquipo,
+  useResyncPlanteles,
   useTablaAdmin,
   useTorneo,
   useUpdateTorneo,
@@ -284,6 +286,7 @@ function EquiposTab({
   >(null);
   const deleteEquipo = useDeleteEquipo(torneoId);
   const reactivarEquipo = useReactivarEquipo(torneoId);
+  const resyncPlanteles = useResyncPlanteles(torneoId);
   // Solo se pueden inscribir equipos en DRAFT.
   const puedeInscribir = estadoTorneo === 'DRAFT';
   // Sprint 44 — suspender solo aplica con torneo ACTIVO (en DRAFT no hay
@@ -326,6 +329,27 @@ function EquiposTab({
     }
   };
 
+  const handleResync = async (): Promise<void> => {
+    const ok = window.confirm(
+      'Sincronizar planteles desde los clubes.\n\n' +
+        'Recorre los clubes inscritos y carga en este torneo a los jugadores ' +
+        'que cargaste DESPUÉS de inscribirlos. No borra ni duplica nada — es seguro ' +
+        'correrlo las veces que quieras.\n\n¿Continuar?',
+    );
+    if (!ok) return;
+    try {
+      const res = await resyncPlanteles.mutateAsync();
+      toastSuccess(
+        `Sincronización lista: ${res.jugadoresSincronizados} jugador(es) en ` +
+          `${res.inscripcionesProcesadas} equipo(s).`,
+      );
+    } catch (err) {
+      toastError(err);
+    }
+  };
+
+  const hayEquiposVacios = (equipos ?? []).some((e) => e.jugadoresCount === 0);
+
   // Series disponibles según la categoría del torneo. Si el torneo no tiene
   // categoría, no mostramos selector de serie en el form.
   const categoria = categoriaId
@@ -357,18 +381,53 @@ function EquiposTab({
             </div>
           </div>
         )}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-line">
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-line">
           <CardLabel>Equipos inscritos</CardLabel>
-          {inscribirHabilitado ? (
-            <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
-              <Plus size={14} /> {adding ? 'Cancelar' : 'Inscribir equipo'}
-            </Button>
-          ) : (
-            <span className="text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded bg-ink-mute/10 text-ink-mute">
-              Torneo {estadoTorneo.toLowerCase()} · inscripciones cerradas
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {equipos && equipos.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleResync}
+                disabled={resyncPlanteles.isPending}
+                title="Carga al torneo los jugadores que cargaste en los clubes después de inscribirlos"
+              >
+                <RefreshCw
+                  size={14}
+                  className={resyncPlanteles.isPending ? 'animate-spin' : undefined}
+                />
+                {resyncPlanteles.isPending ? 'Sincronizando…' : 'Sincronizar planteles'}
+              </Button>
+            )}
+            {inscribirHabilitado ? (
+              <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
+                <Plus size={14} /> {adding ? 'Cancelar' : 'Inscribir equipo'}
+              </Button>
+            ) : (
+              <span className="text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded bg-ink-mute/10 text-ink-mute">
+                Torneo {estadoTorneo.toLowerCase()} · inscripciones cerradas
+              </span>
+            )}
+          </div>
         </div>
+
+        {hayEquiposVacios && (
+          <div className="px-5 py-4 bg-accent/10 border-b border-accent/30">
+            <div className="text-sm text-ink">
+              <strong>Hay equipos con 0 jugadores.</strong> Si ya cargaste los planteles
+              en los clubes (vista Clubes), tocá{' '}
+              <button
+                type="button"
+                onClick={handleResync}
+                disabled={resyncPlanteles.isPending}
+                className="font-semibold text-accent underline underline-offset-2 disabled:opacity-50"
+              >
+                Sincronizar planteles
+              </button>{' '}
+              para traerlos a este torneo.
+            </div>
+          </div>
+        )}
 
         {adding && inscribirHabilitado && (
           <div className="px-5 py-4 bg-paper-dark border-b border-line">

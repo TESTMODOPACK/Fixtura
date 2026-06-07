@@ -137,6 +137,26 @@ export function useEquipos(torneoId: string | null | undefined) {
   });
 }
 
+/**
+ * Re-sincroniza los planteles del torneo desde los clubes (cuando se
+ * cargaron jugadores al club después de inscribirlo y el torneo muestra 0).
+ */
+export function useResyncPlanteles(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ inscripcionesProcesadas: number; jugadoresSincronizados: number }>(
+        `/admin/torneos/${torneoId}/inscripciones/resync-planteles`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'equipos'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'equipos'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos'] });
+    },
+  });
+}
+
 export function useCreateEquipo(torneoId: string) {
   const qc = useQueryClient();
   return useMutation({

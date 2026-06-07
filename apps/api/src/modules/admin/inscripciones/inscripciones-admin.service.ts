@@ -357,6 +357,92 @@ export class InscripcionesAdminService {
     return copiados;
   }
 
+  /**
+   * Re-sincroniza los planteles del torneo desde los clubes.
+   *
+   * Por qué: `precargarPlanillaDesdeClub` solo corre AL INSCRIBIR. Si el
+   * operador cargó/actualizó jugadores del club DESPUÉS de inscribirlo
+   * (o el club estaba vacío al inscribir), la planilla del torneo y el
+   * equipo sombra (jugadores_inscritos) quedan desfasados → el torneo,
+   * el detalle del partido y el Match Center muestran 0 jugadores.
+   *
+   * Esto recorre cada inscripción del torneo y, por cada jugador ACTIVO
+   * del club en la categoría de la inscripción, asegura su fila en
+   * planilla_torneo Y en el equipo sombra. Idempotente (ON CONFLICT DO
+   * NOTHING en planilla; upsert por RUT en el modelo viejo). NO quita a
+   * nadie: solo agrega/actualiza. Ignora el bloqueo de refuerzos porque
+   * es cargar la nómina base, no un refuerzo.
+   */
+  async resyncPlantelesTorneo(
+    torneoId: string,
+    tenantId: string,
+  ): Promise<{ inscripcionesProcesadas: number; jugadoresSincronizados: number }> {
+    await this.ensureTorneo(torneoId, tenantId);
+    const inscripciones = await this.inscRepo.find({
+      where: { torneoId, tenantId },
+    });
+    let jugadoresSincronizados = 0;
+    for (const insc of inscripciones) {
+      jugadoresSincronizados += await this.resyncPlantelInscripcion(
+        insc,
+        tenantId,
+      );
+    }
+    return {
+      inscripcionesProcesadas: inscripciones.length,
+      jugadoresSincronizados,
+    };
+  }
+
+  private async resyncPlantelInscripcion(
+    insc: InscripcionTorneo,
+    tenantId: string,
+  ): Promise<number> {
+    const club = await this.clubRepo.findOne({
+      where: { id: insc.clubId, tenantId },
+    });
+    if (!club) return 0;
+    const equipoSombraId = await this.ensureEquipoSombra(insc, club, tenantId);
+
+    const torneo = await this.torneoRepo.findOne({
+      where: { id: insc.torneoId, tenantId },
+    });
+    const tope = torneo?.topeJugadoresPorEquipo ?? 25;
+
+    const jugadores = await this.jugadorRepo.find({
+      where: {
+        tenantId,
+        clubId: insc.clubId,
+        categoriaId: insc.categoriaId,
+        estado: 'ACTIVO',
+      },
+      order: { createdAt: 'ASC' },
+      take: tope,
+    });
+
+    let n = 0;
+    for (const jugador of jugadores) {
+      // Planilla del torneo (idempotente — ON CONFLICT DO NOTHING). No
+      // usamos el try/catch del precarga para no saltarnos el shim si la
+      // planilla ya tenía la fila pero el equipo sombra no.
+      await this.planillaRepo
+        .createQueryBuilder()
+        .insert()
+        .into(PlanillaTorneo)
+        .values({ tenantId, inscripcionId: insc.id, jugadorId: jugador.id })
+        .orIgnore()
+        .execute();
+      // Equipo sombra (jugadores_inscritos) — upsert por RUT.
+      await this.sincronizarJugadorAModeloViejo(
+        tenantId,
+        equipoSombraId,
+        jugador,
+      );
+      n++;
+    }
+    return n;
+  }
+
   async desinscribir(id: string, tenantId: string): Promise<void> {
     const insc = await this.inscRepo.findOne({
       where: { id, tenantId },
