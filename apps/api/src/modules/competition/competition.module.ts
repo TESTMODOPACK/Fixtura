@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import {
+  AusenciaPersonal,
   Cancha,
   CategoriaJugadores,
   Club,
@@ -55,6 +56,7 @@ import {
       IncidenciaPartido,
       SancionActiva,
       Personal,
+      AusenciaPersonal,
       Designacion,
       DesignacionRecinto,
       Sponsor,

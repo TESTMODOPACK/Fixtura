@@ -98,3 +98,30 @@ export const UpdatePersonalSchema = CreatePersonalSchema.partial().extend({
   activo: z.boolean().optional(),
 });
 export type UpdatePersonalRequest = z.infer<typeof UpdatePersonalSchema>;
+
+/**
+ * F48 — Ausencias del personal por rango de fechas calendario.
+ * `desde`/`hasta` son fechas YYYY-MM-DD inclusivas. Una persona está NO
+ * disponible para un partido si la fecha del partido cae en [desde, hasta].
+ */
+export const AusenciaPersonalSchema = z.object({
+  id: z.uuid(),
+  personalId: z.uuid(),
+  desde: z.string(), // YYYY-MM-DD
+  hasta: z.string(), // YYYY-MM-DD
+  motivo: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+});
+export type AusenciaPersonal = z.infer<typeof AusenciaPersonalSchema>;
+
+export const CrearAusenciaSchema = z
+  .object({
+    desde: z.string().min(10).max(10), // YYYY-MM-DD
+    hasta: z.string().min(10).max(10),
+    motivo: z.string().max(200).optional().nullable(),
+  })
+  .refine((v) => v.hasta >= v.desde, {
+    message: 'La fecha "hasta" no puede ser anterior a "desde".',
+    path: ['hasta'],
+  });
+export type CrearAusenciaRequest = z.infer<typeof CrearAusenciaSchema>;

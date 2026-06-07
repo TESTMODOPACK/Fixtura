@@ -517,6 +517,45 @@ export function useDeactivatePersonal() {
   });
 }
 
+// ─── Ausencias del personal (F48) ─────────────────────────────────────
+import type { AusenciaPersonal, CrearAusenciaRequest } from '@fixtura/types';
+
+export function useAusencias(personalId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'personal', personalId, 'ausencias'],
+    queryFn: () =>
+      apiFetch<AusenciaPersonal[]>(`/admin/personal/${personalId}/ausencias`),
+    enabled: !!personalId,
+  });
+}
+
+export function useCrearAusencia(personalId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CrearAusenciaRequest) =>
+      apiFetch<AusenciaPersonal>(`/admin/personal/${personalId}/ausencias`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'personal', personalId, 'ausencias'] });
+    },
+  });
+}
+
+export function useEliminarAusencia(personalId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ausenciaId: string) =>
+      apiFetch<void>(`/admin/personal/${personalId}/ausencias/${ausenciaId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'personal', personalId, 'ausencias'] });
+    },
+  });
+}
+
 // ─── Designaciones ────────────────────────────────────────────────────
 export function useDesignacionesPorFecha(
   torneoId: string | null | undefined,
@@ -706,7 +745,38 @@ export function useRemoveMiembro() {
 }
 
 // ─── Auto-asignación de designaciones ─────────────────────────────────
-import type { AutoAsignarRequest, AutoAsignarResult } from '@fixtura/types';
+import type { AutoAsignarRequest, AutoAsignarResult, CoberturaFecha } from '@fixtura/types';
+
+/**
+ * F48 — Análisis de cobertura de la fecha (dry-run). La queryKey comparte
+ * el prefijo de designaciones para que asignar/quitar/auto-asignar (que ya
+ * invalidan ese prefijo) refresquen también el panel de cobertura.
+ */
+export function useCobertura(
+  torneoId: string | null | undefined,
+  fechaId: string | null | undefined,
+  roles?: string[],
+) {
+  const rolesParam = roles && roles.length > 0 ? roles.join(',') : '';
+  const qs = rolesParam ? `?roles=${encodeURIComponent(rolesParam)}` : '';
+  return useQuery({
+    queryKey: [
+      'admin',
+      'torneos',
+      torneoId,
+      'fechas',
+      fechaId,
+      'designaciones',
+      'cobertura',
+      rolesParam,
+    ],
+    queryFn: () =>
+      apiFetch<CoberturaFecha>(
+        `/admin/torneos/${torneoId}/fechas/${fechaId}/designaciones/cobertura${qs}`,
+      ),
+    enabled: !!torneoId && !!fechaId,
+  });
+}
 
 export function useAutoAsignarDesignaciones(invalidate: { torneoId: string; fechaId: string }) {
   const qc = useQueryClient();

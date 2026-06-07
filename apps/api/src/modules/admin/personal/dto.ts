@@ -135,3 +135,17 @@ export class InvitarPersonalDto {
   @IsEnum(CANALES)
   canal?: 'EMAIL' | 'WHATSAPP' | 'AMBOS';
 }
+
+// ─── F48: ausencias del personal por rango de fechas ───────────────
+export class CrearAusenciaDto {
+  @IsDateString()
+  desde!: string; // YYYY-MM-DD
+
+  @IsDateString()
+  hasta!: string; // YYYY-MM-DD
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  motivo?: string | null;
+}

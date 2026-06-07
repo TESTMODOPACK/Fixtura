@@ -60,6 +60,7 @@ import {
   PersonalPublicController,
 } from './personal/personal-admin.controller';
 import { PersonalAdminService } from './personal/personal-admin.service';
+import { AusenciasAdminService } from './personal/ausencias-admin.service';
 import { SponsorsAdminController } from './sponsors/sponsors-admin.controller';
 import { SponsorsAdminService } from './sponsors/sponsors-admin.service';
 import { CuotasCron } from './tarifas/cuotas.cron';
@@ -137,6 +138,7 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     PartidosAdminService,
     TribunalAdminService,
     PersonalAdminService,
+    AusenciasAdminService,
     DesignacionesAdminService,
     DesignacionesEmailService,
     RecintoAdminService,

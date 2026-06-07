@@ -127,6 +127,10 @@ async function main(): Promise<void> {
     // tanto en tablas como en índices y triggers.
     await ensurePersonalDesignacionesTables(client, log);
 
+    // Sprint 48 (F48): ausencias del personal por rango de fechas.
+    // Debe correr DESPUÉS de personal (FK personal_id).
+    await ensureAusenciasPersonalTable(client, log);
+
     // Sprint 4B: tabla sponsors (banners portal público).
     await ensureSponsorsTable(client, log);
 
@@ -1055,6 +1059,48 @@ async function ensurePersonalDesignacionesTables(
   await ensureTrigger(client, 'designaciones');
 
   log('Personal + designaciones aseguradas (idempotente).');
+}
+
+/**
+ * Sprint 48 (F48) — Ausencias del personal por rango de fechas.
+ *
+ * Una persona puede declararse NO disponible en un rango de fechas
+ * calendario (vacaciones, lesión, viaje). El rango es por fecha calendario
+ * — no por jornada del torneo — para que cubra todos los partidos de ese
+ * día, incluso de torneos distintos. La auto-asignación y el análisis de
+ * cobertura excluyen a quienes tengan una ausencia que cubra la fecha del
+ * partido. Aditiva e idempotente.
+ */
+async function ensureAusenciasPersonalTable(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS ausencias_personal (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id    UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      personal_id  UUID NOT NULL REFERENCES personal(id) ON DELETE CASCADE,
+      desde        DATE NOT NULL,
+      hasta        DATE NOT NULL,
+      motivo       VARCHAR(200),
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT chk_ausencia_rango CHECK (hasta >= desde)
+    )
+  `);
+  await ensureRls(client, 'ausencias_personal');
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_ausencias_personal_tenant ON ausencias_personal(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_ausencias_personal_personal ON ausencias_personal(personal_id)`,
+  );
+  // Index para cruzar por rango de fechas (cobertura/auto-asignar).
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_ausencias_personal_rango ON ausencias_personal(tenant_id, desde, hasta)`,
+  );
+  await ensureTrigger(client, 'ausencias_personal');
+  log('ausencias_personal asegurada (Sprint 48).');
 }
 
 async function ensureSponsorsTable(

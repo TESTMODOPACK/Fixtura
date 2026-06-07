@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Activity,
   ArrowLeft,
+  CalendarOff,
   CheckCircle2,
   IdCard,
   Mail,
@@ -37,8 +38,11 @@ import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
+  useAusencias,
+  useCrearAusencia,
   useCreatePersonal,
   useDeactivatePersonal,
+  useEliminarAusencia,
   useInvitarPersonal,
   usePersonal,
   useTenantSettings,
@@ -248,6 +252,7 @@ function PersonaRow({
   const update = useUpdatePersonal(persona.id);
   const invitar = useInvitarPersonal();
   const [editing, setEditing] = useState(false);
+  const [showAusencias, setShowAusencias] = useState(false);
   const status = carnetStatus(persona);
   // Solo mostrar badges de carnet si la liga es ANFA. Para ligas libres,
   // el carnet sigue siendo data útil pero no la mostramos como warning.
@@ -271,6 +276,7 @@ function PersonaRow({
   }
 
   return (
+    <div>
     <div className="px-5 py-4 flex items-start gap-3">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
@@ -334,6 +340,17 @@ function PersonaRow({
         )}
         <button
           type="button"
+          onClick={() => setShowAusencias((v) => !v)}
+          className={cn(
+            'p-1 rounded hover:bg-orange-700/10',
+            showAusencias ? 'text-orange-700' : 'text-ink-mute hover:text-orange-700',
+          )}
+          title="Ausencias / disponibilidad"
+        >
+          <CalendarOff size={14} />
+        </button>
+        <button
+          type="button"
           onClick={() => setEditing(true)}
           className="p-1 rounded text-ink-mute hover:text-accent hover:bg-accent/10"
           title="Editar"
@@ -368,6 +385,120 @@ function PersonaRow({
           </button>
         )}
       </div>
+    </div>
+      {showAusencias && (
+        <div className="px-5 pb-4 bg-paper-dark/40 border-t border-line">
+          <AusenciasPanel personaId={persona.id} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * F48 — Gestión de ausencias (rangos de fechas no disponibles) de una
+ * persona. Cuando el rango cubre la fecha de un partido, la auto-asignación
+ * y el análisis de cobertura excluyen a esta persona.
+ */
+function AusenciasPanel({ personaId }: { personaId: string }): React.ReactElement {
+  const { data: ausencias, isLoading } = useAusencias(personaId);
+  const crear = useCrearAusencia(personaId);
+  const eliminar = useEliminarAusencia(personaId);
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const error = crear.error as ApiError | undefined;
+
+  const agregar = async (): Promise<void> => {
+    if (!desde || !hasta) return;
+    await crear.mutateAsync({ desde, hasta, motivo: motivo.trim() || null });
+    setDesde('');
+    setHasta('');
+    setMotivo('');
+  };
+
+  return (
+    <div className="pt-3">
+      <div className="text-[10px] uppercase tracking-[0.18em] text-ink-mute font-semibold mb-2 flex items-center gap-1">
+        <CalendarOff size={12} className="text-orange-700" /> Ausencias / no disponible
+      </div>
+
+      {isLoading && (
+        <div className="text-sm text-ink-mute font-serif italic mb-2">Cargando…</div>
+      )}
+      {!isLoading && (ausencias?.length ?? 0) === 0 && (
+        <div className="text-sm text-ink-mute font-serif italic mb-2">
+          Sin ausencias. Esta persona figura disponible para todas las fechas.
+        </div>
+      )}
+      {(ausencias?.length ?? 0) > 0 && (
+        <ul className="space-y-1 mb-3">
+          {ausencias!.map((a) => (
+            <li
+              key={a.id}
+              className="flex items-center gap-2 text-sm bg-paper rounded-card border border-line px-3 py-1.5"
+            >
+              <span className="font-mono text-ink">
+                {a.desde} → {a.hasta}
+              </span>
+              {a.motivo && <span className="text-ink-mute">· {a.motivo}</span>}
+              <button
+                type="button"
+                onClick={() => eliminar.mutate(a.id)}
+                disabled={eliminar.isPending}
+                className="ml-auto p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
+                title="Quitar ausencia"
+              >
+                <Trash2 size={13} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <label className="label text-[10px]">Desde</label>
+          <input
+            type="date"
+            className="input text-sm"
+            value={desde}
+            onChange={(e) => setDesde(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label text-[10px]">Hasta</label>
+          <input
+            type="date"
+            className="input text-sm"
+            value={hasta}
+            min={desde || undefined}
+            onChange={(e) => setHasta(e.target.value)}
+          />
+        </div>
+        <div className="flex-1 min-w-[140px]">
+          <label className="label text-[10px]">Motivo (opcional)</label>
+          <input
+            type="text"
+            className="input text-sm"
+            placeholder="lesión, viaje, vacaciones…"
+            maxLength={200}
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="accent"
+          size="sm"
+          disabled={!desde || !hasta || crear.isPending}
+          loading={crear.isPending}
+          onClick={agregar}
+        >
+          <Plus size={14} /> Agregar
+        </Button>
+      </div>
+      {error && <div className="text-xs text-danger mt-2">{error.message}</div>}
     </div>
   );
 }

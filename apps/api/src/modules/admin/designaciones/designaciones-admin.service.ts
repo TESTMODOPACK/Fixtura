@@ -9,14 +9,17 @@ import { DataSource, Repository } from 'typeorm';
 
 import type {
   AutoAsignarResult,
+  CoberturaFecha,
+  CoberturaRol,
   DesignacionAdmin,
   DesignacionesPorFecha,
   EstadoDesignacion,
   RolDesignablePartido,
   RolPersonal,
 } from '@fixtura/types';
-import { SLOTS_POR_ROL } from '@fixtura/types';
+import { ROLES_DESIGNABLES_PARTIDO, SLOTS_POR_ROL } from '@fixtura/types';
 
+import { AusenciaPersonal } from '../../competition/entities/ausencia-personal.entity';
 import { Designacion } from '../../competition/entities/designacion.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { Partido } from '../../competition/entities/partido.entity';
@@ -42,6 +45,15 @@ const ROLES_ARBITRAJE: ReadonlyArray<RolPersonal> = [
  */
 const DOBLE_BOOKING_HORAS = 2;
 
+/**
+ * Etiquetas [singular, plural] por rol para armar el resumen de cobertura.
+ */
+const ROL_DEFICIT_LABEL: Record<RolDesignablePartido, [string, string]> = {
+  ARBITRO_PRINCIPAL: ['árbitro principal', 'árbitros principales'],
+  ARBITRO_ASISTENTE: ['árbitro asistente', 'árbitros asistentes'],
+  PLANILLERO: ['planillero', 'planilleros'],
+};
+
 @Injectable()
 export class DesignacionesAdminService {
   constructor(
@@ -51,6 +63,8 @@ export class DesignacionesAdminService {
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
     @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
+    @InjectRepository(AusenciaPersonal)
+    private readonly ausenciaRepo: Repository<AusenciaPersonal>,
     private readonly emailSvc: DesignacionesEmailService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
@@ -487,6 +501,73 @@ export class DesignacionesAdminService {
     return 'OK';
   }
 
+  // ─── Disponibilidad / ausencias (F48) ───────────────────────────────
+  /**
+   * Fecha calendario (YYYY-MM-DD) de un partido en America/Santiago. Si el
+   * partido no tiene fecha_hora, cae a fecha_inicio de la jornada. Se usa
+   * 'en-CA' porque produce el formato ISO YYYY-MM-DD de forma estable y
+   * en la zona correcta (no depende del TZ del proceso).
+   */
+  private partidoFechaISO(p: Partido, fecha: Fecha): string | null {
+    if (p.fechaHora) {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Santiago',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(p.fechaHora);
+    }
+    return fecha.fechaInicio ?? null;
+  }
+
+  /**
+   * Carga las ausencias del personal del tenant que solapan el rango de
+   * fechas dado. Devuelve un map personalId → lista de rangos [desde,hasta].
+   * Si no hay fechas resolubles, devuelve map vacío (no se puede decidir).
+   */
+  private async cargarAusenciasMap(
+    tenantId: string,
+    fechasISO: string[],
+  ): Promise<Map<string, Array<{ desde: string; hasta: string }>>> {
+    const map = new Map<string, Array<{ desde: string; hasta: string }>>();
+    const validas = fechasISO.filter((f): f is string => !!f);
+    if (validas.length === 0) return map;
+    const min = validas.reduce((a, b) => (a < b ? a : b));
+    const max = validas.reduce((a, b) => (a > b ? a : b));
+
+    // TO_CHAR garantiza string 'YYYY-MM-DD' (el parser de pg podría devolver
+    // las columnas DATE como objeto Date en getRawMany).
+    const rows = await this.ausenciaRepo
+      .createQueryBuilder('a')
+      .select([
+        'a.personal_id AS "personalId"',
+        `TO_CHAR(a.desde, 'YYYY-MM-DD') AS "desde"`,
+        `TO_CHAR(a.hasta, 'YYYY-MM-DD') AS "hasta"`,
+      ])
+      .where('a.tenant_id = :tenantId', { tenantId })
+      .andWhere('a.hasta >= :min', { min })
+      .andWhere('a.desde <= :max', { max })
+      .getRawMany<{ personalId: string; desde: string; hasta: string }>();
+
+    for (const r of rows) {
+      const arr = map.get(r.personalId) ?? [];
+      arr.push({ desde: r.desde, hasta: r.hasta });
+      map.set(r.personalId, arr);
+    }
+    return map;
+  }
+
+  private tieneAusenciaEnFecha(
+    map: Map<string, Array<{ desde: string; hasta: string }>>,
+    personalId: string,
+    fechaISO: string | null,
+  ): boolean {
+    if (!fechaISO) return false;
+    const rangos = map.get(personalId);
+    if (!rangos) return false;
+    return rangos.some((r) => r.desde <= fechaISO && fechaISO <= r.hasta);
+  }
+
   // ─── Auto-asignación ────────────────────────────────────────────────
   /**
    * Asigna automáticamente personal disponible a los partidos de una
@@ -538,6 +619,15 @@ export class DesignacionesAdminService {
       .andWhere('p.tenant_id = :tenantId', { tenantId })
       .orderBy('p.fecha_hora', 'ASC', 'NULLS LAST')
       .getMany();
+
+    // F48 — fecha calendario de cada partido + ausencias del personal que
+    // solapan la jornada (para excluir personal no disponible).
+    const partidoFechaMap = new Map<string, string | null>();
+    for (const p of partidos) partidoFechaMap.set(p.id, this.partidoFechaISO(p, fecha));
+    const ausenciasMap = await this.cargarAusenciasMap(
+      tenantId,
+      Array.from(partidoFechaMap.values()).filter((f): f is string => !!f),
+    );
 
     // Catálogo de personal activo agrupado por rol base
     const personalActivo = await this.personalRepo.find({
@@ -664,6 +754,16 @@ export class DesignacionesAdminService {
         const idsYaUsados = new Set(cubiertos.map((c) => c.personalId));
         const disponibles = candidatosBase.filter((p) => {
           if (idsYaUsados.has(p.id)) return false;
+          // F48 — Ausencia declarada que cubre la fecha de este partido.
+          if (
+            this.tieneAusenciaEnFecha(
+              ausenciasMap,
+              p.id,
+              partidoFechaMap.get(partido.id) ?? null,
+            )
+          ) {
+            return false;
+          }
           // Solo bloqueamos por carnet vencido si la liga es ANFA. Para
           // ligas libres (corporativas, barriales) el carnet ANFA no es
           // obligatorio y no debe excluir candidatos.
@@ -696,7 +796,7 @@ export class DesignacionesAdminService {
               rolAsignado: rol,
               motivo: candidatosBase.length === 0
                 ? `No hay personal activo con rol ${rol}`
-                : 'Todos los candidatos tienen conflicto de horario o carnet vencido',
+                : 'Todos los candidatos tienen conflicto de horario, carnet vencido o ausencia declarada',
             });
           }
           continue;
@@ -777,5 +877,227 @@ export class DesignacionesAdminService {
     }
 
     return result;
+  }
+
+  // ─── Análisis de cobertura (F48, dry-run) ───────────────────────────
+  /**
+   * Simula la auto-asignación SIN persistir y reporta, por rol, el déficit
+   * de personal de la fecha. Reusa la misma lógica greedy (balance de
+   * carga + doble-booking + carnet ANFA + ausencias) para que el déficit
+   * sea realista: un árbitro que puede cubrir dos partidos separados >2h
+   * NO infla el faltante. Pensado para un panel proactivo que avise antes
+   * de asignar que falta personal de apoyo.
+   */
+  async analizarCobertura(
+    torneoId: string,
+    fechaId: string,
+    tenantId: string,
+    roles?: RolDesignablePartido[],
+  ): Promise<CoberturaFecha> {
+    await this.ensureTorneo(torneoId, tenantId);
+    const fecha = await this.fechaRepo.findOne({ where: { id: fechaId, tenantId } });
+    if (!fecha) throw new NotFoundException(`Fecha ${fechaId} no encontrada`);
+    if (fecha.torneoId !== torneoId) {
+      throw new BadRequestException('La fecha no pertenece al torneo indicado');
+    }
+
+    const rolesValidos = new Set<string>(ROLES_DESIGNABLES_PARTIDO);
+    const rolesAnalizar: RolDesignablePartido[] =
+      roles && roles.length > 0
+        ? roles.filter((r) => rolesValidos.has(r))
+        : ['ARBITRO_PRINCIPAL', 'ARBITRO_ASISTENTE'];
+
+    const partidos = await this.partidoRepo
+      .createQueryBuilder('p')
+      .where('p.fecha_id = :fechaId', { fechaId })
+      .andWhere('p.tenant_id = :tenantId', { tenantId })
+      .orderBy('p.fecha_hora', 'ASC', 'NULLS LAST')
+      .getMany();
+
+    const fechaNumero = fecha.numero;
+
+    if (partidos.length === 0) {
+      return {
+        fechaId: fecha.id,
+        fechaNumero,
+        roles: rolesAnalizar.map((rol) => ({
+          rol,
+          partidosCount: 0,
+          slotsNecesarios: 0,
+          slotsCubiertos: 0,
+          slotsAsignablesAhora: 0,
+          deficit: 0,
+          personalDisponible: 0,
+          personalNoDisponible: 0,
+        })),
+        hayDeficit: false,
+        resumen: null,
+      };
+    }
+
+    const partidoFechaMap = new Map<string, string | null>();
+    for (const p of partidos) partidoFechaMap.set(p.id, this.partidoFechaISO(p, fecha));
+    const fechasISO = Array.from(partidoFechaMap.values()).filter((f): f is string => !!f);
+    const ausenciasMap = await this.cargarAusenciasMap(tenantId, fechasISO);
+
+    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    const requiereCarnetAnfa = tenant?.requiereCarnetAnfa ?? false;
+
+    const personalActivo = await this.personalRepo.find({
+      where: { tenantId, activo: true },
+    });
+
+    // Designaciones existentes (no rechazada/ausente) → cubiertos + ocupación.
+    const partidoIds = partidos.map((p) => p.id);
+    const existentes = await this.repo
+      .createQueryBuilder('d')
+      .leftJoin('d.partido', 'partido')
+      .select([
+        'd.personal_id AS "personalId"',
+        'd.partido_id AS "partidoId"',
+        'd.rol_asignado AS "rolAsignado"',
+        'partido.fecha_hora AS "fechaHora"',
+      ])
+      .where('d.tenant_id = :tenantId', { tenantId })
+      .andWhere('d.partido_id IN (:...partidoIds)', { partidoIds })
+      .andWhere(`d.estado NOT IN ('RECHAZADA','AUSENTE')`)
+      .getRawMany<{
+        personalId: string;
+        partidoId: string;
+        rolAsignado: string;
+        fechaHora: string | null;
+      }>();
+
+    const cubiertoCount = new Map<string, number>(); // `${partidoId}-${rol}` → count
+    const ocupadoBase = new Map<string, Date[]>();
+    for (const d of existentes) {
+      const key = `${d.partidoId}-${d.rolAsignado}`;
+      cubiertoCount.set(key, (cubiertoCount.get(key) ?? 0) + 1);
+      if (d.fechaHora) {
+        const arr = ocupadoBase.get(d.personalId) ?? [];
+        arr.push(new Date(d.fechaHora));
+        ocupadoBase.set(d.personalId, arr);
+      }
+    }
+
+    // Carga por personal en el torneo (mismo criterio de balance que autoAsignar).
+    const cargaTorneo = await this.repo
+      .createQueryBuilder('d')
+      .leftJoin('d.partido', 'partido')
+      .leftJoin('partido.fecha', 'fecha')
+      .select('d.personal_id', 'personalId')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('d.tenant_id = :tenantId', { tenantId })
+      .andWhere('fecha.torneo_id = :torneoId', { torneoId })
+      .andWhere(`d.estado NOT IN ('RECHAZADA','AUSENTE')`)
+      .groupBy('d.personal_id')
+      .getRawMany<{ personalId: string; cnt: string }>();
+    const cargaBase = new Map<string, number>();
+    for (const r of cargaTorneo) cargaBase.set(r.personalId, Number(r.cnt));
+
+    const hoy = new Date();
+    const treintaDiasMs = 30 * 24 * 60 * 60 * 1000;
+    const margenMs = DOBLE_BOOKING_HORAS * 60 * 60 * 1000;
+
+    const rolesOut: CoberturaRol[] = [];
+
+    for (const rol of rolesAnalizar) {
+      const slotsPorPartido = SLOTS_POR_ROL[rol];
+      const slotsNecesarios = partidos.length * slotsPorPartido;
+      const candidatosBase = personalActivo.filter((p) => p.rol === rol);
+
+      // Personal disponible/no disponible: ausencia que cubra alguna fecha
+      // de la jornada (aprox. para el panel; el déficit real sale del greedy).
+      let personalNoDisponible = 0;
+      for (const p of candidatosBase) {
+        const ausente = fechasISO.some((f) =>
+          this.tieneAusenciaEnFecha(ausenciasMap, p.id, f),
+        );
+        if (ausente) personalNoDisponible++;
+      }
+      const personalDisponible = candidatosBase.length - personalNoDisponible;
+
+      // Clonar estructuras mutables para no contaminar entre roles.
+      const ocupadoSim = new Map<string, Date[]>();
+      for (const [k, v] of ocupadoBase) ocupadoSim.set(k, [...v]);
+      const cargaSim = new Map<string, number>(cargaBase);
+
+      let slotsCubiertos = 0;
+      let slotsAsignablesAhora = 0;
+
+      for (const partido of partidos) {
+        const key = `${partido.id}-${rol}`;
+        const yaCubiertos = Math.min(cubiertoCount.get(key) ?? 0, slotsPorPartido);
+        slotsCubiertos += yaCubiertos;
+        let restantes = slotsPorPartido - yaCubiertos;
+        if (restantes <= 0) continue;
+
+        const partidoFecha = partidoFechaMap.get(partido.id) ?? null;
+        const usadosEnPartido = new Set<string>();
+
+        while (restantes > 0) {
+          const candidatos = candidatosBase.filter((p) => {
+            if (usadosEnPartido.has(p.id)) return false;
+            if (this.tieneAusenciaEnFecha(ausenciasMap, p.id, partidoFecha)) return false;
+            if (requiereCarnetAnfa && ROLES_ARBITRAJE.includes(rol as RolPersonal)) {
+              if (
+                this.checkCarnetWarning(p.rol, p.carnetAnfaVence, hoy, treintaDiasMs) ===
+                'VENCIDO'
+              ) {
+                return false;
+              }
+            }
+            if (partido.fechaHora) {
+              const oc = ocupadoSim.get(p.id) ?? [];
+              for (const o of oc) {
+                if (Math.abs(o.getTime() - partido.fechaHora.getTime()) < margenMs) {
+                  return false;
+                }
+              }
+            }
+            return true;
+          });
+          if (candidatos.length === 0) break;
+          candidatos.sort((a, b) => {
+            const ca = cargaSim.get(a.id) ?? 0;
+            const cb = cargaSim.get(b.id) ?? 0;
+            if (ca !== cb) return ca - cb;
+            return a.apellido.localeCompare(b.apellido);
+          });
+          const elegido = candidatos[0]!;
+          usadosEnPartido.add(elegido.id);
+          slotsAsignablesAhora++;
+          restantes--;
+          cargaSim.set(elegido.id, (cargaSim.get(elegido.id) ?? 0) + 1);
+          if (partido.fechaHora) {
+            const arr = ocupadoSim.get(elegido.id) ?? [];
+            arr.push(partido.fechaHora);
+            ocupadoSim.set(elegido.id, arr);
+          }
+        }
+      }
+
+      const deficit = Math.max(0, slotsNecesarios - slotsCubiertos - slotsAsignablesAhora);
+      rolesOut.push({
+        rol,
+        partidosCount: partidos.length,
+        slotsNecesarios,
+        slotsCubiertos,
+        slotsAsignablesAhora,
+        deficit,
+        personalDisponible,
+        personalNoDisponible,
+      });
+    }
+
+    const conDeficit = rolesOut.filter((r) => r.deficit > 0);
+    const hayDeficit = conDeficit.length > 0;
+    const resumen = hayDeficit
+      ? `Faltan ${conDeficit
+          .map((r) => `${r.deficit} ${ROL_DEFICIT_LABEL[r.rol][r.deficit === 1 ? 0 : 1]}`)
+          .join(', ')} para la fecha ${fechaNumero} — conseguí personal de apoyo.`
+      : null;
+
+    return { fechaId: fecha.id, fechaNumero, roles: rolesOut, hayDeficit, resumen };
   }
 }

@@ -35,6 +35,7 @@ import {
   useAsignarDesignacion,
   useAsignarRecinto,
   useAutoAsignarDesignaciones,
+  useCobertura,
   useDesignacionesPorFecha,
   useDesignacionesRecinto,
   useFixtureDetail,
@@ -228,6 +229,8 @@ function FechaDesignacionesView({
 
   return (
     <>
+      <CoberturaPanel torneoId={torneoId} fechaId={fechaId} />
+
       <div
         className={cn(
           'grid grid-cols-2 gap-3 mb-5',
@@ -289,6 +292,100 @@ function FechaDesignacionesView({
       {/* Cobertura del recinto: paramédicos y otros para toda la jornada */}
       <RecintoSection torneoId={torneoId} fechaId={fechaId} personal={personal} />
     </>
+  );
+}
+
+// ─── Panel de cobertura (F48) ────────────────────────────────────────
+const ROLES_COBERTURA: RolDesignablePartido[] = [
+  'ARBITRO_PRINCIPAL',
+  'ARBITRO_ASISTENTE',
+];
+
+function CoberturaPanel({
+  torneoId,
+  fechaId,
+}: {
+  torneoId: string;
+  fechaId: string;
+}): React.ReactElement | null {
+  const { data, isLoading } = useCobertura(torneoId, fechaId, ROLES_COBERTURA);
+  if (isLoading || !data) return null;
+
+  const { hayDeficit, resumen, roles } = data;
+
+  return (
+    <Card
+      padding="comfortable"
+      className={cn('mb-5', hayDeficit ? 'border-danger/40 bg-danger/5' : '')}
+    >
+      <div className="flex items-start gap-2 mb-3">
+        {hayDeficit ? (
+          <AlertTriangle size={18} className="text-danger flex-shrink-0 mt-0.5" />
+        ) : (
+          <CheckCircle2 size={18} className="text-green-bright flex-shrink-0 mt-0.5" />
+        )}
+        <div>
+          <CardLabel>Cobertura de personal · esta fecha</CardLabel>
+          <div
+            className={cn(
+              'text-sm mt-0.5',
+              hayDeficit ? 'text-danger font-semibold' : 'text-ink-mute font-serif italic',
+            )}
+          >
+            {resumen ??
+              'Cobertura completa: el personal disponible alcanza para todos los partidos.'}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {roles.map((r) => {
+          const ok = r.deficit === 0;
+          return (
+            <div
+              key={r.rol}
+              className={cn(
+                'rounded-card border px-3 py-2 text-sm',
+                ok ? 'border-line bg-paper' : 'border-danger/40 bg-danger/5',
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-ink">{ROL_LABEL[r.rol]}</span>
+                {ok ? (
+                  <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-green-bright/15 text-green-bright">
+                    Cubierto
+                  </span>
+                ) : (
+                  <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-danger/15 text-danger">
+                    Faltan {r.deficit}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-ink-mute mt-1">
+                Necesita {r.slotsNecesarios} · cubiertos {r.slotsCubiertos} · asignables ahora{' '}
+                {r.slotsAsignablesAhora}
+              </div>
+              <div className="text-xs text-ink-mute">
+                Disponibles {r.personalDisponible}
+                {r.personalNoDisponible > 0 && (
+                  <span className="text-orange-700">
+                    {' '}
+                    · {r.personalNoDisponible} con ausencia
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {hayDeficit && (
+        <div className="text-xs text-ink-mute font-serif italic mt-3">
+          Conseguí personal de apoyo o marcá disponibilidad en el perfil del personal. La
+          auto-asignación cubrirá lo que pueda con el personal disponible.
+        </div>
+      )}
+    </Card>
   );
 }
 

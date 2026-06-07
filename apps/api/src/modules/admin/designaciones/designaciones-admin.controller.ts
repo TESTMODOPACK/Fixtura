@@ -8,15 +8,19 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import {
   ROLE,
+  ROLES_DESIGNABLES_PARTIDO,
   type AutoAsignarResult,
+  type CoberturaFecha,
   type DesignacionAdmin,
   type DesignacionesPorFecha,
   type DesignacionRecinto as DesignacionRecintoDto,
   type EstadoDesignacion,
+  type RolDesignablePartido,
   type UserContext,
 } from '@fixtura/types';
 
@@ -102,6 +106,30 @@ export class DesignacionesAdminController {
     @Body() dto: AutoAsignarDto,
   ): Promise<AutoAsignarResult> {
     return this.svc.autoAsignar(torneoId, fechaId, ensureTenant(user), dto);
+  }
+
+  /**
+   * F48 — Análisis de cobertura de personal de una fecha (dry-run, no
+   * persiste). `roles` opcional como CSV (?roles=ARBITRO_PRINCIPAL,...).
+   * Default: árbitro principal + asistente.
+   */
+  @Get('torneos/:torneoId/fechas/:fechaId/designaciones/cobertura')
+  cobertura(
+    @CurrentUser() user: UserContext,
+    @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Param('fechaId', new ParseUUIDPipe()) fechaId: string,
+    @Query('roles') roles?: string,
+  ): Promise<CoberturaFecha> {
+    const validos = new Set<string>(ROLES_DESIGNABLES_PARTIDO);
+    const parsed = (roles ? roles.split(',') : [])
+      .map((r) => r.trim())
+      .filter((r): r is RolDesignablePartido => validos.has(r));
+    return this.svc.analizarCobertura(
+      torneoId,
+      fechaId,
+      ensureTenant(user),
+      parsed.length > 0 ? parsed : undefined,
+    );
   }
 
   // ─── Designaciones de RECINTO (paramédicos / otros por jornada) ───

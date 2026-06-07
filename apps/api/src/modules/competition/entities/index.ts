@@ -1,3 +1,4 @@
+export { AusenciaPersonal } from './ausencia-personal.entity';
 export { Cancha } from './cancha.entity';
 export type { EstadoCancha, SuperficieCancha } from './cancha.entity';
 export { CategoriaJugadores } from './categoria-jugadores.entity';

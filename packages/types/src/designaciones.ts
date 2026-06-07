@@ -107,6 +107,41 @@ export const AsignarRecintoSchema = z.object({
 });
 export type AsignarRecintoRequest = z.infer<typeof AsignarRecintoSchema>;
 
+/**
+ * F48 — Análisis de cobertura de personal de una fecha (dry-run).
+ * Simula la auto-asignación SIN persistir y reporta, por rol, cuántos
+ * slots se necesitan, cuántos ya están cubiertos, cuántos puede cubrir el
+ * personal disponible (respetando carnet ANFA, doble-booking y ausencias),
+ * y el déficit resultante. Sirve para avisar de forma proactiva que falta
+ * personal de apoyo ANTES de asignar.
+ */
+export const CoberturaRolSchema = z.object({
+  rol: z.enum(ROLES_DESIGNABLES_PARTIDO),
+  partidosCount: z.number().int(),
+  // slotsNecesarios = partidos × SLOTS_POR_ROL[rol]
+  slotsNecesarios: z.number().int(),
+  // Ya cubiertos por designaciones existentes (no rechazadas/ausentes).
+  slotsCubiertos: z.number().int(),
+  // Slots que el personal disponible podría cubrir ahora (greedy en seco).
+  slotsAsignablesAhora: z.number().int(),
+  // Déficit = necesarios − cubiertos − asignablesAhora (>= 0).
+  deficit: z.number().int(),
+  // Personal activo de este rol base, partido por disponibilidad.
+  personalDisponible: z.number().int(),
+  personalNoDisponible: z.number().int(),
+});
+export type CoberturaRol = z.infer<typeof CoberturaRolSchema>;
+
+export const CoberturaFechaSchema = z.object({
+  fechaId: z.uuid(),
+  fechaNumero: z.number().int(),
+  roles: z.array(CoberturaRolSchema),
+  hayDeficit: z.boolean(),
+  // Resumen humano listo para banner, p.ej. "Faltan 3 asistentes para la fecha 3".
+  resumen: z.string().nullable(),
+});
+export type CoberturaFecha = z.infer<typeof CoberturaFechaSchema>;
+
 export const AutoAsignarResultSchema = z.object({
   // Designaciones nuevas creadas (con su partido_id + personal asignado).
   asignados: z.array(
