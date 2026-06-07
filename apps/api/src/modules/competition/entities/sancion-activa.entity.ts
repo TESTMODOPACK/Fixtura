@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { Jugador } from './jugador.entity';
 import { JugadorInscrito } from './jugador-inscrito.entity';
 import { Partido } from './partido.entity';
 import { Torneo } from './torneo.entity';
@@ -54,6 +55,16 @@ export class SancionActiva {
   @ManyToOne(() => JugadorInscrito, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'jugador_inscrito_id' })
   jugadorInscrito?: JugadorInscrito | null;
+
+  // Sprint 46 (ADR-0005) — jugador del modelo nuevo (solo para mostrar
+  // nombre/club). El RUT sigue siendo la clave que impide evadir la
+  // sanción cambiando de club.
+  @Column({ name: 'jugador_id', type: 'uuid', nullable: true })
+  jugadorId!: string | null;
+
+  @ManyToOne(() => Jugador, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'jugador_id' })
+  jugador?: Jugador | null;
 
   @Column({ type: 'varchar', length: 50 })
   motivo!: MotivoSancion;

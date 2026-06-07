@@ -765,6 +765,130 @@ async function main(): Promise<void> {
       );
     }
 
+    // ====================================================================
+    // Sprint 46 (ADR-0005) — Fase 1: promover el modelo nuevo a fuente de
+    // verdad. Columnas jugador_id (FK jugadores) en incidencias y sanciones,
+    // y backfill idempotente de TODAS las columnas nuevas en filas históricas
+    // para que actas/sanciones/cobros/fixture puedan leer del modelo nuevo
+    // sin perder historial. Las tablas viejas (equipos, jugadores_inscritos)
+    // quedan intactas como backup hasta la Fase 2 (drop destructivo).
+    // ====================================================================
+    await client.query(`
+      ALTER TABLE incidencias_partido
+        ADD COLUMN IF NOT EXISTS jugador_id UUID
+          REFERENCES jugadores(id) ON DELETE SET NULL
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_incidencias_jugador ON incidencias_partido(jugador_id)`,
+    );
+    await client.query(`
+      ALTER TABLE sanciones_activas
+        ADD COLUMN IF NOT EXISTS jugador_id UUID
+          REFERENCES jugadores(id) ON DELETE SET NULL
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_sanciones_jugador ON sanciones_activas(jugador_id)`,
+    );
+    log('Sprint 46: incidencias_partido.jugador_id + sanciones_activas.jugador_id aseguradas.');
+
+    // Backfill partidos.inscripcion_local/visita_id desde el equipo sombra.
+    const bfPartLocal = await client.query(`
+      UPDATE partidos p
+      SET inscripcion_local_id = it.id
+      FROM inscripciones_torneo it
+      WHERE it.equipo_sombra_id = p.equipo_local_id
+        AND it.tenant_id = p.tenant_id
+        AND p.inscripcion_local_id IS NULL
+    `);
+    const bfPartVisita = await client.query(`
+      UPDATE partidos p
+      SET inscripcion_visita_id = it.id
+      FROM inscripciones_torneo it
+      WHERE it.equipo_sombra_id = p.equipo_visita_id
+        AND it.tenant_id = p.tenant_id
+        AND p.inscripcion_visita_id IS NULL
+    `);
+    log(
+      `Sprint 46: backfill partidos — ${(bfPartLocal.rowCount ?? 0)} local + ${(bfPartVisita.rowCount ?? 0)} visita.`,
+    );
+
+    // Backfill incidencias_partido.inscripcion_id desde el equipo sombra.
+    const bfIncInsc = await client.query(`
+      UPDATE incidencias_partido ip
+      SET inscripcion_id = it.id
+      FROM inscripciones_torneo it
+      WHERE it.equipo_sombra_id = ip.equipo_id
+        AND it.tenant_id = ip.tenant_id
+        AND ip.inscripcion_id IS NULL
+    `);
+    // Backfill incidencias_partido.jugador_id desde jugadores_inscritos por RUT
+    // (rut es único por tenant en la tabla jugadores nueva).
+    const bfIncJug = await client.query(`
+      UPDATE incidencias_partido ip
+      SET jugador_id = j.id
+      FROM jugadores_inscritos ji
+      JOIN jugadores j
+        ON j.tenant_id = ji.tenant_id
+       AND j.rut = ji.rut
+      WHERE ip.jugador_inscrito_id = ji.id
+        AND ji.rut IS NOT NULL
+        AND ip.jugador_id IS NULL
+    `);
+    log(
+      `Sprint 46: backfill incidencias — ${(bfIncInsc.rowCount ?? 0)} inscripción + ${(bfIncJug.rowCount ?? 0)} jugador.`,
+    );
+
+    // Backfill cobros.inscripcion_id desde el equipo sombra.
+    const bfCobros = await client.query(`
+      UPDATE cobros c
+      SET inscripcion_id = it.id
+      FROM inscripciones_torneo it
+      WHERE it.equipo_sombra_id = c.equipo_id
+        AND it.tenant_id = c.tenant_id
+        AND c.equipo_id IS NOT NULL
+        AND c.inscripcion_id IS NULL
+    `);
+    log(`Sprint 46: backfill cobros — ${(bfCobros.rowCount ?? 0)} con inscripción.`);
+
+    // Backfill sanciones_activas.jugador_id por RUT (clave real de la sanción).
+    const bfSanc = await client.query(`
+      UPDATE sanciones_activas s
+      SET jugador_id = j.id
+      FROM jugadores j
+      WHERE j.tenant_id = s.tenant_id
+        AND j.rut = s.rut
+        AND s.rut IS NOT NULL
+        AND s.jugador_id IS NULL
+    `);
+    log(`Sprint 46: backfill sanciones — ${(bfSanc.rowCount ?? 0)} con jugador.`);
+
+    // Reporte de huérfanos: filas que NO pudieron mapearse al modelo nuevo.
+    // Deben resolverse ANTES de la Fase 2 (drop destructivo). No bloquea.
+    const huerfanos = await client.query(`
+      SELECT
+        (SELECT COUNT(*) FROM partidos WHERE inscripcion_local_id IS NULL OR inscripcion_visita_id IS NULL) AS partidos,
+        (SELECT COUNT(*) FROM incidencias_partido WHERE inscripcion_id IS NULL) AS incidencias_sin_insc,
+        (SELECT COUNT(*) FROM incidencias_partido WHERE jugador_inscrito_id IS NOT NULL AND jugador_id IS NULL) AS incidencias_sin_jug,
+        (SELECT COUNT(*) FROM cobros WHERE equipo_id IS NOT NULL AND inscripcion_id IS NULL) AS cobros,
+        (SELECT COUNT(*) FROM sanciones_activas WHERE rut IS NOT NULL AND jugador_id IS NULL AND cumplida = FALSE) AS sanciones
+    `);
+    const h = huerfanos.rows[0] ?? {};
+    const totalHuerfanos =
+      Number(h.partidos ?? 0) +
+      Number(h.incidencias_sin_insc ?? 0) +
+      Number(h.incidencias_sin_jug ?? 0) +
+      Number(h.cobros ?? 0) +
+      Number(h.sanciones ?? 0);
+    if (totalHuerfanos > 0) {
+      log(
+        `Sprint 46 ⚠ HUÉRFANOS sin mapear (resolver antes de Fase 2): ` +
+          `partidos=${h.partidos} incidencias_sin_insc=${h.incidencias_sin_insc} ` +
+          `incidencias_sin_jug=${h.incidencias_sin_jug} cobros=${h.cobros} sanciones=${h.sanciones}`,
+      );
+    } else {
+      log('Sprint 46: backfill completo, sin huérfanos. ✓');
+    }
+
     log('Done.');
   } finally {
     await client.end();
