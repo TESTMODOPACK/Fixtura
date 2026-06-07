@@ -510,9 +510,9 @@ export class FixtureAdminService {
     const canchas = await this.canchaRepo.find({
       where: { tenantId },
     });
-    const canchasDisponibles = canchas.filter(
-      (c) => c.activa && c.estado === 'DISPONIBLE',
-    );
+    // Sprint 40 — disponibilidad operativa la define `estado`, no la columna
+    // legacy `activa` (soft-delete viejo, ya no se expone en la UI).
+    const canchasDisponibles = canchas.filter((c) => c.estado === 'DISPONIBLE');
     const canchasDisponiblesCount = canchasDisponibles.length;
 
     // 3.1 — Catálogo vacío (ninguna cancha cargada en /admin/canchas)

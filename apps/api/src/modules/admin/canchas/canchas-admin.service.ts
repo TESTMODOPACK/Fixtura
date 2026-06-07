@@ -22,9 +22,13 @@ export class CanchasAdminService {
     const qb = this.repo
       .createQueryBuilder('c')
       .where('c.tenant_id = :tenantId', { tenantId })
-      .orderBy('c.activa', 'DESC')
+      .orderBy(`(c.estado = 'DISPONIBLE')`, 'DESC')
       .addOrderBy('c.nombre', 'ASC');
-    if (soloActivas) qb.andWhere('c.activa = true');
+    // Sprint 40 — la disponibilidad operativa la define `estado`
+    // (DISPONIBLE/NO_DISPONIBLE), NO la columna legacy `activa` (soft-delete
+    // viejo, ya no se expone en la UI). `activas=true` = canchas usables para
+    // asignar slots / generar fixture → filtra por estado DISPONIBLE.
+    if (soloActivas) qb.andWhere(`c.estado = 'DISPONIBLE'`);
     const items = await qb.getMany();
     return items.map(this.toDto);
   }
@@ -77,10 +81,10 @@ export class CanchasAdminService {
   }
 
   /**
-   * Ocupación: lista partidos por cancha activa en un rango. Si no se
+   * Ocupación: lista partidos por cancha DISPONIBLE en un rango. Si no se
    * pasa rango, devuelve la semana actual (lunes a domingo Chile).
-   * Solo incluye canchas con `activa = true` aunque el partido aún
-   * referencie una cancha inactiva (caso raro post-soft-delete).
+   * Filtra por `estado` (modelo operativo Sprint 40), no por la columna
+   * legacy `activa`.
    */
   async ocupacion(
     tenantId: string,
@@ -92,7 +96,7 @@ export class CanchasAdminService {
     const canchas = await this.repo
       .createQueryBuilder('c')
       .where('c.tenant_id = :tenantId', { tenantId })
-      .andWhere('c.activa = true')
+      .andWhere(`c.estado = 'DISPONIBLE'`)
       .orderBy('c.nombre', 'ASC')
       .getMany();
 
@@ -160,11 +164,19 @@ export class CanchasAdminService {
     return { desdeDt: lunes, hastaDt: lunesSiguiente };
   }
 
-  /** Soft delete: marcar como inactiva. Preserva historial. */
+  /**
+   * Soft delete (botón "Eliminar"). Marca la cancha como NO_DISPONIBLE
+   * (modelo operativo Sprint 40) además del legacy `activa=false`. Sin
+   * tocar `estado`, una cancha "eliminada" seguía figurando DISPONIBLE y,
+   * tras pasar el filtro a `estado`, reaparecía en los dropdowns. Preserva
+   * historial: no borra la fila ni los partidos que la referencian.
+   */
   async deactivate(id: string, tenantId: string): Promise<void> {
     const c = await this.repo.findOne({ where: { id, tenantId } });
     if (!c) throw new NotFoundException(`Cancha ${id} no encontrada`);
     c.activa = false;
+    c.estado = 'NO_DISPONIBLE';
+    if (!c.motivoNoDisponible) c.motivoNoDisponible = 'Eliminada del catálogo';
     await this.repo.save(c);
   }
 
