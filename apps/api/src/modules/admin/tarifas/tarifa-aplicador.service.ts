@@ -255,8 +255,20 @@ export class TarifaAplicadorService {
     if (!torneoId) return { creados: 0 };
 
     // Limpieza de cobros auto previos del partido (idempotencia ante
-    // re-cierre del acta).
+    // re-cierre del acta). Esto borra los pendientes (no pagados, no
+    // cancelados); los pagados y los cancelados a mano SOBREVIVEN.
     await this.borrarCobrosAutoDelPartido(partido.id, tenantId);
+
+    // C1 — Anti doble-cobro al reabrir un acta: contamos las multas que
+    // sobrevivieron (pagadas o canceladas a mano) por (tarifa, equipo). Al
+    // regenerar, descontamos esas para NO duplicar una multa ya saldada ni
+    // resucitar una que el operador canceló. Si en la reapertura se agregó
+    // una tarjeta nueva, igual se cobra (la diferencia entre incidencias y
+    // multas ya saldadas).
+    const saldadas = await this.contarCobrosSaldadosDelPartido(
+      partido.id,
+      tenantId,
+    );
 
     let creados = 0;
     for (const inc of incidencias) {
@@ -272,6 +284,13 @@ export class TarifaAplicadorService {
           entityId: inc.id,
           metadata: { partidoId: partido.id, tipoTarifa },
         });
+        continue;
+      }
+      // ¿Ya hay una multa pagada/cancelada que cubre esta incidencia?
+      const saldoKey = `${tarifa.id}::${inc.equipoId ?? ''}`;
+      const saldoRestante = saldadas.get(saldoKey) ?? 0;
+      if (saldoRestante > 0) {
+        saldadas.set(saldoKey, saldoRestante - 1);
         continue;
       }
       const inscripcionId = inc.inscripcionId ?? this.inferirInscripcionPartido(
@@ -338,6 +357,17 @@ export class TarifaAplicadorService {
       return null;
     }
 
+    // C1 — Anti doble-cobro: si ya hay un walkover pagado o cancelado a mano
+    // para este equipo en este partido, no generamos otro (re-walkover tras
+    // pago/cancelación).
+    const saldadas = await this.contarCobrosSaldadosDelPartido(
+      partido.id,
+      tenantId,
+    );
+    if ((saldadas.get(`${tarifa.id}::${equipoPerdedorId}`) ?? 0) > 0) {
+      return null;
+    }
+
     const inscripcionId = this.inferirInscripcionPartido(partido, equipoPerdedorId);
     if (!inscripcionId) {
       await this.audit.record({
@@ -389,6 +419,36 @@ export class TarifaAplicadorService {
       .andWhere('cancelado = FALSE')
       .execute();
     return r.affected ?? 0;
+  }
+
+  /**
+   * C1 — Cuenta las multas auto de un partido que YA fueron saldadas:
+   * pagadas o canceladas a mano (las que sobreviven a borrarCobrosAutoDelPartido).
+   * Agrupadas por (tarifa, equipo). Se usa al regenerar multas para no
+   * volver a cobrar una multa ya pagada ni resucitar una cancelada cuando
+   * se reabre y recierra un acta.
+   */
+  private async contarCobrosSaldadosDelPartido(
+    partidoId: string,
+    tenantId: string,
+  ): Promise<Map<string, number>> {
+    const rows = await this.cobroRepo
+      .createQueryBuilder('c')
+      .select('c.tarifa_id', 'tarifaId')
+      .addSelect('c.equipo_id', 'equipoId')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('c.partido_id = :partidoId', { partidoId })
+      .andWhere('c.tenant_id = :tenantId', { tenantId })
+      .andWhere('c.generado_auto = TRUE')
+      .andWhere('(c.pagado_at IS NOT NULL OR c.cancelado = TRUE)')
+      .groupBy('c.tarifa_id')
+      .addGroupBy('c.equipo_id')
+      .getRawMany<{ tarifaId: string | null; equipoId: string | null; cnt: string }>();
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      map.set(`${r.tarifaId ?? ''}::${r.equipoId ?? ''}`, Number(r.cnt));
+    }
+    return map;
   }
 
   // ───────── Lógica de generación ─────────
