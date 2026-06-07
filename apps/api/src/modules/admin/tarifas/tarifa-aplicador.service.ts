@@ -7,7 +7,7 @@ import { Cobro } from '../../competition/entities/cobro.entity';
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
-import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
+import { Jugador } from '../../competition/entities/jugador.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import {
   type FrecuenciaCuota,
@@ -49,8 +49,8 @@ export class TarifaAplicadorService {
     private readonly torneoRepo: Repository<Torneo>,
     @InjectRepository(Equipo)
     private readonly equipoRepo: Repository<Equipo>,
-    @InjectRepository(JugadorInscrito)
-    private readonly jugadorRepo: Repository<JugadorInscrito>,
+    @InjectRepository(Jugador)
+    private readonly jugadorRepo: Repository<Jugador>,
     private readonly audit: AuditLogService,
   ) {}
 
@@ -277,16 +277,15 @@ export class TarifaAplicadorService {
     // del fragmento de UUID del partido.
     const numeroFecha = partido.fecha?.numero ?? null;
     const equiposNombre = await this.cargarNombresEquipos(
-      [partido.equipoLocalId, partido.equipoVisitaId],
+      [partido.inscripcionLocalId, partido.inscripcionVisitaId],
       tenantId,
     );
     const jugadoresNombre = await this.cargarNombresJugadores(
       incidencias
         .filter(
-          (i) =>
-            (i.tipo === 'AMARILLA' || i.tipo === 'ROJA') && i.jugadorInscritoId,
+          (i) => (i.tipo === 'AMARILLA' || i.tipo === 'ROJA') && i.jugadorId,
         )
-        .map((i) => i.jugadorInscritoId as string),
+        .map((i) => i.jugadorId as string),
       tenantId,
     );
 
@@ -307,7 +306,7 @@ export class TarifaAplicadorService {
         continue;
       }
       // ¿Ya hay una multa pagada/cancelada que cubre esta incidencia?
-      const saldoKey = `${tarifa.id}::${inc.equipoId ?? ''}`;
+      const saldoKey = `${tarifa.id}::${inc.inscripcionId ?? ''}`;
       const saldoRestante = saldadas.get(saldoKey) ?? 0;
       if (saldoRestante > 0) {
         saldadas.set(saldoKey, saldoRestante - 1);
@@ -338,10 +337,10 @@ export class TarifaAplicadorService {
         sancionId: null,
         tarifa,
         concepto: this.conceptoMultaIncidencia(inc, tipoTarifa, {
-          jugador: inc.jugadorInscritoId
-            ? jugadoresNombre.get(inc.jugadorInscritoId) ?? null
+          jugador: inc.jugadorId
+            ? jugadoresNombre.get(inc.jugadorId) ?? null
             : null,
-          rival: this.rivalNombre(partido, inc.equipoId, equiposNombre),
+          rival: this.rivalNombre(partido, inc.inscripcionId, equiposNombre),
           numeroFecha,
         }),
         monto: tarifa.monto,
@@ -394,7 +393,13 @@ export class TarifaAplicadorService {
       return null;
     }
 
-    const inscripcionId = this.inferirInscripcionPartido(partido, equipoPerdedorId);
+    // ADR-0005 — equipoPerdedorId YA es el inscripcionId. Validamos que sea
+    // uno de los dos lados del partido.
+    const inscripcionId =
+      partido.inscripcionLocalId === equipoPerdedorId ||
+      partido.inscripcionVisitaId === equipoPerdedorId
+        ? equipoPerdedorId
+        : null;
     if (!inscripcionId) {
       await this.audit.record({
         action: 'cobro.no_generado_sin_inscripcion',
@@ -409,9 +414,10 @@ export class TarifaAplicadorService {
       return null;
     }
 
-    // C3 — concepto legible (equipo · fecha · rival).
+    // C3 — concepto legible (equipo · fecha · rival). equipoPerdedorId es
+    // un inscripcionId (ADR-0005).
     const equiposNombre = await this.cargarNombresEquipos(
-      [partido.equipoLocalId, partido.equipoVisitaId],
+      [partido.inscripcionLocalId, partido.inscripcionVisitaId],
       tenantId,
     );
     return this.crearCobro({
@@ -431,7 +437,9 @@ export class TarifaAplicadorService {
       periodoAnio: null,
       periodoMes: null,
       periodoSemana: null,
-      equipoId: equipoPerdedorId,
+      // equipoId (modelo viejo) ya no se escribe: el cobro se ancla a la
+      // inscripción. Evita FK violation (equipoPerdedorId es inscripcionId).
+      equipoId: null,
     });
   }
 
@@ -998,35 +1006,42 @@ export class TarifaAplicadorService {
     return s;
   }
 
-  /** Nombre del rival del equipo dado en el partido (el otro lado). */
+  /**
+   * Nombre del rival del equipo dado en el partido (el otro lado).
+   * ADR-0005 — `inscripcionId` identifica al equipo; el mapa es por
+   * inscripcionId → nombre de club.
+   */
   private rivalNombre(
     partido: Partido,
-    equipoId: string | null,
+    inscripcionId: string | null,
     equiposNombre: Map<string, string>,
   ): string | null {
-    if (!equipoId) return null;
+    if (!inscripcionId) return null;
     const rivalId =
-      partido.equipoLocalId === equipoId
-        ? partido.equipoVisitaId
-        : partido.equipoLocalId;
+      partido.inscripcionLocalId === inscripcionId
+        ? partido.inscripcionVisitaId
+        : partido.inscripcionLocalId;
     return rivalId ? equiposNombre.get(rivalId) ?? null : null;
   }
 
-  /** Carga nombres de equipos por id (dedupe, ignora nulls). */
+  /**
+   * Carga nombres de equipos por inscripcionId (dedupe, ignora nulls).
+   * El nombre sale del club de la inscripción.
+   */
   private async cargarNombresEquipos(
     ids: Array<string | null | undefined>,
     tenantId: string,
   ): Promise<Map<string, string>> {
     const unicos = Array.from(new Set(ids.filter((x): x is string => !!x)));
     if (unicos.length === 0) return new Map();
-    const rows = await this.equipoRepo.find({
+    const rows = await this.inscRepo.find({
       where: { id: In(unicos), tenantId },
-      select: ['id', 'nombre'],
+      relations: { club: true },
     });
-    return new Map(rows.map((e) => [e.id, e.nombre]));
+    return new Map(rows.map((i) => [i.id, i.club?.nombre ?? '']));
   }
 
-  /** Carga "Nombre Apellido" de jugadores inscritos por id (dedupe). */
+  /** Carga "Nombre Apellido" de jugadores (modelo nuevo) por id (dedupe). */
   private async cargarNombresJugadores(
     ids: Array<string | null | undefined>,
     tenantId: string,
@@ -1035,10 +1050,10 @@ export class TarifaAplicadorService {
     if (unicos.length === 0) return new Map();
     const rows = await this.jugadorRepo.find({
       where: { id: In(unicos), tenantId },
-      select: ['id', 'nombre', 'apellido'],
+      select: ['id', 'nombres', 'apellidos'],
     });
     return new Map(
-      rows.map((j) => [j.id, `${j.nombre} ${j.apellido}`.trim()]),
+      rows.map((j) => [j.id, `${j.nombres} ${j.apellidos}`.trim()]),
     );
   }
 

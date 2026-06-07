@@ -243,32 +243,29 @@ export class DashboardAdminService {
       jugadorId: string | null;
       goles: string;
     };
+    // ADR-0005 — goleadores desde el modelo nuevo: incidencia.jugador_id →
+    // jugadores; club vía inscripcion. Las incidencias históricas tienen
+    // jugador_id backfilled por RUT, así que cubre old + new.
     const rows = await this.incidenciaRepo.query(
       `
       SELECT
-        ji.rut AS rut,
-        jn.id AS "jugadorId",
-        jn.nombres AS "nombreNuevo",
-        jn.apellidos AS "apellidoNuevo",
-        ji.nombre AS "nombreViejo",
-        ji.apellido AS "apellidoViejo",
+        j.rut AS rut,
+        j.id AS "jugadorId",
+        j.nombres AS "nombreNuevo",
+        j.apellidos AS "apellidoNuevo",
+        NULL AS "nombreViejo",
+        NULL AS "apellidoViejo",
         c.nombre AS "clubNombre",
-        e.nombre AS "equipoNombre",
+        NULL AS "equipoNombre",
         COUNT(*) AS goles
       FROM incidencias_partido i
-      LEFT JOIN jugadores_inscritos ji ON ji.id = i.jugador_inscrito_id
-      LEFT JOIN equipos e ON e.id = i.equipo_id
+      JOIN jugadores j ON j.id = i.jugador_id
       LEFT JOIN inscripciones_torneo it ON it.id = i.inscripcion_id
       LEFT JOIN clubes c ON c.id = it.club_id
-      LEFT JOIN jugadores jn ON jn.tenant_id = i.tenant_id AND jn.rut = ji.rut
       WHERE i.tenant_id = $1
         AND i.tipo = 'GOL'
-        AND (
-          (it.torneo_id = $2)
-          OR (e.torneo_id = $2)
-        )
-        AND ji.id IS NOT NULL
-      GROUP BY ji.rut, jn.id, jn.nombres, jn.apellidos, ji.nombre, ji.apellido, c.nombre, e.nombre, ji.id
+        AND it.torneo_id = $2
+      GROUP BY j.rut, j.id, j.nombres, j.apellidos, c.nombre
       ORDER BY goles DESC
       LIMIT 5
       `,
@@ -306,7 +303,7 @@ export class DashboardAdminService {
       JOIN clubes c ON c.id = it.club_id
       WHERE it.torneo_id = $1
         AND it.tenant_id = $2
-        AND it.estado <> 'RETIRADA'
+        AND it.estado <> 'RETIRADO'
       `,
       [torneoId, tenantId],
     );

@@ -10,180 +10,185 @@ import { Repository } from 'typeorm';
 import type { CreateJugadorRequest, JugadorAdmin } from '@fixtura/types';
 import { calcularEdad, calcularEdadCalendario } from '@fixtura/domain';
 
-import { Equipo } from '../../competition/entities/equipo.entity';
-import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
+import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
+import { Jugador } from '../../competition/entities/jugador.entity';
+import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entity';
 
+/**
+ * ADR-0005 — Jugadores de un "equipo del torneo" = planilla de la
+ * inscripción. El `equipoId` que recibe este servicio es el inscripcionId.
+ *
+ * Crear un jugador desde acá crea (o reutiliza) un Jugador del plantel del
+ * club en la categoría de la inscripción y lo agrega a la planilla del
+ * torneo. La regla "un jugador = un solo club" la enforza UNIQUE(tenant,rut)
+ * en `jugadores`.
+ */
 @Injectable()
 export class JugadoresAdminService {
   constructor(
-    @InjectRepository(JugadorInscrito) private readonly repo: Repository<JugadorInscrito>,
-    @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
+    @InjectRepository(InscripcionTorneo)
+    private readonly inscRepo: Repository<InscripcionTorneo>,
+    @InjectRepository(Jugador) private readonly jugadorRepo: Repository<Jugador>,
+    @InjectRepository(PlanillaTorneo)
+    private readonly planillaRepo: Repository<PlanillaTorneo>,
   ) {}
 
-  async listByEquipo(equipoId: string, tenantId: string): Promise<JugadorAdmin[]> {
-    await this.ensureEquipo(equipoId, tenantId);
-    const items = await this.repo.find({
-      where: { equipoId, tenantId },
-      order: { capitan: 'DESC', numeroCamiseta: 'ASC', apellido: 'ASC' },
+  async listByEquipo(inscripcionId: string, tenantId: string): Promise<JugadorAdmin[]> {
+    await this.ensureInscripcion(inscripcionId, tenantId);
+    const planilla = await this.planillaRepo.find({
+      where: { inscripcionId, tenantId },
+      relations: { jugador: true },
     });
-    return items.map(toDto);
+    return planilla
+      .filter((p) => p.jugador)
+      .map((p) => toDto(p.jugador!, inscripcionId))
+      .sort(
+        (a, b) =>
+          Number(b.capitan) - Number(a.capitan) ||
+          (a.numeroCamiseta ?? 999) - (b.numeroCamiseta ?? 999) ||
+          a.apellido.localeCompare(b.apellido, 'es'),
+      );
   }
 
   async create(
-    equipoId: string,
+    inscripcionId: string,
     tenantId: string,
     input: CreateJugadorRequest,
   ): Promise<JugadorAdmin> {
-    const equipo = await this.ensureEquipo(equipoId, tenantId);
+    const insc = await this.ensureInscripcion(inscripcionId, tenantId);
 
-    // AUDIT-8: capitán requiere RUT. El zod schema lo valida en
-    // frontend, pero el DTO class-validator del API no soporta cross-field
-    // refines fácilmente — duplicamos la regla acá para defensa.
-    if (input.capitan && (!input.rut || input.rut.trim().length === 0)) {
+    if (!input.rut || input.rut.trim().length === 0) {
       throw new BadRequestException(
-        'El RUT es obligatorio para capitanes (firmante del acta).',
+        'El RUT es obligatorio para fichar un jugador en el modelo de clubes.',
       );
     }
 
-    // AUDIT-3: pre-check de RUT duplicado en el mismo torneo. Si pasa,
-    // el UNIQUE INDEX uq_jugador_rut_torneo es la defensa en profundidad.
-    if (input.rut) {
-      await this.validarRutNoDuplicado(tenantId, equipo.torneoId, input.rut);
-    }
-
-    const j = this.repo.create({
-      tenantId,
-      equipoId,
-      torneoId: equipo.torneoId,
-      nombre: input.nombre,
-      apellido: input.apellido,
-      apodo: input.apodo ?? null,
-      rut: input.rut ?? null,
-      numeroCamiseta: input.numeroCamiseta ?? null,
-      posicion: input.posicion ?? null,
-      pieHabil: input.pieHabil ?? null,
-      fechaNac: input.fechaNac ?? null,
-      capitan: input.capitan ?? false,
-      activo: true,
-    });
-    const saved = await this.repo.save(j);
-    return toDto(saved);
+    const jugador = await this.findOrCreateJugador(insc, tenantId, input);
+    await this.addAPlanilla(inscripcionId, tenantId, jugador.id);
+    return toDto(jugador, inscripcionId);
   }
 
   async bulkCreate(
-    equipoId: string,
+    inscripcionId: string,
     tenantId: string,
     inputs: CreateJugadorRequest[],
   ): Promise<JugadorAdmin[]> {
-    const equipo = await this.ensureEquipo(equipoId, tenantId);
+    const insc = await this.ensureInscripcion(inscripcionId, tenantId);
 
-    // AUDIT-3 / Observación #10: detectar duplicados internos del CSV
-    // antes de tocar la DB. Si el archivo tiene el mismo RUT dos veces,
-    // fallamos temprano con mensaje claro.
-    const rutsInput = inputs.map((i) => i.rut).filter((r): r is string => !!r);
+    // Dedupe interno por RUT.
+    const ruts = inputs.map((i) => i.rut).filter((r): r is string => !!r);
     const setRuts = new Set<string>();
-    const duplicadosInternos: string[] = [];
-    for (const rut of rutsInput) {
-      if (setRuts.has(rut)) duplicadosInternos.push(rut);
-      else setRuts.add(rut);
+    const dups: string[] = [];
+    for (const r of ruts) {
+      if (setRuts.has(r)) dups.push(r);
+      else setRuts.add(r);
     }
-    if (duplicadosInternos.length > 0) {
+    if (dups.length > 0) {
       throw new BadRequestException(
-        `El CSV contiene RUTs duplicados: ${duplicadosInternos.join(', ')}. Revisá y reintentá.`,
+        `El archivo contiene RUTs duplicados: ${dups.join(', ')}. Revisá y reintentá.`,
       );
     }
 
-    // AUDIT-8: capitanes sin RUT — bloquear el batch entero, mensaje claro.
-    const capitanesSinRut = inputs.filter(
-      (i) => i.capitan && (!i.rut || i.rut.trim().length === 0),
-    );
-    if (capitanesSinRut.length > 0) {
-      const nombres = capitanesSinRut
-        .map((c) => `${c.nombre} ${c.apellido}`)
-        .join(', ');
+    const sinRut = inputs.filter((i) => !i.rut || i.rut.trim().length === 0);
+    if (sinRut.length > 0) {
+      const nombres = sinRut.map((c) => `${c.nombre} ${c.apellido}`).join(', ');
       throw new BadRequestException(
-        `Capitán requiere RUT (firmante del acta). Faltan en: ${nombres}.`,
+        `El RUT es obligatorio para todos los jugadores. Faltan en: ${nombres}.`,
       );
     }
 
-    // AUDIT-3: validar contra el resto del torneo en una sola query.
-    if (rutsInput.length > 0) {
-      const ocupados = await this.repo
-        .createQueryBuilder('j')
-        .leftJoinAndSelect('j.equipo', 'e')
-        .where('j.tenant_id = :tenantId', { tenantId })
-        .andWhere('j.torneo_id = :torneoId', { torneoId: equipo.torneoId })
-        .andWhere('j.activo = TRUE')
-        .andWhere('j.rut IN (:...ruts)', { ruts: rutsInput })
-        .getMany();
-      if (ocupados.length > 0) {
-        const detalle = ocupados
-          .map((o) => `${o.rut} (${o.equipo?.nombre ?? '?'})`)
-          .join(', ');
+    const out: JugadorAdmin[] = [];
+    for (const input of inputs) {
+      const jugador = await this.findOrCreateJugador(insc, tenantId, input);
+      await this.addAPlanilla(inscripcionId, tenantId, jugador.id);
+      out.push(toDto(jugador, inscripcionId));
+    }
+    return out;
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────
+
+  private async findOrCreateJugador(
+    insc: InscripcionTorneo,
+    tenantId: string,
+    input: CreateJugadorRequest,
+  ): Promise<Jugador> {
+    const rut = input.rut!.trim();
+    const existente = await this.jugadorRepo.findOne({ where: { tenantId, rut } });
+    if (existente) {
+      if (
+        existente.clubId !== insc.clubId ||
+        existente.categoriaId !== insc.categoriaId
+      ) {
         throw new ConflictException(
-          `Los siguientes RUTs ya están inscritos en otro equipo del torneo: ${detalle}.`,
+          `El RUT ${rut} ya está fichado en otro club o categoría de la liga. ` +
+            'Un jugador solo puede pertenecer a un club (Plan §4.2).',
         );
       }
+      return existente;
     }
-
-    const entities = inputs.map((input) =>
-      this.repo.create({
-        tenantId,
-        equipoId,
-        torneoId: equipo.torneoId,
-        nombre: input.nombre,
-        apellido: input.apellido,
-        apodo: input.apodo ?? null,
-        rut: input.rut ?? null,
-        numeroCamiseta: input.numeroCamiseta ?? null,
-        posicion: input.posicion ?? null,
-        pieHabil: input.pieHabil ?? null,
-        fechaNac: input.fechaNac ?? null,
-        capitan: input.capitan ?? false,
-        activo: true,
-      }),
-    );
-    const saved = await this.repo.save(entities);
-    return saved.map(toDto);
-  }
-
-  /**
-   * AUDIT-3: helper. Lanza ConflictException si el RUT ya tiene una
-   * inscripción activa en otro equipo del mismo torneo.
-   */
-  private async validarRutNoDuplicado(
-    tenantId: string,
-    torneoId: string,
-    rut: string,
-  ): Promise<void> {
-    const existente = await this.repo
-      .createQueryBuilder('j')
-      .leftJoinAndSelect('j.equipo', 'e')
-      .where('j.tenant_id = :tenantId', { tenantId })
-      .andWhere('j.torneo_id = :torneoId', { torneoId })
-      .andWhere('j.rut = :rut', { rut })
-      .andWhere('j.activo = TRUE')
-      .getOne();
-    if (existente) {
-      throw new ConflictException(
-        `El RUT ${rut} ya está inscrito en el equipo "${existente.equipo?.nombre ?? '?'}" del mismo torneo. Un jugador no puede estar en dos equipos del mismo torneo (Plan §4.2).`,
+    try {
+      return await this.jugadorRepo.save(
+        this.jugadorRepo.create({
+          tenantId,
+          clubId: insc.clubId,
+          categoriaId: insc.categoriaId,
+          rut,
+          nombres: input.nombre,
+          apellidos: input.apellido,
+          apodo: input.apodo ?? null,
+          numeroCamiseta: input.numeroCamiseta ?? null,
+          posicion: input.posicion ?? null,
+          pieHabil: input.pieHabil ?? null,
+          fechaNac: input.fechaNac ?? null,
+          capitan: input.capitan ?? false,
+          estado: 'ACTIVO',
+        }),
       );
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        (err.message.includes('uq_jugador_rut') ||
+          err.message.includes('duplicate key'))
+      ) {
+        throw new ConflictException(
+          `El RUT ${rut} ya está fichado en la liga.`,
+        );
+      }
+      throw err;
     }
   }
 
-  private async ensureEquipo(equipoId: string, tenantId: string): Promise<Equipo> {
-    const exists = await this.equipoRepo.findOne({ where: { id: equipoId, tenantId } });
-    if (!exists) throw new NotFoundException(`Equipo ${equipoId} no encontrado`);
-    return exists;
+  private async addAPlanilla(
+    inscripcionId: string,
+    tenantId: string,
+    jugadorId: string,
+  ): Promise<void> {
+    await this.planillaRepo
+      .createQueryBuilder()
+      .insert()
+      .into(PlanillaTorneo)
+      .values({ tenantId, inscripcionId, jugadorId })
+      .orIgnore()
+      .execute();
+  }
+
+  private async ensureInscripcion(
+    id: string,
+    tenantId: string,
+  ): Promise<InscripcionTorneo> {
+    const insc = await this.inscRepo.findOne({ where: { id, tenantId } });
+    if (!insc) throw new NotFoundException(`Equipo ${id} no encontrado`);
+    return insc;
   }
 }
 
-function toDto(j: JugadorInscrito): JugadorAdmin {
+function toDto(j: Jugador, inscripcionId: string): JugadorAdmin {
   return {
     id: j.id,
-    equipoId: j.equipoId,
-    nombre: j.nombre,
-    apellido: j.apellido,
+    equipoId: inscripcionId,
+    nombre: j.nombres,
+    apellido: j.apellidos,
     apodo: j.apodo,
     rut: j.rut,
     numeroCamiseta: j.numeroCamiseta,
@@ -193,6 +198,6 @@ function toDto(j: JugadorInscrito): JugadorAdmin {
     edad: calcularEdad(j.fechaNac),
     edadCalendario: calcularEdadCalendario(j.fechaNac),
     capitan: j.capitan,
-    activo: j.activo,
+    activo: j.estado === 'ACTIVO',
   };
 }

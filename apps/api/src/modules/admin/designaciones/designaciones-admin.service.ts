@@ -73,8 +73,10 @@ export class DesignacionesAdminService {
 
     const partidos = await this.partidoRepo
       .createQueryBuilder('p')
-      .leftJoinAndSelect('p.equipoLocal', 'local')
-      .leftJoinAndSelect('p.equipoVisita', 'visita')
+      .leftJoinAndSelect('p.inscripcionLocal', 'il')
+      .leftJoinAndSelect('il.club', 'ilc')
+      .leftJoinAndSelect('p.inscripcionVisita', 'iv')
+      .leftJoinAndSelect('iv.club', 'ivc')
       .where('p.fecha_id = :fechaId', { fechaId })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
       .orderBy('p.fecha_hora', 'ASC', 'NULLS LAST')
@@ -141,8 +143,8 @@ export class DesignacionesAdminService {
 
       return {
         partidoId: p.id,
-        equipoLocalNombre: p.equipoLocal?.nombre ?? '',
-        equipoVisitaNombre: p.equipoVisita?.nombre ?? '',
+        equipoLocalNombre: p.inscripcionLocal?.club?.nombre ?? '',
+        equipoVisitaNombre: p.inscripcionVisita?.club?.nombre ?? '',
         fechaHora: p.fechaHora ? p.fechaHora.toISOString() : null,
         canchaNombre: p.canchaNombre,
         designaciones: desigsDelPartido,
@@ -277,7 +279,11 @@ export class DesignacionesAdminService {
         where: { id: designacionId, tenantId },
         relations: {
           personal: true,
-          partido: { equipoLocal: true, equipoVisita: true, fecha: { torneo: true } },
+          partido: {
+            inscripcionLocal: { club: true },
+            inscripcionVisita: { club: true },
+            fecha: { torneo: true },
+          },
         },
       });
       if (!d || !d.personal || !d.partido) return;
@@ -288,8 +294,8 @@ export class DesignacionesAdminService {
         personalNombre: d.personal.nombre,
         personalApellido: d.personal.apellido,
         personalEmail: d.personal.email,
-        equipoLocalNombre: d.partido.equipoLocal?.nombre ?? '',
-        equipoVisitaNombre: d.partido.equipoVisita?.nombre ?? '',
+        equipoLocalNombre: d.partido.inscripcionLocal?.club?.nombre ?? '',
+        equipoVisitaNombre: d.partido.inscripcionVisita?.club?.nombre ?? '',
         fechaHora: d.partido.fechaHora,
         canchaNombre: d.partido.canchaNombre,
         torneoNombre: d.partido.fecha?.torneo?.nombre ?? '',

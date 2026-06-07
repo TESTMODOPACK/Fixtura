@@ -37,8 +37,10 @@ export class MatchCenterService {
   async snapshot(partidoId: string, tenantId: string): Promise<MatchCenterSnapshot> {
     const partido = await this.repo
       .createQueryBuilder('p')
-      .leftJoinAndSelect('p.equipoLocal', 'el')
-      .leftJoinAndSelect('p.equipoVisita', 'ev')
+      .leftJoinAndSelect('p.inscripcionLocal', 'il')
+      .leftJoinAndSelect('il.club', 'ilc')
+      .leftJoinAndSelect('p.inscripcionVisita', 'iv')
+      .leftJoinAndSelect('iv.club', 'ivc')
       .where('p.id = :id AND p.tenant_id = :tenantId', { id: partidoId, tenantId })
       .getOne();
     if (!partido) throw new NotFoundException(`Partido ${partidoId} no encontrado.`);
@@ -52,8 +54,10 @@ export class MatchCenterService {
   async snapshotPublico(partidoId: string): Promise<MatchCenterSnapshot> {
     const partido = await this.repo
       .createQueryBuilder('p')
-      .leftJoinAndSelect('p.equipoLocal', 'el')
-      .leftJoinAndSelect('p.equipoVisita', 'ev')
+      .leftJoinAndSelect('p.inscripcionLocal', 'il')
+      .leftJoinAndSelect('il.club', 'ilc')
+      .leftJoinAndSelect('p.inscripcionVisita', 'iv')
+      .leftJoinAndSelect('iv.club', 'ivc')
       .where('p.id = :id', { id: partidoId })
       .getOne();
     if (!partido) throw new NotFoundException(`Partido ${partidoId} no encontrado.`);
@@ -266,8 +270,8 @@ export class MatchCenterService {
       segundosTranscurridos: this.calcularTranscurrido(partido),
       golesLocal: partido.golesLocal ?? 0,
       golesVisita: partido.golesVisita ?? 0,
-      equipoLocalNombre: partido.equipoLocal?.nombre ?? '?',
-      equipoVisitaNombre: partido.equipoVisita?.nombre ?? '?',
+      equipoLocalNombre: partido.inscripcionLocal?.club?.nombre ?? '?',
+      equipoVisitaNombre: partido.inscripcionVisita?.club?.nombre ?? '?',
       ultimaActualizacion: new Date().toISOString(),
     };
   }

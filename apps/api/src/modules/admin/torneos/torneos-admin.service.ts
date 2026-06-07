@@ -28,7 +28,7 @@ interface CategoriaSerieInput {
 }
 
 import { CategoriaJugadores } from '../../competition/entities/categoria-jugadores.entity';
-import { Equipo } from '../../competition/entities/equipo.entity';
+import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Temporada } from '../../competition/entities/temporada.entity';
@@ -42,7 +42,8 @@ export class TorneosAdminService {
   constructor(
     @InjectRepository(Torneo) private readonly repo: Repository<Torneo>,
     @InjectRepository(Temporada) private readonly temporadaRepo: Repository<Temporada>,
-    @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
+    @InjectRepository(InscripcionTorneo)
+    private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
     @InjectRepository(CategoriaJugadores)
@@ -186,18 +187,35 @@ export class TorneosAdminService {
     const torneo = await this.repo.findOne({ where: { id, tenantId } });
     if (!torneo) throw new NotFoundException(`Torneo ${id} no encontrado`);
 
-    const equipos = await this.equipoRepo.find({
+    // ADR-0005 — los "equipos" de la tabla son las inscripciones (id =
+    // inscripcionId); nombre/slug/escudo salen del club.
+    const inscripciones = await this.inscRepo.find({
       where: { torneoId: id, tenantId },
+      relations: { club: true },
     });
+    const equipos = inscripciones
+      .filter((i) => i.estado !== 'RETIRADO')
+      .map((i) => ({
+        id: i.id,
+        nombre: i.club?.nombre ?? '',
+        slug: i.club?.slug ?? '',
+        escudoUrl: i.club?.escudoUrl ?? null,
+      }));
     // Solo partidos ya jugados: FINALIZADO o WALKOVER (mismo criterio que
     // el portal público — el walkover ya persiste 3-0).
-    const partidos = await this.partidoRepo
+    const partidosRaw = await this.partidoRepo
       .createQueryBuilder('p')
       .innerJoin('p.fecha', 'f')
       .where('f.torneo_id = :id', { id })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
       .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
       .getMany();
+    const partidos = partidosRaw.map((p) => ({
+      equipoLocalId: p.inscripcionLocalId ?? '',
+      equipoVisitaId: p.inscripcionVisitaId ?? '',
+      golesLocal: p.golesLocal,
+      golesVisita: p.golesVisita,
+    }));
 
     const tiebreakers =
       Array.isArray(torneo.tablaTiebreakers) && torneo.tablaTiebreakers.length > 0
@@ -438,7 +456,7 @@ export class TorneosAdminService {
       // mejor null que un slug colgado que apunta a series fantasma.
       const cambioCategoria = (input.categoriaId ?? null) !== existing.categoriaId;
       if (cambioCategoria) {
-        await this.equipoRepo
+        await this.inscRepo
           .createQueryBuilder()
           .update()
           .set({ serieSlug: null })
@@ -604,7 +622,7 @@ export class TorneosAdminService {
 
   private async toDto(t: Torneo): Promise<TorneoAdmin> {
     const [equiposCount, fechasCount] = await Promise.all([
-      this.equipoRepo.count({ where: { torneoId: t.id } }),
+      this.inscRepo.count({ where: { torneoId: t.id } }),
       this.fechaRepo.count({ where: { torneoId: t.id } }),
     ]);
 

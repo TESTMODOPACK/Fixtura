@@ -25,11 +25,11 @@ import type {
 
 import { Cancha } from '../../competition/entities/cancha.entity';
 import { DiaNoJugable } from '../../competition/entities/dia-no-jugable.entity';
-import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { TarifaAplicadorService } from '../tarifas/tarifa-aplicador.service';
-import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
+import { Jugador } from '../../competition/entities/jugador.entity';
+import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
@@ -41,11 +41,13 @@ export class PartidosAdminService {
     @InjectRepository(Partido) private readonly repo: Repository<Partido>,
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
-    @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
     @InjectRepository(IncidenciaPartido)
     private readonly incidenciaRepo: Repository<IncidenciaPartido>,
-    @InjectRepository(JugadorInscrito)
-    private readonly jugadorRepo: Repository<JugadorInscrito>,
+    // ADR-0005 — roster del partido = planilla de la inscripción → jugadores.
+    @InjectRepository(Jugador)
+    private readonly jugadorRepo: Repository<Jugador>,
+    @InjectRepository(PlanillaTorneo)
+    private readonly planillaRepo: Repository<PlanillaTorneo>,
     @InjectRepository(SancionActiva)
     private readonly sancionRepo: Repository<SancionActiva>,
     @InjectRepository(Cancha) private readonly canchaRepo: Repository<Cancha>,
@@ -76,7 +78,10 @@ export class PartidosAdminService {
 
     const partidos = await this.repo.find({
       where: fechas.map((f) => ({ fechaId: f.id })),
-      relations: { equipoLocal: true, equipoVisita: true },
+      relations: {
+        inscripcionLocal: { club: true },
+        inscripcionVisita: { club: true },
+      },
       order: { fechaHora: 'ASC' },
     });
 
@@ -264,8 +269,10 @@ export class PartidosAdminService {
     const choque = await this.repo
       .createQueryBuilder('p')
       .leftJoinAndSelect('p.cancha', 'cancha')
-      .leftJoinAndSelect('p.equipoLocal', 'el')
-      .leftJoinAndSelect('p.equipoVisita', 'ev')
+      .leftJoinAndSelect('p.inscripcionLocal', 'il')
+      .leftJoinAndSelect('il.club', 'ilc')
+      .leftJoinAndSelect('p.inscripcionVisita', 'iv')
+      .leftJoinAndSelect('iv.club', 'ivc')
       .where('p.tenant_id = :tenantId', { tenantId: partido.tenantId })
       .andWhere('p.id <> :id', { id: partido.id })
       .andWhere('p.cancha_id = :canchaId', { canchaId: partido.canchaId })
@@ -277,8 +284,8 @@ export class PartidosAdminService {
 
     if (choque) {
       const nombreCancha = choque.cancha?.nombre ?? partido.canchaNombre ?? 'cancha';
-      const local = choque.equipoLocal?.nombre ?? '?';
-      const visita = choque.equipoVisita?.nombre ?? '?';
+      const local = choque.inscripcionLocal?.club?.nombre ?? '?';
+      const visita = choque.inscripcionVisita?.club?.nombre ?? '?';
       const hora = choque.fechaHora
         ? new Date(choque.fechaHora).toLocaleString('es-CL', {
             day: '2-digit',
@@ -307,18 +314,29 @@ export class PartidosAdminService {
       );
     }
 
-    // Validar que el equipo pertenece a este partido
-    if (input.equipoId !== partido.equipoLocalId && input.equipoId !== partido.equipoVisitaId) {
+    // ADR-0005 — input.equipoId es el inscripcionId; jugadorInscritoId es
+    // el jugadorId del modelo nuevo. Validamos contra la inscripción del
+    // partido y la planilla del torneo.
+    if (
+      input.equipoId !== partido.inscripcionLocalId &&
+      input.equipoId !== partido.inscripcionVisitaId
+    ) {
       throw new BadRequestException('El equipo no pertenece a este partido');
     }
 
-    // Validar que el jugador pertenece al equipo si se proporciona
+    // Validar que el jugador está en la planilla de esa inscripción.
     if (input.jugadorInscritoId) {
-      const jugador = await this.jugadorRepo.findOne({
-        where: { id: input.jugadorInscritoId, equipoId: input.equipoId },
+      const enPlanilla = await this.planillaRepo.findOne({
+        where: {
+          inscripcionId: input.equipoId,
+          jugadorId: input.jugadorInscritoId,
+          tenantId,
+        },
       });
-      if (!jugador) {
-        throw new BadRequestException('El jugador no pertenece al equipo indicado');
+      if (!enPlanilla) {
+        throw new BadRequestException(
+          'El jugador no está en la planilla del equipo indicado',
+        );
       }
     }
 
@@ -326,8 +344,8 @@ export class PartidosAdminService {
       this.incidenciaRepo.create({
         tenantId,
         partidoId,
-        equipoId: input.equipoId,
-        jugadorInscritoId: input.jugadorInscritoId,
+        inscripcionId: input.equipoId,
+        jugadorId: input.jugadorInscritoId,
         tipo: input.tipo,
         minuto: input.minuto ?? null,
         detalle: {},
@@ -382,10 +400,14 @@ export class PartidosAdminService {
     // marcador sin tracking por jugador).
     const incidencias = await this.incidenciaRepo.find({ where: { partidoId } });
     const golesLocalIncidencias = incidencias.filter(
-      (i) => i.equipoId === partido.equipoLocalId && (i.tipo === 'GOL' || i.tipo === 'AUTOGOL'),
+      (i) =>
+        i.inscripcionId === partido.inscripcionLocalId &&
+        (i.tipo === 'GOL' || i.tipo === 'AUTOGOL'),
     ).length;
     const golesVisitaIncidencias = incidencias.filter(
-      (i) => i.equipoId === partido.equipoVisitaId && (i.tipo === 'GOL' || i.tipo === 'AUTOGOL'),
+      (i) =>
+        i.inscripcionId === partido.inscripcionVisitaId &&
+        (i.tipo === 'GOL' || i.tipo === 'AUTOGOL'),
     ).length;
 
     if (
@@ -483,24 +505,24 @@ export class PartidosAdminService {
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     const torneoId = fecha.torneoId;
 
-    // Traer incidencias del partido con info del jugador
+    // Traer incidencias del partido con info del jugador (modelo nuevo)
     const incidencias = await this.incidenciaRepo.find({
       where: { partidoId: partido.id },
-      relations: { jugadorInscrito: true },
+      relations: { jugador: true },
     });
 
     // Agrupar incidencias por jugador (sólo las relevantes para sanción)
     const porJugador = new Map<
       string,
       {
-        jugadorInscritoId: string;
+        jugadorId: string;
         rut: string | null;
         incidencias: IncidenciaJugador[];
       }
     >();
 
     for (const inc of incidencias) {
-      if (!inc.jugadorInscritoId) continue;
+      if (!inc.jugadorId) continue;
       if (
         inc.tipo !== 'AMARILLA' &&
         inc.tipo !== 'ROJA' &&
@@ -508,10 +530,10 @@ export class PartidosAdminService {
       )
         continue;
 
-      const key = inc.jugadorInscritoId;
+      const key = inc.jugadorId;
       const bucket = porJugador.get(key) ?? {
-        jugadorInscritoId: inc.jugadorInscritoId,
-        rut: inc.jugadorInscrito?.rut ?? null,
+        jugadorId: inc.jugadorId,
+        rut: inc.jugador?.rut ?? null,
         incidencias: [],
       };
       bucket.incidencias.push({
@@ -525,7 +547,7 @@ export class PartidosAdminService {
     // Para cada jugador, calcular sanciones contra historial
     for (const bucket of porJugador.values()) {
       const previas = await this.getIncidenciasPreviasEnTorneo(
-        bucket.jugadorInscritoId,
+        bucket.jugadorId,
         bucket.rut,
         torneoId,
         partido.id,
@@ -536,7 +558,7 @@ export class PartidosAdminService {
         propuestas,
         tenantId,
         torneoId,
-        bucket.jugadorInscritoId,
+        bucket.jugadorId,
         bucket.rut,
       );
     }
@@ -548,7 +570,7 @@ export class PartidosAdminService {
    * de un jugador que se cambia de club).
    */
   private async getIncidenciasPreviasEnTorneo(
-    jugadorInscritoId: string,
+    jugadorId: string,
     rut: string | null,
     torneoId: string,
     partidoActualId: string,
@@ -557,16 +579,17 @@ export class PartidosAdminService {
       .createQueryBuilder('i')
       .innerJoin('i.partido', 'p')
       .innerJoin('p.fecha', 'f')
-      .innerJoin('i.jugadorInscrito', 'j')
-      .leftJoin('j.equipo', 'e')
+      .innerJoin('i.jugador', 'j')
       .where('f.torneo_id = :torneoId', { torneoId })
       .andWhere('i.partido_id <> :partidoActualId', { partidoActualId })
       .andWhere(`i.tipo IN ('AMARILLA','ROJA','AMARILLA_ROJA')`);
 
+    // Match por jugadorId O por RUT (un jugador que cambia de club dentro
+    // del torneo no elude la sanción — la clave real es el RUT).
     if (rut) {
-      qb.andWhere('(j.id = :jId OR j.rut = :rut)', { jId: jugadorInscritoId, rut });
+      qb.andWhere('(j.id = :jId OR j.rut = :rut)', { jId: jugadorId, rut });
     } else {
-      qb.andWhere('j.id = :jId', { jId: jugadorInscritoId });
+      qb.andWhere('j.id = :jId', { jId: jugadorId });
     }
 
     const rows = await qb
@@ -585,7 +608,7 @@ export class PartidosAdminService {
     propuestas: SancionPropuesta[],
     tenantId: string,
     torneoId: string,
-    jugadorInscritoId: string,
+    jugadorId: string,
     rut: string | null,
   ): Promise<void> {
     for (const p of propuestas) {
@@ -595,7 +618,7 @@ export class PartidosAdminService {
         where: {
           tenantId,
           torneoId,
-          jugadorInscritoId,
+          jugadorId,
           motivo: p.motivo,
           origenIncidenciaPartidoId: p.origenIncidenciaPartidoId,
         },
@@ -607,7 +630,7 @@ export class PartidosAdminService {
           tenantId,
           torneoId,
           rut,
-          jugadorInscritoId,
+          jugadorId,
           motivo: p.motivo,
           fechasPendientes: p.fechasSuspension,
           desdeFechaNumero: p.desdeFechaNumero,
@@ -891,17 +914,17 @@ export class PartidosAdminService {
       );
     }
 
-    // Validar que el equipo perdedor sea uno de los dos del partido.
+    // ADR-0005 — equipoPerdedorId es el inscripcionId.
     if (
-      input.equipoPerdedorId !== partido.equipoLocalId &&
-      input.equipoPerdedorId !== partido.equipoVisitaId
+      input.equipoPerdedorId !== partido.inscripcionLocalId &&
+      input.equipoPerdedorId !== partido.inscripcionVisitaId
     ) {
       throw new BadRequestException(
         'El equipo indicado no pertenece a este partido.',
       );
     }
 
-    const perdedorEsLocal = input.equipoPerdedorId === partido.equipoLocalId;
+    const perdedorEsLocal = input.equipoPerdedorId === partido.inscripcionLocalId;
     partido.estado = 'WALKOVER';
     partido.golesLocal = perdedorEsLocal ? 0 : 3;
     partido.golesVisita = perdedorEsLocal ? 3 : 0;
@@ -910,8 +933,8 @@ export class PartidosAdminService {
 
     const obsBase = input.observaciones?.trim();
     const perdedorNombre = perdedorEsLocal
-      ? partido.equipoLocal?.nombre ?? 'local'
-      : partido.equipoVisita?.nombre ?? 'visita';
+      ? partido.inscripcionLocal?.club?.nombre ?? 'local'
+      : partido.inscripcionVisita?.club?.nombre ?? 'visita';
     partido.observaciones = obsBase
       ? `[WALKOVER] No se presentó ${perdedorNombre}. ${obsBase}`
       : `[WALKOVER] No se presentó ${perdedorNombre}.`;
@@ -997,7 +1020,10 @@ export class PartidosAdminService {
   private async findPartido(id: string, tenantId: string): Promise<Partido> {
     const p = await this.repo.findOne({
       where: { id, tenantId },
-      relations: { equipoLocal: true, equipoVisita: true },
+      relations: {
+        inscripcionLocal: { club: true },
+        inscripcionVisita: { club: true },
+      },
     });
     if (!p) throw new NotFoundException(`Partido ${id} no encontrado`);
     return p;
@@ -1006,16 +1032,18 @@ export class PartidosAdminService {
   private async listIncidencias(partidoId: string): Promise<IncidenciaAdmin[]> {
     const incidencias = await this.incidenciaRepo.find({
       where: { partidoId },
-      relations: { equipo: true, jugadorInscrito: true },
+      relations: { inscripcion: { club: true }, jugador: true },
       order: { minuto: 'ASC', createdAt: 'ASC' },
     });
+    // ADR-0005 — equipoId expone inscripcionId; jugadorInscritoId expone
+    // jugadorId. El frontend los trata como ids opacos (rename en Fase 2).
     return incidencias.map((i) => ({
       id: i.id,
-      equipoId: i.equipoId,
-      equipoNombre: i.equipo?.nombre ?? '',
-      jugadorInscritoId: i.jugadorInscritoId,
-      jugadorNombre: i.jugadorInscrito
-        ? `${i.jugadorInscrito.nombre} ${i.jugadorInscrito.apellido}`
+      equipoId: i.inscripcionId ?? '',
+      equipoNombre: i.inscripcion?.club?.nombre ?? '',
+      jugadorInscritoId: i.jugadorId,
+      jugadorNombre: i.jugador
+        ? `${i.jugador.nombres} ${i.jugador.apellidos}`
         : null,
       tipo: i.tipo,
       minuto: i.minuto,
@@ -1028,10 +1056,12 @@ export class PartidosAdminService {
       fechaId: p.fechaId,
       fechaNumero,
       fechaEtiqueta,
-      equipoLocalId: p.equipoLocalId,
-      equipoLocalNombre: p.equipoLocal?.nombre ?? '',
-      equipoVisitaId: p.equipoVisitaId,
-      equipoVisitaNombre: p.equipoVisita?.nombre ?? '',
+      // ADR-0005 — el campo equipoLocalId expone el inscripcionId (el id del
+      // equipo en el torneo). El nombre sale del club de la inscripción.
+      equipoLocalId: p.inscripcionLocalId ?? '',
+      equipoLocalNombre: p.inscripcionLocal?.club?.nombre ?? '',
+      equipoVisitaId: p.inscripcionVisitaId ?? '',
+      equipoVisitaNombre: p.inscripcionVisita?.club?.nombre ?? '',
       canchaId: p.canchaId,
       canchaNombre: p.canchaNombre,
       fechaHora: p.fechaHora?.toISOString() ?? null,

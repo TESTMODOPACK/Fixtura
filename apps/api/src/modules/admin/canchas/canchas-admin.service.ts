@@ -101,8 +101,10 @@ export class CanchasAdminService {
     const canchaIds = canchas.map((c) => c.id);
     const partidos = await this.partidoRepo
       .createQueryBuilder('p')
-      .leftJoinAndSelect('p.equipoLocal', 'el')
-      .leftJoinAndSelect('p.equipoVisita', 'ev')
+      .leftJoinAndSelect('p.inscripcionLocal', 'il')
+      .leftJoinAndSelect('il.club', 'ilc')
+      .leftJoinAndSelect('p.inscripcionVisita', 'iv')
+      .leftJoinAndSelect('iv.club', 'ivc')
       .leftJoinAndSelect('p.fecha', 'f')
       .leftJoinAndSelect('f.torneo', 't')
       .where('p.tenant_id = :tenantId', { tenantId })
@@ -130,8 +132,8 @@ export class CanchasAdminService {
         torneoId: p.fecha?.torneoId ?? '',
         fechaHora: p.fechaHora.toISOString(),
         duracionMin: CanchasAdminService.DURACION_PARTIDO_MIN,
-        equipoLocal: p.equipoLocal?.nombre ?? '?',
-        equipoVisita: p.equipoVisita?.nombre ?? '?',
+        equipoLocal: p.inscripcionLocal?.club?.nombre ?? '?',
+        equipoVisita: p.inscripcionVisita?.club?.nombre ?? '?',
         torneoNombre: p.fecha?.torneo?.nombre ?? '?',
         estado: p.estado,
       });

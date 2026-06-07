@@ -76,6 +76,20 @@ export class InscripcionTorneo {
   @Column({ type: 'varchar', length: 20, default: 'INSCRITO' })
   estado!: EstadoInscripcion;
 
+  // Sprint 46 (ADR-0005) — suspensión del "equipo en el torneo". Antes
+  // vivía en `equipos`; ahora la inscripción es la fuente de verdad.
+  @Column({ name: 'motivo_suspension', type: 'varchar', length: 20, nullable: true })
+  motivoSuspension!: 'DEPORTIVA' | 'ECONOMICA' | 'OTRA' | null;
+
+  @Column({ name: 'observaciones_suspension', type: 'text', nullable: true })
+  observacionesSuspension!: string | null;
+
+  @Column({ name: 'suspendido_en', type: 'timestamptz', nullable: true })
+  suspendidoEn!: Date | null;
+
+  @Column({ name: 'suspendido_por', type: 'uuid', nullable: true })
+  suspendidoPor!: string | null;
+
   // Sprint 26G.2 (ADR-0004 shim) — Referencia al "equipo sombra" del
   // modelo viejo que se mantiene sincronizado para que fixture, actas
   // y sanciones sigan funcionando sin refactor. NO se expone al cliente.

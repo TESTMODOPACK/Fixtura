@@ -22,222 +22,187 @@ import type {
   ValidarPlantelResult,
 } from '@fixtura/types';
 
-import { Equipo } from '../../competition/entities/equipo.entity';
 import { CategoriaJugadores } from '../../competition/entities/categoria-jugadores.entity';
+import { Club } from '../../competition/entities/club.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
-import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
+import { Jugador } from '../../competition/entities/jugador.entity';
 import { Partido } from '../../competition/entities/partido.entity';
+import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { InscripcionesAdminService } from '../inscripciones/inscripciones-admin.service';
 import { PartidosAdminService } from '../partidos/partidos-admin.service';
 
+/**
+ * ADR-0005 — "Equipo del torneo" = InscripcionTorneo. Este servicio expone
+ * la misma API que antes (EquipoAdmin shape) pero respaldada por el modelo
+ * nuevo: el `id` de un equipo es el inscripcionId, el nombre/escudo salen
+ * del club, y la planilla son los jugadores del torneo. La creación y la
+ * baja delegan en InscripcionesAdminService para no duplicar la lógica de
+ * inscripción/desinscripción (validación de combo, cupo, equipo sombra).
+ */
 @Injectable()
 export class EquiposAdminService {
   private readonly logger = new Logger(EquiposAdminService.name);
 
   constructor(
-    @InjectRepository(Equipo) private readonly repo: Repository<Equipo>,
-    @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
-    @InjectRepository(JugadorInscrito)
-    private readonly jugadorRepo: Repository<JugadorInscrito>,
-    @InjectRepository(CategoriaJugadores)
-    private readonly categoriaRepo: Repository<CategoriaJugadores>,
     @InjectRepository(InscripcionTorneo)
     private readonly inscRepo: Repository<InscripcionTorneo>,
+    @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
+    @InjectRepository(Club) private readonly clubRepo: Repository<Club>,
+    @InjectRepository(PlanillaTorneo)
+    private readonly planillaRepo: Repository<PlanillaTorneo>,
+    @InjectRepository(Jugador) private readonly jugadorRepo: Repository<Jugador>,
+    @InjectRepository(CategoriaJugadores)
+    private readonly categoriaRepo: Repository<CategoriaJugadores>,
     @InjectRepository(Partido)
     private readonly partidoRepo: Repository<Partido>,
     @InjectRepository(Fecha)
     private readonly fechaRepo: Repository<Fecha>,
     @Inject(forwardRef(() => PartidosAdminService))
     private readonly partidosSvc: PartidosAdminService,
+    private readonly inscripcionesSvc: InscripcionesAdminService,
   ) {}
 
   async listByTorneo(torneoId: string, tenantId: string): Promise<EquipoAdmin[]> {
-    const torneo = await this.ensureTorneo(torneoId, tenantId);
-    const equipos = await this.repo.find({
+    await this.ensureTorneo(torneoId, tenantId);
+    const inscripciones = await this.inscRepo.find({
       where: { torneoId, tenantId },
-      order: { nombre: 'ASC' },
+      relations: { club: true, categoria: true },
+      order: { createdAt: 'ASC' },
     });
-    // Resolvemos la categoría una sola vez para mapear serieSlug→nombre
-    // y evitar un N+1 desde toDto.
-    const categoria = torneo.categoriaId
-      ? await this.categoriaRepo.findOne({
-          where: { id: torneo.categoriaId, tenantId },
-        })
-      : null;
-    return Promise.all(equipos.map((e) => this.toDto(e, categoria)));
+    if (inscripciones.length === 0) return [];
+
+    const ids = inscripciones.map((i) => i.id);
+    const counts = await this.planillaRepo
+      .createQueryBuilder('p')
+      .select('p.inscripcion_id', 'inscripcionId')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('p.inscripcion_id IN (:...ids)', { ids })
+      .groupBy('p.inscripcion_id')
+      .getRawMany<{ inscripcionId: string; cnt: string }>();
+    const byInsc = new Map<string, number>();
+    for (const c of counts) byInsc.set(c.inscripcionId, Number(c.cnt));
+
+    return inscripciones.map((i) => this.toDto(i, byInsc.get(i.id) ?? 0));
   }
 
   async findOne(id: string, tenantId: string): Promise<EquipoAdmin> {
-    const e = await this.repo.findOne({ where: { id, tenantId } });
-    if (!e) throw new NotFoundException(`Equipo ${id} no encontrado`);
-    const torneo = await this.torneoRepo.findOne({
-      where: { id: e.torneoId, tenantId },
+    const insc = await this.inscRepo.findOne({
+      where: { id, tenantId },
+      relations: { club: true, categoria: true },
     });
-    const categoria = torneo?.categoriaId
-      ? await this.categoriaRepo.findOne({
-          where: { id: torneo.categoriaId, tenantId },
-        })
-      : null;
-    return this.toDto(e, categoria);
+    if (!insc) throw new NotFoundException(`Equipo ${id} no encontrado`);
+    const cnt = await this.planillaRepo.count({
+      where: { inscripcionId: id, tenantId },
+    });
+    return this.toDto(insc, cnt);
   }
 
+  /**
+   * Inscribir un club al torneo (lo que antes era "crear equipo"). El form
+   * manda los datos del club (nombre/slug/colores); resolvemos el club por
+   * slug y delegamos en InscripcionesAdminService.inscribir, que crea la
+   * inscripción + equipo sombra + precarga de planilla.
+   */
   async create(
     torneoId: string,
     tenantId: string,
     input: CreateEquipoRequest,
   ): Promise<EquipoAdmin> {
-    const torneo = await this.ensureTorneoFull(torneoId, tenantId);
-
-    // No se pueden inscribir equipos en un torneo ya iniciado o cerrado.
-    // Si la liga necesita agregar un equipo después de arrancar, primero
-    // tiene que volver el torneo a DRAFT (resetea fixture).
+    const torneo = await this.torneoRepo.findOne({
+      where: { id: torneoId, tenantId },
+    });
+    if (!torneo) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);
     if (torneo.estado !== 'DRAFT') {
       throw new ConflictException(
         `No se pueden inscribir equipos en un torneo ${torneo.estado}. ` +
-          'Para agregar equipos, el torneo debe estar en DRAFT (sin fixture generado).',
+          'Para agregar equipos, el torneo debe estar en DRAFT.',
+      );
+    }
+    if (!torneo.categoriaId) {
+      throw new BadRequestException(
+        'El torneo no tiene una categoría asignada. Editá el torneo y asigná ' +
+          'una categoría antes de inscribir clubes desde acá.',
       );
     }
 
-    // Validar serieSlug contra la categoría del torneo (Sprint 25 paso 3).
-    // Si el torneo no tiene categoría, ignorar el slug que venga (no hay
-    // contra qué validarlo). Si el torneo sí tiene categoría y el slug
-    // viene, debe existir en su lista de series activas.
-    const categoria = torneo.categoriaId
-      ? await this.categoriaRepo.findOne({
-          where: { id: torneo.categoriaId, tenantId },
-        })
-      : null;
-
-    const serieSlug = await this.validarSerieSlug(input.serieSlug, categoria, torneo.categoriaId);
-
-    const dup = await this.repo.findOne({ where: { torneoId, slug: input.slug } });
-    if (dup) {
-      throw new ConflictException(`Ya existe un equipo con slug "${input.slug}" en este torneo`);
-    }
-
-    const e = this.repo.create({
-      tenantId,
-      torneoId,
-      nombre: input.nombre,
-      slug: input.slug,
-      escudoUrl: input.escudoUrl ?? null,
-      colorPrimario: input.colorPrimario ?? null,
-      colorSecundario: input.colorSecundario ?? null,
-      delegadoUserId: input.delegadoUserId ?? null,
-      estado: 'INSCRITO',
-      serieSlug,
+    const club = await this.clubRepo.findOne({
+      where: { slug: input.slug, tenantId },
     });
-    try {
-      const saved = await this.repo.save(e);
-      return this.findOne(saved.id, tenantId);
-    } catch (err) {
-      // Race condition con UNIQUE (torneo_id, slug)
-      if (
-        err instanceof Error &&
-        (err.message.includes('duplicate key') || err.message.includes('UQ_'))
-      ) {
-        throw new ConflictException(
-          `Ya existe un equipo con slug "${input.slug}" en este torneo`,
-        );
-      }
-      throw err;
+    if (!club) {
+      throw new BadRequestException(
+        `No existe un club con slug "${input.slug}". Creá el club en /admin/clubes primero.`,
+      );
     }
+
+    const dto = await this.inscripcionesSvc.inscribir(torneoId, tenantId, {
+      clubId: club.id,
+      categoriaId: torneo.categoriaId,
+      serieSlug: input.serieSlug ?? null,
+    });
+    return this.findOne(dto.id, tenantId);
   }
 
   /**
-   * Eliminar un equipo del torneo. Solo permitido si el torneo está en
-   * DRAFT (sin fixture activo) — un equipo con partidos jugados rompe
-   * historial e integridad de actas/sanciones.
-   *
-   * Si el equipo es "sombra" de una inscripción de club (modelo 26),
-   * lo bloqueamos y derivamos al flujo de desinscripción que mantiene
-   * la consistencia de inscripciones_torneo + planilla.
-   *
-   * Las FKs de partidos son ON DELETE CASCADE — al borrar el equipo,
-   * los partidos del fixture asociados se borran en cascada. En DRAFT
-   * eso significa que no hay actas cerradas que perder.
+   * Eliminar un equipo del torneo = desinscribir el club. Solo en DRAFT
+   * (lo enforza InscripcionesAdminService.desinscribir).
    */
   async delete(id: string, tenantId: string): Promise<void> {
-    const equipo = await this.repo.findOne({ where: { id, tenantId } });
-    if (!equipo) throw new NotFoundException(`Equipo ${id} no encontrado`);
-
-    const torneo = await this.torneoRepo.findOne({
-      where: { id: equipo.torneoId, tenantId },
+    // Resolvemos el torneo ANTES de desinscribir, para poder limpiar las
+    // fechas huérfanas si el torneo queda con <2 equipos.
+    const insc = await this.inscRepo.findOne({
+      where: { id, tenantId },
+      select: ['id', 'torneoId'],
     });
-    if (!torneo) {
-      throw new NotFoundException('Torneo del equipo no encontrado');
-    }
-    if (torneo.estado !== 'DRAFT') {
-      throw new ConflictException(
-        `No se pueden eliminar equipos de un torneo ${torneo.estado}. ` +
-          'Para retirar un equipo en competición, suspendelo desde su ficha.',
-      );
-    }
+    const torneoId = insc?.torneoId ?? null;
 
-    const inscrip = await this.inscRepo.findOne({
-      where: { equipoSombraId: id, tenantId },
-      select: ['id'],
-    });
-    if (inscrip) {
-      throw new ConflictException(
-        'Este equipo está vinculado a una inscripción de club. ' +
-          'Eliminalo desde la pestaña "Inscripciones" del torneo para ' +
-          'mantener la planilla consistente.',
-      );
-    }
+    await this.inscripcionesSvc.desinscribir(id, tenantId);
 
-    await this.repo.delete({ id, tenantId });
-
-    // Sprint 44 fix — Las FK partido→equipo son ON DELETE CASCADE, así
-    // que borrar el equipo borró sus partidos. Pero las FECHAS no tienen
-    // FK al equipo, así que quedaban "fantasma" (fechas vacías sin
-    // partidos). Si tras borrar el torneo queda con menos de 2 equipos,
-    // no puede existir un fixture válido → limpiamos las fechas para que
-    // el torneo vuelva al estado inicial (0 fechas, listo para regenerar
-    // cuando se reinscriban equipos).
-    const equiposRestantes = await this.repo.count({
-      where: { torneoId: equipo.torneoId, tenantId },
-    });
-    if (equiposRestantes < 2) {
-      // delete() de fechas: la FK partido→fecha es ON DELETE CASCADE, así
-      // que esto barre también cualquier partido que hubiera quedado.
-      await this.fechaRepo.delete({ torneoId: equipo.torneoId, tenantId });
+    // Si el torneo quedó con menos de 2 inscripciones, el fixture deja de
+    // tener sentido — limpiamos las fechas (cascade borra sus partidos).
+    if (torneoId) {
+      const restantes = await this.inscRepo.count({ where: { torneoId, tenantId } });
+      if (restantes < 2) {
+        await this.fechaRepo.delete({ torneoId, tenantId });
+      }
     }
   }
 
   /**
-   * Valida el plantel del equipo contra la categoría del torneo.
-   * Si el torneo no tiene categoría, devuelve un resultado "neutro" con
-   * apto=true (no hay regla que aplicar).
+   * Valida la planilla del equipo (inscripción) contra su categoría.
    */
   async validarPlantel(
-    equipoId: string,
+    inscripcionId: string,
     tenantId: string,
   ): Promise<ValidarPlantelResult> {
-    const equipo = await this.repo.findOne({ where: { id: equipoId, tenantId } });
-    if (!equipo) throw new NotFoundException(`Equipo ${equipoId} no encontrado`);
-
-    const torneo = await this.torneoRepo.findOne({
-      where: { id: equipo.torneoId, tenantId },
+    const insc = await this.inscRepo.findOne({
+      where: { id: inscripcionId, tenantId },
     });
-    if (!torneo) {
-      throw new NotFoundException(`Torneo del equipo ${equipoId} no encontrado`);
+    if (!insc) {
+      throw new NotFoundException(`Equipo ${inscripcionId} no encontrado`);
     }
 
-    // Sin categoría: nada que validar. Devolvemos un resultado vacío con
-    // apto=true y sinCategoria=true para que la UI lo distinga del caso
-    // "validó OK con regla".
-    if (!torneo.categoriaId) {
-      const jugadoresCount = await this.jugadorRepo.count({
-        where: { equipoId, tenantId },
-      });
+    const planilla = await this.planillaRepo.find({
+      where: { inscripcionId, tenantId },
+      relations: { jugador: true },
+    });
+    const jugadores = planilla
+      .map((p) => p.jugador)
+      .filter((j): j is Jugador => !!j);
+
+    const categoria = await this.categoriaRepo.findOne({
+      where: { id: insc.categoriaId, tenantId },
+    });
+    if (!categoria) {
+      // Sin categoría no hay regla de edad que aplicar.
       return {
-        validos: jugadoresCount,
+        validos: jugadores.length,
         enExcepcion: 0,
         bloqueados: 0,
         sinFecha: 0,
-        totalJugadores: jugadoresCount,
+        totalJugadores: jugadores.length,
         cupoExcepcionesDisponibles: 0,
         cupoExcepcionesUsado: 0,
         apto: true,
@@ -246,28 +211,11 @@ export class EquiposAdminService {
       };
     }
 
-    const categoria = await this.categoriaRepo.findOne({
-      where: { id: torneo.categoriaId, tenantId },
-    });
-    if (!categoria) {
-      // FK ON DELETE SET NULL puede dejar este escenario: el torneo tenía
-      // categoría que se borró. El field debería ya estar en null por la
-      // FK action, pero por las dudas.
-      throw new BadRequestException(
-        'La categoría asociada al torneo ya no existe. Editá el torneo para asignar una nueva.',
-      );
-    }
-
-    const jugadores = await this.jugadorRepo.find({
-      where: { equipoId, tenantId },
-      select: ['id', 'nombre', 'apellido', 'fechaNac'],
-    });
-
     const resultado: PlantelValidacionResult = validarPlantelCategoria(
       jugadores.map((j) => ({
         id: j.id,
-        nombre: j.nombre ?? '',
-        apellido: j.apellido ?? '',
+        nombre: j.nombres ?? '',
+        apellido: j.apellidos ?? '',
         fechaNac: j.fechaNac,
       })),
       {
@@ -277,9 +225,6 @@ export class EquiposAdminService {
       },
     );
 
-    // El tipo ValidarPlantelResult expuesto al frontend no incluye
-    // `detalle` (lista por jugador) para evitar payload grande en
-    // /list. Si la UI lo necesita, hacemos un endpoint /:id/validar-plantel/detalle.
     return {
       validos: resultado.validos,
       enExcepcion: resultado.enExcepcion,
@@ -294,125 +239,34 @@ export class EquiposAdminService {
     };
   }
 
-  private async ensureTorneo(
-    torneoId: string,
-    tenantId: string,
-  ): Promise<{ id: string; estado: 'DRAFT' | 'ACTIVO' | 'CERRADO'; categoriaId: string | null }> {
-    const torneo = await this.torneoRepo.findOne({ where: { id: torneoId, tenantId } });
-    if (!torneo) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);
-    return { id: torneo.id, estado: torneo.estado, categoriaId: torneo.categoriaId };
-  }
-
-  private async ensureTorneoFull(
-    torneoId: string,
-    tenantId: string,
-  ): Promise<Torneo> {
-    const torneo = await this.torneoRepo.findOne({ where: { id: torneoId, tenantId } });
-    if (!torneo) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);
-    return torneo;
-  }
-
   /**
-   * Si el torneo tiene categoría y vino un serieSlug, valida que exista
-   * en la lista de series ACTIVAS de la categoría. Si el torneo NO tiene
-   * categoría, ignora el slug (devuelve null) — no tiene sentido guardarlo.
-   */
-  private async validarSerieSlug(
-    slug: string | null | undefined,
-    categoria: CategoriaJugadores | null,
-    torneoCategoriaId: string | null,
-  ): Promise<string | null> {
-    if (!slug) return null;
-    if (!torneoCategoriaId) return null; // sin categoría no hay series
-    if (!categoria) {
-      throw new BadRequestException(
-        'El torneo apunta a una categoría que ya no existe. Editá el torneo primero.',
-      );
-    }
-    const series = Array.isArray(categoria.series) ? categoria.series : [];
-    const found = series.find((s) => s.slug === slug && s.activa);
-    if (!found) {
-      const disponibles = series
-        .filter((s) => s.activa)
-        .map((s) => s.slug)
-        .join(', ');
-      throw new BadRequestException(
-        `La serie "${slug}" no existe (o está inactiva) en la categoría del torneo. ` +
-          (disponibles ? `Disponibles: ${disponibles}.` : 'No hay series definidas.'),
-      );
-    }
-    return slug;
-  }
-
-  private async toDto(
-    e: Equipo,
-    categoria: CategoriaJugadores | null,
-  ): Promise<EquipoAdmin> {
-    const jugadoresCount = await this.jugadorRepo.count({ where: { equipoId: e.id } });
-    const series = categoria && Array.isArray(categoria.series) ? categoria.series : [];
-    const serie = e.serieSlug ? series.find((s) => s.slug === e.serieSlug) : null;
-    return {
-      id: e.id,
-      torneoId: e.torneoId,
-      nombre: e.nombre,
-      slug: e.slug,
-      escudoUrl: e.escudoUrl,
-      colorPrimario: e.colorPrimario,
-      colorSecundario: e.colorSecundario,
-      delegadoUserId: e.delegadoUserId,
-      estado: e.estado,
-      jugadoresCount,
-      serieSlug: e.serieSlug,
-      serieNombre: serie?.nombre ?? null,
-      motivoSuspension: e.motivoSuspension,
-      observacionesSuspension: e.observacionesSuspension,
-      suspendidoEn: e.suspendidoEn ? e.suspendidoEn.toISOString() : null,
-      createdAt: e.createdAt.toISOString(),
-    };
-  }
-
-  /**
-   * Sprint 44 — Suspender un equipo del torneo (conducta antideportiva,
-   * deuda económica, otros). Solo aplica si el torneo está ACTIVO (en
-   * DRAFT no hay partidos en juego — borrar el equipo es la operación
-   * correcta; en CERRADO el torneo terminó). Reversible vía reactivar().
-   *
-   * Efecto sobre partidos pendientes (PROGRAMADO / EN_CURSO):
-   *   - Partido con rival NO suspendido → walkover 3-0 al rival, con
-   *     observación que registra la suspensión.
-   *   - Partido con rival también SUSPENDIDO → no tiene sentido un
-   *     walkover (ninguno se presenta). Se marca SUSPENDIDO_FUERZA_MAYOR
-   *     con observación "ambos equipos suspendidos del torneo".
-   *
-   * Los partidos ya FINALIZADO / WALKOVER / SUSPENDIDO_FUERZA_MAYOR /
-   * REPROGRAMADO no se tocan — son historia.
+   * Suspender un equipo del torneo (Sprint 44, ADR-0005). Solo con torneo
+   * ACTIVO. Dispara walkover 3-0 en partidos pendientes contra rivales no
+   * suspendidos; si el rival también está suspendido, marca el partido
+   * SUSPENDIDO_FUERZA_MAYOR. El estado/motivo viven ahora en la inscripción.
    */
   async suspender(
-    equipoId: string,
+    inscripcionId: string,
     tenantId: string,
     actorUserId: string | null,
     input: {
       motivo: MotivoSuspensionEquipo;
       observaciones?: string | null;
-      // Sprint 44 revisión — Si el torneo tiene tarifa MULTA_WALKOVER
-      // configurada, declararWalkover() genera una multa por cada partido
-      // pendiente. Para motivo=ECONOMICA esto puede ser doble castigo. Por
-      // eso lo dejamos opt-in: la UI default a false y el operador lo
-      // activa explícitamente si quiere multar.
       aplicarMultaWalkover?: boolean;
     },
   ): Promise<SuspenderEquipoResult> {
-    const equipo = await this.repo.findOne({ where: { id: equipoId, tenantId } });
-    if (!equipo) throw new NotFoundException(`Equipo ${equipoId} no encontrado`);
-
-    if (equipo.estado === 'SUSPENDIDO') {
+    const insc = await this.inscRepo.findOne({
+      where: { id: inscripcionId, tenantId },
+    });
+    if (!insc) throw new NotFoundException(`Equipo ${inscripcionId} no encontrado`);
+    if (insc.estado === 'SUSPENDIDO') {
       throw new ConflictException(
         'El equipo ya está suspendido. Reactivalo primero si querés cambiar el motivo.',
       );
     }
 
     const torneo = await this.torneoRepo.findOne({
-      where: { id: equipo.torneoId, tenantId },
+      where: { id: insc.torneoId, tenantId },
     });
     if (!torneo) throw new NotFoundException('Torneo del equipo no encontrado');
     if (torneo.estado === 'DRAFT') {
@@ -423,8 +277,7 @@ export class EquiposAdminService {
     }
     if (torneo.estado === 'CERRADO') {
       throw new BadRequestException(
-        'El torneo ya está cerrado — no se puede suspender un equipo en ' +
-          'esta etapa.',
+        'El torneo ya está cerrado — no se puede suspender un equipo en esta etapa.',
       );
     }
 
@@ -432,12 +285,12 @@ export class EquiposAdminService {
       where: [
         {
           tenantId,
-          equipoLocalId: equipoId,
+          inscripcionLocalId: inscripcionId,
           estado: In(['PROGRAMADO', 'EN_CURSO']),
         },
         {
           tenantId,
-          equipoVisitaId: equipoId,
+          inscripcionVisitaId: inscripcionId,
           estado: In(['PROGRAMADO', 'EN_CURSO']),
         },
       ],
@@ -451,24 +304,22 @@ export class EquiposAdminService {
 
     let partidosWalkover = 0;
     let partidosCancelados = 0;
-
     const aplicarMulta = input.aplicarMultaWalkover === true;
     const ahora = new Date();
 
     for (const partido of pendientes) {
       const rivalId =
-        partido.equipoLocalId === equipoId
-          ? partido.equipoVisitaId
-          : partido.equipoLocalId;
-      const rival = await this.repo.findOne({
-        where: { id: rivalId, tenantId },
-        select: ['id', 'estado'],
-      });
+        partido.inscripcionLocalId === inscripcionId
+          ? partido.inscripcionVisitaId
+          : partido.inscripcionLocalId;
+      const rival = rivalId
+        ? await this.inscRepo.findOne({
+            where: { id: rivalId, tenantId },
+            select: ['id', 'estado'],
+          })
+        : null;
 
       if (rival && rival.estado === 'SUSPENDIDO') {
-        // Ambos equipos suspendidos — ningún walkover tiene sentido.
-        // Marcamos el partido como SUSPENDIDO_FUERZA_MAYOR con motivo
-        // DECISION_LIGA + audit para que quede trazado quién y cuándo.
         partido.estado = 'SUSPENDIDO_FUERZA_MAYOR';
         partido.motivoSuspension = 'DECISION_LIGA';
         partido.suspendidoAt = ahora;
@@ -486,17 +337,13 @@ export class EquiposAdminService {
             tenantId,
             actorUserId,
             {
-              equipoPerdedorId: equipoId,
+              equipoPerdedorId: inscripcionId,
               observaciones: walkoverObs,
               aplicarMulta,
             },
           );
           partidosWalkover++;
         } catch (err) {
-          // Race condition esperable: otro admin cerró el acta o
-          // declaró walkover en paralelo entre el find() y este punto.
-          // No detenemos el batch — registramos y seguimos con el
-          // resto. La UI reportará partidosWalkover < pendientes.
           this.logger.warn(
             `[suspender] no se pudo declarar walkover partido=${partido.id}: ${
               (err as Error).message
@@ -506,44 +353,67 @@ export class EquiposAdminService {
       }
     }
 
-    equipo.estado = 'SUSPENDIDO';
-    equipo.motivoSuspension = input.motivo;
-    equipo.observacionesSuspension = obsTxt;
-    equipo.suspendidoEn = new Date();
-    equipo.suspendidoPor = actorUserId;
-    await this.repo.save(equipo);
+    insc.estado = 'SUSPENDIDO';
+    insc.motivoSuspension = input.motivo;
+    insc.observacionesSuspension = obsTxt;
+    insc.suspendidoEn = new Date();
+    insc.suspendidoPor = actorUserId;
+    await this.inscRepo.save(insc);
 
-    return {
-      equipoId,
-      partidosWalkover,
-      partidosCancelados,
-    };
+    return { equipoId: inscripcionId, partidosWalkover, partidosCancelados };
   }
 
   /**
-   * Sprint 44 — Reactivar un equipo previamente suspendido. Vuelve a
-   * estado INSCRITO y blanquea motivo/observaciones/audit. NO regenera
-   * los walkovers ya disparados — esos quedan como historia del torneo.
-   * Si el operador necesita restablecer partidos puntuales, lo hace
-   * desde el fixture (editar partido, reabrir acta).
+   * Reactivar un equipo suspendido. Vuelve a INSCRITO. Los walkovers ya
+   * disparados quedan como historia (no se revierten automáticamente).
    */
-  async reactivar(equipoId: string, tenantId: string): Promise<EquipoAdmin> {
-    const equipo = await this.repo.findOne({ where: { id: equipoId, tenantId } });
-    if (!equipo) throw new NotFoundException(`Equipo ${equipoId} no encontrado`);
-
-    if (equipo.estado !== 'SUSPENDIDO') {
+  async reactivar(inscripcionId: string, tenantId: string): Promise<EquipoAdmin> {
+    const insc = await this.inscRepo.findOne({
+      where: { id: inscripcionId, tenantId },
+    });
+    if (!insc) throw new NotFoundException(`Equipo ${inscripcionId} no encontrado`);
+    if (insc.estado !== 'SUSPENDIDO') {
       throw new ConflictException(
         'El equipo no está suspendido — no hay nada que reactivar.',
       );
     }
+    insc.estado = 'INSCRITO';
+    insc.motivoSuspension = null;
+    insc.observacionesSuspension = null;
+    insc.suspendidoEn = null;
+    insc.suspendidoPor = null;
+    await this.inscRepo.save(insc);
+    return this.findOne(inscripcionId, tenantId);
+  }
 
-    equipo.estado = 'INSCRITO';
-    equipo.motivoSuspension = null;
-    equipo.observacionesSuspension = null;
-    equipo.suspendidoEn = null;
-    equipo.suspendidoPor = null;
-    await this.repo.save(equipo);
+  private async ensureTorneo(torneoId: string, tenantId: string): Promise<Torneo> {
+    const torneo = await this.torneoRepo.findOne({
+      where: { id: torneoId, tenantId },
+    });
+    if (!torneo) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);
+    return torneo;
+  }
 
-    return this.findOne(equipoId, tenantId);
+  private toDto(insc: InscripcionTorneo, jugadoresCount: number): EquipoAdmin {
+    const series = Array.isArray(insc.categoria?.series) ? insc.categoria!.series : [];
+    const serie = insc.serieSlug ? series.find((s) => s.slug === insc.serieSlug) : null;
+    return {
+      id: insc.id,
+      torneoId: insc.torneoId,
+      nombre: insc.club?.nombre ?? '',
+      slug: insc.club?.slug ?? '',
+      escudoUrl: insc.club?.escudoUrl ?? null,
+      colorPrimario: insc.club?.colorPrimario ?? null,
+      colorSecundario: insc.club?.colorSecundario ?? null,
+      delegadoUserId: null,
+      estado: insc.estado,
+      jugadoresCount,
+      serieSlug: insc.serieSlug,
+      serieNombre: serie?.nombre ?? null,
+      motivoSuspension: insc.motivoSuspension,
+      observacionesSuspension: insc.observacionesSuspension,
+      suspendidoEn: insc.suspendidoEn ? insc.suspendidoEn.toISOString() : null,
+      createdAt: insc.createdAt.toISOString(),
+    };
   }
 }

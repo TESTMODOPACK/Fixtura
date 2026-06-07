@@ -6,7 +6,7 @@ import type { CobroAdmin } from '@fixtura/types';
 
 import { AuditLogService } from '../../audit';
 import { Cobro } from '../../competition/entities/cobro.entity';
-import { Equipo } from '../../competition/entities/equipo.entity';
+import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { DunningService } from '../dunning/dunning.service';
 import type { CreateCobroDto, MarcarPagadoDto, UpdateCobroDto } from './dto';
 
@@ -14,7 +14,9 @@ import type { CreateCobroDto, MarcarPagadoDto, UpdateCobroDto } from './dto';
 export class CobrosAdminService {
   constructor(
     @InjectRepository(Cobro) private readonly repo: Repository<Cobro>,
-    @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
+    // ADR-0005 — el "equipoId" del DTO transporta el inscripcionId.
+    @InjectRepository(InscripcionTorneo)
+    private readonly inscRepo: Repository<InscripcionTorneo>,
     private readonly dunning: DunningService,
     private readonly audit: AuditLogService,
   ) {}
@@ -98,19 +100,20 @@ export class CobrosAdminService {
   }
 
   async create(tenantId: string, input: CreateCobroDto): Promise<CobroAdmin> {
-    // Validar que el equipo pertenece al tenant (si se especifica)
+    // ADR-0005 — input.equipoId es el inscripcionId. Validamos contra
+    // inscripciones y anclamos el cobro a inscripcion_id.
     if (input.equipoId) {
-      const equipo = await this.equipoRepo.findOne({
+      const insc = await this.inscRepo.findOne({
         where: { id: input.equipoId, tenantId },
       });
-      if (!equipo) {
+      if (!insc) {
         throw new BadRequestException('El equipo no existe o no pertenece a esta liga');
       }
     }
 
     const entity = this.repo.create({
       tenantId,
-      equipoId: input.equipoId ?? null,
+      inscripcionId: input.equipoId ?? null,
       concepto: input.concepto,
       categoria: input.categoria,
       monto: input.monto,
@@ -132,14 +135,14 @@ export class CobrosAdminService {
 
     if (input.equipoId !== undefined) {
       if (input.equipoId) {
-        const equipo = await this.equipoRepo.findOne({
+        const insc = await this.inscRepo.findOne({
           where: { id: input.equipoId, tenantId },
         });
-        if (!equipo) {
+        if (!insc) {
           throw new BadRequestException('El equipo no existe o no pertenece a esta liga');
         }
       }
-      c.equipoId = input.equipoId ?? null;
+      c.inscripcionId = input.equipoId ?? null;
     }
     if (input.concepto !== undefined) c.concepto = input.concepto;
     if (input.categoria !== undefined) c.categoria = input.categoria;
@@ -243,8 +246,9 @@ export class CobrosAdminService {
     }
     return {
       id: c.id,
-      equipoId: c.equipoId,
-      equipoNombre: c.equipo?.nombre ?? null,
+      // ADR-0005 — equipoId expone el inscripcionId; el nombre sale del club.
+      equipoId: c.inscripcionId ?? c.equipoId,
+      equipoNombre: c.inscripcion?.club?.nombre ?? c.equipo?.nombre ?? null,
       concepto: c.concepto,
       categoria: c.categoria,
       monto: c.monto,

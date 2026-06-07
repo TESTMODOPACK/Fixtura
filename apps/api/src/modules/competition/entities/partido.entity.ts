@@ -55,19 +55,21 @@ export class Partido {
   @JoinColumn({ name: 'fecha_id' })
   fecha?: Fecha;
 
-  @Column({ name: 'equipo_local_id', type: 'uuid' })
-  equipoLocalId!: string;
+  // ADR-0005 Fase 1 — write-only-new: estas FK al modelo viejo dejan de
+  // escribirse; quedan nullable y conservan valores históricos como backup.
+  @Column({ name: 'equipo_local_id', type: 'uuid', nullable: true })
+  equipoLocalId!: string | null;
 
-  @ManyToOne(() => Equipo, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Equipo, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'equipo_local_id' })
-  equipoLocal?: Equipo;
+  equipoLocal?: Equipo | null;
 
-  @Column({ name: 'equipo_visita_id', type: 'uuid' })
-  equipoVisitaId!: string;
+  @Column({ name: 'equipo_visita_id', type: 'uuid', nullable: true })
+  equipoVisitaId!: string | null;
 
-  @ManyToOne(() => Equipo, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Equipo, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'equipo_visita_id' })
-  equipoVisita?: Equipo;
+  equipoVisita?: Equipo | null;
 
   // Sprint 26G.1 (ADR-0004) — referencias paralelas al modelo nuevo.
   // Pobladas por backfill (migrate-clubes) y por el shim (Sprint 26G.2).

@@ -773,6 +773,88 @@ async function main(): Promise<void> {
     // sin perder historial. Las tablas viejas (equipos, jugadores_inscritos)
     // quedan intactas como backup hasta la Fase 2 (drop destructivo).
     // ====================================================================
+
+    // Columnas de suspensión en inscripciones_torneo (antes vivían en
+    // `equipos`). Se crean ACÁ porque el backfill de equipos huérfanos las
+    // necesita. Aditivas + nullable.
+    await client.query(`
+      ALTER TABLE inscripciones_torneo
+        ADD COLUMN IF NOT EXISTS motivo_suspension VARCHAR(20)
+          CHECK (motivo_suspension IS NULL OR motivo_suspension IN ('DEPORTIVA','ECONOMICA','OTRA')),
+        ADD COLUMN IF NOT EXISTS observaciones_suspension TEXT,
+        ADD COLUMN IF NOT EXISTS suspendido_en TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS suspendido_por UUID
+    `);
+
+    // CRÍTICO (ADR-0005) — Equipos "huérfanos": los creados por el viejo
+    // EquiposAdminService.create() son `equipos` sueltos SIN inscripción
+    // (no tienen quien los referencie por equipo_sombra_id). Al flipear las
+    // lecturas al modelo nuevo desaparecerían del torneo. Acá creamos una
+    // inscripción por cada uno: matchea el club por slug, toma la categoría
+    // del torneo, copia estado/serie/suspensión, y apunta equipo_sombra_id
+    // al equipo huérfano para que el resto del backfill (partidos, planilla)
+    // los enganche. Idempotente: solo toca equipos sin inscripción y solo
+    // si existe un club con el mismo slug y el torneo tiene categoría.
+    const bfHuerfanos = await client.query(`
+      INSERT INTO inscripciones_torneo (
+        tenant_id, club_id, torneo_id, categoria_id, serie_slug, estado,
+        equipo_sombra_id, motivo_suspension, observaciones_suspension,
+        suspendido_en, suspendido_por
+      )
+      SELECT
+        e.tenant_id, c.id, e.torneo_id, t.categoria_id, e.serie_slug, e.estado,
+        e.id, e.motivo_suspension, e.observaciones_suspension,
+        e.suspendido_en, e.suspendido_por
+      FROM equipos e
+      JOIN torneos t ON t.id = e.torneo_id AND t.categoria_id IS NOT NULL
+      JOIN clubes c ON c.tenant_id = e.tenant_id AND c.slug = e.slug
+      WHERE NOT EXISTS (
+        SELECT 1 FROM inscripciones_torneo it WHERE it.equipo_sombra_id = e.id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM inscripciones_torneo it2
+        WHERE it2.torneo_id = e.torneo_id
+          AND it2.club_id = c.id
+          AND it2.categoria_id = t.categoria_id
+      )
+      ON CONFLICT DO NOTHING
+    `);
+    if ((bfHuerfanos.rowCount ?? 0) > 0) {
+      log(
+        `Sprint 46: ${bfHuerfanos.rowCount} equipo(s) huérfano(s) convertidos a inscripción.`,
+      );
+    }
+
+    // Rellenar planilla de las inscripciones recién creadas desde el plantel
+    // del club (mismo criterio que el backfill Sprint 38, idempotente).
+    const bfPlanillaHuerfanos = await client.query(`
+      WITH inscripciones_vacias AS (
+        SELECT i.id AS inscripcion_id, i.tenant_id, i.club_id, i.categoria_id,
+               t.tope_jugadores_por_equipo AS tope
+        FROM inscripciones_torneo i
+        JOIN torneos t ON t.id = i.torneo_id
+        WHERE NOT EXISTS (SELECT 1 FROM planilla_torneo p WHERE p.inscripcion_id = i.id)
+      ),
+      candidatos AS (
+        SELECT iv.tenant_id, iv.inscripcion_id, j.id AS jugador_id,
+               ROW_NUMBER() OVER (PARTITION BY iv.inscripcion_id ORDER BY j.created_at ASC) AS rn,
+               iv.tope
+        FROM inscripciones_vacias iv
+        JOIN jugadores j
+          ON j.tenant_id = iv.tenant_id AND j.club_id = iv.club_id
+         AND j.categoria_id = iv.categoria_id AND j.estado = 'ACTIVO'
+      )
+      INSERT INTO planilla_torneo (tenant_id, inscripcion_id, jugador_id)
+      SELECT tenant_id, inscripcion_id, jugador_id FROM candidatos
+      WHERE rn <= tope
+      ON CONFLICT (inscripcion_id, jugador_id) DO NOTHING
+    `);
+    if ((bfPlanillaHuerfanos.rowCount ?? 0) > 0) {
+      log(
+        `Sprint 46: planilla rellenada para huérfanos — ${bfPlanillaHuerfanos.rowCount} jugador(es).`,
+      );
+    }
+
     await client.query(`
       ALTER TABLE incidencias_partido
         ADD COLUMN IF NOT EXISTS jugador_id UUID
@@ -861,6 +943,35 @@ async function main(): Promise<void> {
         AND s.jugador_id IS NULL
     `);
     log(`Sprint 46: backfill sanciones — ${(bfSanc.rowCount ?? 0)} con jugador.`);
+
+    // Backfill estado + suspensión de la inscripción desde el equipo sombra,
+    // para que los equipos suspendidos sigan suspendidos tras el flip.
+    const bfEstadoInsc = await client.query(`
+      UPDATE inscripciones_torneo it
+      SET estado = e.estado,
+          motivo_suspension = e.motivo_suspension,
+          observaciones_suspension = e.observaciones_suspension,
+          suspendido_en = e.suspendido_en,
+          suspendido_por = e.suspendido_por
+      FROM equipos e
+      WHERE it.equipo_sombra_id = e.id
+        AND it.tenant_id = e.tenant_id
+        AND e.estado = 'SUSPENDIDO'
+        AND it.estado <> 'SUSPENDIDO'
+    `);
+    log(
+      `Sprint 46: inscripciones_torneo suspensión asegurada + ${(bfEstadoInsc.rowCount ?? 0)} estado(s) backfilled desde sombra.`,
+    );
+
+    // Modo write-only-new (ADR-0005 Fase 1): las columnas FK al modelo
+    // viejo dejan de escribirse en filas nuevas. Las hacemos NULLABLE para
+    // que partidos/incidencias nuevas no las requieran. Las filas
+    // históricas conservan sus valores como backup hasta la Fase 2.
+    // ALTER ... DROP NOT NULL es idempotente (no falla si ya es nullable).
+    await client.query(`ALTER TABLE partidos ALTER COLUMN equipo_local_id DROP NOT NULL`);
+    await client.query(`ALTER TABLE partidos ALTER COLUMN equipo_visita_id DROP NOT NULL`);
+    await client.query(`ALTER TABLE incidencias_partido ALTER COLUMN equipo_id DROP NOT NULL`);
+    log('Sprint 46: FK viejas (equipo_local/visita_id, incidencias.equipo_id) ahora nullable.');
 
     // Reporte de huérfanos: filas que NO pudieron mapearse al modelo nuevo.
     // Deben resolverse ANTES de la Fase 2 (drop destructivo). No bloquea.

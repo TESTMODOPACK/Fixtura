@@ -17,9 +17,9 @@ import type {
 import { aplicarConstraintsFixture, generarFixtureBerger } from '@fixtura/domain';
 
 import { Cancha } from '../../competition/entities/cancha.entity';
-import { Equipo } from '../../competition/entities/equipo.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { HorarioTorneo } from '../../competition/entities/horario-torneo.entity';
+import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { DiasNoJugablesService } from '../dias-no-jugables/dias-no-jugables.service';
@@ -37,7 +37,8 @@ export class FixtureAdminService {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
-    @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
+    @InjectRepository(InscripcionTorneo)
+    private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
     @InjectRepository(HorarioTorneo)
@@ -122,10 +123,17 @@ export class FixtureAdminService {
       );
     }
 
-    const equipos = await this.equipoRepo.find({
-      where: { torneoId },
-      order: { nombre: 'ASC' },
+    // ADR-0005 — el "equipo en el torneo" es la InscripcionTorneo. El id
+    // que viaja al fixture/partidos es el inscripcionId. El nombre sale del
+    // club. Excluimos inscripciones RETIRADAS.
+    const inscripciones = await this.inscRepo.find({
+      where: { torneoId, tenantId },
+      relations: { club: true },
     });
+    const equipos = inscripciones
+      .filter((i) => i.estado !== 'RETIRADO')
+      .map((i) => ({ id: i.id, nombre: i.club?.nombre ?? i.id }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     if (equipos.length < 2) {
       throw new BadRequestException(`Se requieren al menos 2 equipos. Hay ${equipos.length}.`);
     }
@@ -389,12 +397,14 @@ export class FixtureAdminService {
         canchaNombre = cancha;
       }
 
+      // ADR-0005 — los ids que devuelve Berger son inscripcionIds. Se
+      // escriben en las columnas del modelo nuevo; las viejas quedan null.
       await this.partidoRepo.save(
         this.partidoRepo.create({
           tenantId,
           fechaId,
-          equipoLocalId: p.equipoLocalId,
-          equipoVisitaId: p.equipoVisitaId,
+          inscripcionLocalId: p.equipoLocalId,
+          inscripcionVisitaId: p.equipoVisitaId,
           canchaNombre,
           canchaId,
           fechaHora,
@@ -454,8 +464,13 @@ export class FixtureAdminService {
 
     const advertencias: FixtureAdvertencia[] = [];
 
-    // ── 1. EQUIPOS ────────────────────────────────────────────────
-    const equiposCount = await this.equipoRepo.count({ where: { torneoId } });
+    // ── 1. EQUIPOS (= inscripciones no retiradas) ─────────────────
+    const equiposCount = await this.inscRepo
+      .createQueryBuilder('i')
+      .where('i.tenant_id = :tenantId', { tenantId })
+      .andWhere('i.torneo_id = :torneoId', { torneoId })
+      .andWhere(`i.estado <> 'RETIRADO'`)
+      .getCount();
     if (equiposCount < 2) {
       advertencias.push({
         codigo: 'SIN_EQUIPOS_SUFICIENTES',

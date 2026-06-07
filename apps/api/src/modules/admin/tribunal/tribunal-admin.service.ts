@@ -9,41 +9,38 @@ import { Repository } from 'typeorm';
 import type { CreateSancionTribunalRequest, SancionAdmin } from '@fixtura/types';
 
 import { Fecha } from '../../competition/entities/fecha.entity';
+import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Jugador } from '../../competition/entities/jugador.entity';
-import { JugadorInscrito } from '../../competition/entities/jugador-inscrito.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { VetadosAdminService } from '../vetados/vetados-admin.service';
 
+/**
+ * ADR-0005 — Tribunal sobre el modelo nuevo. Las sanciones se anclan al
+ * Jugador (tabla `jugadores`); el `jugadorInscritoId` del request/DTO
+ * transporta ahora el jugadorId (rename mecánico en Fase 2). El RUT sigue
+ * siendo la clave que impide evadir la sanción cambiando de club.
+ */
 @Injectable()
 export class TribunalAdminService {
   constructor(
     @InjectRepository(SancionActiva) private readonly repo: Repository<SancionActiva>,
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
-    @InjectRepository(JugadorInscrito)
-    private readonly jugadorRepo: Repository<JugadorInscrito>,
+    @InjectRepository(Jugador) private readonly jugadorRepo: Repository<Jugador>,
+    @InjectRepository(InscripcionTorneo)
+    private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
-    // Sprint 26H (ADR-0004) — para vetar de por vida en sanciones
-    // permanentes del Tribunal. addFromTribunal es idempotente.
     private readonly vetadosService: VetadosAdminService,
-    // Sprint 26I — al vetar, marcar también como INACTIVO el registro
-    // del jugador en el plantel nuevo del club (si existe).
-    @InjectRepository(Jugador)
-    private readonly jugadorNuevoRepo: Repository<Jugador>,
   ) {}
 
-  /**
-   * Lista sanciones de un torneo, primero las activas (pendientes > 0)
-   * ordenadas por desde_fecha, después las cumplidas.
-   */
   async list(torneoId: string, tenantId: string): Promise<SancionAdmin[]> {
     await this.ensureTorneo(torneoId, tenantId);
 
     const sanciones = await this.repo
       .createQueryBuilder('s')
       .leftJoinAndSelect('s.torneo', 'torneo')
-      .leftJoinAndSelect('s.jugadorInscrito', 'jugador')
-      .leftJoinAndSelect('jugador.equipo', 'equipo')
+      .leftJoinAndSelect('s.jugador', 'jugador')
+      .leftJoinAndSelect('jugador.club', 'club')
       .where('s.torneo_id = :torneoId', { torneoId })
       .andWhere('s.tenant_id = :tenantId', { tenantId })
       .orderBy('s.cumplida', 'ASC')
@@ -62,16 +59,18 @@ export class TribunalAdminService {
 
     const jugador = await this.jugadorRepo.findOne({
       where: { id: input.jugadorInscritoId, tenantId },
-      relations: { equipo: true },
     });
     if (!jugador) {
       throw new NotFoundException(`Jugador ${input.jugadorInscritoId} no encontrado`);
     }
-    if (jugador.equipo?.torneoId !== torneoId) {
+    // El jugador pertenece al torneo si su club+categoría están inscritos.
+    const inscrito = await this.inscRepo.findOne({
+      where: { torneoId, tenantId, clubId: jugador.clubId, categoriaId: jugador.categoriaId },
+    });
+    if (!inscrito) {
       throw new BadRequestException('El jugador no pertenece al torneo indicado');
     }
 
-    // Default desdeFechaNumero: la próxima fecha programada en el torneo
     const desdeFechaNumero =
       input.desdeFechaNumero ??
       (await this.proximaFechaNumero(torneoId)) ??
@@ -82,7 +81,7 @@ export class TribunalAdminService {
         tenantId,
         torneoId,
         rut: jugador.rut,
-        jugadorInscritoId: input.jugadorInscritoId,
+        jugadorId: jugador.id,
         motivo: 'TRIBUNAL',
         fechasPendientes: input.fechasSuspension,
         desdeFechaNumero,
@@ -92,23 +91,14 @@ export class TribunalAdminService {
       }),
     );
 
-    // Sprint 26H — Si la sanción es definitiva (vetoPermanente=true),
-    // agregamos el RUT del jugador a la lista negra del tenant.
-    // Idempotente: si ya estaba vetado, no hace nada.
     if (input.vetoPermanente && jugador.rut) {
       await this.vetadosService.addFromTribunal(
         tenantId,
         jugador.rut,
         `Sanción permanente del Tribunal: ${input.descripcion}`,
       );
-      // Sprint 26I — Además de vetar el RUT, marcamos como INACTIVO
-      // el registro del jugador en el plantel del club del modelo
-      // nuevo (si lo encuentra por RUT). Esto evita que admins
-      // distraídos sigan citándolo en futuros torneos del mismo club.
-      // En el modelo viejo (jugadores_inscritos) NO lo desactivamos
-      // porque no tiene campo de estado — el chequeo a futuro es via
-      // jugadores_vetados.rut.
-      await this.jugadorNuevoRepo.update(
+      // Marcar INACTIVO el registro del jugador en el plantel del club.
+      await this.jugadorRepo.update(
         { tenantId, rut: jugador.rut },
         { estado: 'INACTIVO' },
       );
@@ -120,7 +110,7 @@ export class TribunalAdminService {
   async findOne(id: string, tenantId: string): Promise<SancionAdmin> {
     const s = await this.repo.findOne({
       where: { id, tenantId },
-      relations: { torneo: true, jugadorInscrito: { equipo: true } },
+      relations: { torneo: true, jugador: { club: true } },
     });
     if (!s) throw new NotFoundException(`Sanción ${id} no encontrada`);
     return this.toDto(s);
@@ -138,8 +128,9 @@ export class TribunalAdminService {
   }
 
   /**
-   * Devuelve los IDs de jugadores con sanción activa para una fecha
-   * específica. Sirve al frontend para mostrar warning visual.
+   * Devuelve los jugadores con sanción activa para una fecha específica.
+   * La key `jugadorInscritoId` transporta el jugadorId (modelo nuevo) para
+   * que el frontend la matchee contra la planilla.
    */
   async jugadoresBloqueadosEnFecha(
     torneoId: string,
@@ -148,7 +139,7 @@ export class TribunalAdminService {
   ): Promise<Array<{ jugadorInscritoId: string; rut: string | null; motivo: string }>> {
     const rows = (await this.repo
       .createQueryBuilder('s')
-      .select('s.jugador_inscrito_id', 'jugadorInscritoId')
+      .select('s.jugador_id', 'jugadorId')
       .addSelect('s.rut', 'rut')
       .addSelect('s.motivo', 'motivo')
       .where('s.torneo_id = :torneoId', { torneoId })
@@ -157,14 +148,14 @@ export class TribunalAdminService {
       .andWhere('s.fechas_pendientes > 0')
       .andWhere('s.desde_fecha_numero <= :fechaNumero', { fechaNumero })
       .getRawMany()) as Array<{
-      jugadorInscritoId: string | null;
+      jugadorId: string | null;
       rut: string | null;
       motivo: string;
     }>;
 
     return rows
-      .filter((r): r is { jugadorInscritoId: string; rut: string | null; motivo: string } => !!r.jugadorInscritoId)
-      .map((r) => ({ jugadorInscritoId: r.jugadorInscritoId, rut: r.rut, motivo: r.motivo }));
+      .filter((r): r is { jugadorId: string; rut: string | null; motivo: string } => !!r.jugadorId)
+      .map((r) => ({ jugadorInscritoId: r.jugadorId, rut: r.rut, motivo: r.motivo }));
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────
@@ -188,10 +179,10 @@ export class TribunalAdminService {
       id: s.id,
       torneoId: s.torneoId,
       torneoNombre: s.torneo?.nombre ?? '',
-      jugadorInscritoId: s.jugadorInscritoId,
-      jugadorNombre: s.jugadorInscrito?.nombre ?? null,
-      jugadorApellido: s.jugadorInscrito?.apellido ?? null,
-      equipoNombre: s.jugadorInscrito?.equipo?.nombre ?? null,
+      jugadorInscritoId: s.jugadorId,
+      jugadorNombre: s.jugador?.nombres ?? null,
+      jugadorApellido: s.jugador?.apellidos ?? null,
+      equipoNombre: s.jugador?.club?.nombre ?? null,
       rut: s.rut,
       motivo: s.motivo,
       fechasPendientes: s.fechasPendientes,

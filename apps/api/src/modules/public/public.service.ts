@@ -19,7 +19,7 @@ import type {
 
 import { CategoriaJugadores } from '../competition/entities/categoria-jugadores.entity';
 import { Designacion } from '../competition/entities/designacion.entity';
-import { Equipo } from '../competition/entities/equipo.entity';
+import { InscripcionTorneo } from '../competition/entities/inscripcion-torneo.entity';
 import { Fecha } from '../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../competition/entities/incidencia-partido.entity';
 import { Partido } from '../competition/entities/partido.entity';
@@ -37,7 +37,8 @@ import { Torneo } from '../competition/entities/torneo.entity';
 export class PublicService {
   constructor(
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
-    @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
+    @InjectRepository(InscripcionTorneo)
+    private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
     @InjectRepository(IncidenciaPartido)
@@ -91,7 +92,7 @@ export class PublicService {
       const fechasFinalizadas = fechas.filter(
         (f) => f.estado === 'FINALIZADA',
       ).length;
-      const equiposCount = await this.equipoRepo.count({ where: { torneoId: t.id } });
+      const equiposCount = await this.inscRepo.count({ where: { torneoId: t.id } });
 
       // Categorias: agrupar las categorias_series por categoriaId.
       const cats = Array.isArray(t.categoriasSeries) ? t.categoriasSeries : [];
@@ -281,17 +282,35 @@ export class PublicService {
     const torneo = await this.findTorneoActivo(slug, torneoSlug);
     const torneoDto = await this.buildTorneoPublico(torneo);
 
-    const equipos = await this.equipoRepo.find({ where: { torneoId: torneo.id } });
+    // ADR-0005 — los equipos de la tabla son las inscripciones del torneo.
+    const inscripciones = await this.inscRepo.find({
+      where: { torneoId: torneo.id },
+      relations: { club: true },
+    });
+    const equipos = inscripciones
+      .filter((i) => i.estado !== 'RETIRADO')
+      .map((i) => ({
+        id: i.id,
+        nombre: i.club?.nombre ?? '',
+        slug: i.club?.slug ?? '',
+        escudoUrl: i.club?.escudoUrl ?? null,
+      }));
     // AUDIT-1 fix: incluir WALKOVER. `declararWalkover()` ya persiste
     // golesLocal=3 / golesVisita=0 (o inverso), así que la suma de stats
     // funciona idéntica a un partido normal. Antes solo se contaban
     // FINALIZADO → equipos ganadores por inasistencia no sumaban puntos.
-    const partidos = await this.partidoRepo
+    const partidosRaw = await this.partidoRepo
       .createQueryBuilder('p')
       .innerJoin('p.fecha', 'f')
       .where('f.torneo_id = :torneoId', { torneoId: torneo.id })
       .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
       .getMany();
+    const partidos = partidosRaw.map((p) => ({
+      equipoLocalId: p.inscripcionLocalId ?? '',
+      equipoVisitaId: p.inscripcionVisitaId ?? '',
+      golesLocal: p.golesLocal,
+      golesVisita: p.golesVisita,
+    }));
 
     // Cálculo de la tabla en lógica de dominio compartida (packages/domain),
     // así el admin y el portal público calculan idéntico. Los partidos ya
@@ -326,7 +345,11 @@ export class PublicService {
     const partidos = fechaIds.length
       ? await this.partidoRepo.find({
           where: fechaIds.map((id) => ({ fechaId: id })),
-          relations: { equipoLocal: true, equipoVisita: true, fecha: true },
+          relations: {
+            inscripcionLocal: { club: true },
+            inscripcionVisita: { club: true },
+            fecha: true,
+          },
           order: { fechaHora: 'ASC' },
         })
       : [];
@@ -510,7 +533,10 @@ export class PublicService {
 
     const partidos = await this.partidoRepo.find({
       where: { fechaId: fecha.id },
-      relations: { equipoLocal: true, equipoVisita: true },
+      relations: {
+        inscripcionLocal: { club: true },
+        inscripcionVisita: { club: true },
+      },
       order: { fechaHora: 'ASC' },
     });
 
@@ -525,8 +551,10 @@ export class PublicService {
     const partidos = await this.partidoRepo
       .createQueryBuilder('p')
       .innerJoinAndSelect('p.fecha', 'f')
-      .innerJoinAndSelect('p.equipoLocal', 'eL')
-      .innerJoinAndSelect('p.equipoVisita', 'eV')
+      .leftJoinAndSelect('p.inscripcionLocal', 'il')
+      .leftJoinAndSelect('il.club', 'ilc')
+      .leftJoinAndSelect('p.inscripcionVisita', 'iv')
+      .leftJoinAndSelect('iv.club', 'ivc')
       .where('f.torneo_id = :torneoId', { torneoId })
       .andWhere('p.estado = :estado', { estado: 'FINALIZADO' })
       .orderBy('p.fecha_hora', 'DESC')
@@ -543,17 +571,17 @@ export class PublicService {
       fechaHora: (p.fechaHora ?? new Date()).toISOString(),
       estado: p.estado,
       local: {
-        equipoId: p.equipoLocalId,
-        nombre: p.equipoLocal?.nombre ?? '',
-        slug: p.equipoLocal?.slug ?? '',
-        escudoUrl: p.equipoLocal?.escudoUrl ?? null,
+        equipoId: p.inscripcionLocalId ?? '',
+        nombre: p.inscripcionLocal?.club?.nombre ?? '',
+        slug: p.inscripcionLocal?.club?.slug ?? '',
+        escudoUrl: p.inscripcionLocal?.club?.escudoUrl ?? null,
         goles: p.golesLocal,
       },
       visita: {
-        equipoId: p.equipoVisitaId,
-        nombre: p.equipoVisita?.nombre ?? '',
-        slug: p.equipoVisita?.slug ?? '',
-        escudoUrl: p.equipoVisita?.escudoUrl ?? null,
+        equipoId: p.inscripcionVisitaId ?? '',
+        nombre: p.inscripcionVisita?.club?.nombre ?? '',
+        slug: p.inscripcionVisita?.club?.slug ?? '',
+        escudoUrl: p.inscripcionVisita?.club?.escudoUrl ?? null,
         goles: p.golesVisita,
       },
       canchaNombre: p.canchaNombre,
@@ -587,24 +615,28 @@ export class PublicService {
 
     // Para FAIR_PLAY más adelante: contar AMARILLA + ROJA × 3 invertido.
     // Para ahora solo soportamos GOLEADORES / ASISTENCIAS / MVP.
+    // ADR-0005 — ranking desde el modelo nuevo: incidencia.jugador_id →
+    // jugadores; club vía inscripcion. jugador_id está backfilled por RUT
+    // para las incidencias históricas, así que cubre old + new.
     const rows = (await this.incidenciaRepo
       .createQueryBuilder('i')
-      .select('i.jugador_inscrito_id', 'jugadorId')
-      .addSelect('j.nombre', 'nombre')
-      .addSelect('j.apellido', 'apellido')
-      .addSelect('e.nombre', 'equipoNombre')
-      .addSelect('e.slug', 'equipoSlug')
+      .select('i.jugador_id', 'jugadorId')
+      .addSelect('j.nombres', 'nombre')
+      .addSelect('j.apellidos', 'apellido')
+      .addSelect('c.nombre', 'equipoNombre')
+      .addSelect('c.slug', 'equipoSlug')
       .addSelect('COUNT(*)::int', 'valor')
-      .innerJoin('jugadores_inscritos', 'j', 'j.id = i.jugador_inscrito_id')
-      .innerJoin('equipos', 'e', 'e.id = j.equipo_id')
+      .innerJoin('jugadores', 'j', 'j.id = i.jugador_id')
+      .leftJoin('inscripciones_torneo', 'it', 'it.id = i.inscripcion_id')
+      .leftJoin('clubes', 'c', 'c.id = it.club_id')
       .innerJoin('partidos', 'p', 'p.id = i.partido_id')
       .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
       .where('f.torneo_id = :torneoId', { torneoId })
       .andWhere('i.tipo = :tipo', { tipo: tipoIncidencia })
-      .andWhere('i.jugador_inscrito_id IS NOT NULL')
-      .groupBy('i.jugador_inscrito_id, j.nombre, j.apellido, e.nombre, e.slug')
+      .andWhere('i.jugador_id IS NOT NULL')
+      .groupBy('i.jugador_id, j.nombres, j.apellidos, c.nombre, c.slug')
       .orderBy('valor', 'DESC')
-      .addOrderBy('j.apellido', 'ASC')
+      .addOrderBy('j.apellidos', 'ASC')
       .limit(50)
       .getRawMany()) as Array<{
       jugadorId: string;

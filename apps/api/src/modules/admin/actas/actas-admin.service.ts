@@ -27,8 +27,10 @@ export class ActasAdminService {
       .createQueryBuilder('p')
       .leftJoinAndSelect('p.fecha', 'fecha')
       .leftJoinAndSelect('fecha.torneo', 'torneo')
-      .leftJoinAndSelect('p.equipoLocal', 'local')
-      .leftJoinAndSelect('p.equipoVisita', 'visita')
+      .leftJoinAndSelect('p.inscripcionLocal', 'il')
+      .leftJoinAndSelect('il.club', 'ilc')
+      .leftJoinAndSelect('p.inscripcionVisita', 'iv')
+      .leftJoinAndSelect('iv.club', 'ivc')
       .where('p.tenant_id = :tenantId', { tenantId });
 
     if (query.torneoId) {
@@ -76,10 +78,10 @@ export class ActasAdminService {
       fechaId: p.fechaId,
       fechaNumero: p.fecha?.numero ?? 0,
       fechaEtiqueta: p.fecha?.etiqueta ?? null,
-      equipoLocalId: p.equipoLocalId,
-      equipoLocalNombre: p.equipoLocal?.nombre ?? '',
-      equipoVisitaId: p.equipoVisitaId,
-      equipoVisitaNombre: p.equipoVisita?.nombre ?? '',
+      equipoLocalId: p.inscripcionLocalId ?? '',
+      equipoLocalNombre: p.inscripcionLocal?.club?.nombre ?? '',
+      equipoVisitaId: p.inscripcionVisitaId ?? '',
+      equipoVisitaNombre: p.inscripcionVisita?.club?.nombre ?? '',
       fechaHora: p.fechaHora ? p.fechaHora.toISOString() : null,
       canchaNombre: p.canchaNombre,
       estado: p.estado as EstadoPartidoGlobal,

@@ -97,15 +97,27 @@ export class PushService {
   async notifyPartidoCerrado(partidoId: string): Promise<{ enviados: number; revocados: number }> {
     const partido = await this.partidoRepo.findOne({
       where: { id: partidoId },
-      relations: { equipoLocal: true, equipoVisita: true, fecha: { torneo: true } },
+      relations: {
+        inscripcionLocal: { club: true },
+        inscripcionVisita: { club: true },
+        fecha: { torneo: true },
+      },
     });
     if (!partido) return { enviados: 0, revocados: 0 };
 
     const subs = await this.repo.find({
       where: [
         { revokedAt: IsNull(), scopeType: 'PARTIDO', scopeId: partido.id },
-        { revokedAt: IsNull(), scopeType: 'EQUIPO', scopeId: partido.equipoLocalId },
-        { revokedAt: IsNull(), scopeType: 'EQUIPO', scopeId: partido.equipoVisitaId },
+        {
+          revokedAt: IsNull(),
+          scopeType: 'EQUIPO',
+          scopeId: partido.inscripcionLocalId ?? undefined,
+        },
+        {
+          revokedAt: IsNull(),
+          scopeType: 'EQUIPO',
+          scopeId: partido.inscripcionVisitaId ?? undefined,
+        },
         {
           revokedAt: IsNull(),
           scopeType: 'TORNEO',
@@ -121,8 +133,8 @@ export class PushService {
 
     const golesL = partido.golesLocal ?? 0;
     const golesV = partido.golesVisita ?? 0;
-    const local = partido.equipoLocal?.nombre ?? '?';
-    const visita = partido.equipoVisita?.nombre ?? '?';
+    const local = partido.inscripcionLocal?.club?.nombre ?? '?';
+    const visita = partido.inscripcionVisita?.club?.nombre ?? '?';
     const esWalkover = partido.estado === 'WALKOVER';
     const payload: PushPayload = {
       title: esWalkover
@@ -136,8 +148,8 @@ export class PushService {
       data: {
         partidoId: partido.id,
         torneoId: partido.fecha?.torneoId,
-        equipoLocalId: partido.equipoLocalId,
-        equipoVisitaId: partido.equipoVisitaId,
+        equipoLocalId: partido.inscripcionLocalId,
+        equipoVisitaId: partido.inscripcionVisitaId,
       },
     };
 

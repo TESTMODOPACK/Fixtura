@@ -48,12 +48,13 @@ export class IncidenciaPartido {
   @JoinColumn({ name: 'partido_id' })
   partido?: Partido;
 
-  @Column({ name: 'equipo_id', type: 'uuid' })
-  equipoId!: string;
+  // ADR-0005 Fase 1 — write-only-new: nullable, conservada como backup.
+  @Column({ name: 'equipo_id', type: 'uuid', nullable: true })
+  equipoId!: string | null;
 
-  @ManyToOne(() => Equipo, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Equipo, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'equipo_id' })
-  equipo?: Equipo;
+  equipo?: Equipo | null;
 
   // Sprint 26G.1 (ADR-0004) — referencia paralela al modelo nuevo.
   // Poblada por backfill (migrate-clubes) y shim (Sprint 26G.2).

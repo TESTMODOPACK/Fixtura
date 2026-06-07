@@ -523,6 +523,9 @@ export class FechasAdminService {
       this.partidoRepo.create({
         tenantId,
         fechaId: destinoId,
+        // ADR-0005 — el clon hereda las inscripciones (fuente de verdad).
+        inscripcionLocalId: p.inscripcionLocalId,
+        inscripcionVisitaId: p.inscripcionVisitaId,
         equipoLocalId: p.equipoLocalId,
         equipoVisitaId: p.equipoVisitaId,
         canchaId: p.canchaId,
@@ -593,8 +596,10 @@ export class FechasAdminService {
       const hasta = new Date(fechaHora.getTime() + ventanaMs);
       const choque = await this.partidoRepo
         .createQueryBuilder('p')
-        .leftJoinAndSelect('p.equipoLocal', 'el')
-        .leftJoinAndSelect('p.equipoVisita', 'ev')
+        .leftJoinAndSelect('p.inscripcionLocal', 'il')
+        .leftJoinAndSelect('il.club', 'ilc')
+        .leftJoinAndSelect('p.inscripcionVisita', 'iv')
+        .leftJoinAndSelect('iv.club', 'ivc')
         .where('p.tenant_id = :tenantId', { tenantId })
         .andWhere('p.cancha_id = :canchaId', { canchaId: original.canchaId })
         .andWhere('p.fecha_hora IS NOT NULL')
@@ -606,8 +611,8 @@ export class FechasAdminService {
         const hora = choque.fechaHora
           ? new Date(choque.fechaHora).toLocaleString('es-CL')
           : 'sin hora';
-        const local = choque.equipoLocal?.nombre ?? '—';
-        const visita = choque.equipoVisita?.nombre ?? '—';
+        const local = choque.inscripcionLocal?.club?.nombre ?? '—';
+        const visita = choque.inscripcionVisita?.club?.nombre ?? '—';
         throw new ConflictException(
           `No se puede clonar el partido a la nueva fecha: la cancha ya tiene "${local} vs ${visita}" ` +
             `el ${hora}. Las citas deben separarse al menos ${VENTANA_MIN} min. ` +
