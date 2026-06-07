@@ -166,6 +166,11 @@ export class MatchCenterService {
     equipo: 'LOCAL' | 'VISITA',
   ): Promise<MatchCenterSnapshot> {
     const partido = await this.ensure(partidoId, tenantId);
+    if (partido.centroEstado === 'IDLE') {
+      throw new BadRequestException(
+        'Iniciá el partido antes de cargar goles.',
+      );
+    }
     if (partido.centroEstado === 'FINALIZADO_CENTRO') {
       throw new BadRequestException('El partido en vivo ya finalizó.');
     }
@@ -192,6 +197,11 @@ export class MatchCenterService {
       throw new BadRequestException('Los goles no pueden ser negativos.');
     }
     const partido = await this.ensure(partidoId, tenantId);
+    if (partido.centroEstado === 'IDLE') {
+      throw new BadRequestException(
+        'Iniciá el partido antes de ajustar el marcador.',
+      );
+    }
     partido.golesLocal = golesLocal;
     partido.golesVisita = golesVisita;
     await this.repo.save(partido);

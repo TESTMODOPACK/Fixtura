@@ -6,14 +6,24 @@ import {
   Pause,
   Play,
   RotateCcw,
+  Trash2,
   Wifi,
   WifiOff,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
+
+import type { TipoIncidencia } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
+import {
+  useAddIncidencia,
+  useJugadores,
+  usePartido,
+  useRemoveIncidencia,
+} from '@/hooks/use-admin';
 import {
   useArrancarCentro,
   useAjustarGolesCentro,
@@ -24,6 +34,9 @@ import {
   useSiguientePeriodoCentro,
   useSumarGolCentro,
 } from '@/hooks/use-match-center';
+import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
+import { toastError } from '@/lib/toast';
 
 export default function CentroPage({
   params,
@@ -33,6 +46,7 @@ export default function CentroPage({
 }): React.ReactElement {
   const { id: torneoId, partidoId } = params;
   const { snapshot, conectado, error } = useMatchCenter(partidoId);
+  const { data: partido } = usePartido(partidoId);
   const arrancar = useArrancarCentro(partidoId);
   const pausar = usePausarCentro(partidoId);
   const reanudar = useReanudarCentro(partidoId);
@@ -45,6 +59,18 @@ export default function CentroPage({
   const minutosVisibles = Math.floor(segundos / 60);
   const segundosVisibles = segundos % 60;
   const cronometro = `${String(minutosVisibles).padStart(2, '0')}:${String(segundosVisibles).padStart(2, '0')}`;
+
+  // El marcador y las incidencias solo se cargan con el partido en juego
+  // (no antes de iniciar ni después de finalizar el centro).
+  const enJuego =
+    snapshot?.estado === 'EN_VIVO' || snapshot?.estado === 'PAUSADO';
+
+  // Minuto de juego acumulado (sirve para autocompletar el minuto de la
+  // incidencia): períodos completos previos + minutos del período actual.
+  const minutoJuego = snapshot
+    ? Math.max(0, snapshot.periodo - 1) * snapshot.minutosPorPeriodo +
+      minutosVisibles
+    : 0;
 
   return (
     <>
@@ -100,7 +126,7 @@ export default function CentroPage({
                     golesVisita: snapshot.golesVisita,
                   })
                 }
-                disabled={sumarGol.isPending || ajustar.isPending}
+                disabled={sumarGol.isPending || ajustar.isPending || !enJuego}
               />
               <div className="text-center">
                 <div className="font-mono text-6xl md:text-7xl text-ink font-bold tabular-nums">
@@ -128,9 +154,14 @@ export default function CentroPage({
                     golesVisita: Math.max(0, snapshot.golesVisita - 1),
                   })
                 }
-                disabled={sumarGol.isPending || ajustar.isPending}
+                disabled={sumarGol.isPending || ajustar.isPending || !enJuego}
               />
             </div>
+            {snapshot.estado === 'IDLE' && (
+              <p className="mt-4 text-center text-xs font-serif italic text-ink-mute">
+                Iniciá el partido para cargar goles e incidencias.
+              </p>
+            )}
           </Card>
 
           {/* Controles cronómetro */}
@@ -198,6 +229,26 @@ export default function CentroPage({
               )}
             </div>
           </Card>
+
+          {/* Carga de incidencias en vivo (planillero) */}
+          {enJuego && partido && (
+            <IncidenciasPanel
+              partidoId={partidoId}
+              equipoLocalId={partido.equipoLocalId}
+              equipoLocalNombre={partido.equipoLocalNombre}
+              equipoVisitaId={partido.equipoVisitaId}
+              equipoVisitaNombre={partido.equipoVisitaNombre}
+              minutoSugerido={minutoJuego}
+              onGolMarcador={(lado) => sumarGol.mutate(lado)}
+            />
+          )}
+
+          {partido && partido.incidencias.length > 0 && (
+            <IncidenciasEnVivoList
+              partidoId={partidoId}
+              incidencias={partido.incidencias}
+            />
+          )}
         </>
       )}
     </>
@@ -244,5 +295,224 @@ function EquipoColumn({
         </button>
       </div>
     </div>
+  );
+}
+
+// ─── Carga de incidencias en vivo ───────────────────────────────────
+// Tipos que el planillero suele registrar durante el partido. GOL suma
+// también al marcador (un solo gesto: gol + goleador). Las tarjetas no
+// tocan el marcador. El resto (autogol, asistencia, MVP) se carga en el
+// detalle del partido.
+const TIPOS_RAPIDOS: Array<{ value: TipoIncidencia; label: string }> = [
+  { value: 'GOL', label: '⚽ Gol' },
+  { value: 'AMARILLA', label: '🟨 Amarilla' },
+  { value: 'ROJA', label: '🟥 Roja' },
+  { value: 'AMARILLA_ROJA', label: '🟨🟥 Doble amarilla' },
+];
+
+function IncidenciasPanel({
+  partidoId,
+  equipoLocalId,
+  equipoLocalNombre,
+  equipoVisitaId,
+  equipoVisitaNombre,
+  minutoSugerido,
+  onGolMarcador,
+}: {
+  partidoId: string;
+  equipoLocalId: string;
+  equipoLocalNombre: string;
+  equipoVisitaId: string;
+  equipoVisitaNombre: string;
+  minutoSugerido: number;
+  onGolMarcador: (lado: 'LOCAL' | 'VISITA') => void;
+}): React.ReactElement {
+  const [equipoSel, setEquipoSel] = useState<string>(equipoLocalId);
+  const [jugadorId, setJugadorId] = useState<string>('');
+  const [tipo, setTipo] = useState<TipoIncidencia>('GOL');
+  const [minuto, setMinuto] = useState<string>('');
+  const jugadores = useJugadores(equipoSel);
+  const addIncidencia = useAddIncidencia(partidoId);
+
+  const registrar = async (): Promise<void> => {
+    if (!jugadorId) {
+      toastError('Elegí el jugador.');
+      return;
+    }
+    const minutoFinal = minuto.trim() !== '' ? Number(minuto) : minutoSugerido;
+    try {
+      await addIncidencia.mutateAsync({
+        equipoId: equipoSel,
+        jugadorInscritoId: jugadorId,
+        tipo,
+        minuto: Number.isFinite(minutoFinal) ? minutoFinal : null,
+      });
+      // GOL: además del registro del goleador, sube el marcador del equipo.
+      if (tipo === 'GOL') {
+        onGolMarcador(equipoSel === equipoLocalId ? 'LOCAL' : 'VISITA');
+      }
+      setJugadorId('');
+      setMinuto('');
+    } catch (err) {
+      toastError((err as ApiError).message ?? 'No se pudo registrar.');
+    }
+  };
+
+  return (
+    <Card padding="roomy" className="mt-5">
+      <CardLabel>Registrar incidencia</CardLabel>
+
+      {/* Equipo */}
+      <div className="flex gap-2 mt-3 mb-3">
+        {[
+          { id: equipoLocalId, nombre: equipoLocalNombre },
+          { id: equipoVisitaId, nombre: equipoVisitaNombre },
+        ].map((e) => (
+          <button
+            key={e.id}
+            type="button"
+            onClick={() => {
+              setEquipoSel(e.id);
+              setJugadorId('');
+            }}
+            className={cn(
+              'flex-1 px-4 py-2 text-sm font-semibold rounded-card border transition-colors truncate',
+              equipoSel === e.id
+                ? 'bg-green-deep text-chalk border-green-deep'
+                : 'bg-chalk text-ink-mute border-line hover:border-green-deep',
+            )}
+          >
+            {e.nombre}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-[2fr_1.3fr_0.7fr_auto] gap-3 items-end">
+        <div>
+          <label className="label">Jugador</label>
+          <select
+            className="input"
+            value={jugadorId}
+            onChange={(e) => setJugadorId(e.target.value)}
+          >
+            <option value="">— elegí jugador —</option>
+            {jugadores.data?.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.numeroCamiseta ? `#${j.numeroCamiseta} ` : ''}
+                {j.nombre} {j.apellido}
+                {j.capitan ? ' (C)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Tipo</label>
+          <select
+            className="input"
+            value={tipo}
+            onChange={(e) => setTipo(e.target.value as TipoIncidencia)}
+          >
+            {TIPOS_RAPIDOS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Minuto</label>
+          <input
+            type="number"
+            min={0}
+            max={150}
+            className="input"
+            placeholder={String(minutoSugerido)}
+            value={minuto}
+            onChange={(e) => setMinuto(e.target.value)}
+          />
+        </div>
+        <Button
+          variant="accent"
+          onClick={registrar}
+          loading={addIncidencia.isPending}
+        >
+          <Flag size={14} /> Registrar
+        </Button>
+      </div>
+      <p className="mt-3 text-[11px] font-serif italic text-ink-mute">
+        El gol suma también al marcador (no uses además el botón “+ GOL” para
+        el mismo gol). El minuto se autocompleta con el del partido; podés
+        cambiarlo.
+      </p>
+    </Card>
+  );
+}
+
+const ICONOS_INCIDENCIA: Record<string, string> = {
+  GOL: '⚽',
+  AUTOGOL: '🥲',
+  ASISTENCIA: '🅰️',
+  AMARILLA: '🟨',
+  ROJA: '🟥',
+  AMARILLA_ROJA: '🟨🟥',
+  MVP: '🏆',
+  CAMBIO: '🔄',
+  LESION: '🚑',
+};
+
+function IncidenciasEnVivoList({
+  partidoId,
+  incidencias,
+}: {
+  partidoId: string;
+  incidencias: Array<{
+    id: string;
+    tipo: string;
+    minuto: number | null;
+    jugadorNombre: string | null;
+    equipoNombre: string;
+  }>;
+}): React.ReactElement {
+  const remove = useRemoveIncidencia(partidoId);
+  // Más recientes primero — útil para el planillero en vivo.
+  const orden = [...incidencias].sort((a, b) => (b.minuto ?? 0) - (a.minuto ?? 0));
+
+  return (
+    <Card padding="none" className="overflow-hidden mt-5">
+      <div className="px-5 py-3 bg-paper-dark border-b border-line">
+        <CardLabel tone="mute">Incidencias del partido</CardLabel>
+        <div className="font-display text-lg text-green-deep tracking-display">
+          {incidencias.length} EVENTOS
+        </div>
+      </div>
+      <div className="divide-y divide-line">
+        {orden.map((i) => (
+          <div key={i.id} className="px-5 py-2.5 flex items-center gap-3">
+            <span className="text-xl w-8 text-center">
+              {ICONOS_INCIDENCIA[i.tipo] ?? '•'}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-sm truncate">
+                {i.jugadorNombre ?? 'Sin jugador'}
+              </div>
+              <div className="text-xs text-ink-mute truncate">
+                {i.tipo.replace('_', ' ')} · {i.equipoNombre}
+              </div>
+            </div>
+            <div className="text-xs font-mono text-ink-mute w-10 text-right">
+              {i.minuto != null ? `${i.minuto}'` : '—'}
+            </div>
+            <button
+              type="button"
+              onClick={() => remove.mutate(i.id)}
+              className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
+              aria-label="Borrar incidencia"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
