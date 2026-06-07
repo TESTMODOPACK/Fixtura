@@ -18,29 +18,34 @@ import { useTorneos } from '@/hooks/use-admin';
 export default function TribunalIndexPage(): React.ReactElement {
   const { data: torneos, isLoading } = useTorneos();
 
+  // El tribunal opera sobre torneos en curso: solo mostramos los ACTIVOS.
+  // Los DRAFT no tienen partidos jugados y los CERRADOS son historia.
+  const torneosActivos = (torneos ?? []).filter((t) => t.estado === 'ACTIVO');
+
   return (
     <>
       <PageHead
         eyebrow="Disciplina"
         title="Tribunal"
-        sub="Las sanciones se administran por torneo. Elegí el torneo cuyo tribunal querés operar."
+        sub="Las sanciones se administran por torneo. Elegí el torneo activo cuyo tribunal querés operar."
       />
 
       {isLoading && (
         <div className="font-serif italic text-ink-mute">Cargando torneos…</div>
       )}
 
-      {!isLoading && (torneos?.length ?? 0) === 0 && (
+      {!isLoading && torneosActivos.length === 0 && (
         <Card padding="roomy">
-          <CardLabel>Sin torneos</CardLabel>
+          <CardLabel>Sin torneos activos</CardLabel>
           <p className="font-serif italic text-ink-mute mt-2">
-            Creá un torneo primero — el tribunal opera por torneo.
+            El tribunal opera sobre torneos en curso. Iniciá un torneo (ponelo
+            “En curso”) para administrar sus sanciones.
           </p>
         </Card>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {torneos?.map((t) => (
+        {torneosActivos.map((t) => (
           <Link key={t.id} href={`/admin/torneos/${t.id}/tribunal`}>
             <Card
               padding="comfortable"

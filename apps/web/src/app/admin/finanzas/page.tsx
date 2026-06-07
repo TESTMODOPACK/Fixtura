@@ -6,7 +6,6 @@ import {
   Bell,
   CheckCircle2,
   Coins,
-  CreditCard,
   DollarSign,
   Download,
   FileText,
@@ -721,23 +720,11 @@ function FiltroChip({
 function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
   const remove = useDeleteCobro();
   const revertir = useRevertirPago();
-  const iniciarPago = useIniciarPago();
   const avisarUno = useDunningAvisarUno();
   const [pagando, setPagando] = useState(false);
-  const iniciarError = iniciarPago.error as ApiError | undefined;
   const avisarError = avisarUno.error as ApiError | undefined;
   const mostrarDunning =
     cobro.estado === 'VENCIDO' && cobro.estadoDunning !== 'AL_DIA';
-
-  const onPagarOnline = async (): Promise<void> => {
-    const res = await iniciarPago.mutateAsync({ cobroId: cobro.id });
-    // Redirigir al user a la pasarela. En modo MOCK, la "pasarela" es
-    // nuestra propia página de retorno con un token simulado — el user
-    // ve el flujo end-to-end igual que con Webpay real.
-    if (typeof window !== 'undefined') {
-      window.location.href = res.urlRedireccion;
-    }
-  };
 
   return (
     <div className="p-5">
@@ -844,11 +831,6 @@ function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
             </div>
           )}
 
-          {iniciarError && (
-            <div className="mt-2 text-xs text-danger bg-danger/10 px-2 py-1 rounded">
-              No pudimos iniciar el pago online: {iniciarError.message}
-            </div>
-          )}
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -856,21 +838,11 @@ function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
             <>
               <button
                 type="button"
-                onClick={onPagarOnline}
-                disabled={iniciarPago.isPending}
-                className="px-2 py-1 rounded text-xs uppercase tracking-wider font-semibold bg-green-deep text-chalk hover:bg-green-deep/90 disabled:opacity-50"
-                title="Pagar online por Webpay"
-              >
-                <CreditCard size={12} className="inline mr-1" />
-                {iniciarPago.isPending ? 'Redirigiendo…' : 'Pagar online'}
-              </button>
-              <button
-                type="button"
                 onClick={() => setPagando((v) => !v)}
                 className="px-2 py-1 rounded text-xs uppercase tracking-wider font-semibold bg-accent text-chalk hover:bg-accent/90"
-                title="Marcar como pagado manualmente (efectivo, transferencia)"
+                title="Registrar pago (efectivo / transferencia + voucher)"
               >
-                <Coins size={12} className="inline mr-1" /> Manual
+                <Coins size={12} className="inline mr-1" /> Registrar pago
               </button>
               {cobro.estado === 'VENCIDO' && (
                 <button
