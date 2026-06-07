@@ -295,7 +295,17 @@ function NuevaSancionTribunalForm({
     jugadorInscritoId: z.string().min(1, 'Elegí un jugador'),
     fechasSuspension: z.coerce.number().int().min(1).max(20),
     descripcion: z.string().min(3).max(1000),
-    desdeFechaNumero: z.coerce.number().int().min(1).optional(),
+    // Campo opcional: con valueAsNumber un input vacío entrega NaN, que NO
+    // es undefined → rompía la validación en silencio (el botón "no hacía
+    // nada"). Lo normalizamos: vacío/NaN → undefined.
+    desdeFechaNumero: z.preprocess(
+      (v) => {
+        if (v === '' || v === undefined || v === null) return undefined;
+        const n = typeof v === 'number' ? v : Number(v);
+        return Number.isNaN(n) ? undefined : n;
+      },
+      z.number().int().min(1).optional(),
+    ),
     vetoPermanente: z.boolean().default(false),
   });
   type Form = z.infer<typeof Schema>;
@@ -398,6 +408,7 @@ function NuevaSancionTribunalForm({
           min={1}
           placeholder="Próxima programada"
           {...form.register('desdeFechaNumero', { valueAsNumber: true })}
+          error={form.formState.errors.desdeFechaNumero?.message}
         />
 
         <div className="md:col-span-2">

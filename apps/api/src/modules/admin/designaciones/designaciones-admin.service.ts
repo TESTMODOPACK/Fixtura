@@ -970,9 +970,16 @@ export class DesignacionesAdminService {
 
     const cubiertoCount = new Map<string, number>(); // `${partidoId}-${rol}` → count
     const ocupadoBase = new Map<string, Date[]>();
+    // Personal ya designado por partido+rol — para no re-contarlo en la
+    // simulación (sin esto, un partido sin fecha_hora podía contar al mismo
+    // existente como si llenara otro slot e inflar lo asignable).
+    const asignadosPorPartidoRol = new Map<string, Set<string>>();
     for (const d of existentes) {
       const key = `${d.partidoId}-${d.rolAsignado}`;
       cubiertoCount.set(key, (cubiertoCount.get(key) ?? 0) + 1);
+      const set = asignadosPorPartidoRol.get(key) ?? new Set<string>();
+      set.add(d.personalId);
+      asignadosPorPartidoRol.set(key, set);
       if (d.fechaHora) {
         const arr = ocupadoBase.get(d.personalId) ?? [];
         arr.push(new Date(d.fechaHora));
@@ -1033,7 +1040,7 @@ export class DesignacionesAdminService {
         if (restantes <= 0) continue;
 
         const partidoFecha = partidoFechaMap.get(partido.id) ?? null;
-        const usadosEnPartido = new Set<string>();
+        const usadosEnPartido = new Set<string>(asignadosPorPartidoRol.get(key) ?? []);
 
         while (restantes > 0) {
           const candidatos = candidatosBase.filter((p) => {
