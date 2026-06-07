@@ -77,6 +77,13 @@ export class MatchCenterService {
       partido.centroPeriodo = 1;
       partido.centroSegundosAcumulados = 0;
 
+      // Marcador en vivo arranca en 0-0 (no null). Sin esto, el equipo que
+      // no convirtió queda con goles=null y la vista detalle muestra "—" en
+      // un partido jugado (confuso). Solo inicializa si todavía no hay goles
+      // cargados, para no pisar un marcador previo de un acta reabierta.
+      partido.golesLocal = partido.golesLocal ?? 0;
+      partido.golesVisita = partido.golesVisita ?? 0;
+
       // Sprint 29A — heredar duración del torneo si no viene override.
       // Esto asegura que el match-center respete lo configurado al crear
       // el torneo (40 min default amateur). El override por payload sigue

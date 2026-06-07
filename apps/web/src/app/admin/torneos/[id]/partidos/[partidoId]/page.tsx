@@ -201,6 +201,19 @@ function ActaSection({
     defaultValues: { golesLocal: partido.golesLocal ?? 0, golesVisita: partido.golesVisita ?? 0 },
   });
 
+  // El formulario se monta con defaultValues del primer render. Si el
+  // marcador llega/cambia después (ej. el cronista cargó goles en el Match
+  // Center y volvés a esta vista), RHF NO re-aplica los defaults solo. Sin
+  // este reset, el form mostraría 0-0 y al cerrar el acta SOBRESCRIBIRÍA el
+  // marcador en vivo con 0-0. Re-sincronizamos cuando cambian los goles.
+  useEffect(() => {
+    form.reset({
+      golesLocal: partido.golesLocal ?? 0,
+      golesVisita: partido.golesVisita ?? 0,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partido.golesLocal, partido.golesVisita]);
+
   const cerrada = !!partido.actaCerradaAt;
   const error = (cerrarActa.error ?? reabrirActa.error) as ApiError | undefined;
 
