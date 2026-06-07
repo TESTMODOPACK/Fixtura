@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { io, type Socket } from 'socket.io-client';
 
@@ -100,6 +100,53 @@ export function useMatchCenter(partidoId: string): {
   }, [partidoId]);
 
   return { snapshot, conectado, error };
+}
+
+/**
+ * Cronómetro que CORRE en el cliente, sembrado desde el snapshot del
+ * servidor y resincronizado cada vez que llega uno nuevo.
+ *
+ * Por qué: mostrar `snapshot.segundosTranscurridos` directo deja el reloj
+ * "congelado" entre snapshots (el WS puede venir irregular detrás de un
+ * proxy). Acá, mientras el partido está EN_VIVO, avanzamos un segundo por
+ * segundo localmente; cuando llega un snapshot nuevo (tick o broadcast por
+ * una acción como +GOL) reajustamos la base. Así el tiempo avanza fluido y
+ * cambiar el marcador NO altera el cronómetro.
+ */
+export function useSegundosCronometro(
+  snapshot: MatchCenterSnapshot | null,
+): number {
+  const base = useRef<{ segundos: number; desde: number; enVivo: boolean }>({
+    segundos: 0,
+    desde: Date.now(),
+    enVivo: false,
+  });
+  const [, forzarRender] = useState(0);
+
+  const segundosServidor = snapshot?.segundosTranscurridos ?? 0;
+  const estado = snapshot?.estado;
+
+  // Resincronizar la base con cada snapshot (cambia segundos o estado).
+  useEffect(() => {
+    base.current = {
+      segundos: segundosServidor,
+      desde: Date.now(),
+      enVivo: estado === 'EN_VIVO',
+    };
+    forzarRender((n) => n + 1);
+  }, [segundosServidor, estado]);
+
+  // Tick local cada segundo mientras está EN_VIVO (avanza aunque el WS
+  // no emita). Si no está en vivo, no corre y el valor queda fijo.
+  useEffect(() => {
+    if (estado !== 'EN_VIVO') return;
+    const id = setInterval(() => forzarRender((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [estado]);
+
+  const b = base.current;
+  if (!b.enVivo) return b.segundos;
+  return b.segundos + Math.max(0, Math.floor((Date.now() - b.desde) / 1000));
 }
 
 /**

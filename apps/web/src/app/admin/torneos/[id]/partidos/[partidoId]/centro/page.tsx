@@ -31,6 +31,7 @@ import {
   useMatchCenter,
   usePausarCentro,
   useReanudarCentro,
+  useSegundosCronometro,
   useSiguientePeriodoCentro,
   useSumarGolCentro,
 } from '@/hooks/use-match-center';
@@ -55,7 +56,9 @@ export default function CentroPage({
   const siguientePeriodo = useSiguientePeriodoCentro(partidoId);
   const finalizar = useFinalizarCentro(partidoId);
 
-  const segundos = snapshot?.segundosTranscurridos ?? 0;
+  // Cronómetro que corre en el cliente (sembrado del servidor). Avanza
+  // fluido aunque el WS venga irregular y no salta al tocar el marcador.
+  const segundos = useSegundosCronometro(snapshot);
   const minutosVisibles = Math.floor(segundos / 60);
   const segundosVisibles = segundos % 60;
   const cronometro = `${String(minutosVisibles).padStart(2, '0')}:${String(segundosVisibles).padStart(2, '0')}`;
