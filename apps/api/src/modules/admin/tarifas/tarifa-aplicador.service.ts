@@ -558,6 +558,16 @@ export class TarifaAplicadorService {
     let matriculasCreadas = 0;
     let cuotasCreadas = 0;
 
+    // Resolvemos la inscripción del equipo (si es equipo sombra de una
+    // inscripción de club). La anclamos en el cobro además del equipo para
+    // que /admin/finanzas pueda filtrar por club (el filtro usa
+    // inscripcion.club_id) — igual que hacen las multas. Equipos directos
+    // (pestaña Equipos, sin inscripción) quedan con inscripcion_id null.
+    const inscripcionId = await this.resolverInscripcionDeEquipo(
+      equipo.id,
+      equipo.tenantId,
+    );
+
     // Matrícula — un único cobro por equipo+tarifa. No filtramos por
     // cancelado/generadoAuto: si ya existe cualquier matrícula (manual,
     // auto o cancelada a mano) NO regeneramos. Así respetamos la decisión
@@ -576,6 +586,7 @@ export class TarifaAplicadorService {
           tenantId: equipo.tenantId,
           torneoId: torneo.id,
           equipoId: equipo.id,
+          inscripcionId,
           tarifa: tarifaMatricula,
           concepto: this.conceptoEquipo('Matrícula', equipo, torneo),
           monto: tarifaMatricula.monto,
@@ -614,6 +625,7 @@ export class TarifaAplicadorService {
             tenantId: equipo.tenantId,
             torneoId: torneo.id,
             equipoId: equipo.id,
+            inscripcionId,
             tarifa: tarifaCuota,
             concepto: this.conceptoCuotaEquipo(
               equipo,
@@ -644,6 +656,23 @@ export class TarifaAplicadorService {
     }
 
     return { matriculasCreadas, cuotasCreadas };
+  }
+
+  /**
+   * Si el equipo es el "equipo sombra" de una inscripción de club, devuelve
+   * el id de esa inscripción; si no (equipo directo de la pestaña Equipos),
+   * devuelve null. Sirve para anclar el cobro al club y que /admin/finanzas
+   * lo pueda filtrar por club.
+   */
+  private async resolverInscripcionDeEquipo(
+    equipoId: string,
+    tenantId: string,
+  ): Promise<string | null> {
+    const insc = await this.inscRepo.findOne({
+      where: { equipoSombraId: equipoId, tenantId },
+      select: ['id'],
+    });
+    return insc?.id ?? null;
   }
 
   /** Busca la tarifa CUOTA activa del torneo (la del modelo nuevo upfront). */

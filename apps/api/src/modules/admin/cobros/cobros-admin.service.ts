@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 
 import type { CobroAdmin } from '@fixtura/types';
 
+import { AuditLogService } from '../../audit';
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { Equipo } from '../../competition/entities/equipo.entity';
 import { DunningService } from '../dunning/dunning.service';
@@ -15,6 +16,7 @@ export class CobrosAdminService {
     @InjectRepository(Cobro) private readonly repo: Repository<Cobro>,
     @InjectRepository(Equipo) private readonly equipoRepo: Repository<Equipo>,
     private readonly dunning: DunningService,
+    private readonly audit: AuditLogService,
   ) {}
 
   /**
@@ -189,6 +191,29 @@ export class CobrosAdminService {
   async remove(id: string, tenantId: string): Promise<void> {
     const c = await this.repo.findOne({ where: { id, tenantId } });
     if (!c) throw new NotFoundException(`Cobro ${id} no encontrado`);
+    // Eliminar un cobro es destructivo y financiero — dejamos traza de qué
+    // se borró, a quién y cuánto, antes del hard delete. Best-effort: si el
+    // audit falla, no bloqueamos la operación del operador.
+    try {
+      await this.audit.record({
+        action: 'cobro.eliminado',
+        tenantId,
+        entityType: 'Cobro',
+        entityId: c.id,
+        metadata: {
+          concepto: c.concepto,
+          categoria: c.categoria,
+          monto: c.monto,
+          equipoId: c.equipoId,
+          inscripcionId: c.inscripcionId,
+          torneoId: c.torneoId,
+          pagado: c.pagadoAt != null,
+          generadoAuto: c.generadoAuto,
+        },
+      });
+    } catch {
+      // best-effort
+    }
     await this.repo.remove(c);
   }
 
