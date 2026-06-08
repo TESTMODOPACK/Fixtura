@@ -6,8 +6,13 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import type { CreateSancionTribunalRequest, SancionAdmin } from '@fixtura/types';
+import type {
+  AjustarSancionRequest,
+  CreateSancionTribunalRequest,
+  SancionAdmin,
+} from '@fixtura/types';
 
+import { AuditLogService } from '../../audit';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Jugador } from '../../competition/entities/jugador.entity';
@@ -31,6 +36,7 @@ export class TribunalAdminService {
     private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     private readonly vetadosService: VetadosAdminService,
+    private readonly audit: AuditLogService,
   ) {}
 
   async list(torneoId: string, tenantId: string): Promise<SancionAdmin[]> {
@@ -122,6 +128,57 @@ export class TribunalAdminService {
     });
     if (!s) throw new NotFoundException(`Sanción ${id} no encontrada`);
     return this.toDto(s);
+  }
+
+  /**
+   * Ajusta (agrava o corrige) una sanción existente. Pensado para escalar una
+   * sanción automática (p.ej. roja directa = 1 fecha) cuando hay incidencias
+   * extra (agresión, insultos): sube `fechasPendientes` y documenta el motivo
+   * en la descripción. `fechasPendientes` = 0 marca la sanción como cumplida;
+   * > 0 la mantiene/reactiva activa.
+   */
+  async ajustar(
+    id: string,
+    tenantId: string,
+    actorUserId: string | null,
+    input: AjustarSancionRequest,
+  ): Promise<SancionAdmin> {
+    const s = await this.repo.findOne({ where: { id, tenantId } });
+    if (!s) throw new NotFoundException(`Sanción ${id} no encontrada`);
+
+    const previas = s.fechasPendientes;
+    s.fechasPendientes = input.fechasPendientes;
+    if (input.desdeFechaNumero != null) {
+      s.desdeFechaNumero = input.desdeFechaNumero;
+    }
+    s.cumplida = input.fechasPendientes === 0;
+
+    const stamp = `[Ajuste tribunal] ${previas} → ${input.fechasPendientes} fecha(s): ${input.motivoAjuste}`;
+    s.descripcion = (s.descripcion ? `${s.descripcion}\n\n` : '') + stamp;
+    await this.repo.save(s);
+
+    try {
+      await this.audit.record({
+        action: 'tribunal.sancion_ajustada',
+        tenantId,
+        userId: actorUserId,
+        entityType: 'SancionActiva',
+        entityId: s.id,
+        metadata: {
+          torneoId: s.torneoId,
+          rut: s.rut,
+          motivoOriginal: s.motivo,
+          fechasPendientesPrevias: previas,
+          fechasPendientesNuevas: input.fechasPendientes,
+          desdeFechaNumero: s.desdeFechaNumero,
+          motivoAjuste: input.motivoAjuste,
+        },
+      });
+    } catch {
+      // best-effort
+    }
+
+    return this.findOne(id, tenantId);
   }
 
   async revoke(id: string, tenantId: string): Promise<void> {

@@ -7,12 +7,14 @@ import {
   Param,
   ParseIntPipe,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
 
 import {
   ROLE,
+  type AjustarSancionRequest,
   type CreateSancionTribunalRequest,
   type SancionAdmin,
   type UserContext,
@@ -20,7 +22,7 @@ import {
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
-import { CreateSancionTribunalDto } from './dto';
+import { AjustarSancionDto, CreateSancionTribunalDto } from './dto';
 import { TribunalAdminService } from './tribunal-admin.service';
 
 function ensureTenant(user: UserContext): string {
@@ -72,6 +74,21 @@ export class TribunalAdminController {
       torneoId,
       ensureTenant(user),
       dto as unknown as CreateSancionTribunalRequest,
+    );
+  }
+
+  @Patch(':id')
+  ajustar(
+    @CurrentUser() user: UserContext,
+    @Param('torneoId', new ParseUUIDPipe()) _torneoId: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AjustarSancionDto,
+  ): Promise<SancionAdmin> {
+    return this.svc.ajustar(
+      id,
+      ensureTenant(user),
+      user.userId,
+      dto as unknown as AjustarSancionRequest,
     );
   }
 

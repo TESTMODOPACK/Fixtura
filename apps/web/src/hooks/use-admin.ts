@@ -15,6 +15,7 @@ import type {
   UpdateSponsorRequest,
   UpdateTenantSettingsRequest,
   CreateEquipoRequest,
+  AjustarSancionRequest,
   CreateIncidenciaRequest,
   CreateJugadorRequest,
   CreatePersonalRequest,
@@ -470,6 +471,20 @@ export function useRevokeSancion(torneoId: string) {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch<void>(`/admin/torneos/${torneoId}/sanciones/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'sanciones'] });
+    },
+  });
+}
+
+export function useAjustarSancion(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: AjustarSancionRequest }) =>
+      apiFetch<SancionAdmin>(`/admin/torneos/${torneoId}/sanciones/${id}`, {
+        method: 'PATCH',
+        body: input,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'sanciones'] });
     },

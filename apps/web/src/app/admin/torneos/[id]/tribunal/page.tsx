@@ -8,7 +8,9 @@ import {
   CheckCircle2,
   Gavel,
   Lock,
+  Pencil,
   Trash2,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -23,6 +25,7 @@ import { makeRhfErrorHandler } from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
+  useAjustarSancion,
   useCreateSancionTribunal,
   useEquipos,
   useJugadores,
@@ -32,6 +35,7 @@ import {
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { toastError, toastSuccess } from '@/lib/toast';
 
 const MOTIVO_LABEL: Record<string, string> = {
   ACUMULACION_AMARILLAS: '5 amarillas acumuladas',
@@ -203,6 +207,7 @@ function SancionesSection({
   historico?: boolean;
 }): React.ReactElement {
   const revoke = useRevokeSancion(torneoId);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   return (
     <Card padding="none" className="overflow-hidden">
@@ -259,21 +264,145 @@ function SancionesSection({
                   <span className="font-serif italic truncate flex-1">{s.descripcion.split('\n')[0]}</span>
                 )}
                 {!historico && (
-                  <button
-                    type="button"
-                    onClick={() => revoke.mutate(s.id)}
-                    className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
-                    title="Revocar"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingId(editingId === s.id ? null : s.id)
+                      }
+                      className="p-1 rounded text-ink-mute hover:text-accent hover:bg-accent/10"
+                      title="Ajustar sanción (agravar / corregir)"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => revoke.mutate(s.id)}
+                      className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
+                      title="Revocar"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 )}
               </div>
+
+              {!historico && editingId === s.id && (
+                <AjustarSancionForm
+                  sancion={s}
+                  torneoId={torneoId}
+                  onClose={() => setEditingId(null)}
+                />
+              )}
             </div>
           ))}
         </div>
       )}
     </Card>
+  );
+}
+
+function AjustarSancionForm({
+  sancion,
+  torneoId,
+  onClose,
+}: {
+  sancion: SancionAdmin;
+  torneoId: string;
+  onClose: () => void;
+}): React.ReactElement {
+  const ajustar = useAjustarSancion(torneoId);
+  const [fechasPendientes, setFechasPendientes] = useState(
+    sancion.fechasPendientes,
+  );
+  const [desdeFechaNumero, setDesdeFechaNumero] = useState(
+    String(sancion.desdeFechaNumero),
+  );
+  const [motivoAjuste, setMotivoAjuste] = useState('');
+
+  const submit = async (): Promise<void> => {
+    if (motivoAjuste.trim().length < 3) {
+      toastError(new Error('Indicá el motivo del ajuste (mín. 3 caracteres).'));
+      return;
+    }
+    const desde = Number(desdeFechaNumero);
+    try {
+      await ajustar.mutateAsync({
+        id: sancion.id,
+        input: {
+          fechasPendientes,
+          desdeFechaNumero:
+            Number.isFinite(desde) && desde >= 1 ? desde : undefined,
+          motivoAjuste: motivoAjuste.trim(),
+        },
+      });
+      toastSuccess(
+        fechasPendientes === 0
+          ? 'Sanción marcada como cumplida.'
+          : `Sanción ajustada a ${fechasPendientes} fecha(s) pendiente(s).`,
+      );
+      onClose();
+    } catch (err) {
+      toastError(err);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-card border border-line bg-paper-dark/40 p-3">
+      <div className="flex items-center gap-2 mb-2">
+        <Gavel size={14} className="text-accent" />
+        <CardLabel>Ajustar sanción del tribunal</CardLabel>
+      </div>
+      <p className="text-xs text-ink-mute font-serif italic mb-3">
+        Subí las fechas pendientes si hay incidencias extra (agresión, insultos,
+        etc.). Queda registrado en el historial de la sanción.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="label">Fechas pendientes (nuevo total)</label>
+          <Input
+            type="number"
+            min={0}
+            max={40}
+            value={fechasPendientes}
+            onChange={(e) => setFechasPendientes(Number(e.target.value))}
+          />
+        </div>
+        <div>
+          <label className="label">Desde fecha número</label>
+          <Input
+            type="number"
+            min={1}
+            value={desdeFechaNumero}
+            onChange={(e) => setDesdeFechaNumero(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="mt-3">
+        <label className="label">Motivo del ajuste</label>
+        <textarea
+          className="input min-h-[60px]"
+          placeholder="Ej. Agravada por agresión al árbitro tras la expulsión: +3 fechas. Fallo del tribunal."
+          value={motivoAjuste}
+          onChange={(e) => setMotivoAjuste(e.target.value)}
+          maxLength={1000}
+        />
+      </div>
+      <div className="mt-3 flex gap-2">
+        <Button
+          type="button"
+          variant="accent"
+          size="sm"
+          loading={ajustar.isPending}
+          onClick={submit}
+        >
+          <Gavel size={14} /> Guardar ajuste
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+          <X size={14} /> Cancelar
+        </Button>
+      </div>
+    </div>
   );
 }
 

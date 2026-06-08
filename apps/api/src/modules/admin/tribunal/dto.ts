@@ -37,3 +37,22 @@ export class CreateSancionTribunalDto {
   @IsBoolean()
   vetoPermanente?: boolean;
 }
+
+export class AjustarSancionDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(40)
+  fechasPendientes!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  desdeFechaNumero?: number;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(1000)
+  motivoAjuste!: string;
+}

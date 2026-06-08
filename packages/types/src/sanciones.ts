@@ -53,6 +53,20 @@ export const CreateSancionTribunalSchema = z.object({
 export type CreateSancionTribunalRequest = z.infer<typeof CreateSancionTribunalSchema>;
 
 /**
+ * Ajustar (agravar/corregir) una sanción existente desde el Tribunal. Sirve
+ * para escalar una sanción automática (p.ej. roja directa = 1 fecha) cuando
+ * hay incidencias extra (agresión, insultos): el tribunal sube las fechas
+ * pendientes y documenta el motivo. `fechasPendientes` es el nuevo total; 0
+ * la marca como cumplida. El motivo del ajuste se anexa a la descripción.
+ */
+export const AjustarSancionSchema = z.object({
+  fechasPendientes: z.number().int().min(0).max(40),
+  desdeFechaNumero: z.number().int().min(1).optional(),
+  motivoAjuste: z.string().min(3).max(1000),
+});
+export type AjustarSancionRequest = z.infer<typeof AjustarSancionSchema>;
+
+/**
  * Resultado del cierre de acta — qué sanciones se crearon
  * automáticamente. Se devuelve al cliente para feedback visual.
  */
