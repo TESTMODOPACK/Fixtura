@@ -1119,6 +1119,8 @@ export interface CobrosFiltros {
   torneoId?: string;
   clubId?: string;
   soloAuto?: boolean;
+  // F51.1 — filtro por concepto (categoría).
+  categoria?: string;
 }
 
 export function useCobros(
@@ -1137,6 +1139,7 @@ export function useCobros(
   if (args.clubId) qs.set('clubId', args.clubId);
   if (args.soloAuto === true) qs.set('soloAuto', 'true');
   if (args.soloAuto === false) qs.set('soloAuto', 'false');
+  if (args.categoria) qs.set('categoria', args.categoria);
   const query = qs.toString();
   return useQuery({
     queryKey: [
@@ -1148,6 +1151,7 @@ export function useCobros(
         torneoId: args.torneoId ?? null,
         clubId: args.clubId ?? null,
         soloAuto: args.soloAuto ?? null,
+        categoria: args.categoria ?? null,
       },
     ],
     queryFn: () =>

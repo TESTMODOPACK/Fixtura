@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import type { CobroAdmin } from '@fixtura/types';
+import type { CategoriaCobro, CobroAdmin } from '@fixtura/types';
 
 import { AuditLogService } from '../../audit';
 import { Cobro } from '../../competition/entities/cobro.entity';
@@ -41,6 +41,8 @@ export class CobrosAdminService {
     torneoId?: string,
     clubId?: string,
     soloAuto?: boolean,
+    // F51.1 — filtro por concepto (categoría del cobro).
+    categoria?: CategoriaCobro,
   ): Promise<CobroAdmin[]> {
     const qb = this.repo
       .createQueryBuilder('c')
@@ -59,6 +61,9 @@ export class CobrosAdminService {
     }
     if (clubId) {
       qb.andWhere('inscripcion.club_id = :clubId', { clubId });
+    }
+    if (categoria) {
+      qb.andWhere('c.categoria = :categoria', { categoria });
     }
     if (soloAuto === true) {
       qb.andWhere('c.generado_auto = TRUE');

@@ -219,6 +219,8 @@ export class PersonalAdminService {
       telefono: input.telefono ?? null,
       email: input.email ?? null,
       tarifaBase: input.tarifaBase ?? null,
+      tarifaArbitroPrincipal: input.tarifaArbitroPrincipal ?? null,
+      tarifaArbitroAsistente: input.tarifaArbitroAsistente ?? null,
       carnetAnfaNumero: input.carnetAnfaNumero ?? null,
       carnetAnfaVence: input.carnetAnfaVence ?? null,
       banco: input.banco?.trim() || null,
@@ -249,6 +251,14 @@ export class PersonalAdminService {
       email: input.email === undefined ? p.email : input.email,
       tarifaBase:
         input.tarifaBase === undefined ? p.tarifaBase : input.tarifaBase,
+      tarifaArbitroPrincipal:
+        input.tarifaArbitroPrincipal === undefined
+          ? p.tarifaArbitroPrincipal
+          : input.tarifaArbitroPrincipal,
+      tarifaArbitroAsistente:
+        input.tarifaArbitroAsistente === undefined
+          ? p.tarifaArbitroAsistente
+          : input.tarifaArbitroAsistente,
       carnetAnfaNumero:
         input.carnetAnfaNumero === undefined
           ? p.carnetAnfaNumero
@@ -301,6 +311,8 @@ export class PersonalAdminService {
       telefono: p.telefono,
       email: p.email,
       tarifaBase: p.tarifaBase,
+      tarifaArbitroPrincipal: p.tarifaArbitroPrincipal,
+      tarifaArbitroAsistente: p.tarifaArbitroAsistente,
       carnetAnfaNumero: p.carnetAnfaNumero,
       carnetAnfaVence: p.carnetAnfaVence,
       activo: p.activo,

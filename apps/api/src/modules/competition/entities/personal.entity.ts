@@ -71,6 +71,15 @@ export class Personal {
   @Column({ name: 'tarifa_base', type: 'int', nullable: true })
   tarifaBase!: number | null;
 
+  // F51 (ADR-0008) — tarifa por rol arbitral. Si está definida, prevalece
+  // sobre tarifaBase cuando la designación es de ese rol. tarifaBase queda
+  // como fallback (y para planillero / otros).
+  @Column({ name: 'tarifa_arbitro_principal', type: 'int', nullable: true })
+  tarifaArbitroPrincipal!: number | null;
+
+  @Column({ name: 'tarifa_arbitro_asistente', type: 'int', nullable: true })
+  tarifaArbitroAsistente!: number | null;
+
   @Column({ name: 'carnet_anfa_numero', type: 'varchar', length: 50, nullable: true })
   carnetAnfaNumero!: string | null;
 

@@ -89,6 +89,9 @@ export const PersonalAdminSchema = z.object({
   telefono: z.string().nullable(),
   email: z.string().nullable(),
   tarifaBase: z.number().int().nullable(),
+  // F51 — tarifas por rol arbitral (fallback a tarifaBase si null).
+  tarifaArbitroPrincipal: z.number().int().nullable(),
+  tarifaArbitroAsistente: z.number().int().nullable(),
   carnetAnfaNumero: z.string().nullable(),
   // ISO date YYYY-MM-DD o null
   carnetAnfaVence: z.string().nullable(),
@@ -112,6 +115,8 @@ export const CreatePersonalSchema = z.object({
   telefono: z.string().max(30).optional().nullable(),
   email: z.string().email().max(150).optional().nullable(),
   tarifaBase: z.number().int().min(0).optional().nullable(),
+  tarifaArbitroPrincipal: z.number().int().min(0).optional().nullable(),
+  tarifaArbitroAsistente: z.number().int().min(0).optional().nullable(),
   carnetAnfaNumero: z.string().max(50).optional().nullable(),
   carnetAnfaVence: z.string().optional().nullable(),
   // F49 — datos bancarios (opcionales).

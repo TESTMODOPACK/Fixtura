@@ -90,11 +90,13 @@ export default function FinanzasPage(): React.ReactElement {
   const [torneoFiltro, setTorneoFiltro] = useState<string>('');
   const [clubFiltro, setClubFiltro] = useState<string>('');
   const [soloAuto, setSoloAuto] = useState<'todos' | 'auto' | 'manual'>('todos');
+  const [conceptoFiltro, setConceptoFiltro] = useState<string>('');
   const { data: cobros, isLoading, error } = useCobros({
     filtro: filtro === 'todos' ? undefined : filtro,
     torneoId: torneoFiltro || undefined,
     clubId: clubFiltro || undefined,
     soloAuto: soloAuto === 'auto' ? true : soloAuto === 'manual' ? false : undefined,
+    categoria: conceptoFiltro || undefined,
   });
   const apiError = error as ApiError | undefined;
 
@@ -160,6 +162,8 @@ export default function FinanzasPage(): React.ReactElement {
           setClubFiltro={setClubFiltro}
           soloAuto={soloAuto}
           setSoloAuto={setSoloAuto}
+          conceptoFiltro={conceptoFiltro}
+          setConceptoFiltro={setConceptoFiltro}
           adding={adding}
           setAdding={setAdding}
         />
@@ -207,6 +211,8 @@ interface CobrosTabProps {
   setClubFiltro: React.Dispatch<React.SetStateAction<string>>;
   soloAuto: 'todos' | 'auto' | 'manual';
   setSoloAuto: React.Dispatch<React.SetStateAction<'todos' | 'auto' | 'manual'>>;
+  conceptoFiltro: string;
+  setConceptoFiltro: React.Dispatch<React.SetStateAction<string>>;
   adding: boolean;
   setAdding: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -224,6 +230,8 @@ function CobrosTab({
   setClubFiltro,
   soloAuto,
   setSoloAuto,
+  conceptoFiltro,
+  setConceptoFiltro,
   adding,
   setAdding,
 }: CobrosTabProps): React.ReactElement {
@@ -354,7 +362,7 @@ function CobrosTab({
         </Card>
       )}
 
-      {/* Sprint 34E — selectores por torneo / club / origen. */}
+      {/* Sprint 34E — selectores por torneo / club / origen. F51.1 — concepto. */}
       <FiltrosAvanzados
         torneoFiltro={torneoFiltro}
         setTorneoFiltro={setTorneoFiltro}
@@ -362,6 +370,8 @@ function CobrosTab({
         setClubFiltro={setClubFiltro}
         soloAuto={soloAuto}
         setSoloAuto={setSoloAuto}
+        conceptoFiltro={conceptoFiltro}
+        setConceptoFiltro={setConceptoFiltro}
       />
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -1083,6 +1093,8 @@ function FiltrosAvanzados({
   setClubFiltro,
   soloAuto,
   setSoloAuto,
+  conceptoFiltro,
+  setConceptoFiltro,
 }: {
   torneoFiltro: string;
   setTorneoFiltro: React.Dispatch<React.SetStateAction<string>>;
@@ -1090,10 +1102,13 @@ function FiltrosAvanzados({
   setClubFiltro: React.Dispatch<React.SetStateAction<string>>;
   soloAuto: 'todos' | 'auto' | 'manual';
   setSoloAuto: React.Dispatch<React.SetStateAction<'todos' | 'auto' | 'manual'>>;
+  conceptoFiltro: string;
+  setConceptoFiltro: React.Dispatch<React.SetStateAction<string>>;
 }): React.ReactElement {
   const { data: torneos } = useTorneos();
   const { data: clubes } = useClubes();
-  const hayFiltro = !!torneoFiltro || !!clubFiltro || soloAuto !== 'todos';
+  const hayFiltro =
+    !!torneoFiltro || !!clubFiltro || soloAuto !== 'todos' || !!conceptoFiltro;
 
   return (
     <div
@@ -1102,7 +1117,7 @@ function FiltrosAvanzados({
         hayFiltro ? 'border-accent/40 bg-accent/5' : 'border-line bg-paper/40',
       )}
     >
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] gap-3 items-end">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto_auto] gap-3 items-end">
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
             Torneo
@@ -1153,6 +1168,23 @@ function FiltrosAvanzados({
             <option value="manual">Solo manuales</option>
           </select>
         </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
+            Concepto
+          </label>
+          <select
+            className="input"
+            value={conceptoFiltro}
+            onChange={(e) => setConceptoFiltro(e.target.value)}
+          >
+            <option value="">Todos los conceptos</option>
+            {CATEGORIA_COBRO.map((c) => (
+              <option key={c} value={c}>
+                {CATEGORIA_LABEL[c]}
+              </option>
+            ))}
+          </select>
+        </div>
         {hayFiltro && (
           <Button
             variant="ghost"
@@ -1161,6 +1193,7 @@ function FiltrosAvanzados({
               setTorneoFiltro('');
               setClubFiltro('');
               setSoloAuto('todos');
+              setConceptoFiltro('');
             }}
             title="Limpiar filtros"
           >

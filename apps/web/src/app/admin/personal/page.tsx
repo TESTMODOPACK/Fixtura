@@ -522,6 +522,8 @@ function EditarPersonalForm({
     telefono: string | null;
     email: string | null;
     tarifaBase: number | null;
+    tarifaArbitroPrincipal: number | null;
+    tarifaArbitroAsistente: number | null;
     carnetAnfaNumero: string | null;
     carnetAnfaVence: string | null;
     banco: string | null;
@@ -545,6 +547,8 @@ function EditarPersonalForm({
     telefono: z.string().optional(),
     email: z.union([z.literal(''), z.string().email('Email inválido')]).optional(),
     tarifaBase: z.coerce.number().int().min(0).optional(),
+    tarifaArbitroPrincipal: z.coerce.number().int().min(0).optional(),
+    tarifaArbitroAsistente: z.coerce.number().int().min(0).optional(),
     carnetAnfaNumero: z.string().optional(),
     carnetAnfaVence: z.string().optional(),
     banco: z.string().max(60).optional(),
@@ -566,6 +570,8 @@ function EditarPersonalForm({
       telefono: persona.telefono ?? '',
       email: persona.email ?? '',
       tarifaBase: persona.tarifaBase ?? undefined,
+      tarifaArbitroPrincipal: persona.tarifaArbitroPrincipal ?? undefined,
+      tarifaArbitroAsistente: persona.tarifaArbitroAsistente ?? undefined,
       carnetAnfaNumero: persona.carnetAnfaNumero ?? '',
       carnetAnfaVence: persona.carnetAnfaVence ?? '',
       banco: persona.banco ?? '',
@@ -588,6 +594,8 @@ function EditarPersonalForm({
       telefono: vals.telefono || null,
       email: vals.email || null,
       tarifaBase: vals.tarifaBase ?? null,
+      tarifaArbitroPrincipal: vals.tarifaArbitroPrincipal ?? null,
+      tarifaArbitroAsistente: vals.tarifaArbitroAsistente ?? null,
       carnetAnfaNumero: vals.carnetAnfaNumero || null,
       carnetAnfaVence: vals.carnetAnfaVence || null,
       banco: vals.banco || null,
@@ -660,6 +668,22 @@ function EditarPersonalForm({
       />
       {aplicaCarnet && (
         <>
+          <Input
+            label="Tarifa árbitro principal (CLP)"
+            type="number"
+            min={0}
+            step={1000}
+            placeholder="Si vacío, usa la tarifa base"
+            {...form.register('tarifaArbitroPrincipal', { valueAsNumber: true })}
+          />
+          <Input
+            label="Tarifa árbitro asistente (CLP)"
+            type="number"
+            min={0}
+            step={1000}
+            placeholder="Si vacío, usa la tarifa base"
+            {...form.register('tarifaArbitroAsistente', { valueAsNumber: true })}
+          />
           <Input label="N° Carnet ANFA" {...form.register('carnetAnfaNumero')} />
           <Input
             label="Vence"
@@ -728,6 +752,8 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
     telefono: z.string().optional(),
     email: z.union([z.literal(''), z.string().email('Email inválido')]).optional(),
     tarifaBase: z.coerce.number().int().min(0).optional(),
+    tarifaArbitroPrincipal: z.coerce.number().int().min(0).optional(),
+    tarifaArbitroAsistente: z.coerce.number().int().min(0).optional(),
     carnetAnfaNumero: z.string().optional(),
     carnetAnfaVence: z.string().optional(),
     banco: z.string().max(60).optional(),
@@ -755,6 +781,8 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
       telefono: vals.telefono || null,
       email: vals.email || null,
       tarifaBase: vals.tarifaBase ?? null,
+      tarifaArbitroPrincipal: vals.tarifaArbitroPrincipal ?? null,
+      tarifaArbitroAsistente: vals.tarifaArbitroAsistente ?? null,
       carnetAnfaNumero: vals.carnetAnfaNumero || null,
       carnetAnfaVence: vals.carnetAnfaVence || null,
       banco: vals.banco || null,
@@ -837,6 +865,22 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
 
         {aplicaCarnet && (
           <>
+            <Input
+              label="Tarifa árbitro principal (CLP)"
+              type="number"
+              min={0}
+              step={1000}
+              placeholder="Si vacío, usa la tarifa base"
+              {...form.register('tarifaArbitroPrincipal', { valueAsNumber: true })}
+            />
+            <Input
+              label="Tarifa árbitro asistente (CLP)"
+              type="number"
+              min={0}
+              step={1000}
+              placeholder="Si vacío, usa la tarifa base"
+              {...form.register('tarifaArbitroAsistente', { valueAsNumber: true })}
+            />
             <Input
               label="N° Carnet ANFA"
               {...form.register('carnetAnfaNumero')}

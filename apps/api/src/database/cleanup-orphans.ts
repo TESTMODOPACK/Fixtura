@@ -315,6 +315,16 @@ async function main(): Promise<void> {
     );
     log('nominas_pago + personal bancario + liquidaciones.nomina_id asegurados (F49).');
 
+    // F51 (ADR-0008) — tarifa por rol arbitral: un árbitro puede actuar de
+    // principal o asistente y cobrar distinto según el rol del partido.
+    // tarifaBase queda como fallback (y para planillero/otros).
+    await client.query(`
+      ALTER TABLE personal
+        ADD COLUMN IF NOT EXISTS tarifa_arbitro_principal INTEGER,
+        ADD COLUMN IF NOT EXISTS tarifa_arbitro_asistente INTEGER
+    `);
+    log('personal.tarifa_arbitro_principal/asistente asegurados (F51).');
+
     // Sprint 14: tabla push_subscriptions (notificaciones FCM/WebPush).
     await ensurePushSubscriptionsTable(client, log);
 

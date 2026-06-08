@@ -266,7 +266,7 @@ export class DesignacionesAdminService {
         personalId: input.personalId,
         rolAsignado: input.rolAsignado,
         estado: 'PROPUESTA',
-        montoPago: input.montoPago ?? personal.tarifaBase ?? null,
+        montoPago: input.montoPago ?? this.resolverTarifa(personal, input.rolAsignado),
         notas: input.notas ?? null,
       }),
     );
@@ -501,6 +501,24 @@ export class DesignacionesAdminService {
     return 'OK';
   }
 
+  /**
+   * F51 — Tarifa que cobra una persona según el rol que ejerce en el
+   * partido. Si hay tarifa específica para el rol arbitral, prevalece; si
+   * no, cae a tarifaBase (que cubre planillero / otros y el caso general).
+   */
+  private resolverTarifa(
+    personal: Personal,
+    rol: RolPersonal | RolDesignablePartido,
+  ): number | null {
+    if (rol === 'ARBITRO_PRINCIPAL' && personal.tarifaArbitroPrincipal != null) {
+      return personal.tarifaArbitroPrincipal;
+    }
+    if (rol === 'ARBITRO_ASISTENTE' && personal.tarifaArbitroAsistente != null) {
+      return personal.tarifaArbitroAsistente;
+    }
+    return personal.tarifaBase ?? null;
+  }
+
   // ─── Disponibilidad / ausencias (F48) ───────────────────────────────
   /**
    * Fecha calendario (YYYY-MM-DD) de un partido en America/Santiago. Si el
@@ -711,10 +729,15 @@ export class DesignacionesAdminService {
     const nuevasParaNotificar: string[] = [];
 
     for (const rol of roles) {
-      // Candidatos: personal activo cuyo rol base = rol pedido. Si el rol
-      // pedido es PLANILLERO y no hay planilleros, NO usamos árbitros como
-      // fallback — sería sorpresivo.
-      const candidatosBase = personalActivo.filter((p) => p.rol === rol);
+      // F51 — Candidatos por rol. Para roles ARBITRALES (principal/asistente)
+      // cualquier árbitro es candidato a ambos roles (un principal puede
+      // actuar de asistente y viceversa); cobra según el rol del partido
+      // (resolverTarifa). Para PLANILLERO se exige match exacto: NO usamos
+      // árbitros como fallback — sería sorpresivo.
+      const esArbitral = ROLES_ARBITRAJE.includes(rol);
+      const candidatosBase = personalActivo.filter((p) =>
+        esArbitral ? ROLES_ARBITRAJE.includes(p.rol) : p.rol === rol,
+      );
       // Cuántos slots de este rol se necesitan por partido (ej. 2 para
       // ARBITRO_ASISTENTE — uno por línea).
       const slotsNecesarios = SLOTS_POR_ROL[rol];
@@ -752,8 +775,18 @@ export class DesignacionesAdminService {
         // asignados en este partido+rol (evita duplicar el mismo
         // asistente como asistente 1 y asistente 2).
         const idsYaUsados = new Set(cubiertos.map((c) => c.personalId));
+        // F51 — Un mismo árbitro no puede cubrir DOS roles del mismo partido
+        // (ahora principal/asistente comparten pool). Excluimos a quien ya
+        // quedó designado en este partido en CUALQUIER otro rol.
+        const idsEnPartido = new Set<string>();
+        for (const r of ROLES_DESIGNABLES_PARTIDO) {
+          for (const c of cubiertoMap.get(`${partido.id}-${r}`) ?? []) {
+            idsEnPartido.add(c.personalId);
+          }
+        }
         const disponibles = candidatosBase.filter((p) => {
           if (idsYaUsados.has(p.id)) return false;
+          if (idsEnPartido.has(p.id)) return false;
           // F48 — Ausencia declarada que cubre la fecha de este partido.
           if (
             this.tieneAusenciaEnFecha(
@@ -838,7 +871,7 @@ export class DesignacionesAdminService {
               personalId: elegido.id,
               rolAsignado: rol,
               estado: 'PROPUESTA',
-              montoPago: elegido.tarifaBase ?? null,
+              montoPago: this.resolverTarifa(elegido, rol),
               notas: null,
             }),
           );

@@ -58,6 +58,18 @@ export class CreatePersonalDto {
   tarifaBase?: number | null;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  tarifaArbitroPrincipal?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  tarifaArbitroAsistente?: number | null;
+
+  @IsOptional()
   @IsString()
   @MaxLength(50)
   carnetAnfaNumero?: string | null;
@@ -134,6 +146,18 @@ export class UpdatePersonalDto {
   @IsInt()
   @Min(0)
   tarifaBase?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  tarifaArbitroPrincipal?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  tarifaArbitroAsistente?: number | null;
 
   @IsOptional()
   @IsString()

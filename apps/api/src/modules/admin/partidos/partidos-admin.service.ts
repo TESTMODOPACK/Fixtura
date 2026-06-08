@@ -29,6 +29,7 @@ import type {
 } from '@fixtura/types';
 
 import { Cancha } from '../../competition/entities/cancha.entity';
+import { Designacion } from '../../competition/entities/designacion.entity';
 import { DiaNoJugable } from '../../competition/entities/dia-no-jugable.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
@@ -64,6 +65,8 @@ export class PartidosAdminService {
     @InjectRepository(Cancha) private readonly canchaRepo: Repository<Cancha>,
     @InjectRepository(DiaNoJugable)
     private readonly diaNoJugableRepo: Repository<DiaNoJugable>,
+    @InjectRepository(Designacion)
+    private readonly designacionRepo: Repository<Designacion>,
     private readonly push: PushService,
     // Sprint 34D — hooks de multas automaticas al cerrar acta y walkover.
     private readonly tarifaAplicador: TarifaAplicadorService,
@@ -505,6 +508,27 @@ export class PartidosAdminService {
     if (input.observaciones !== undefined) partido.observaciones = input.observaciones;
 
     await this.repo.save(partido);
+
+    // F51.2 — Devengo de pagos a personal: al cerrar el acta, el personal
+    // designado en este partido que estaba PROPUESTA/CONFIRMADA queda
+    // ASISTIO (el partido se jugó). Esto genera las cuentas por pagar
+    // (ADR-0006). RECHAZADA/AUSENTE/ya-ASISTIO se respetan; el admin puede
+    // corregir a AUSENTE a quien no se haya presentado. Best-effort: no
+    // bloquea el cierre del acta.
+    try {
+      await this.designacionRepo
+        .createQueryBuilder()
+        .update(Designacion)
+        .set({ estado: 'ASISTIO' })
+        .where('partido_id = :partidoId', { partidoId: partido.id })
+        .andWhere('tenant_id = :tenantId', { tenantId })
+        .andWhere(`estado IN ('PROPUESTA', 'CONFIRMADA')`)
+        .execute();
+    } catch (err) {
+      console.warn(
+        `[partido] auto-ASISTIO designaciones falló partido=${partido.id}: ${(err as Error).message}`,
+      );
+    }
 
     // ─── CASCADA POST-ACTA ───────────────────────────────────────────
     // 1. Detectar sanciones automáticas por las incidencias de este

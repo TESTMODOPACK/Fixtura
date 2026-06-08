@@ -11,7 +11,13 @@ import {
   Query,
 } from '@nestjs/common';
 
-import { ROLE, type CobroAdmin, type UserContext } from '@fixtura/types';
+import {
+  CATEGORIA_COBRO,
+  ROLE,
+  type CategoriaCobro,
+  type CobroAdmin,
+  type UserContext,
+} from '@fixtura/types';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -42,6 +48,7 @@ export class CobrosAdminController {
     @Query('torneoId') torneoId?: string,
     @Query('clubId') clubId?: string,
     @Query('soloAuto') soloAuto?: string,
+    @Query('categoria') categoria?: string,
   ): Promise<CobroAdmin[]> {
     const filtroValid =
       filtro === 'pendientes' ||
@@ -55,6 +62,9 @@ export class CobrosAdminController {
     // = sin filtro (devuelve auto + manual).
     const soloAutoValid =
       soloAuto === 'true' ? true : soloAuto === 'false' ? false : undefined;
+    const categoriaValid = CATEGORIA_COBRO.includes(categoria as CategoriaCobro)
+      ? (categoria as CategoriaCobro)
+      : undefined;
     return this.svc.list(
       ensureTenant(user),
       filtroValid,
@@ -62,6 +72,7 @@ export class CobrosAdminController {
       torneoId || undefined,
       clubId || undefined,
       soloAutoValid,
+      categoriaValid,
     );
   }
 
