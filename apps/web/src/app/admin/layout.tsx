@@ -22,6 +22,7 @@ import {
   Trophy,
   UserCog,
   Users,
+  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -67,6 +68,7 @@ const NAV: NavSection[] = [
     title: 'Operaciones',
     items: [
       { href: '/admin/finanzas', label: 'Finanzas & cobros', icon: PiggyBank },
+      { href: '/admin/pagos-personal', label: 'Pagos a personal', icon: Wallet },
       { href: '/admin/canchas', label: 'Ocupación canchas', icon: Calendar },
       { href: '/admin/mi-suscripcion', label: 'Mi suscripción', icon: FileText },
       { href: '/admin/analytics', label: 'Analytics & NPS', icon: BarChart3, comingSoon: true },

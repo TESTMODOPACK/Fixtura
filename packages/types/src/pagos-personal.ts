@@ -1,0 +1,118 @@
+import { z } from 'zod';
+
+import { ROL_PERSONAL } from './personal';
+
+/**
+ * F47 (ADR-0006) — Pagos a personal (cuentas por pagar).
+ *
+ * Devengo: una designación genera deuda cuando su estado pasa a ASISTIO.
+ * El monto adeudado es `Designacion.montoPago` (heredado de la tarifa base
+ * del personal, editable por designación).
+ *
+ * Cuenta pendiente = designación ASISTIO con `liquidacion_id` NULL.
+ * Pagar = crear una `LiquidacionPersonal` que agrupa N designaciones de una
+ * misma persona; cada designación queda con `liquidacion_id` apuntando a ella.
+ * Revertir = eliminar la liquidación (ON DELETE SET NULL las libera).
+ */
+
+export const METODO_PAGO_LIQUIDACION = [
+  'TRANSFERENCIA',
+  'EFECTIVO',
+  'OTRO',
+] as const;
+export type MetodoPagoLiquidacion = (typeof METODO_PAGO_LIQUIDACION)[number];
+
+export const METODO_PAGO_LIQUIDACION_LABEL: Record<
+  MetodoPagoLiquidacion,
+  string
+> = {
+  TRANSFERENCIA: 'Transferencia',
+  EFECTIVO: 'Efectivo',
+  OTRO: 'Otro',
+};
+
+/** Una designación ASISTIO pendiente de pago (línea de cuenta por pagar). */
+export const DesignacionPendientePagoSchema = z.object({
+  designacionId: z.uuid(),
+  partidoId: z.uuid(),
+  torneoId: z.uuid(),
+  torneoNombre: z.string(),
+  fechaNumero: z.number().int().nullable(),
+  fechaHora: z.iso.datetime().nullable(),
+  equipoLocalNombre: z.string(),
+  equipoVisitaNombre: z.string(),
+  rolAsignado: z.string(),
+  monto: z.number().int(),
+});
+export type DesignacionPendientePago = z.infer<
+  typeof DesignacionPendientePagoSchema
+>;
+
+/** Cuenta por pagar agrupada por persona: lo que se le debe en total. */
+export const CuentaPorPagarPersonaSchema = z.object({
+  personalId: z.uuid(),
+  nombre: z.string(),
+  apellido: z.string(),
+  rut: z.string().nullable(),
+  rol: z.enum(ROL_PERSONAL),
+  // Designaciones ASISTIO sin liquidar.
+  designacionesCount: z.number().int(),
+  totalPendiente: z.number().int(),
+  detalle: z.array(DesignacionPendientePagoSchema),
+});
+export type CuentaPorPagarPersona = z.infer<
+  typeof CuentaPorPagarPersonaSchema
+>;
+
+export const CuentasPorPagarResumenSchema = z.object({
+  personas: z.array(CuentaPorPagarPersonaSchema),
+  totalPendienteGlobal: z.number().int(),
+  // Designaciones ASISTIO sin montoPago definido (no se pueden liquidar).
+  sinMontoCount: z.number().int(),
+});
+export type CuentasPorPagarResumen = z.infer<
+  typeof CuentasPorPagarResumenSchema
+>;
+
+/** Una liquidación (pago) ya registrada. */
+export const LiquidacionPersonalSchema = z.object({
+  id: z.uuid(),
+  personalId: z.uuid(),
+  personalNombre: z.string(),
+  personalApellido: z.string(),
+  total: z.number().int(),
+  metodoPago: z.enum(METODO_PAGO_LIQUIDACION),
+  comprobante: z.string().nullable(),
+  observaciones: z.string().nullable(),
+  fechaPago: z.string(), // YYYY-MM-DD
+  designacionesCount: z.number().int(),
+  createdByNombre: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+});
+export type LiquidacionPersonal = z.infer<typeof LiquidacionPersonalSchema>;
+
+/** Detalle de una liquidación: la cabecera + las designaciones que saldó. */
+export const LiquidacionPersonalDetalleSchema = LiquidacionPersonalSchema.extend(
+  {
+    detalle: z.array(DesignacionPendientePagoSchema),
+  },
+);
+export type LiquidacionPersonalDetalle = z.infer<
+  typeof LiquidacionPersonalDetalleSchema
+>;
+
+/**
+ * Crear una liquidación. `designacionIds` deben ser todas de la misma persona,
+ * en estado ASISTIO y sin liquidar; el backend valida y calcula el `total`
+ * como snapshot (no se confía en un total provisto por el cliente).
+ */
+export const CrearLiquidacionSchema = z.object({
+  personalId: z.uuid(),
+  designacionIds: z.array(z.uuid()).min(1),
+  metodoPago: z.enum(METODO_PAGO_LIQUIDACION),
+  comprobante: z.string().max(200).optional().nullable(),
+  observaciones: z.string().max(500).optional().nullable(),
+  // YYYY-MM-DD. Si se omite, el backend usa la fecha de hoy (America/Santiago).
+  fechaPago: z.string().min(10).max(10).optional(),
+});
+export type CrearLiquidacionRequest = z.infer<typeof CrearLiquidacionSchema>;

@@ -223,6 +223,43 @@ async function main(): Promise<void> {
     `);
     log('partido_jugadores + partidos.presentes_certificados_* asegurados (F46.4).');
 
+    // F47 (ADR-0006) — Pagos a personal: liquidaciones (pago agrupado por
+    // persona) + columna liquidacion_id en designaciones. Las cuentas por
+    // pagar pendientes = designaciones ASISTIO con liquidacion_id NULL.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS liquidaciones_personal (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        personal_id   UUID NOT NULL REFERENCES personal(id) ON DELETE CASCADE,
+        total         INTEGER NOT NULL DEFAULT 0,
+        metodo_pago   VARCHAR(20) NOT NULL DEFAULT 'TRANSFERENCIA'
+                        CHECK (metodo_pago IN ('TRANSFERENCIA','EFECTIVO','OTRO')),
+        comprobante   TEXT,
+        observaciones TEXT,
+        fecha_pago    DATE NOT NULL,
+        created_by    UUID REFERENCES users(id) ON DELETE SET NULL,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await ensureRls(client, 'liquidaciones_personal');
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_liquidaciones_personal_tenant ON liquidaciones_personal(tenant_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_liquidaciones_personal_personal ON liquidaciones_personal(personal_id)`,
+    );
+    await ensureTrigger(client, 'liquidaciones_personal');
+    await client.query(`
+      ALTER TABLE designaciones
+        ADD COLUMN IF NOT EXISTS liquidacion_id UUID
+          REFERENCES liquidaciones_personal(id) ON DELETE SET NULL
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_designaciones_liquidacion ON designaciones(liquidacion_id)`,
+    );
+    log('liquidaciones_personal + designaciones.liquidacion_id asegurados (F47).');
+
     // Sprint 14: tabla push_subscriptions (notificaciones FCM/WebPush).
     await ensurePushSubscriptionsTable(client, log);
 

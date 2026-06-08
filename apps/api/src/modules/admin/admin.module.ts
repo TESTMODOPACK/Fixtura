@@ -49,6 +49,8 @@ import { JugadoresGlobalController } from './jugadores-global/jugadores-global.c
 import { JugadoresGlobalService } from './jugadores-global/jugadores-global.service';
 import { DunningModule } from './dunning/dunning.module';
 import { PagosModule } from './pagos/pagos.module';
+import { PagosPersonalController } from './pagos-personal/pagos-personal.controller';
+import { PagosPersonalService } from './pagos-personal/pagos-personal.service';
 import { PushModule } from './push/push.module';
 import {
   FixtureDetailController,
@@ -127,6 +129,7 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     InscripcionesItemController,
     VetadosAdminController,
     HorariosAdminController,
+    PagosPersonalController,
   ],
   providers: [
     TemporadasAdminService,
@@ -161,6 +164,7 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     InscripcionesAdminService,
     VetadosAdminService,
     HorariosAdminService,
+    PagosPersonalService,
   ],
   exports: [DiasNoJugablesService, VetadosAdminService],
 })

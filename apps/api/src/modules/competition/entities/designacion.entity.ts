@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { LiquidacionPersonal } from './liquidacion-personal.entity';
 import { Partido } from './partido.entity';
 import { Personal, type RolPersonal } from './personal.entity';
 
@@ -62,6 +63,15 @@ export class Designacion {
 
   @Column({ name: 'confirmado_at', type: 'timestamptz', nullable: true })
   confirmadoAt!: Date | null;
+
+  // F47 (ADR-0006) — liquidación que pagó esta designación. NULL + estado
+  // ASISTIO = cuenta por pagar pendiente.
+  @Column({ name: 'liquidacion_id', type: 'uuid', nullable: true })
+  liquidacionId!: string | null;
+
+  @ManyToOne(() => LiquidacionPersonal, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'liquidacion_id' })
+  liquidacion?: LiquidacionPersonal | null;
 
   @Column({ type: 'text', nullable: true })
   notas!: string | null;

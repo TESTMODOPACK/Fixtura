@@ -20,6 +20,7 @@ import {
   Jugador,
   JugadorInscrito,
   JugadorVetado,
+  LiquidacionPersonal,
   Partido,
   PartidoJugador,
   Personal,

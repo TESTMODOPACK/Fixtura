@@ -36,6 +36,8 @@ export type {
 } from './jugador.entity';
 export { JugadorVetado } from './jugador-vetado.entity';
 export type { OrigenVeto } from './jugador-vetado.entity';
+export { LiquidacionPersonal } from './liquidacion-personal.entity';
+export type { MetodoPagoLiquidacion } from './liquidacion-personal.entity';
 export { InscripcionTorneo } from './inscripcion-torneo.entity';
 export type { EstadoInscripcion } from './inscripcion-torneo.entity';
 export { PlanillaTorneo } from './planilla-torneo.entity';

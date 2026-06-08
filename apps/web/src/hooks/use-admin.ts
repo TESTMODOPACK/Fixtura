@@ -2345,3 +2345,67 @@ export function useGenerarCobros(torneoId: string) {
     },
   });
 }
+
+// ─── F47: Pagos a personal (cuentas por pagar) ──────────────────────
+import type {
+  CrearLiquidacionRequest,
+  CuentasPorPagarResumen,
+  LiquidacionPersonal,
+  LiquidacionPersonalDetalle,
+} from '@fixtura/types';
+
+const PAGOS_PERSONAL_KEY = ['admin', 'pagos-personal'] as const;
+
+export function useCuentasPorPagar() {
+  return useQuery({
+    queryKey: [...PAGOS_PERSONAL_KEY, 'cuentas'],
+    queryFn: () =>
+      apiFetch<CuentasPorPagarResumen>('/admin/pagos-personal/cuentas-por-pagar'),
+  });
+}
+
+export function useLiquidaciones() {
+  return useQuery({
+    queryKey: [...PAGOS_PERSONAL_KEY, 'liquidaciones'],
+    queryFn: () =>
+      apiFetch<LiquidacionPersonal[]>('/admin/pagos-personal/liquidaciones'),
+  });
+}
+
+export function useLiquidacionDetalle(id: string | null) {
+  return useQuery({
+    queryKey: [...PAGOS_PERSONAL_KEY, 'liquidaciones', id],
+    enabled: !!id,
+    queryFn: () =>
+      apiFetch<LiquidacionPersonalDetalle>(
+        `/admin/pagos-personal/liquidaciones/${id}`,
+      ),
+  });
+}
+
+export function useLiquidar() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CrearLiquidacionRequest) =>
+      apiFetch<LiquidacionPersonalDetalle>('/admin/pagos-personal/liquidaciones', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PAGOS_PERSONAL_KEY });
+    },
+  });
+}
+
+export function useEliminarLiquidacion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/pagos-personal/liquidaciones/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PAGOS_PERSONAL_KEY });
+    },
+  });
+}
