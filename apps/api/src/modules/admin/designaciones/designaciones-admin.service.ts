@@ -506,6 +506,18 @@ export class DesignacionesAdminService {
    * partido. Si hay tarifa específica para el rol arbitral, prevalece; si
    * no, cae a tarifaBase (que cubre planillero / otros y el caso general).
    */
+  /**
+   * F53 — multi-rol. Roles que la persona puede ejercer; cae a [rol] si el
+   * registro viejo no tiene `roles` poblado.
+   */
+  private rolesDe(p: Personal): RolPersonal[] {
+    return p.roles && p.roles.length ? p.roles : p.rol ? [p.rol] : [];
+  }
+
+  private puedeEjercer(p: Personal, rol: RolPersonal | RolDesignablePartido): boolean {
+    return this.rolesDe(p).includes(rol as RolPersonal);
+  }
+
   private resolverTarifa(
     personal: Personal,
     rol: RolPersonal | RolDesignablePartido,
@@ -729,14 +741,10 @@ export class DesignacionesAdminService {
     const nuevasParaNotificar: string[] = [];
 
     for (const rol of roles) {
-      // F51 — Candidatos por rol. Para roles ARBITRALES (principal/asistente)
-      // cualquier árbitro es candidato a ambos roles (un principal puede
-      // actuar de asistente y viceversa); cobra según el rol del partido
-      // (resolverTarifa). Para PLANILLERO se exige match exacto: NO usamos
-      // árbitros como fallback — sería sorpresivo.
-      const esArbitral = ROLES_ARBITRAJE.includes(rol);
+      // F53 — Candidatos: personal que tiene ESE rol entre sus roles (multi).
+      // Cobra según el rol del partido (resolverTarifa).
       const candidatosBase = personalActivo.filter((p) =>
-        esArbitral ? ROLES_ARBITRAJE.includes(p.rol) : p.rol === rol,
+        this.puedeEjercer(p, rol),
       );
       // Cuántos slots de este rol se necesitan por partido (ej. 2 para
       // ARBITRO_ASISTENTE — uno por línea).
@@ -801,8 +809,10 @@ export class DesignacionesAdminService {
           // ligas libres (corporativas, barriales) el carnet ANFA no es
           // obligatorio y no debe excluir candidatos.
           if (requiereCarnetAnfa && ROLES_ARBITRAJE.includes(rol as RolPersonal)) {
+            // F53 — el carnet aplica por el rol OBJETIVO (arbitral), no por el
+            // rol base de la persona.
             const w = this.checkCarnetWarning(
-              p.rol,
+              rol as RolPersonal,
               p.carnetAnfaVence,
               hoy,
               treintaDiasMs,
@@ -1044,7 +1054,9 @@ export class DesignacionesAdminService {
     for (const rol of rolesAnalizar) {
       const slotsPorPartido = SLOTS_POR_ROL[rol];
       const slotsNecesarios = partidos.length * slotsPorPartido;
-      const candidatosBase = personalActivo.filter((p) => p.rol === rol);
+      const candidatosBase = personalActivo.filter((p) =>
+        this.puedeEjercer(p, rol),
+      );
 
       // Personal disponible/no disponible: ausencia que cubra alguna fecha
       // de la jornada (aprox. para el panel; el déficit real sale del greedy).
@@ -1081,8 +1093,12 @@ export class DesignacionesAdminService {
             if (this.tieneAusenciaEnFecha(ausenciasMap, p.id, partidoFecha)) return false;
             if (requiereCarnetAnfa && ROLES_ARBITRAJE.includes(rol as RolPersonal)) {
               if (
-                this.checkCarnetWarning(p.rol, p.carnetAnfaVence, hoy, treintaDiasMs) ===
-                'VENCIDO'
+                this.checkCarnetWarning(
+                  rol as RolPersonal,
+                  p.carnetAnfaVence,
+                  hoy,
+                  treintaDiasMs,
+                ) === 'VENCIDO'
               ) {
                 return false;
               }

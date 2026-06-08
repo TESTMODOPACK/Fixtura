@@ -85,7 +85,10 @@ export const PersonalAdminSchema = z.object({
   nombre: z.string(),
   apellido: z.string(),
   rut: z.string().nullable(),
+  // Rol primario (= roles[0]); se mantiene para display/agrupación.
   rol: z.enum(ROL_PERSONAL),
+  // F53 — todos los roles que la persona puede ejercer.
+  roles: z.array(z.enum(ROL_PERSONAL)),
   telefono: z.string().nullable(),
   email: z.string().nullable(),
   tarifaBase: z.number().int().nullable(),
@@ -111,7 +114,10 @@ export const CreatePersonalSchema = z.object({
   nombre: z.string().min(2).max(100),
   apellido: z.string().min(2).max(100),
   rut: z.string().max(20).optional().nullable(),
-  rol: z.enum(ROL_PERSONAL),
+  // F53 — roles que la persona puede ejercer (multi). El rol primario se
+  // deriva del primero. `rol` queda opcional por compatibilidad.
+  roles: z.array(z.enum(ROL_PERSONAL)).min(1, 'Elegí al menos un rol'),
+  rol: z.enum(ROL_PERSONAL).optional(),
   telefono: z.string().max(30).optional().nullable(),
   email: z.string().email().max(150).optional().nullable(),
   tarifaBase: z.number().int().min(0).optional().nullable(),

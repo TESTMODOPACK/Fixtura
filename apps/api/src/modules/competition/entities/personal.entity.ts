@@ -59,8 +59,16 @@ export class Personal {
   @Column({ type: 'varchar', length: 20, nullable: true })
   rut!: string | null;
 
+  // Rol "primario" (= roles[0]). Se mantiene para display/agrupación y
+  // compatibilidad con lecturas existentes.
   @Column({ type: 'varchar', length: 30 })
   rol!: RolPersonal;
+
+  // F53 — multi-rol: todos los roles que la persona puede ejercer. simple-array
+  // (texto separado por comas). Puede ser null en registros muy viejos →
+  // el código cae a [rol].
+  @Column({ type: 'simple-array', nullable: true })
+  roles!: RolPersonal[] | null;
 
   @Column({ type: 'varchar', length: 30, nullable: true })
   telefono!: string | null;

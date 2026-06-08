@@ -290,14 +290,17 @@ function PersonaRow({
               inactivo
             </span>
           )}
-          <span
-            className={cn(
-              'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
-              ROL_BADGE[persona.rol],
-            )}
-          >
-            {ROL_LABEL[persona.rol]}
-          </span>
+          {(persona.roles?.length ? persona.roles : [persona.rol]).map((r) => (
+            <span
+              key={r}
+              className={cn(
+                'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
+                ROL_BADGE[r],
+              )}
+            >
+              {ROL_LABEL[r]}
+            </span>
+          ))}
           {aplicaCarnet && status === 'VENCIDO' && (
             <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-danger/15 text-danger flex items-center gap-1">
               <AlertTriangle size={11} /> Carnet vencido
@@ -517,7 +520,7 @@ function EditarPersonalForm({
   onSubmit: (vals: {
     nombre: string;
     apellido: string;
-    rol: RolPersonal;
+    roles: RolPersonal[];
     rut: string | null;
     telefono: string | null;
     email: string | null;
@@ -539,7 +542,7 @@ function EditarPersonalForm({
   const Schema = z.object({
     nombre: z.string().min(2).max(100),
     apellido: z.string().min(2).max(100),
-    rol: z.enum(ROL_PERSONAL),
+    roles: z.array(z.enum(ROL_PERSONAL)).min(1, 'Elegí al menos un rol'),
     rut: z
       .string()
       .optional()
@@ -565,7 +568,7 @@ function EditarPersonalForm({
     defaultValues: {
       nombre: persona.nombre,
       apellido: persona.apellido,
-      rol: persona.rol,
+      roles: persona.roles,
       rut: persona.rut ?? '',
       telefono: persona.telefono ?? '',
       email: persona.email ?? '',
@@ -582,14 +585,15 @@ function EditarPersonalForm({
       notas: persona.notas ?? '',
     },
   });
-  const rol = form.watch('rol');
-  const aplicaCarnet = ROLES_ARBITRAJE.includes(rol);
+  const rolesWatch = form.watch('roles');
+  const rolesSel = Array.isArray(rolesWatch) ? rolesWatch : [];
+  const aplicaCarnet = rolesSel.some((r) => ROLES_ARBITRAJE.includes(r));
 
   const handle = async (vals: Form): Promise<void> => {
     await onSubmit({
       nombre: vals.nombre,
       apellido: vals.apellido,
-      rol: vals.rol,
+      roles: vals.roles,
       rut: vals.rut || null,
       telefono: vals.telefono || null,
       email: vals.email || null,
@@ -629,15 +633,26 @@ function EditarPersonalForm({
         {...form.register('apellido')}
         error={form.formState.errors.apellido?.message}
       />
-      <div>
-        <label className="label">Rol</label>
-        <select className="input" {...form.register('rol')}>
+      <div className="md:col-span-2">
+        <label className="label">Roles (podés marcar varios)</label>
+        <div className="flex flex-wrap gap-x-4 gap-y-2 mt-1">
           {ROL_PERSONAL.map((r) => (
-            <option key={r} value={r}>
+            <label key={r} className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                value={r}
+                className="h-4 w-4"
+                {...form.register('roles')}
+              />
               {ROL_LABEL[r]}
-            </option>
+            </label>
           ))}
-        </select>
+        </div>
+        {form.formState.errors.roles && (
+          <p className="text-xs text-danger mt-1">
+            {form.formState.errors.roles.message}
+          </p>
+        )}
       </div>
       <Input
         label="RUT"
@@ -744,7 +759,7 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
   const Schema = z.object({
     nombre: z.string().min(2, 'Mínimo 2 caracteres').max(100),
     apellido: z.string().min(2, 'Mínimo 2 caracteres').max(100),
-    rol: z.enum(ROL_PERSONAL),
+    roles: z.array(z.enum(ROL_PERSONAL)).min(1, 'Elegí al menos un rol'),
     rut: z
       .string()
       .optional()
@@ -767,16 +782,17 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
 
   const form = useForm<Form>({
     resolver: zodResolver(Schema),
-    defaultValues: { rol: 'ARBITRO_PRINCIPAL' },
+    defaultValues: { roles: ['ARBITRO_PRINCIPAL'] },
   });
-  const rol = form.watch('rol');
-  const aplicaCarnet = ROLES_ARBITRAJE.includes(rol);
+  const rolesWatch = form.watch('roles');
+  const rolesSel = Array.isArray(rolesWatch) ? rolesWatch : [];
+  const aplicaCarnet = rolesSel.some((r) => ROLES_ARBITRAJE.includes(r));
 
   const onSubmit = async (vals: Form): Promise<void> => {
     await mutation.mutateAsync({
       nombre: vals.nombre,
       apellido: vals.apellido,
-      rol: vals.rol,
+      roles: vals.roles,
       rut: vals.rut || null,
       telefono: vals.telefono || null,
       email: vals.email || null,
@@ -823,15 +839,26 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
           error={form.formState.errors.apellido?.message}
         />
 
-        <div>
-          <label className="label">Rol</label>
-          <select className="input" {...form.register('rol')}>
+        <div className="md:col-span-2">
+          <label className="label">Roles (podés marcar varios)</label>
+          <div className="flex flex-wrap gap-x-4 gap-y-2 mt-1">
             {ROL_PERSONAL.map((r) => (
-              <option key={r} value={r}>
+              <label key={r} className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  value={r}
+                  className="h-4 w-4"
+                  {...form.register('roles')}
+                />
                 {ROL_LABEL[r]}
-              </option>
+              </label>
             ))}
-          </select>
+          </div>
+          {form.formState.errors.roles && (
+            <p className="text-xs text-danger mt-1">
+              {form.formState.errors.roles.message}
+            </p>
+          )}
         </div>
         <Input
           label="RUT"

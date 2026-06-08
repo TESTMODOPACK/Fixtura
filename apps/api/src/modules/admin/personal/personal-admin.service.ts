@@ -210,11 +210,15 @@ export class PersonalAdminService {
   }
 
   async create(tenantId: string, input: CreatePersonalDto): Promise<PersonalAdmin> {
+    // F53 — multi-rol. El rol primario se deriva del primero seleccionado.
+    const roles = input.roles?.length ? input.roles : input.rol ? [input.rol] : [];
+    const rolPrimario = roles[0];
     const entity = this.repo.create({
       tenantId,
       nombre: input.nombre,
       apellido: input.apellido,
-      rol: input.rol,
+      rol: rolPrimario,
+      roles,
       rut: input.rut ?? null,
       telefono: input.telefono ?? null,
       email: input.email ?? null,
@@ -242,10 +246,14 @@ export class PersonalAdminService {
   ): Promise<PersonalAdmin> {
     const p = await this.repo.findOne({ where: { id, tenantId } });
     if (!p) throw new NotFoundException(`Personal ${id} no encontrado`);
+    // F53 — si llegan roles, recalculamos roles + rol primario.
+    const rolesNuevos =
+      input.roles && input.roles.length ? input.roles : undefined;
     Object.assign(p, {
       nombre: input.nombre ?? p.nombre,
       apellido: input.apellido ?? p.apellido,
-      rol: input.rol ?? p.rol,
+      roles: rolesNuevos ?? p.roles,
+      rol: rolesNuevos ? rolesNuevos[0] : input.rol ?? p.rol,
       rut: input.rut === undefined ? p.rut : input.rut,
       telefono: input.telefono === undefined ? p.telefono : input.telefono,
       email: input.email === undefined ? p.email : input.email,
@@ -308,6 +316,7 @@ export class PersonalAdminService {
       apellido: p.apellido,
       rut: p.rut,
       rol: p.rol,
+      roles: p.roles && p.roles.length ? p.roles : [p.rol],
       telefono: p.telefono,
       email: p.email,
       tarifaBase: p.tarifaBase,

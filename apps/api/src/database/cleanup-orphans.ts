@@ -325,6 +325,15 @@ async function main(): Promise<void> {
     `);
     log('personal.tarifa_arbitro_principal/asistente asegurados (F51).');
 
+    // F53 — multi-rol: una persona puede ejercer varios roles. `roles` es
+    // simple-array (texto separado por comas). Backfill desde `rol` (single)
+    // para los registros existentes.
+    await client.query(`ALTER TABLE personal ADD COLUMN IF NOT EXISTS roles TEXT`);
+    await client.query(
+      `UPDATE personal SET roles = rol WHERE (roles IS NULL OR roles = '') AND rol IS NOT NULL`,
+    );
+    log('personal.roles (multi-rol) asegurado + backfill (F53).');
+
     // Sprint 14: tabla push_subscriptions (notificaciones FCM/WebPush).
     await ensurePushSubscriptionsTable(client, log);
 

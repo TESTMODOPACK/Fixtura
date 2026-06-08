@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMinSize,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEmail,
@@ -32,8 +34,15 @@ export class CreatePersonalDto {
   @MaxLength(100)
   apellido!: string;
 
+  // F53 — roles múltiples. El rol primario se deriva del primero.
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsIn(ROL_PERSONAL, { each: true })
+  roles!: RolPersonal[];
+
+  @IsOptional()
   @IsIn(ROL_PERSONAL)
-  rol!: RolPersonal;
+  rol?: RolPersonal;
 
   @IsOptional()
   @IsString()
@@ -120,6 +129,12 @@ export class UpdatePersonalDto {
   @MinLength(2)
   @MaxLength(100)
   apellido?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsIn(ROL_PERSONAL, { each: true })
+  roles?: RolPersonal[];
 
   @IsOptional()
   @IsIn(ROL_PERSONAL)
