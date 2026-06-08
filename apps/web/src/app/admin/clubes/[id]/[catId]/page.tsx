@@ -26,6 +26,7 @@ import { PlantelTab } from '../_plantel-tab';
 
 import { DirectivaCategoriaForm } from './_directiva-categoria-form';
 import { EditarClubDrawer } from './_editar-club-drawer';
+import { DelegadoClubCard } from '@/components/delegado-club-card';
 
 /**
  * Sprint 32 — ficha del club por categoría.
@@ -246,6 +247,9 @@ export default function ClubCategoriaPage({
           </div>
         </Card>
       </div>
+
+      {/* Acceso del delegado (alcance club, F55) */}
+      <DelegadoClubCard clubId={id} />
 
       {/* Directiva de la categoría */}
       <Card padding="roomy" className="mb-5">
