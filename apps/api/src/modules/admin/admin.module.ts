@@ -78,6 +78,15 @@ import { TribunalAdminController } from './tribunal/tribunal-admin.controller';
 import { TribunalAdminService } from './tribunal/tribunal-admin.service';
 import { VetadosAdminController } from './vetados/vetados-admin.controller';
 import { VetadosAdminService } from './vetados/vetados-admin.service';
+import { MagicLink } from '../auth/entities/magic-link.entity';
+import { UsersModule } from '../users/users.module';
+import {
+  DelegadoAdminController,
+  DelegadoController,
+  DelegadoPublicController,
+} from './delegado/delegado.controller';
+import { DelegadoInviteService } from './delegado/delegado-invite.service';
+import { DelegadoPortalService } from './delegado/delegado-portal.service';
 
 /**
  * Módulo admin — endpoints autenticados bajo /api/v1/admin/*.
@@ -94,9 +103,11 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     PagosModule,
     DunningModule,
     PushModule,
+    UsersModule,
     // Ajustes necesita Tenant + User + UserRole — los registramos
     // localmente (no se duplican: TypeORM resuelve la metadata).
-    TypeOrmModule.forFeature([Tenant, User, UserRole]),
+    // F55: MagicLink para el estado de invitación del delegado.
+    TypeOrmModule.forFeature([Tenant, User, UserRole, MagicLink]),
   ],
   controllers: [
     TemporadasAdminController,
@@ -130,6 +141,9 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     VetadosAdminController,
     HorariosAdminController,
     PagosPersonalController,
+    DelegadoController,
+    DelegadoAdminController,
+    DelegadoPublicController,
   ],
   providers: [
     TemporadasAdminService,
@@ -165,6 +179,8 @@ import { VetadosAdminService } from './vetados/vetados-admin.service';
     VetadosAdminService,
     HorariosAdminService,
     PagosPersonalService,
+    DelegadoInviteService,
+    DelegadoPortalService,
   ],
   exports: [DiasNoJugablesService, VetadosAdminService],
 })

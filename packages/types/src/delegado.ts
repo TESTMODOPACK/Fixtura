@@ -85,18 +85,17 @@ export type MiClubDelegado = z.infer<typeof MiClubDelegadoSchema>;
 export const JugadorDelegadoSchema = z.object({
   id: z.uuid(),
   nombre: z.string(),
-  apellido: z.string().nullable(),
+  apellido: z.string(),
   rut: z.string().nullable(),
   numeroCamiseta: z.number().int().nullable(),
   posicion: z.string().nullable(),
   estado: z.string(),
-  esRefuerzo: z.boolean(),
 });
 export type JugadorDelegado = z.infer<typeof JugadorDelegadoSchema>;
 
+/** El plantel del club se agrupa por categoría (Jugador es club+categoría). */
 export const PlantelCategoriaDelegadoSchema = z.object({
-  inscripcionId: z.uuid(),
-  torneoNombre: z.string(),
+  categoriaId: z.uuid(),
   categoriaNombre: z.string().nullable(),
   jugadores: z.array(JugadorDelegadoSchema),
 });
