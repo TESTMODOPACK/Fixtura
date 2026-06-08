@@ -53,6 +53,17 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
+/**
+ * Campo CLP opcional. Un <input type="number"> vacío con valueAsNumber
+ * entrega NaN, que NO es undefined → z.number().optional() lo rechaza y el
+ * submit fallaba en silencio. Normalizamos vacío/NaN → undefined.
+ */
+const clpOpcional = z.preprocess((v) => {
+  if (v === '' || v === undefined || v === null) return undefined;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isNaN(n) ? undefined : n;
+}, z.number().int().min(0).optional());
+
 const ROL_LABEL: Record<RolPersonal, string> = {
   ARBITRO_PRINCIPAL: 'Árbitro principal',
   ARBITRO_ASISTENTE: 'Árbitro asistente',
@@ -549,9 +560,9 @@ function EditarPersonalForm({
       .refine((v) => !v || validarRut(v), 'RUT inválido (verificá el dígito verificador)'),
     telefono: z.string().optional(),
     email: z.union([z.literal(''), z.string().email('Email inválido')]).optional(),
-    tarifaBase: z.coerce.number().int().min(0).optional(),
-    tarifaArbitroPrincipal: z.coerce.number().int().min(0).optional(),
-    tarifaArbitroAsistente: z.coerce.number().int().min(0).optional(),
+    tarifaBase: clpOpcional,
+    tarifaArbitroPrincipal: clpOpcional,
+    tarifaArbitroAsistente: clpOpcional,
     carnetAnfaNumero: z.string().optional(),
     carnetAnfaVence: z.string().optional(),
     banco: z.string().max(60).optional(),
@@ -766,9 +777,9 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
       .refine((v) => !v || validarRut(v), 'RUT inválido (verificá el dígito verificador)'),
     telefono: z.string().optional(),
     email: z.union([z.literal(''), z.string().email('Email inválido')]).optional(),
-    tarifaBase: z.coerce.number().int().min(0).optional(),
-    tarifaArbitroPrincipal: z.coerce.number().int().min(0).optional(),
-    tarifaArbitroAsistente: z.coerce.number().int().min(0).optional(),
+    tarifaBase: clpOpcional,
+    tarifaArbitroPrincipal: clpOpcional,
+    tarifaArbitroAsistente: clpOpcional,
     carnetAnfaNumero: z.string().optional(),
     carnetAnfaVence: z.string().optional(),
     banco: z.string().max(60).optional(),
