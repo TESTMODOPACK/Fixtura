@@ -493,6 +493,24 @@ function EditarPartidoCard({
   const canchaIdSeleccionada = form.watch('canchaId');
   const error = mutation.error as ApiError | undefined;
 
+  // El dropdown lista solo canchas DISPONIBLE (useCanchas(true)) para las
+  // asignaciones nuevas. Pero si el partido YA tiene una cancha que después
+  // se marcó NO_DISPONIBLE (o se "eliminó"), esa cancha no vendría en la
+  // lista y desaparecería del select → al guardar se perdería en silencio.
+  // La agregamos siempre como opción usando el nombre que ya guarda el
+  // partido, marcándola como no disponible.
+  const opcionesCancha: Array<{ id: string; label: string }> = (canchas ?? []).map(
+    (c) => ({ id: c.id, label: c.nombre }),
+  );
+  const canchaAsignadaFaltante =
+    !!partido.canchaId && !opcionesCancha.some((o) => o.id === partido.canchaId);
+  if (canchaAsignadaFaltante) {
+    opcionesCancha.push({
+      id: partido.canchaId as string,
+      label: `${partido.canchaNombre ?? 'Cancha asignada'} (no disponible)`,
+    });
+  }
+
   // Sprint 44 — Aviso si el partido vino sin horario o cancha asignados.
   // Suele pasar cuando el generador del fixture corrió en un día sin
   // slots cargados (bug del Sprint 44 ya corregido) — los fixtures
@@ -545,12 +563,18 @@ function EditarPartidoCard({
             disabled={cerrada}
           >
             <option value="">— Sin cancha del catálogo —</option>
-            {canchas?.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
+            {opcionesCancha.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
               </option>
             ))}
           </select>
+          {canchaAsignadaFaltante && (
+            <p className="text-[11px] text-orange-700 mt-1 leading-snug">
+              La cancha asignada está marcada como no disponible. Sigue válida
+              para este partido; elegí otra solo si querés reasignarlo.
+            </p>
+          )}
           {!canchaIdSeleccionada && (
             <input
               type="text"
