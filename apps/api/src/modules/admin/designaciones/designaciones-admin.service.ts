@@ -11,6 +11,7 @@ import type {
   AutoAsignarResult,
   CoberturaFecha,
   CoberturaRol,
+  ConflictoDobleBooking,
   DesignacionAdmin,
   DesignacionesPorFecha,
   EstadoDesignacion,
@@ -44,6 +45,17 @@ const ROLES_ARBITRAJE: ReadonlyArray<RolPersonal> = [
  * se marca conflicto.
  */
 const DOBLE_BOOKING_HORAS = 2;
+
+/**
+ * Ocupación de una persona en un partido concreto, usada para detectar
+ * doble booking. Solo incluye designaciones que realmente ocupan a la
+ * persona (se excluyen RECHAZADA/AUSENTE al construir el mapa).
+ */
+type OcupacionPersonal = {
+  partidoId: string;
+  fechaHora: Date | null;
+  canchaNombre: string | null;
+};
 
 /**
  * Etiquetas [singular, plural] por rol para armar el resumen de cobertura.
@@ -120,7 +132,7 @@ export class DesignacionesAdminService {
     // las 18:00 y a un partido de la fecha 4 también a las 18:00 del
     // mismo día calendario).
     const personalIdsInvolucrados = Array.from(new Set(designaciones.map((d) => d.personalId)));
-    const porPersonal = new Map<string, Array<{ partidoId: string; fechaHora: Date | null }>>();
+    const porPersonal = new Map<string, OcupacionPersonal[]>();
 
     if (personalIdsInvolucrados.length > 0) {
       const cruceRaw = await this.repo
@@ -130,18 +142,29 @@ export class DesignacionesAdminService {
           personalIds: personalIdsInvolucrados,
         })
         .andWhere('d2.tenant_id = :tenantId', { tenantId })
+        // Una designación RECHAZADA/AUSENTE NO ocupa a la persona, así que no
+        // debe generar conflicto de doble booking (consistente con el
+        // auto-asignar y el análisis de cobertura).
+        .andWhere(`d2.estado NOT IN ('RECHAZADA','AUSENTE')`)
         .select([
           'd2.personal_id AS "personalId"',
           'd2.partido_id AS "partidoId"',
           'partido.fecha_hora AS "fechaHora"',
+          'partido.cancha_nombre AS "canchaNombre"',
         ])
-        .getRawMany<{ personalId: string; partidoId: string; fechaHora: string | null }>();
+        .getRawMany<{
+          personalId: string;
+          partidoId: string;
+          fechaHora: string | null;
+          canchaNombre: string | null;
+        }>();
 
       for (const row of cruceRaw) {
         const arr = porPersonal.get(row.personalId) ?? [];
         arr.push({
           partidoId: row.partidoId,
           fechaHora: row.fechaHora ? new Date(row.fechaHora) : null,
+          canchaNombre: row.canchaNombre ?? null,
         });
         porPersonal.set(row.personalId, arr);
       }
@@ -199,26 +222,39 @@ export class DesignacionesAdminService {
           .where('d.personal_id IN (:...personalIds)', { personalIds })
           .andWhere('d.tenant_id = :tenantId', { tenantId })
           .andWhere('d.partido_id <> :partidoId', { partidoId })
-          .select(['d.id', 'd.personalId', 'd.partidoId', 'partido.fechaHora'])
+          // RECHAZADA/AUSENTE no ocupan a la persona → no generan conflicto.
+          .andWhere(`d.estado NOT IN ('RECHAZADA','AUSENTE')`)
+          .select([
+            'd.id',
+            'd.personalId',
+            'd.partidoId',
+            'partido.fechaHora',
+            'partido.canchaNombre',
+          ])
           .getRawMany()
       : [];
 
-    // Map: personalId → lista de { partidoId, fechaHora }. Combina las
-    // designaciones del personal en OTROS partidos + las de este partido
-    // (toDto compara cada designación contra el resto excluyendo la propia).
-    const porPersonal = new Map<string, Array<{ partidoId: string; fechaHora: Date | null }>>();
+    // Map: personalId → lista de ocupaciones. Combina las designaciones del
+    // personal en OTROS partidos + las de este partido (toDto compara cada
+    // designación contra el resto excluyendo la propia).
+    const porPersonal = new Map<string, OcupacionPersonal[]>();
     for (const row of otras) {
       const pid = row.d_personalId as string;
       const arr = porPersonal.get(pid) ?? [];
       arr.push({
         partidoId: row.d_partidoId as string,
         fechaHora: row.partido_fechaHora ? new Date(row.partido_fechaHora as string) : null,
+        canchaNombre: (row.partido_canchaNombre as string | null) ?? null,
       });
       porPersonal.set(pid, arr);
     }
     for (const d of designaciones) {
       const arr = porPersonal.get(d.personalId) ?? [];
-      arr.push({ partidoId: partido.id, fechaHora: partido.fechaHora });
+      arr.push({
+        partidoId: partido.id,
+        fechaHora: partido.fechaHora,
+        canchaNombre: partido.canchaNombre ?? null,
+      });
       porPersonal.set(d.personalId, arr);
     }
 
@@ -375,15 +411,18 @@ export class DesignacionesAdminService {
       .leftJoin('d2.partido', 'partido')
       .where('d2.personal_id = :personalId', { personalId: d.personalId })
       .andWhere('d2.tenant_id = :tenantId', { tenantId })
-      .select(['d2.id', 'd2.partidoId', 'partido.fechaHora'])
+      // RECHAZADA/AUSENTE no ocupan a la persona → no generan conflicto.
+      .andWhere(`d2.estado NOT IN ('RECHAZADA','AUSENTE')`)
+      .select(['d2.id', 'd2.partidoId', 'partido.fechaHora', 'partido.canchaNombre'])
       .getRawMany();
 
-    const porPersonal = new Map<string, Array<{ partidoId: string; fechaHora: Date | null }>>();
+    const porPersonal = new Map<string, OcupacionPersonal[]>();
     porPersonal.set(
       d.personalId,
       otras.map((r) => ({
         partidoId: r.d2_partidoId as string,
         fechaHora: r.partido_fechaHora ? new Date(r.partido_fechaHora as string) : null,
+        canchaNombre: (r.partido_canchaNombre as string | null) ?? null,
       })),
     );
 
@@ -422,16 +461,17 @@ export class DesignacionesAdminService {
   private toDto(
     d: Designacion,
     partido: Partido,
-    porPersonal: Map<string, Array<{ partidoId: string; fechaHora: Date | null }>>,
+    porPersonal: Map<string, OcupacionPersonal[]>,
     hoy: Date,
     treintaDiasMs: number,
   ): DesignacionAdmin {
-    const conflictoDobleBooking = this.checkDobleBooking(
+    const conflictoDobleBookingDetalle = this.checkDobleBooking(
       d.personalId,
       partido.id,
       partido.fechaHora,
       porPersonal,
     );
+    const conflictoDobleBooking = conflictoDobleBookingDetalle.length > 0;
 
     const carnetAnfaWarning = this.checkCarnetWarning(
       d.rolAsignado,
@@ -457,6 +497,7 @@ export class DesignacionesAdminService {
       confirmadoAt: d.confirmadoAt ? d.confirmadoAt.toISOString() : null,
       notas: d.notas,
       conflictoDobleBooking,
+      conflictoDobleBookingDetalle,
       carnetAnfaWarning,
       createdAt: d.createdAt.toISOString(),
     };
@@ -465,24 +506,39 @@ export class DesignacionesAdminService {
   /**
    * Doble booking: el mismo personal asignado a >1 partido cuya
    * fecha_hora está dentro de DOBLE_BOOKING_HORAS de diferencia.
-   * Si alguno no tiene fecha_hora, no podemos decidir → no marcamos.
+   * Si la designación no tiene fecha_hora, no podemos decidir → no marcamos.
+   *
+   * Devuelve los OTROS partidos (cancha + hora) que provocan el conflicto,
+   * para que la UI explique el porqué del aviso. Vacío = sin conflicto.
+   * `porPersonal` ya viene filtrado: solo incluye designaciones que
+   * realmente ocupan a la persona (excluye RECHAZADA/AUSENTE).
    */
   private checkDobleBooking(
     personalId: string,
     partidoId: string,
     fechaHora: Date | null,
-    porPersonal: Map<string, Array<{ partidoId: string; fechaHora: Date | null }>>,
-  ): boolean {
-    if (!fechaHora) return false;
+    porPersonal: Map<string, OcupacionPersonal[]>,
+  ): ConflictoDobleBooking[] {
+    if (!fechaHora) return [];
     const lista = porPersonal.get(personalId) ?? [];
     const margenMs = DOBLE_BOOKING_HORAS * 60 * 60 * 1000;
+    const conflictos: ConflictoDobleBooking[] = [];
+    const vistos = new Set<string>();
     for (const otro of lista) {
       if (otro.partidoId === partidoId) continue;
+      if (vistos.has(otro.partidoId)) continue;
       if (!otro.fechaHora) continue;
       const diff = Math.abs(otro.fechaHora.getTime() - fechaHora.getTime());
-      if (diff < margenMs) return true;
+      if (diff < margenMs) {
+        vistos.add(otro.partidoId);
+        conflictos.push({
+          partidoId: otro.partidoId,
+          canchaNombre: otro.canchaNombre,
+          fechaHora: otro.fechaHora.toISOString(),
+        });
+      }
     }
-    return false;
+    return conflictos;
   }
 
   private checkCarnetWarning(

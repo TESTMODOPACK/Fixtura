@@ -20,6 +20,7 @@ import {
   ROLES_DESIGNABLES_RECINTO,
   SLOTS_POR_ROL,
   type AutoAsignarResult,
+  type ConflictoDobleBooking,
   type DesignacionAdmin,
   type DesignacionRecinto,
   type EstadoDesignacion,
@@ -60,6 +61,25 @@ const ROL_ABREV: Record<RolDesignablePartido, string> = {
   ARBITRO_ASISTENTE: 'Asistente',
   PLANILLERO: 'Planilla',
 };
+
+/** Resumen humano de los partidos con los que choca un doble booking. */
+function dobleBookingResumen(detalle: ConflictoDobleBooking[]): string {
+  return detalle
+    .map((c) => {
+      const cancha = c.canchaNombre ?? 'cancha s/i';
+      const cuando = c.fechaHora
+        ? new Date(c.fechaHora).toLocaleString('es-CL', {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : 'sin hora';
+      return `${cancha} (${cuando})`;
+    })
+    .join('; ');
+}
 
 const ESTADO_LABEL: Record<EstadoDesignacion, string> = {
   PROPUESTA: 'Propuesta',
@@ -548,10 +568,27 @@ function DesignacionRow({
       </select>
 
       {desig.conflictoDobleBooking && (
-        <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-danger/15 text-danger flex items-center gap-1">
+        <span
+          className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-danger/15 text-danger flex items-center gap-1"
+          title={
+            desig.conflictoDobleBookingDetalle.length > 0
+              ? `También designado en: ${dobleBookingResumen(desig.conflictoDobleBookingDetalle)}`
+              : 'Designado en otro partido a la misma hora'
+          }
+        >
           <AlertTriangle size={11} /> Doble booking
         </span>
       )}
+      {desig.conflictoDobleBooking &&
+        desig.conflictoDobleBookingDetalle.length > 0 && (
+          <span className="basis-full text-[11px] text-danger/90 flex items-start gap-1 normal-case tracking-normal font-normal">
+            <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+            <span>
+              También designado en{' '}
+              {dobleBookingResumen(desig.conflictoDobleBookingDetalle)}
+            </span>
+          </span>
+        )}
 
       {mostrarCarnet && desig.carnetAnfaWarning === 'VENCIDO' && (
         <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-danger/15 text-danger flex items-center gap-1">

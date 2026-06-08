@@ -11,6 +11,18 @@ export const ESTADO_DESIGNACION = [
 ] as const;
 export type EstadoDesignacion = (typeof ESTADO_DESIGNACION)[number];
 
+/**
+ * Detalle de un partido que provoca doble booking: el mismo personal está
+ * designado en OTRO partido cuya hora cae dentro de la ventana de conflicto.
+ * Permite a la UI explicar el porqué del aviso (cancha + hora del otro partido).
+ */
+export const ConflictoDobleBookingSchema = z.object({
+  partidoId: z.uuid(),
+  canchaNombre: z.string().nullable(),
+  fechaHora: z.iso.datetime().nullable(),
+});
+export type ConflictoDobleBooking = z.infer<typeof ConflictoDobleBookingSchema>;
+
 export const DesignacionAdminSchema = z.object({
   id: z.uuid(),
   partidoId: z.uuid(),
@@ -25,6 +37,10 @@ export const DesignacionAdminSchema = z.object({
   confirmadoAt: z.iso.datetime().nullable(),
   notas: z.string().nullable(),
   conflictoDobleBooking: z.boolean(),
+  // Partidos concretos con los que choca (vacío si no hay conflicto). Solo
+  // considera designaciones que realmente ocupan a la persona (excluye
+  // RECHAZADA/AUSENTE).
+  conflictoDobleBookingDetalle: z.array(ConflictoDobleBookingSchema),
   carnetAnfaWarning: z.enum(['VENCIDO', 'POR_VENCER', 'OK', 'NO_APLICA']),
   createdAt: z.iso.datetime(),
 });
