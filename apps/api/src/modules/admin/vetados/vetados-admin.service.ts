@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import {
   limpiarRut,
@@ -14,7 +14,13 @@ import {
   type JugadorVetado as JugadorVetadoDto,
 } from '@fixtura/types';
 
+import { Jugador } from '../../competition/entities/jugador.entity';
 import { JugadorVetado } from '../../competition/entities/jugador-vetado.entity';
+
+interface JugadorInfo {
+  nombre: string;
+  club: string | null;
+}
 
 /**
  * Sprint 26B/26H — Mantenedor de lista negra de jugadores.
@@ -31,7 +37,39 @@ export class VetadosAdminService {
   constructor(
     @InjectRepository(JugadorVetado)
     private readonly repo: Repository<JugadorVetado>,
+    @InjectRepository(Jugador)
+    private readonly jugadorRepo: Repository<Jugador>,
   ) {}
+
+  /**
+   * Resuelve nombre + club por RUT (normalizado). Un mismo RUT puede figurar
+   * en varios clubes/categorías; tomamos el registro más reciente. Devuelve
+   * un Map rut→info para los RUTs pedidos.
+   */
+  private async resolverJugadores(
+    tenantId: string,
+    ruts: string[],
+  ): Promise<Map<string, JugadorInfo>> {
+    const limpios = Array.from(
+      new Set(ruts.map((r) => limpiarRut(r)).filter((r) => !!r)),
+    );
+    if (limpios.length === 0) return new Map();
+    const jugadores = await this.jugadorRepo.find({
+      where: { tenantId, rut: In(limpios) },
+      relations: { club: true },
+      order: { createdAt: 'DESC' },
+    });
+    const map = new Map<string, JugadorInfo>();
+    for (const j of jugadores) {
+      const rut = j.rut ? limpiarRut(j.rut) : null;
+      if (!rut || map.has(rut)) continue; // primero = más reciente
+      map.set(rut, {
+        nombre: `${j.apellidos}, ${j.nombres}`,
+        club: j.club?.nombre ?? null,
+      });
+    }
+    return map;
+  }
 
   async list(tenantId: string): Promise<JugadorVetadoDto[]> {
     const vetados = await this.repo.find({
@@ -39,7 +77,11 @@ export class VetadosAdminService {
       relations: { creadoPor: true },
       order: { createdAt: 'DESC' },
     });
-    return vetados.map((v) => this.toDto(v));
+    const infoMap = await this.resolverJugadores(
+      tenantId,
+      vetados.map((v) => v.rut),
+    );
+    return vetados.map((v) => this.toDto(v, infoMap.get(limpiarRut(v.rut))));
   }
 
   async create(
@@ -139,7 +181,8 @@ export class VetadosAdminService {
       relations: { creadoPor: true },
     });
     if (!v) throw new NotFoundException(`Veto ${id} no encontrado.`);
-    return this.toDto(v);
+    const infoMap = await this.resolverJugadores(tenantId, [v.rut]);
+    return this.toDto(v, infoMap.get(limpiarRut(v.rut)));
   }
 
   /**
@@ -157,11 +200,13 @@ export class VetadosAdminService {
     }
   }
 
-  private toDto(v: JugadorVetado): JugadorVetadoDto {
+  private toDto(v: JugadorVetado, info?: JugadorInfo): JugadorVetadoDto {
     return {
       id: v.id,
       tenantId: v.tenantId,
       rut: v.rut,
+      jugadorNombre: info?.nombre ?? null,
+      clubNombre: info?.club ?? null,
       motivo: v.motivo,
       origen: v.origen,
       creadoPorUserId: v.creadoPorUserId,

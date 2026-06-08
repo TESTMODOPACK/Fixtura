@@ -3,16 +3,27 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import PDFDocument from 'pdfkit';
 
+import { limpiarRut } from '@fixtura/types';
+
 import { Fecha } from '../../competition/entities/fecha.entity';
+import { JugadorVetado } from '../../competition/entities/jugador-vetado.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 
+interface FilaJugador {
+  numero: number | null;
+  rut: string | null;
+  nombre: string;
+  capitan: boolean;
+}
+
 /**
- * F46.5 — Genera la "plantilla física" del partido en PDF: una hoja por
- * equipo con RUT, N°, Nombre y columnas en blanco (Goles / Amarillas /
- * Rojas) para llevar a la cancha y completar a mano. El roster sale de la
- * planilla del torneo de cada inscripción.
+ * F46.5 / F52 — Genera la "plantilla física" del partido en PDF: UNA HOJA
+ * INDEPENDIENTE por equipo, con RUT, N°, Nombre, columnas en blanco
+ * (Goles / Amarillas / Rojas) y una columna de FIRMA para que cada jugador
+ * firme su asistencia. El roster sale de la planilla del torneo de cada
+ * inscripción; los jugadores VETADOS se excluyen (no pueden jugar).
  */
 @Injectable()
 export class PlantillaPdfService {
@@ -22,6 +33,8 @@ export class PlantillaPdfService {
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
     @InjectRepository(PlanillaTorneo)
     private readonly planillaRepo: Repository<PlanillaTorneo>,
+    @InjectRepository(JugadorVetado)
+    private readonly vetadoRepo: Repository<JugadorVetado>,
   ) {}
 
   async generar(partidoId: string, tenantId: string): Promise<Buffer> {
@@ -35,13 +48,20 @@ export class PlantillaPdfService {
       ? await this.torneoRepo.findOne({ where: { id: fecha.torneoId, tenantId } })
       : null;
 
+    // Vetados de la liga (lista negra por RUT). Se excluyen de la plantilla:
+    // un jugador vetado no puede figurar en el roster del partido.
+    const vetados = await this.vetadoRepo.find({ where: { tenantId } });
+    const vetadosSet = new Set(
+      vetados.map((v) => limpiarRut(v.rut)).filter((r) => !!r),
+    );
+
     const local = {
       nombre: partido.inscripcionLocal?.club?.nombre ?? 'Local',
-      jugadores: await this.cargarPlantilla(partido.inscripcionLocalId, tenantId),
+      jugadores: await this.cargarPlantilla(partido.inscripcionLocalId, tenantId, vetadosSet),
     };
     const visita = {
       nombre: partido.inscripcionVisita?.club?.nombre ?? 'Visita',
-      jugadores: await this.cargarPlantilla(partido.inscripcionVisitaId, tenantId),
+      jugadores: await this.cargarPlantilla(partido.inscripcionVisitaId, tenantId, vetadosSet),
     };
 
     const fechaHoraStr = partido.fechaHora
@@ -66,7 +86,8 @@ export class PlantillaPdfService {
   private async cargarPlantilla(
     inscripcionId: string | null,
     tenantId: string,
-  ): Promise<Array<{ numero: number | null; rut: string | null; nombre: string; capitan: boolean }>> {
+    vetadosSet: Set<string>,
+  ): Promise<FilaJugador[]> {
     if (!inscripcionId) return [];
     const planilla = await this.planillaRepo.find({
       where: { inscripcionId, tenantId },
@@ -74,6 +95,11 @@ export class PlantillaPdfService {
     });
     return planilla
       .filter((p) => p.jugador)
+      // Excluir vetados (comparación por RUT normalizado).
+      .filter((p) => {
+        const rut = p.jugador!.rut ? limpiarRut(p.jugador!.rut) : null;
+        return !rut || !vetadosSet.has(rut);
+      })
       .map((p) => ({
         numero: p.jugador!.numeroCamiseta,
         rut: p.jugador!.rut,
@@ -92,8 +118,8 @@ export class PlantillaPdfService {
     fechaEtiqueta: string | null;
     fechaHoraStr: string;
     canchaNombre: string | null;
-    local: { nombre: string; jugadores: Array<{ numero: number | null; rut: string | null; nombre: string; capitan: boolean }> };
-    visita: { nombre: string; jugadores: Array<{ numero: number | null; rut: string | null; nombre: string; capitan: boolean }> };
+    local: { nombre: string; jugadores: FilaJugador[] };
+    visita: { nombre: string; jugadores: FilaJugador[] };
   }): Promise<Buffer> {
     const doc = new PDFDocument({ size: 'A4', margin: 36 });
     const chunks: Buffer[] = [];
@@ -102,8 +128,35 @@ export class PlantillaPdfService {
       doc.on('end', () => resolve(Buffer.concat(chunks))),
     );
 
-    // Encabezado del partido.
-    doc.fontSize(16).font('Helvetica-Bold').text('Plantilla física del partido', { align: 'center' });
+    // Hoja 1 — equipo local.
+    this.dibujarEncabezado(doc, data, 'LOCAL');
+    this.dibujarEquipo(doc, data.local.nombre, data.local.jugadores);
+    this.dibujarFirmas(doc, 'Capitán local');
+
+    // Hoja 2 — equipo visita (hoja independiente).
+    doc.addPage();
+    this.dibujarEncabezado(doc, data, 'VISITA');
+    this.dibujarEquipo(doc, data.visita.nombre, data.visita.jugadores);
+    this.dibujarFirmas(doc, 'Capitán visita');
+
+    doc.end();
+    return done;
+  }
+
+  private dibujarEncabezado(
+    doc: PDFKit.PDFDocument,
+    data: {
+      torneoNombre: string;
+      fechaNumero: number;
+      fechaEtiqueta: string | null;
+      fechaHoraStr: string;
+      canchaNombre: string | null;
+      local: { nombre: string };
+      visita: { nombre: string };
+    },
+    lado: 'LOCAL' | 'VISITA',
+  ): void {
+    doc.fontSize(16).font('Helvetica-Bold').fillColor('black').text('Plantilla física del partido', { align: 'center' });
     doc.moveDown(0.3);
     doc
       .fontSize(10)
@@ -123,46 +176,45 @@ export class PlantillaPdfService {
         `${data.fechaHoraStr}${data.canchaNombre ? ` · Cancha: ${data.canchaNombre}` : ''}`,
         { align: 'center' },
       );
+    doc
+      .fontSize(9)
+      .font('Helvetica-Bold')
+      .fillColor('#0f3d2e')
+      .text(`Hoja ${lado === 'LOCAL' ? '1/2 · Equipo LOCAL' : '2/2 · Equipo VISITA'}`, {
+        align: 'center',
+      });
+    doc.fillColor('black');
     doc.moveDown(0.8);
+  }
 
-    this.dibujarEquipo(doc, data.local.nombre, data.local.jugadores);
-    doc.moveDown(1);
-    // Salto de página si no queda espacio razonable para el 2do equipo.
-    if (doc.y > 560) doc.addPage();
-    this.dibujarEquipo(doc, data.visita.nombre, data.visita.jugadores);
-
-    // Pie de firmas.
+  private dibujarFirmas(doc: PDFKit.PDFDocument, capitanLabel: string): void {
     doc.moveDown(2);
-    const yFirmas = doc.y;
-    doc.fontSize(9).font('Helvetica');
-    doc.text('______________________', 60, yFirmas);
-    doc.text('Árbitro', 60, yFirmas + 14);
-    doc.text('______________________', 240, yFirmas);
-    doc.text('Capitán local', 240, yFirmas + 14);
-    doc.text('______________________', 410, yFirmas);
-    doc.text('Capitán visita', 410, yFirmas + 14);
-
-    doc.end();
-    return done;
+    const yFirmas = doc.y > 720 ? 720 : doc.y;
+    doc.fontSize(9).font('Helvetica').fillColor('black');
+    doc.text('______________________', 70, yFirmas);
+    doc.text('Árbitro', 70, yFirmas + 14);
+    doc.text('______________________', 330, yFirmas);
+    doc.text(capitanLabel, 330, yFirmas + 14);
   }
 
   private dibujarEquipo(
     doc: PDFKit.PDFDocument,
     nombre: string,
-    jugadores: Array<{ numero: number | null; rut: string | null; nombre: string; capitan: boolean }>,
+    jugadores: FilaJugador[],
   ): void {
     const left = 36;
     const right = 559; // A4 width 595 - margin 36
-    // Columnas: N° | RUT | Nombre | Goles | Amarillas | Rojas
+    // Columnas: N° | RUT | Nombre | Goles | Amar. | Rojas | Firma
     const cols = [
-      { label: 'N°', w: 30 },
-      { label: 'RUT', w: 90 },
-      { label: 'Nombre', w: 213 },
-      { label: 'Goles', w: 60 },
-      { label: 'Amar.', w: 50 },
-      { label: 'Rojas', w: 44 },
+      { label: 'N°', w: 26 },
+      { label: 'RUT', w: 78 },
+      { label: 'Nombre', w: 150 },
+      { label: 'Goles', w: 38 },
+      { label: 'Amar.', w: 34 },
+      { label: 'Rojas', w: 34 },
+      { label: 'Firma', w: 163 },
     ];
-    const rowH = 20;
+    const rowH = 22;
 
     doc.fontSize(12).font('Helvetica-Bold').fillColor('#0f3d2e').text(nombre, left, doc.y);
     doc.fillColor('black');
@@ -175,16 +227,16 @@ export class PlantillaPdfService {
     doc.rect(left, y, right - left, rowH).fill('#eee').fillColor('black').stroke();
     x = left;
     for (const c of cols) {
-      doc.fillColor('black').text(c.label, x + 3, y + 6, { width: c.w - 6 });
+      doc.fillColor('black').text(c.label, x + 3, y + 7, { width: c.w - 6 });
       x += c.w;
     }
     y += rowH;
 
-    // Filas. Si no hay jugadores, dibujamos 14 filas vacías para escribir a mano.
-    const filas =
+    // Filas. Si no hay jugadores, dibujamos 16 filas vacías para escribir a mano.
+    const filas: FilaJugador[] =
       jugadores.length > 0
         ? jugadores
-        : Array.from({ length: 14 }, () => ({ numero: null, rut: null, nombre: '', capitan: false }));
+        : Array.from({ length: 16 }, () => ({ numero: null, rut: null, nombre: '', capitan: false }));
 
     doc.font('Helvetica').fontSize(9);
     for (const j of filas) {
@@ -192,14 +244,13 @@ export class PlantillaPdfService {
         doc.addPage();
         y = 36;
       }
-      x = left;
       // Bordes de celda.
       let cx = left;
       for (const c of cols) {
         doc.rect(cx, y, c.w, rowH).stroke();
         cx += c.w;
       }
-      // Contenido de las 3 primeras columnas.
+      // Contenido de las 3 primeras columnas (Goles/Amar./Rojas/Firma en blanco).
       const valores = [
         j.numero != null ? String(j.numero) : '',
         j.rut ?? '',
@@ -207,7 +258,7 @@ export class PlantillaPdfService {
       ];
       x = left;
       valores.forEach((v, i) => {
-        doc.text(v, x + 3, y + 6, { width: cols[i]!.w - 6, ellipsis: true });
+        doc.text(v, x + 3, y + 7, { width: cols[i]!.w - 6, ellipsis: true });
         x += cols[i]!.w;
       });
       y += rowH;

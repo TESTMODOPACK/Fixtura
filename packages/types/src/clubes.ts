@@ -226,6 +226,10 @@ export const JugadorVetadoSchema = z.object({
   id: z.uuid(),
   tenantId: z.uuid(),
   rut: z.string(),
+  // F52 — nombre y club al que pertenecía (resuelto por RUT; null si el RUT
+  // no matchea ningún jugador cargado en la liga).
+  jugadorNombre: z.string().nullable(),
+  clubNombre: z.string().nullable(),
   motivo: z.string().nullable(),
   origen: OrigenVetoSchema,
   creadoPorUserId: z.uuid().nullable(),

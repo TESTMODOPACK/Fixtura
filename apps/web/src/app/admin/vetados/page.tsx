@@ -181,8 +181,12 @@ export default function VetadosPage(): React.ReactElement {
                   <ShieldOff size={14} />
                 </div>
                 <div className="min-w-0">
-                  <div className="font-mono font-semibold text-ink">
-                    {v.rut}
+                  <div className="font-semibold text-ink truncate">
+                    {v.jugadorNombre ?? 'Jugador no identificado'}
+                  </div>
+                  <div className="text-xs text-ink-mute mt-0.5 flex items-center gap-2 flex-wrap">
+                    <span className="font-mono">{v.rut}</span>
+                    {v.clubNombre && <span>· {v.clubNombre}</span>}
                   </div>
                   {v.motivo && (
                     <div className="text-xs text-ink-mute mt-0.5">
