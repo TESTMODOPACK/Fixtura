@@ -142,7 +142,14 @@ export class AuthService {
     // Tenant default: si tiene un único rol TENANT, se elige ese.
     // Caso multi-tenant: el frontend hará un switch explícito de tenant.
     const tenantRoles = roles.filter((r) => r.scope === 'TENANT');
-    const defaultTenantId = tenantRoles.length === 1 ? (tenantRoles[0]!.scopeId ?? null) : null;
+    // Fallback: roles que NO son scope TENANT (DELEGADO_EQUIPO scope TEAM,
+    // personal scope PERSONAL) no aportan tenant por scopeId. Sin esto el
+    // usuario quedaba con tenantId=null → RLS en bypass (leak). Usamos el
+    // tenant único de sus user_roles.
+    const defaultTenantId =
+      tenantRoles.length === 1
+        ? (tenantRoles[0]!.scopeId ?? null)
+        : await this.users.getSoleTenantId(user.id);
 
     return this.issueTokens(
       {
@@ -176,7 +183,14 @@ export class AuthService {
     // refresh perdía el tenantId y dejaba al usuario sin contexto —
     // los endpoints admin devolvían "No hay tenant en el contexto".
     const tenantRoles = roles.filter((r) => r.scope === 'TENANT');
-    const defaultTenantId = tenantRoles.length === 1 ? (tenantRoles[0]!.scopeId ?? null) : null;
+    // Fallback: roles que NO son scope TENANT (DELEGADO_EQUIPO scope TEAM,
+    // personal scope PERSONAL) no aportan tenant por scopeId. Sin esto el
+    // usuario quedaba con tenantId=null → RLS en bypass (leak). Usamos el
+    // tenant único de sus user_roles.
+    const defaultTenantId =
+      tenantRoles.length === 1
+        ? (tenantRoles[0]!.scopeId ?? null)
+        : await this.users.getSoleTenantId(user.id);
     return this.issueTokens({
       userId: user.id,
       email: user.email,
