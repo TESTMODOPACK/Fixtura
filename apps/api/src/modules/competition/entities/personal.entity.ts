@@ -19,6 +19,12 @@ export type RolPersonal =
   | 'PARAMEDICO'
   | 'OTRO';
 
+export type TipoCuentaBancaria =
+  | 'CORRIENTE'
+  | 'VISTA'
+  | 'AHORRO'
+  | 'CUENTA_RUT';
+
 /**
  * Catálogo de personal operativo de la liga. user_id es opcional
  * porque muchas personas son sólo registros administrativos sin cuenta.
@@ -73,6 +79,24 @@ export class Personal {
 
   @Column({ type: 'boolean', default: true })
   activo!: boolean;
+
+  // F49 (ADR-0007) — datos bancarios para nómina de pago / transferencia.
+  @Column({ type: 'varchar', length: 60, nullable: true })
+  banco!: string | null;
+
+  @Column({ name: 'tipo_cuenta', type: 'varchar', length: 20, nullable: true })
+  tipoCuenta!: TipoCuentaBancaria | null;
+
+  @Column({ name: 'numero_cuenta', type: 'varchar', length: 40, nullable: true })
+  numeroCuenta!: string | null;
+
+  // Titular distinto al personal (cuenta de un tercero). NULL = el titular
+  // es la propia persona.
+  @Column({ name: 'titular_nombre', type: 'varchar', length: 150, nullable: true })
+  titularNombre!: string | null;
+
+  @Column({ name: 'titular_rut', type: 'varchar', length: 20, nullable: true })
+  titularRut!: string | null;
 
   @Column({ type: 'text', nullable: true })
   notas!: string | null;

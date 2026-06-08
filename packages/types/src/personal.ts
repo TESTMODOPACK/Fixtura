@@ -61,6 +61,24 @@ export const ROLES_ARBITRAJE = [
 ] as const;
 export type RolArbitraje = (typeof ROLES_ARBITRAJE)[number];
 
+/**
+ * F49 — Tipos de cuenta bancaria chilenos para nómina de pago.
+ */
+export const TIPO_CUENTA_BANCARIA = [
+  'CORRIENTE',
+  'VISTA',
+  'AHORRO',
+  'CUENTA_RUT',
+] as const;
+export type TipoCuentaBancaria = (typeof TIPO_CUENTA_BANCARIA)[number];
+
+export const TIPO_CUENTA_BANCARIA_LABEL: Record<TipoCuentaBancaria, string> = {
+  CORRIENTE: 'Cuenta corriente',
+  VISTA: 'Cuenta vista',
+  AHORRO: 'Cuenta de ahorro',
+  CUENTA_RUT: 'CuentaRUT',
+};
+
 export const PersonalAdminSchema = z.object({
   id: z.uuid(),
   userId: z.uuid().nullable(),
@@ -75,6 +93,12 @@ export const PersonalAdminSchema = z.object({
   // ISO date YYYY-MM-DD o null
   carnetAnfaVence: z.string().nullable(),
   activo: z.boolean(),
+  // F49 — datos bancarios para nómina de pago.
+  banco: z.string().nullable(),
+  tipoCuenta: z.enum(TIPO_CUENTA_BANCARIA).nullable(),
+  numeroCuenta: z.string().nullable(),
+  titularNombre: z.string().nullable(),
+  titularRut: z.string().nullable(),
   notas: z.string().nullable(),
   createdAt: z.iso.datetime(),
 });
@@ -90,6 +114,12 @@ export const CreatePersonalSchema = z.object({
   tarifaBase: z.number().int().min(0).optional().nullable(),
   carnetAnfaNumero: z.string().max(50).optional().nullable(),
   carnetAnfaVence: z.string().optional().nullable(),
+  // F49 — datos bancarios (opcionales).
+  banco: z.string().max(60).optional().nullable(),
+  tipoCuenta: z.enum(TIPO_CUENTA_BANCARIA).optional().nullable(),
+  numeroCuenta: z.string().max(40).optional().nullable(),
+  titularNombre: z.string().max(150).optional().nullable(),
+  titularRut: z.string().max(20).optional().nullable(),
   notas: z.string().max(2000).optional().nullable(),
 });
 export type CreatePersonalRequest = z.infer<typeof CreatePersonalSchema>;

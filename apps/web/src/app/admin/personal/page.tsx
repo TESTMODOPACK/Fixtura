@@ -26,6 +26,8 @@ import { z } from 'zod';
 
 import {
   ROL_PERSONAL,
+  TIPO_CUENTA_BANCARIA,
+  TIPO_CUENTA_BANCARIA_LABEL,
   formatearRut,
   validarRut,
   type PersonalAdmin,
@@ -522,6 +524,11 @@ function EditarPersonalForm({
     tarifaBase: number | null;
     carnetAnfaNumero: string | null;
     carnetAnfaVence: string | null;
+    banco: string | null;
+    tipoCuenta: (typeof TIPO_CUENTA_BANCARIA)[number] | null;
+    numeroCuenta: string | null;
+    titularNombre: string | null;
+    titularRut: string | null;
     notas: string | null;
   }) => Promise<void>;
   pending?: boolean;
@@ -540,6 +547,11 @@ function EditarPersonalForm({
     tarifaBase: z.coerce.number().int().min(0).optional(),
     carnetAnfaNumero: z.string().optional(),
     carnetAnfaVence: z.string().optional(),
+    banco: z.string().max(60).optional(),
+    tipoCuenta: z.union([z.literal(''), z.enum(TIPO_CUENTA_BANCARIA)]).optional(),
+    numeroCuenta: z.string().max(40).optional(),
+    titularNombre: z.string().max(150).optional(),
+    titularRut: z.string().max(20).optional(),
     notas: z.string().max(2000).optional(),
   });
   type Form = z.infer<typeof Schema>;
@@ -556,6 +568,11 @@ function EditarPersonalForm({
       tarifaBase: persona.tarifaBase ?? undefined,
       carnetAnfaNumero: persona.carnetAnfaNumero ?? '',
       carnetAnfaVence: persona.carnetAnfaVence ?? '',
+      banco: persona.banco ?? '',
+      tipoCuenta: persona.tipoCuenta ?? '',
+      numeroCuenta: persona.numeroCuenta ?? '',
+      titularNombre: persona.titularNombre ?? '',
+      titularRut: persona.titularRut ?? '',
       notas: persona.notas ?? '',
     },
   });
@@ -573,6 +590,11 @@ function EditarPersonalForm({
       tarifaBase: vals.tarifaBase ?? null,
       carnetAnfaNumero: vals.carnetAnfaNumero || null,
       carnetAnfaVence: vals.carnetAnfaVence || null,
+      banco: vals.banco || null,
+      tipoCuenta: vals.tipoCuenta || null,
+      numeroCuenta: vals.numeroCuenta || null,
+      titularNombre: vals.titularNombre || null,
+      titularRut: vals.titularRut || null,
       notas: vals.notas || null,
     });
   };
@@ -646,6 +668,28 @@ function EditarPersonalForm({
           />
         </>
       )}
+      <div className="md:col-span-2 mt-1">
+        <CardLabel>Datos bancarios (para nómina de pago)</CardLabel>
+      </div>
+      <Input label="Banco" {...form.register('banco')} />
+      <div>
+        <label className="label">Tipo de cuenta</label>
+        <select className="input" {...form.register('tipoCuenta')}>
+          <option value="">—</option>
+          {TIPO_CUENTA_BANCARIA.map((t) => (
+            <option key={t} value={t}>
+              {TIPO_CUENTA_BANCARIA_LABEL[t]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Input label="N° de cuenta" {...form.register('numeroCuenta')} />
+      <Input
+        label="Titular (si difiere)"
+        placeholder="Dejar vacío si es la misma persona"
+        {...form.register('titularNombre')}
+      />
+      <Input label="RUT del titular (si difiere)" {...form.register('titularRut')} />
       <div className="md:col-span-2">
         <label className="label">Notas</label>
         <textarea
@@ -686,6 +730,11 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
     tarifaBase: z.coerce.number().int().min(0).optional(),
     carnetAnfaNumero: z.string().optional(),
     carnetAnfaVence: z.string().optional(),
+    banco: z.string().max(60).optional(),
+    tipoCuenta: z.union([z.literal(''), z.enum(TIPO_CUENTA_BANCARIA)]).optional(),
+    numeroCuenta: z.string().max(40).optional(),
+    titularNombre: z.string().max(150).optional(),
+    titularRut: z.string().max(20).optional(),
     notas: z.string().max(2000).optional(),
   });
   type Form = z.infer<typeof Schema>;
@@ -708,6 +757,11 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
       tarifaBase: vals.tarifaBase ?? null,
       carnetAnfaNumero: vals.carnetAnfaNumero || null,
       carnetAnfaVence: vals.carnetAnfaVence || null,
+      banco: vals.banco || null,
+      tipoCuenta: vals.tipoCuenta || null,
+      numeroCuenta: vals.numeroCuenta || null,
+      titularNombre: vals.titularNombre || null,
+      titularRut: vals.titularRut || null,
       notas: vals.notas || null,
     });
     form.reset();
@@ -795,6 +849,32 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
             />
           </>
         )}
+
+        <div className="md:col-span-2 mt-1">
+          <CardLabel>Datos bancarios (para nómina de pago)</CardLabel>
+        </div>
+        <Input label="Banco" {...form.register('banco')} placeholder="ej. Banco Estado" />
+        <div>
+          <label className="label">Tipo de cuenta</label>
+          <select className="input" {...form.register('tipoCuenta')}>
+            <option value="">—</option>
+            {TIPO_CUENTA_BANCARIA.map((t) => (
+              <option key={t} value={t}>
+                {TIPO_CUENTA_BANCARIA_LABEL[t]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Input label="N° de cuenta" {...form.register('numeroCuenta')} />
+        <Input
+          label="Titular (si difiere)"
+          placeholder="Dejar vacío si es la misma persona"
+          {...form.register('titularNombre')}
+        />
+        <Input
+          label="RUT del titular (si difiere)"
+          {...form.register('titularRut')}
+        />
 
         <div className="md:col-span-2">
           <label className="label">Notas (opcional)</label>

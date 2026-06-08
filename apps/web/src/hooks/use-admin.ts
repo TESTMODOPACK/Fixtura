@@ -2409,3 +2409,54 @@ export function useEliminarLiquidacion() {
     },
   });
 }
+
+// ─── F49: Nóminas de pago (pago masivo) ─────────────────────────────
+import type {
+  EmitirNominaRequest,
+  NominaPago,
+  NominaPagoDetalle,
+  NominaPreview,
+} from '@fixtura/types';
+
+export function usePreviewNomina(desde: string, hasta: string) {
+  return useQuery({
+    queryKey: [...PAGOS_PERSONAL_KEY, 'nomina-preview', desde, hasta],
+    enabled: !!desde && !!hasta && hasta >= desde,
+    queryFn: () =>
+      apiFetch<NominaPreview>(
+        `/admin/pagos-personal/nominas/preview?desde=${desde}&hasta=${hasta}`,
+      ),
+  });
+}
+
+export function useNominas() {
+  return useQuery({
+    queryKey: [...PAGOS_PERSONAL_KEY, 'nominas'],
+    queryFn: () => apiFetch<NominaPago[]>('/admin/pagos-personal/nominas'),
+  });
+}
+
+export function useEmitirNomina() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: EmitirNominaRequest) =>
+      apiFetch<NominaPagoDetalle>('/admin/pagos-personal/nominas', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PAGOS_PERSONAL_KEY });
+    },
+  });
+}
+
+export function useEliminarNomina() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/admin/pagos-personal/nominas/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PAGOS_PERSONAL_KEY });
+    },
+  });
+}

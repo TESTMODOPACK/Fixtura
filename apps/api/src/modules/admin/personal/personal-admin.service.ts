@@ -221,6 +221,11 @@ export class PersonalAdminService {
       tarifaBase: input.tarifaBase ?? null,
       carnetAnfaNumero: input.carnetAnfaNumero ?? null,
       carnetAnfaVence: input.carnetAnfaVence ?? null,
+      banco: input.banco?.trim() || null,
+      tipoCuenta: input.tipoCuenta ?? null,
+      numeroCuenta: input.numeroCuenta?.trim() || null,
+      titularNombre: input.titularNombre?.trim() || null,
+      titularRut: input.titularRut?.trim() || null,
       notas: input.notas ?? null,
       activo: true,
     });
@@ -252,6 +257,21 @@ export class PersonalAdminService {
         input.carnetAnfaVence === undefined
           ? p.carnetAnfaVence
           : input.carnetAnfaVence,
+      banco: input.banco === undefined ? p.banco : input.banco?.trim() || null,
+      tipoCuenta:
+        input.tipoCuenta === undefined ? p.tipoCuenta : input.tipoCuenta,
+      numeroCuenta:
+        input.numeroCuenta === undefined
+          ? p.numeroCuenta
+          : input.numeroCuenta?.trim() || null,
+      titularNombre:
+        input.titularNombre === undefined
+          ? p.titularNombre
+          : input.titularNombre?.trim() || null,
+      titularRut:
+        input.titularRut === undefined
+          ? p.titularRut
+          : input.titularRut?.trim() || null,
       notas: input.notas === undefined ? p.notas : input.notas,
       activo: input.activo ?? p.activo,
     });
@@ -284,6 +304,11 @@ export class PersonalAdminService {
       carnetAnfaNumero: p.carnetAnfaNumero,
       carnetAnfaVence: p.carnetAnfaVence,
       activo: p.activo,
+      banco: p.banco,
+      tipoCuenta: p.tipoCuenta,
+      numeroCuenta: p.numeroCuenta,
+      titularNombre: p.titularNombre,
+      titularRut: p.titularRut,
       notas: p.notas,
       createdAt: p.createdAt.toISOString(),
     };

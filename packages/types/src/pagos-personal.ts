@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ROL_PERSONAL } from './personal';
+import { ROL_PERSONAL, TIPO_CUENTA_BANCARIA } from './personal';
 
 /**
  * F47 (ADR-0006) — Pagos a personal (cuentas por pagar).
@@ -116,3 +116,79 @@ export const CrearLiquidacionSchema = z.object({
   fechaPago: z.string().min(10).max(10).optional(),
 });
 export type CrearLiquidacionRequest = z.infer<typeof CrearLiquidacionSchema>;
+
+// ─── F49: Nómina de pago (pago masivo por período) ──────────────────
+
+/**
+ * Línea por persona dentro de una nómina (preview o detalle): cuánto se le
+ * paga en el período + sus datos bancarios para el archivo del banco.
+ */
+export const NominaPersonaLineaSchema = z.object({
+  personalId: z.uuid(),
+  nombre: z.string(),
+  apellido: z.string(),
+  rut: z.string().nullable(),
+  rol: z.enum(ROL_PERSONAL),
+  banco: z.string().nullable(),
+  tipoCuenta: z.enum(TIPO_CUENTA_BANCARIA).nullable(),
+  numeroCuenta: z.string().nullable(),
+  titularNombre: z.string().nullable(),
+  titularRut: z.string().nullable(),
+  designacionesCount: z.number().int(),
+  total: z.number().int(),
+  // Tiene banco + tipo + número de cuenta completos (transferible).
+  tieneCuenta: z.boolean(),
+});
+export type NominaPersonaLinea = z.infer<typeof NominaPersonaLineaSchema>;
+
+/**
+ * Preview (dry-run) de una nómina para un período: a quién se le pagaría y
+ * cuánto, sin persistir. Filtra las asistencias por la fecha del partido.
+ */
+export const NominaPreviewSchema = z.object({
+  desde: z.string(), // YYYY-MM-DD
+  hasta: z.string(),
+  personas: z.array(NominaPersonaLineaSchema),
+  totalGlobal: z.number().int(),
+  personasCount: z.number().int(),
+  // Personas elegibles sin cuenta bancaria completa (no transferibles).
+  sinCuentaCount: z.number().int(),
+});
+export type NominaPreview = z.infer<typeof NominaPreviewSchema>;
+
+/** Cabecera de una nómina emitida (lote de pago). */
+export const NominaPagoSchema = z.object({
+  id: z.uuid(),
+  periodoDesde: z.string(),
+  periodoHasta: z.string(),
+  fechaPago: z.string(),
+  metodoPago: z.enum(METODO_PAGO_LIQUIDACION),
+  total: z.number().int(),
+  cantidadPersonas: z.number().int(),
+  observaciones: z.string().nullable(),
+  createdByNombre: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+});
+export type NominaPago = z.infer<typeof NominaPagoSchema>;
+
+/** Detalle de una nómina: cabecera + las líneas (una por persona pagada). */
+export const NominaPagoDetalleSchema = NominaPagoSchema.extend({
+  lineas: z.array(NominaPersonaLineaSchema),
+});
+export type NominaPagoDetalle = z.infer<typeof NominaPagoDetalleSchema>;
+
+/**
+ * Emitir una nómina: registra el pago (crea las liquidaciones) de las
+ * personas seleccionadas, por las asistencias ASISTIO sin liquidar cuyo
+ * partido cae en [desde, hasta]. El backend recalcula montos como snapshot.
+ */
+export const EmitirNominaSchema = z.object({
+  desde: z.string().min(10).max(10), // YYYY-MM-DD
+  hasta: z.string().min(10).max(10),
+  personalIds: z.array(z.uuid()).min(1),
+  metodoPago: z.enum(METODO_PAGO_LIQUIDACION),
+  // Si se omite, el backend usa la fecha de hoy (America/Santiago).
+  fechaPago: z.string().min(10).max(10).optional(),
+  observaciones: z.string().max(500).optional().nullable(),
+});
+export type EmitirNominaRequest = z.infer<typeof EmitirNominaSchema>;

@@ -260,6 +260,61 @@ async function main(): Promise<void> {
     );
     log('liquidaciones_personal + designaciones.liquidacion_id asegurados (F47).');
 
+    // F49 (ADR-0007) — Nómina de pago (pago masivo). Datos bancarios del
+    // personal + cabecera de nómina que agrupa N liquidaciones de un período.
+    await client.query(`
+      ALTER TABLE personal
+        ADD COLUMN IF NOT EXISTS banco           VARCHAR(60),
+        ADD COLUMN IF NOT EXISTS tipo_cuenta     VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS numero_cuenta   VARCHAR(40),
+        ADD COLUMN IF NOT EXISTS titular_nombre  VARCHAR(150),
+        ADD COLUMN IF NOT EXISTS titular_rut     VARCHAR(20)
+    `);
+    // CHECK aditivo del tipo de cuenta (idempotente: solo si no existe).
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'chk_personal_tipo_cuenta'
+        ) THEN
+          ALTER TABLE personal ADD CONSTRAINT chk_personal_tipo_cuenta
+            CHECK (tipo_cuenta IS NULL OR tipo_cuenta IN
+              ('CORRIENTE','VISTA','AHORRO','CUENTA_RUT'));
+        END IF;
+      END $$;
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS nominas_pago (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id         UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        periodo_desde     DATE NOT NULL,
+        periodo_hasta     DATE NOT NULL,
+        fecha_pago        DATE NOT NULL,
+        metodo_pago       VARCHAR(20) NOT NULL DEFAULT 'TRANSFERENCIA'
+                            CHECK (metodo_pago IN ('TRANSFERENCIA','EFECTIVO','OTRO')),
+        total             INTEGER NOT NULL DEFAULT 0,
+        cantidad_personas INTEGER NOT NULL DEFAULT 0,
+        observaciones     TEXT,
+        created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await ensureRls(client, 'nominas_pago');
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_nominas_pago_tenant ON nominas_pago(tenant_id)`,
+    );
+    await ensureTrigger(client, 'nominas_pago');
+    await client.query(`
+      ALTER TABLE liquidaciones_personal
+        ADD COLUMN IF NOT EXISTS nomina_id UUID
+          REFERENCES nominas_pago(id) ON DELETE SET NULL
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_liquidaciones_personal_nomina ON liquidaciones_personal(nomina_id)`,
+    );
+    log('nominas_pago + personal bancario + liquidaciones.nomina_id asegurados (F49).');
+
     // Sprint 14: tabla push_subscriptions (notificaciones FCM/WebPush).
     await ensurePushSubscriptionsTable(client, log);
 

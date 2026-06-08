@@ -12,7 +12,12 @@ import {
   MinLength,
 } from 'class-validator';
 
-import { ROL_PERSONAL, type RolPersonal } from '@fixtura/types';
+import {
+  ROL_PERSONAL,
+  TIPO_CUENTA_BANCARIA,
+  type RolPersonal,
+  type TipoCuentaBancaria,
+} from '@fixtura/types';
 
 import { IsRutChileno } from '../../../common/validators/is-rut-chileno.validator';
 
@@ -60,6 +65,30 @@ export class CreatePersonalDto {
   @IsOptional()
   @IsDateString()
   carnetAnfaVence?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  banco?: string | null;
+
+  @IsOptional()
+  @IsIn(TIPO_CUENTA_BANCARIA)
+  tipoCuenta?: TipoCuentaBancaria | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  numeroCuenta?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  titularNombre?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  titularRut?: string | null;
 
   @IsOptional()
   @IsString()
@@ -118,6 +147,30 @@ export class UpdatePersonalDto {
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  banco?: string | null;
+
+  @IsOptional()
+  @IsIn(TIPO_CUENTA_BANCARIA)
+  tipoCuenta?: TipoCuentaBancaria | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  numeroCuenta?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  titularNombre?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  titularRut?: string | null;
 
   @IsOptional()
   @IsString()

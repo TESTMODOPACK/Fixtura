@@ -11,6 +11,7 @@ import {
 
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { User } from '../../users/entities/user.entity';
+import { NominaPago } from './nomina-pago.entity';
 import { Personal } from './personal.entity';
 
 export type MetodoPagoLiquidacion = 'TRANSFERENCIA' | 'EFECTIVO' | 'OTRO';
@@ -56,6 +57,15 @@ export class LiquidacionPersonal {
 
   @Column({ name: 'fecha_pago', type: 'date' })
   fechaPago!: string;
+
+  // F49 (ADR-0007) — nómina (lote de pago masivo) a la que pertenece esta
+  // liquidación. NULL = liquidación individual (F47).
+  @Column({ name: 'nomina_id', type: 'uuid', nullable: true })
+  nominaId!: string | null;
+
+  @ManyToOne(() => NominaPago, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'nomina_id' })
+  nomina?: NominaPago | null;
 
   @Column({ name: 'created_by', type: 'uuid', nullable: true })
   createdBy!: string | null;
