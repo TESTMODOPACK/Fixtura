@@ -905,14 +905,12 @@ function RecintoSection({
   const [addingRol, setAddingRol] = useState<RolDesignableRecinto | null>(null);
   const asignarErr = asignar.error as ApiError | undefined;
 
-  // Personal candidato para el recinto (paramédicos y otros del catálogo)
-  const candidatos = useMemo(
-    () =>
-      personal.filter((p) =>
-        (ROLES_DESIGNABLES_RECINTO as readonly string[]).includes(p.rol),
-      ),
-    [personal],
-  );
+  // F53 — Cualquier persona activa puede cubrir el recinto (paramédico,
+  // utilería, seguridad). El backend acepta cualquier rol base; en el form
+  // sugerimos primero a quien tenga el rol esperado entre sus roles. Antes
+  // se filtraba por rol primario y, si no había nadie con ese rol exacto, el
+  // dropdown quedaba vacío y no se podía asignar.
+  const candidatos = personal;
 
   return (
     <Card padding="none" className="overflow-hidden mt-6">
@@ -1052,18 +1050,19 @@ function RecintoAsignarForm({
   const [personalId, setPersonalId] = useState('');
   const [canchaNombre, setCanchaNombre] = useState('');
 
+  // F53 — sugerencia por TODOS los roles de la persona (no solo el primario).
+  const tieneRol = (p: PersonalAdmin): boolean =>
+    (p.roles?.length ? p.roles : [p.rol]).includes(rolBaseEsperado);
   const sugeridos = useMemo(
     () =>
-      candidatos.filter(
-        (p) => p.rol === rolBaseEsperado && !yaAsignados.includes(p.id),
-      ),
+      candidatos.filter((p) => tieneRol(p) && !yaAsignados.includes(p.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [candidatos, rolBaseEsperado, yaAsignados],
   );
   const restoCandidatos = useMemo(
     () =>
-      candidatos.filter(
-        (p) => p.rol !== rolBaseEsperado && !yaAsignados.includes(p.id),
-      ),
+      candidatos.filter((p) => !tieneRol(p) && !yaAsignados.includes(p.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [candidatos, rolBaseEsperado, yaAsignados],
   );
 
