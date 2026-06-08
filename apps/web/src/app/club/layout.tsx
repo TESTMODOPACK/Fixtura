@@ -36,7 +36,7 @@ export default function ClubLayout({
 }: {
   children: React.ReactNode;
 }): React.ReactElement | null {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
   const clearTokens = useAuthStore((s) => s.clearTokens);

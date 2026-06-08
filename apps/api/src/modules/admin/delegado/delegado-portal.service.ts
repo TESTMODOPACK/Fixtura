@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import type {
   EstadisticasDelegado,
@@ -67,7 +67,7 @@ export class DelegadoPortalService {
         torneoId: i.torneoId,
         torneoNombre: i.torneo?.nombre ?? '',
         categoriaNombre: i.categoria?.nombre ?? null,
-        serieNombre: i.serieSlug,
+        serieNombre: i.serieSlug ? `Serie ${i.serieSlug.toUpperCase()}` : null,
         estado: i.estado,
       })),
     };
@@ -190,8 +190,6 @@ export class DelegadoPortalService {
     const { ids, map } = await this.inscripcionesDelClub(clubId, tenantId);
     if (ids.length === 0) return { porInscripcion: [], sanciones: [] };
 
-    const partidos = await this.partidos(clubId, tenantId);
-
     // Tarjetas por inscripción.
     const tarjetas =
       ids.length > 0
@@ -281,7 +279,15 @@ export class DelegadoPortalService {
     const rows = await this.cobroRepo.manager
       .createQueryBuilder()
       .from('sanciones_activas', 's')
-      .innerJoin('jugadores', 'j', 'j.id = s.jugador_id AND j.club_id = :clubId', { clubId })
+      // Match por jugador_id (modelo nuevo) O por rut (sanciones legacy que
+      // pueden tener jugador_id NULL). rut es UNIQUE por tenant, así que el
+      // OR machea a un único jugador del club — sin duplicar filas.
+      .innerJoin(
+        'jugadores',
+        'j',
+        'j.club_id = :clubId AND (j.id = s.jugador_id OR j.rut = s.rut)',
+        { clubId },
+      )
       .leftJoin('torneos', 't', 't.id = s.torneo_id')
       .where('s.tenant_id = :tenantId', { tenantId })
       .andWhere('s.cumplida = false')

@@ -152,6 +152,7 @@ export class DelegadoInviteService {
     const pendiente = await this.magicLinkRepo
       .createQueryBuilder('m')
       .where('m.purpose = :p', { p: 'INVITE_USER' })
+      .andWhere('m.tenant_id = :tenantId', { tenantId })
       .andWhere('m.used_at IS NULL')
       .andWhere('m.expires_at > NOW()')
       .andWhere(`m.metadata ->> 'clubId' = :clubId`, { clubId })

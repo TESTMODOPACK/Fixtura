@@ -49,3 +49,14 @@ El rol `DELEGADO_EQUIPO` (scope `TEAM`) ya existía en el catálogo (ADR-0003) y
   `CobrosAdminService`, `PagosService`, flujo de retorno `/pago/retorno`.
 - Pendiente para v2 (si se decide): autogestión del plantel por el delegado
   (con aprobación del admin) y alcance por categoría si alguna liga lo requiere.
+
+## Limitaciones conocidas (v1)
+
+- **Delegado multi-tenant**: si una misma persona (mismo email) es delegado en
+  clubes de DOS ligas distintas, `getSoleTenantId` devuelve null (>1 tenant) y
+  el portal responde 403 (fail-closed, no hay leak). Falta un selector de
+  tenant para el rol TEAM. Poco común; se aborda en v2 si aparece.
+- **Sanciones legacy** sin `jugador_id` se matchean por `rut` (UNIQUE por
+  tenant). Las que no tengan ni `jugador_id` ni `rut` no se atribuyen al club.
+- **Puntaje** de estadísticas usa 3/1/0 estándar (no lee la config de puntos
+  del torneo). Es un resumen del delegado, no la tabla oficial.
