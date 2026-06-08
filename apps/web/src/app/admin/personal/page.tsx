@@ -94,12 +94,18 @@ export default function PersonalPage(): React.ReactElement {
 
   const filtrados = useMemo(() => {
     if (!personal) return [];
-    return filtro === 'TODOS' ? personal : personal.filter((p) => p.rol === filtro);
+    if (filtro === 'TODOS') return personal;
+    // F53 — filtrar por TODOS los roles de la persona (fallback a [rol]).
+    return personal.filter((p) =>
+      (p.roles?.length ? p.roles : [p.rol]).includes(filtro),
+    );
   }, [personal, filtro]);
 
   const stats = useMemo(() => {
     const all = personal ?? [];
-    const arbitros = all.filter((p) => ROLES_ARBITRAJE.includes(p.rol));
+    const arbitros = all.filter((p) =>
+      (p.roles?.length ? p.roles : [p.rol]).some((r) => ROLES_ARBITRAJE.includes(r)),
+    );
     const carnetVencido = arbitros.filter((p) => carnetStatus(p) === 'VENCIDO').length;
     const carnetPorVencer = arbitros.filter((p) => carnetStatus(p) === 'POR_VENCER').length;
     return {
