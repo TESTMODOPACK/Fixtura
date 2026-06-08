@@ -1294,8 +1294,13 @@ export function useDeclararWalkover(partidoId: string, torneoId: string) {
         body: input,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'partido', partidoId] });
-      qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
+      // El detalle del partido usa key PLURAL 'partidos' (ver usePartido) y el
+      // fixture usa ['admin','torneos',torneoId,'fixture-detail']. Antes se
+      // invalidaban keys inexistentes ('partido' singular / 'fixture'), así que
+      // el walkover se aplicaba en backend (cerraba el acta) pero la UI quedaba
+      // stale: seguía "programado" y sin marcador.
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'] });
     },
   });
 }
