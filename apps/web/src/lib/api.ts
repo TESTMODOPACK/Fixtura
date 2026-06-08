@@ -198,6 +198,12 @@ export async function apiFetch<T = unknown>(path: string, opts: FetchOpts = {}):
     throw new ApiError(res.status, message, parsed);
   }
 
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // 204/205 no traen cuerpo. Además, varios endpoints (ej. DELETE que
+  // retornan void) responden 200 con cuerpo vacío: parsear eso como JSON
+  // tira "Unexpected end of JSON input". Leemos como texto y solo
+  // parseamos si hay contenido.
+  if (res.status === 204 || res.status === 205) return undefined as T;
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
