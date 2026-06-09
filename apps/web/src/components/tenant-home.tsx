@@ -14,6 +14,7 @@ import Link from 'next/link';
 import type { PartidoPublico, TorneoListaPublico } from '@fixtura/types';
 
 import { PublicHeader } from '@/components/public-header';
+import { PushToggle } from '@/components/push-toggle';
 import { SponsorBanner } from '@/components/sponsor-banner';
 import { Card, CardLabel } from '@/components/ui/card';
 import { usePublicTorneos, useResumenLiga } from '@/hooks/use-portal';
@@ -104,10 +105,19 @@ export function TenantHome({
             {data.torneoActivo?.nombre.toUpperCase() ?? 'SIN TORNEO ACTIVO'}
           </h1>
           {data.torneoActivo && (
-            <p className="font-serif italic text-ink-mute mt-2 text-lg">
-              Fecha {data.torneoActivo.fechaActual} de {data.torneoActivo.fechasTotales} ·
-              Temporada {data.torneoActivo.temporada}
-            </p>
+            <>
+              <p className="font-serif italic text-ink-mute mt-2 text-lg">
+                Fecha {data.torneoActivo.fechaActual} de {data.torneoActivo.fechasTotales} ·
+                Temporada {data.torneoActivo.temporada}
+              </p>
+              <div className="mt-3">
+                <PushToggle
+                  scopeType="TORNEO"
+                  scopeId={data.torneoActivo.id}
+                  label="Recibí los resultados"
+                />
+              </div>
+            </>
           )}
           {/* Sponsors HOME_HERO — dentro del hero */}
           <SponsorBanner posicion="HOME_HERO" className="mt-6" maxItems={4} />

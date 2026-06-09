@@ -8,13 +8,15 @@ import {
   PUSH_PROVIDER,
   PushFCMProvider,
   PushMockProvider,
+  PushWebPushProvider,
 } from './push-provider';
 import { PushService } from './push.service';
 
 /**
  * Módulo de notificaciones push. Selecciona provider según `PUSH_MODE`:
  *   mock (default) → PushMockProvider (log-only)
- *   fcm           → PushFCMProvider (stub, requiere credenciales)
+ *   webpush        → PushWebPushProvider (VAPID, requiere claves en env)
+ *   fcm            → PushFCMProvider (stub, requiere credenciales)
  */
 @Module({
   imports: [CompetitionModule, TypeOrmModule.forFeature([PushSubscription])],
@@ -23,11 +25,17 @@ import { PushService } from './push.service';
     PushService,
     PushMockProvider,
     PushFCMProvider,
+    PushWebPushProvider,
     {
       provide: PUSH_PROVIDER,
-      inject: [PushMockProvider, PushFCMProvider],
-      useFactory: (mock: PushMockProvider, fcm: PushFCMProvider) => {
+      inject: [PushMockProvider, PushFCMProvider, PushWebPushProvider],
+      useFactory: (
+        mock: PushMockProvider,
+        fcm: PushFCMProvider,
+        webpush: PushWebPushProvider,
+      ) => {
         const mode = (process.env.PUSH_MODE ?? 'mock').toLowerCase();
+        if (mode === 'webpush') return webpush;
         if (mode === 'fcm') return fcm;
         return mock;
       },
