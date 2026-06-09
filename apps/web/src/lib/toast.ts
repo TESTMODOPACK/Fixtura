@@ -3,7 +3,7 @@ import { toast as sonner, type ExternalToast } from 'sonner';
 import { parseApiErrorMessage } from '@/lib/api';
 
 /**
- * Sprint 27 — Helpers de toast con shape Fixtura.
+ * Sprint 27 — Helpers de toast con shape LigaPlus.
  *
  * Usar siempre estos en vez de `sonner.toast(...)` directo para que:
  *  - Los errores se parsean con parseApiErrorMessage (entiende

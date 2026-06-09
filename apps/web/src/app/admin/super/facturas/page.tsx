@@ -80,7 +80,7 @@ export default function FacturasPlataformaPage(): React.ReactElement {
       <PageHead
         eyebrow="Plataforma"
         title="Facturación a ligas"
-        sub="Cobros mensuales de Fixtura a las ligas suscriptas. Acciones solo para el administrador del sistema."
+        sub="Cobros mensuales de LigaPlus a las ligas suscriptas. Acciones solo para el administrador del sistema."
       >
         <Link href="/admin/super">
           <Button variant="ghost" size="sm">

@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 /**
- * Sprint 24A — Facturación de las ligas (clientes de Fixtura).
+ * Sprint 24A — Facturación de las ligas (clientes de LigaPlus).
  *
  * NO confundir con `Cobro` (sprint 7C): los Cobros son del LIGA_ADMIN
- * cobrando a sus equipos. Las FacturasPlataforma son de Fixtura
+ * cobrando a sus equipos. Las FacturasPlataforma son de LigaPlus
  * cobrando la suscripción a las ligas.
  */
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Catálogo completo de roles de Fixtura — 16 roles según ADR-0003.
+ * Catálogo completo de roles de LigaPlus — 16 roles según ADR-0003.
  *
  * El scope define dónde aplica el rol:
  *   PLATFORM — global, atraviesa todos los tenants (solo SUPER_ADMIN)

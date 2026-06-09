@@ -260,7 +260,7 @@ export class DelegadoInviteService {
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
         <h2>Hola ${nombre},</h2>
         <p>Te invitaron como <strong>delegado de ${clubNombre}</strong> en
-        <strong>${ligaNombre}</strong> a través de Fixtura.</p>
+        <strong>${ligaNombre}</strong> a través de LigaPlus.</p>
         <p>Vas a poder ver la información de tu club: plantel, resultados,
         tarjetas, sanciones y tus deudas — y pagar en línea.</p>
         <p style="margin:24px 0">

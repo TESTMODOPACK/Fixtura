@@ -6,7 +6,7 @@ import { Suspense, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { FixturaLockup } from '@/components/ui/logo';
+import { LigaPlusLockup } from '@/components/ui/logo';
 import { PasswordInput } from '@/components/ui/password-input';
 import { useActivarDelegado, useActivarInfo } from '@/hooks/use-delegado';
 import { parseApiErrorMessage } from '@/lib/api';
@@ -47,7 +47,7 @@ function ActivarInner(): React.ReactElement {
     <div className="min-h-screen bg-paper flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="flex justify-center mb-6">
-          <FixturaLockup showTag={false} />
+          <LigaPlusLockup showTag={false} />
         </div>
         <Card padding="roomy">
           {isLoading && <p className="text-ink-mute text-center">Validando invitación…</p>}

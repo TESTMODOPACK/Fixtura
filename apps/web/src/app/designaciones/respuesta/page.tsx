@@ -7,7 +7,7 @@ import { Suspense, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { FixturaLockup } from '@/components/ui/logo';
+import { LigaPlusLockup } from '@/components/ui/logo';
 import { apiFetch, ApiError } from '@/lib/api';
 
 interface RespuestaResult {
@@ -53,7 +53,7 @@ function RespuestaContent(): React.ReactElement {
     <div className="min-h-screen bg-paper flex items-center justify-center px-4 py-12">
       <Card padding="roomy" className="w-full max-w-md">
         <div className="flex justify-center mb-6">
-          <FixturaLockup />
+          <LigaPlusLockup />
         </div>
 
         {state.kind === 'loading' && (

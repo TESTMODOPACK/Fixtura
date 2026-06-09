@@ -1,5 +1,5 @@
 /**
- * Service Worker de Fixtura.
+ * Service Worker de LigaPlus.
  *
  * Estrategias:
  *   - Estáticos (JS, CSS, fuentes, imágenes propias): cache-first + revalidate
@@ -238,9 +238,9 @@ self.addEventListener('push', (event) => {
   try {
     payload = event.data ? event.data.json() : {};
   } catch {
-    payload = { title: 'Fixtura', body: event.data ? event.data.text() : '' };
+    payload = { title: 'LigaPlus', body: event.data ? event.data.text() : '' };
   }
-  const title = payload.title || 'Fixtura';
+  const title = payload.title || 'LigaPlus';
   const options = {
     body: payload.body || '',
     icon: '/icons/icon.svg',

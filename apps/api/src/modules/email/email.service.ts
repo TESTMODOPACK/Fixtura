@@ -22,7 +22,7 @@ export class EmailService {
   constructor() {
     const apiKey = process.env.RESEND_API_KEY;
     this.fromAddress =
-      process.env.EMAIL_FROM ?? 'Fixtura <onboarding@resend.dev>';
+      process.env.EMAIL_FROM ?? 'LigaPlus <onboarding@resend.dev>';
 
     if (apiKey && apiKey.trim().length > 0) {
       this.resend = new Resend(apiKey);

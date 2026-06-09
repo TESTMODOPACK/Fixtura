@@ -86,7 +86,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
             <CheckCircle2 size={56} className="mx-auto text-green-bright mb-4" />
             <CardLabel className="text-green-bright">¡Listo!</CardLabel>
             <p className="text-ink mt-4">
-              Si <strong>{email}</strong> está registrado en Fixtura, te enviamos un
+              Si <strong>{email}</strong> está registrado en LigaPlus, te enviamos un
               email con un link para recuperar tu contraseña.
             </p>
             <p className="text-sm text-ink-mute font-serif italic mt-4">

@@ -250,7 +250,7 @@ export class FacturacionPlataformaPagosService {
         externalReference,
         conceptos: [
           {
-            descripcion: `Suscripción Fixtura ${factura.plan?.nombre ?? 'Plan'} — ${String(
+            descripcion: `Suscripción LigaPlus ${factura.plan?.nombre ?? 'Plan'} — ${String(
               factura.periodoMes,
             ).padStart(2, '0')}/${factura.periodoAnio}`,
             monto: factura.monto,

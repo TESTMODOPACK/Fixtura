@@ -43,7 +43,7 @@ export default function MiSuscripcionPage(): React.ReactElement {
       <PageHead
         eyebrow="Tu liga"
         title="Mi suscripción"
-        sub="Resumen de tu plan de Fixtura, facturas y opciones de pago."
+        sub="Resumen de tu plan de LigaPlus, facturas y opciones de pago."
       />
 
       {apiError && (
@@ -81,7 +81,7 @@ export default function MiSuscripcionPage(): React.ReactElement {
               <div className="text-sm text-ink-mute mt-1">
                 {cuenta.plan
                   ? `$${cuenta.plan.precioMensualClp.toLocaleString('es-CL')} CLP / mes`
-                  : 'Contactá a Fixtura'}
+                  : 'Contactá a LigaPlus'}
               </div>
               <div
                 className={cn(

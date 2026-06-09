@@ -13,7 +13,7 @@ export default function NotFound(): React.ReactElement {
         </div>
         <div className="text-xl text-ink mb-4">No encontramos esa página</div>
         <p className="font-serif italic text-ink-mute mb-6">
-          La dirección que ingresaste no existe en Fixtura, o fue movida a otro
+          La dirección que ingresaste no existe en LigaPlus, o fue movida a otro
           lugar.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">

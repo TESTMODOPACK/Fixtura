@@ -144,7 +144,7 @@ export class FacturacionPlataformaCron {
     let asunto: string;
     let urgencia: string;
     if (dias === FacturacionPlataformaCron.DIAS_RECORDATORIO_1) {
-      asunto = `Tu factura de Fixtura está vencida — ${ligaNombre}`;
+      asunto = `Tu factura de LigaPlus está vencida — ${ligaNombre}`;
       urgencia = 'amistoso';
     } else if (dias === FacturacionPlataformaCron.DIAS_RECORDATORIO_2) {
       asunto = `Recordatorio: 10 días de mora — ${ligaNombre}`;
@@ -179,9 +179,9 @@ export class FacturacionPlataformaCron {
         Si ya hiciste el pago por transferencia, ignorá este aviso. Te
         avisaremos cuando lo registremos.
       </p>
-      <p>Saludos,<br/>Equipo Fixtura</p>
+      <p>Saludos,<br/>Equipo LigaPlus</p>
     `;
-    const text = `Tu factura ${periodo} de Fixtura tiene ${dias} días de mora. Monto $${monto} CLP. Pagá en ${linkPago}.`;
+    const text = `Tu factura ${periodo} de LigaPlus tiene ${dias} días de mora. Monto $${monto} CLP. Pagá en ${linkPago}.`;
 
     for (const email of emails) {
       await this.email.send({ to: email, subject: asunto, html, text });

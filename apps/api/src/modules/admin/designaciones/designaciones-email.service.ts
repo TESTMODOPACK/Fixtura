@@ -166,7 +166,7 @@ export class DesignacionesEmailService {
           </p>
           <hr style="margin:24px 0; border:0; border-top:1px solid #e5e0d3;">
           <p style="font-size:11px; color:#777; margin:0;">
-            Notificación automática de Fixtura. No respondas a esta dirección — el remitente
+            Notificación automática de LigaPlus. No respondas a esta dirección — el remitente
             es solo de envío. Para hablar con la liga, llamá o escribí al responsable directo.
           </p>
         </div>

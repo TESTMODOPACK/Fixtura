@@ -142,7 +142,7 @@ export class PushService {
         : `${local} ${golesL} – ${golesV} ${visita}`,
       body: esWalkover
         ? `Walkover declarado. Acta cerrada por inasistencia.`
-        : `Final de partido. ${partido.fecha?.torneo?.nombre ?? 'Fixtura'} — ${partido.fecha?.etiqueta ?? `Fecha ${partido.fecha?.numero ?? ''}`}`,
+        : `Final de partido. ${partido.fecha?.torneo?.nombre ?? 'LigaPlus'} — ${partido.fecha?.etiqueta ?? `Fecha ${partido.fecha?.numero ?? ''}`}`,
       url: `/torneos/${partido.fecha?.torneo?.slug ?? ''}/partidos/${partido.id}`,
       tag: `partido-${partido.id}`,
       data: {

@@ -7,14 +7,16 @@ interface LogoProps {
 }
 
 /**
- * Símbolo Fixtura — círculo verde profundo con X cruzada (naranja + lime).
- * La X representa: dos partidos cruzándose en el fixture, dos equipos
- * enfrentándose, las hojas del calendario tachadas.
+ * Símbolo LigaPlus — círculo verde profundo con un "+" cruzado
+ * (naranja + lime). El "+" representa el "Plus" de la marca: la liga y
+ * todo lo que suma alrededor (operación, finanzas, comunidad).
  */
-export function FixturaMark({ size = 32, variant = 'default', className }: LogoProps): React.ReactElement {
+export function LigaPlusMark({ size = 32, variant = 'default', className }: LogoProps): React.ReactElement {
   const fill = variant === 'mono' ? '#FFFFFF' : '#0F2A1F';
-  const stroke1 = variant === 'lime' ? '#95D5B2' : variant === 'mono' ? '#E76F26' : '#E76F26';
-  const stroke2 = variant === 'lime' ? '#95D5B2' : variant === 'mono' ? '#E76F26' : '#95D5B2';
+  // Barra horizontal (naranja) + vertical (lime). En dark/lime o mono el
+  // "+" va de un solo color para máximo contraste.
+  const barH = variant === 'lime' ? '#95D5B2' : variant === 'mono' ? '#0F2A1F' : '#E76F26';
+  const barV = variant === 'lime' ? '#95D5B2' : variant === 'mono' ? '#0F2A1F' : '#95D5B2';
 
   return (
     <svg
@@ -23,25 +25,27 @@ export function FixturaMark({ size = 32, variant = 'default', className }: LogoP
       viewBox="0 0 120 120"
       xmlns="http://www.w3.org/2000/svg"
       className={cn('flex-shrink-0', className)}
-      aria-label="Fixtura"
+      aria-label="LigaPlus"
     >
       <circle cx="60" cy="60" r="56" fill={fill} />
+      {/* Barra horizontal del "+" */}
       <line
-        x1="32"
-        y1="32"
-        x2="88"
-        y2="88"
-        stroke={stroke1}
-        strokeWidth="14"
+        x1="34"
+        y1="60"
+        x2="86"
+        y2="60"
+        stroke={barH}
+        strokeWidth="15"
         strokeLinecap="round"
       />
+      {/* Barra vertical del "+" */}
       <line
-        x1="88"
-        y1="32"
-        x2="32"
-        y2="88"
-        stroke={stroke2}
-        strokeWidth="14"
+        x1="60"
+        y1="34"
+        x2="60"
+        y2="86"
+        stroke={barV}
+        strokeWidth="15"
         strokeLinecap="round"
       />
     </svg>
@@ -49,9 +53,10 @@ export function FixturaMark({ size = 32, variant = 'default', className }: LogoP
 }
 
 /**
- * Wordmark "FIXTURA" con X en naranja. Para headers, splashes, footers.
+ * Wordmark "Liga+" — "Liga" en verde profundo y el "+" en naranja.
+ * Para headers, splashes, footers.
  */
-export function FixturaWordmark({
+export function LigaPlusWordmark({
   size = 32,
   inverse = false,
   className,
@@ -69,7 +74,7 @@ export function FixturaWordmark({
         className,
       )}
     >
-      FI<span className="text-accent">X</span>TURA
+      Liga<span className="text-accent">+</span>
     </span>
   );
 }
@@ -77,7 +82,7 @@ export function FixturaWordmark({
 /**
  * Lockup horizontal completo: símbolo + wordmark + tagline.
  */
-export function FixturaLockup({
+export function LigaPlusLockup({
   inverse = false,
   showTag = true,
   className,
@@ -88,15 +93,15 @@ export function FixturaLockup({
 }): React.ReactElement {
   return (
     <div className={cn('inline-flex items-center gap-3', className)}>
-      <FixturaMark size={40} variant={inverse ? 'lime' : 'default'} />
+      <LigaPlusMark size={40} variant={inverse ? 'lime' : 'default'} />
       <div>
         <div
           className={cn(
-            'font-display tracking-[0.18em] text-2xl leading-none',
+            'font-display tracking-[0.12em] text-2xl leading-none',
             inverse ? 'text-chalk' : 'text-green-deep',
           )}
         >
-          FIXTURA
+          LIGA<span className="text-accent">+</span>
         </div>
         {showTag && (
           <div

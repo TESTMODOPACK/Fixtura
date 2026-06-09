@@ -60,11 +60,11 @@ export class AuthService {
 
     await this.email.send({
       to: normalizado,
-      subject: 'Recuperación de contraseña — Fixtura',
+      subject: 'Recuperación de contraseña — LigaPlus',
       html: `
         <h2 style="color:#15803d">Recuperación de contraseña</h2>
         <p>Hola,</p>
-        <p>Recibimos una solicitud para recuperar tu contraseña en Fixtura.
+        <p>Recibimos una solicitud para recuperar tu contraseña en LigaPlus.
         Si fuiste vos, hacé click en este botón para crear una nueva:</p>
         <p style="margin: 20px 0">
           <a href="${link}"
@@ -77,9 +77,9 @@ export class AuthService {
           Este link expira en 30 minutos. Si no fuiste vos, ignorá este email —
           tu contraseña actual sigue siendo válida.
         </p>
-        <p>Saludos,<br/>Fixtura</p>
+        <p>Saludos,<br/>LigaPlus</p>
       `,
-      text: `Recuperación de contraseña Fixtura. Link (expira en 30min): ${link}`,
+      text: `Recuperación de contraseña LigaPlus. Link (expira en 30min): ${link}`,
     });
 
     return { ok: true };

@@ -130,7 +130,7 @@ export class SIIService {
         razonSocial: doc.razonSocial,
         conceptos: [
           {
-            descripcion: doc.cobro?.concepto ?? 'Pago Fixtura',
+            descripcion: doc.cobro?.concepto ?? 'Pago LigaPlus',
             monto: doc.monto,
             cantidad: 1,
           },

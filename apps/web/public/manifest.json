@@ -1,6 +1,6 @@
 {
-  "name": "Fixtura — Plataforma para ligas amateur",
-  "short_name": "Fixtura",
+  "name": "LigaPlus — Plataforma para ligas amateur",
+  "short_name": "LigaPlus",
   "description": "Gestión de torneos, fixture, actas y designaciones para ligas amateur de Chile y LATAM.",
   "start_url": "/",
   "scope": "/",

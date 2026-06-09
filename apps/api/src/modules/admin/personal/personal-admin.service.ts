@@ -82,11 +82,11 @@ export class PersonalAdminService {
       try {
         await this.email.send({
           to: personal.email,
-          subject: `[${tenantName}] Activación de cuenta — Fixtura`,
+          subject: `[${tenantName}] Activación de cuenta — LigaPlus`,
           html: `
             <h2 style="color:#15803d">¡Hola, ${personal.nombre}!</h2>
             <p><strong>${tenantName}</strong> te dio de alta como
-            <strong>${rolHumano}</strong> en Fixtura.</p>
+            <strong>${rolHumano}</strong> en LigaPlus.</p>
             <p>Para activar tu cuenta y poder ver tus designaciones, hacé click en este
             botón:</p>
             <p style="margin: 20px 0">
@@ -101,7 +101,7 @@ export class PersonalAdminService {
             </p>
             <p>Saludos,<br/>${tenantName}</p>
           `,
-          text: `Hola ${personal.nombre}, ${tenantName} te invitó a Fixtura. Activá tu cuenta en: ${link} (expira en 72h).`,
+          text: `Hola ${personal.nombre}, ${tenantName} te invitó a LigaPlus. Activá tu cuenta en: ${link} (expira en 72h).`,
         });
         algunEnviado = true;
       } catch (err) {

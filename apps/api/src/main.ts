@@ -263,7 +263,7 @@ async function bootstrap(): Promise<void> {
   const port = Number.parseInt(process.env.PORT ?? '3000', 10);
   await app.listen(port);
   trace(`8/8 listening on :${port}`);
-  logger.log(`Fixtura API running on port ${port}`);
+  logger.log(`LigaPlus API running on port ${port}`);
   logger.log(
     `CORS allowed origins: ${allowedOrigins ? allowedOrigins.join(', ') : 'all (reflect — dev only)'}`,
   );

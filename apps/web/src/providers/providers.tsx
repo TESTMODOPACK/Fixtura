@@ -40,7 +40,7 @@ export function Providers({ children }: { children: React.ReactNode }): React.Re
       {children}
       {/* Sprint 27 — Toaster global. Posición bottom-right para no
           tapar la nav superior. richColors usa la paleta semántica
-          de sonner (verde/rojo/amarillo) que pega bien con Fixtura. */}
+          de sonner (verde/rojo/amarillo) que pega bien con LigaPlus. */}
       <Toaster
         position="bottom-right"
         richColors

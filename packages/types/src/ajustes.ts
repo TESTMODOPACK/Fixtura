@@ -5,7 +5,7 @@ import { ROLE, type Role } from './roles';
 /**
  * Configuración del tenant que el admin de liga puede editar desde
  * /admin/ajustes. NO incluye campos administrativos como plan/tipo —
- * esos los maneja el super admin de Fixtura.
+ * esos los maneja el super admin de LigaPlus.
  */
 
 /**

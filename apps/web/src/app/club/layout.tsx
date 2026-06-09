@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-import { FixturaLockup } from '@/components/ui/logo';
+import { LigaPlusLockup } from '@/components/ui/logo';
 import { useMiClub } from '@/hooks/use-delegado';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth-store';
@@ -59,7 +59,7 @@ export default function ClubLayout({
         <aside className="hidden md:flex w-60 flex-col bg-green-deep text-chalk">
           <div className="px-5 py-6 border-b border-green-mid">
             <Link href="/club">
-              <FixturaLockup inverse showTag={false} />
+              <LigaPlusLockup inverse showTag={false} />
             </Link>
             {club && (
               <div className="mt-3 text-sm font-semibold text-chalk leading-tight">

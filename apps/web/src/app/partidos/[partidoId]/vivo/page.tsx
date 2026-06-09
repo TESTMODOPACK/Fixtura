@@ -100,7 +100,7 @@ export default function PartidoVivoPage({
         </div>
 
         <div className="mt-10 text-center text-xs uppercase tracking-[0.18em] text-chalk/40">
-          Powered by Fixtura
+          Powered by LigaPlus
         </div>
       </div>
     </div>

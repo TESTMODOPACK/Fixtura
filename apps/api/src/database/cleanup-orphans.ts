@@ -343,7 +343,7 @@ async function main(): Promise<void> {
     // Sprint 23 (Super Admin): planes_suscripcion + flags en tenants.
     await ensurePlanesSuscripcionTable(client, log);
 
-    // Sprint 24A (Facturación plataforma): facturas que cobra Fixtura a sus ligas.
+    // Sprint 24A (Facturación plataforma): facturas que cobra LigaPlus a sus ligas.
     await ensureFacturasPlataformaTable(client, log);
     // FK transacciones → facturas_plataforma. Se hace acá porque transacciones
     // se crea más arriba pero la tabla destino se crea recién acá.
@@ -2136,7 +2136,7 @@ async function ensurePlanesSuscripcionTable(
 }
 
 /**
- * Sprint 24A — Facturas que Fixtura cobra a las ligas.
+ * Sprint 24A — Facturas que LigaPlus cobra a las ligas.
  *
  * Sin RLS — datos de plataforma. Solo SUPER_ADMIN puede crear/anular.
  * El LIGA_ADMIN puede ver SUS facturas (filtro por tenant_id explícito

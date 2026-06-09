@@ -97,7 +97,7 @@ export function InstallPrompt(): React.ReactElement | null {
     <div className="fixed bottom-3 inset-x-3 z-50 md:left-auto md:right-4 md:max-w-sm">
       <div className="bg-green-deep text-chalk rounded-card shadow-xl border border-green-mid p-4 flex items-start gap-3">
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm">Instalá Fixtura en tu teléfono</p>
+          <p className="font-semibold text-sm">Instalá LigaPlus en tu teléfono</p>
           {ios ? (
             <p className="text-[13px] text-chalk/80 mt-1 leading-snug flex items-center gap-1 flex-wrap">
               Tocá <Share size={14} className="inline" /> <strong>Compartir</strong> y luego{' '}

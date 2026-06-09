@@ -33,7 +33,7 @@ import { useEffect, useState } from 'react';
 import { ImpersonationBanner } from '@/components/impersonation-banner';
 import { useIsSuperAdmin } from '@/hooks/use-admin';
 
-import { FixturaLockup } from '@/components/ui/logo';
+import { LigaPlusLockup } from '@/components/ui/logo';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -218,7 +218,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <aside className="hidden md:flex w-64 flex-col bg-green-deep text-chalk">
           <div className="px-5 py-6 border-b border-green-mid">
             <Link href="/">
-              <FixturaLockup inverse showTag={false} />
+              <LigaPlusLockup inverse showTag={false} />
             </Link>
           </div>
           <NavBody sections={sections} pathname={pathname} />
@@ -235,7 +235,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Topbar móvil */}
         <div className="md:hidden fixed top-0 inset-x-0 z-30 flex items-center justify-between bg-green-deep text-chalk px-4 h-14 border-b border-green-mid">
           <Link href="/">
-            <FixturaLockup inverse showTag={false} />
+            <LigaPlusLockup inverse showTag={false} />
           </Link>
           <button
             type="button"
@@ -257,7 +257,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             />
             <div className="absolute left-0 top-0 h-full w-72 max-w-[85%] bg-green-deep text-chalk flex flex-col shadow-xl">
               <div className="flex items-center justify-between px-5 py-4 border-b border-green-mid">
-                <FixturaLockup inverse showTag={false} />
+                <LigaPlusLockup inverse showTag={false} />
                 <button
                   type="button"
                   onClick={() => setMenuOpen(false)}

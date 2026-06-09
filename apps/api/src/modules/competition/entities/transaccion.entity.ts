@@ -45,7 +45,7 @@ export class Transaccion {
 
   /**
    * Sprint 24A — vínculo opcional con factura plataforma cuando la
-   * transacción corresponde al pago de la liga a Fixtura (no a un
+   * transacción corresponde al pago de la liga a LigaPlus (no a un
    * cobro equipo→liga). Mutuamente excluyente con cobroId en la
    * práctica, pero no lo enforcamos a nivel DB para mantener flexibilidad.
    */

@@ -252,7 +252,7 @@ export function TenantHome({
             <span className="font-display tracking-[0.18em] text-green-deep">
               {data.liga.nombre.toUpperCase()}
             </span>{' '}
-            · Powered by <span className="text-accent">Fixtura</span>
+            · Powered by <span className="text-accent">LigaPlus</span>
           </div>
           <div className="font-serif italic">la cancha, organizada.</div>
         </div>

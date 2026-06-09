@@ -35,7 +35,7 @@ export default function SuperAdminPanel(): React.ReactElement {
       <PageHead
         eyebrow="Plataforma"
         title="Super Admin · Panel"
-        sub="Vista cross-tenant de Fixtura. Métricas, salud y acciones globales."
+        sub="Vista cross-tenant de LigaPlus. Métricas, salud y acciones globales."
       />
 
       {/* Atajos */}

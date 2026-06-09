@@ -9,7 +9,7 @@ interface PageHeadProps {
 }
 
 /**
- * Encabezado de página estilo prototipo Fixtura:
+ * Encabezado de página estilo prototipo LigaPlus:
  *   → EYEBROW (uppercase, naranja, letter-spacing alto)
  *   Buenas, Rodrigo (Anton, verde profundo, 40-48px)
  *   Hoy es viernes... (Newsreader italic, mute)

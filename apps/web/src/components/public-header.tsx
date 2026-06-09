@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { LoginModal } from '@/components/login-modal';
 import { Button } from '@/components/ui/button';
-import { FixturaMark } from '@/components/ui/logo';
+import { LigaPlusMark } from '@/components/ui/logo';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -46,7 +46,7 @@ export function PublicHeader({
       <header className="bg-green-deep text-chalk">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-6">
           <Link href={homeHref} className="flex items-center gap-3 min-w-0">
-            <FixturaMark size={36} variant="lime" />
+            <LigaPlusMark size={36} variant="lime" />
             <div className="min-w-0">
               <div className="font-display text-xl tracking-[0.12em] truncate">
                 {ligaNombre.toUpperCase()}

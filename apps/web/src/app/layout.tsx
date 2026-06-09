@@ -49,12 +49,12 @@ const spaceGrotesk = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'Fixtura · Plataforma para ligas amateur',
+  title: 'LigaPlus · Plataforma para ligas amateur',
   description:
     'Gestión integral de torneos, fixture, designaciones, finanzas y comunidad para ligas amateur de Chile y LATAM.',
-  applicationName: 'Fixtura',
-  authors: [{ name: 'Fixtura' }],
-  creator: 'Fixtura',
+  applicationName: 'LigaPlus',
+  authors: [{ name: 'LigaPlus' }],
+  creator: 'LigaPlus',
   manifest: '/manifest.json',
   icons: {
     icon: '/favicon.svg',
@@ -63,7 +63,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Fixtura',
+    title: 'LigaPlus',
   },
   formatDetection: {
     telephone: false,

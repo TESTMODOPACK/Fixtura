@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <!-- Maskable: el contenido principal vive en safe-zone central (80%) -->
   <rect width="512" height="512" fill="#0F2A1F"/>
-  <line x1="180" y1="180" x2="332" y2="332" stroke="#E76F26" stroke-width="48" stroke-linecap="round"/>
-  <line x1="332" y1="180" x2="180" y2="332" stroke="#95D5B2" stroke-width="48" stroke-linecap="round"/>
+  <line x1="180" y1="256" x2="332" y2="256" stroke="#E76F26" stroke-width="52" stroke-linecap="round"/>
+  <line x1="256" y1="180" x2="256" y2="332" stroke="#95D5B2" stroke-width="52" stroke-linecap="round"/>
 </svg>

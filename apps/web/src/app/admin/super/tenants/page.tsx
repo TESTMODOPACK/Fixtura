@@ -53,7 +53,7 @@ export default function TenantsPlataformaPage(): React.ReactElement {
       <PageHead
         eyebrow="Plataforma"
         title="Ligas registradas"
-        sub="Listado de todas las ligas y recintos que usan Fixtura. Acciones solo para el administrador del sistema."
+        sub="Listado de todas las ligas y recintos que usan LigaPlus. Acciones solo para el administrador del sistema."
       >
         <Link href="/admin/super">
           <Button variant="default" size="sm">

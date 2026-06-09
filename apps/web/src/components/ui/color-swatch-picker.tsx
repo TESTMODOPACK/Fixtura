@@ -13,7 +13,7 @@ import { cn } from '@/lib/cn';
  * abre el color picker nativo del navegador.
  */
 const COLORES_COMUNES: Array<{ hex: string; nombre: string }> = [
-  { hex: '#1B4332', nombre: 'Verde Fixtura' },
+  { hex: '#1B4332', nombre: 'Verde LigaPlus' },
   { hex: '#2F855A', nombre: 'Verde claro' },
   { hex: '#1E3A8A', nombre: 'Azul marino' },
   { hex: '#2563EB', nombre: 'Azul' },

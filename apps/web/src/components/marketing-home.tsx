@@ -2,10 +2,10 @@ import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { FixturaLockup, FixturaMark } from '@/components/ui/logo';
+import { LigaPlusLockup, LigaPlusMark } from '@/components/ui/logo';
 
 /**
- * Home pública del SaaS Fixtura — se renderiza cuando el hostname es
+ * Home pública del SaaS LigaPlus — se renderiza cuando el hostname es
  * fixtura.cl (o IP/localhost en dev). Target: dueños de ligas que
  * quieren contratar el producto.
  */
@@ -14,7 +14,7 @@ export function MarketingHome(): React.ReactElement {
     <main className="min-h-screen bg-paper">
       <header className="border-b border-line bg-chalk">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <FixturaLockup showTag={false} />
+          <LigaPlusLockup showTag={false} />
           <div className="flex items-center gap-2">
             <Link href="/precios">
               <Button variant="ghost" size="sm">
@@ -55,7 +55,7 @@ export function MarketingHome(): React.ReactElement {
 
         <div className="flex items-center justify-center">
           <Card variant="dark" padding="roomy" className="w-full max-w-sm text-center">
-            <FixturaMark size={200} className="mx-auto" />
+            <LigaPlusMark size={200} className="mx-auto" />
             <CardLabel tone="lime" className="mt-6 justify-center">
               El centro del juego
             </CardLabel>
@@ -96,14 +96,14 @@ export function MarketingHome(): React.ReactElement {
             </h3>
             <p className="text-sm text-ink-mute leading-relaxed">
               Tu liga vive en su propio dominio (liganunoa.cl, ligaviña.cl). Hinchas, jugadores
-              y prensa entran al portal con la marca de la liga, no la de Fixtura.
+              y prensa entran al portal con la marca de la liga, no la de LigaPlus.
             </p>
           </Card>
         </div>
       </section>
 
       <section className="max-w-6xl mx-auto px-6 py-20 text-center">
-        <div className="eyebrow mb-3 justify-center">→ ¿Ya tenés liga en Fixtura?</div>
+        <div className="eyebrow mb-3 justify-center">→ ¿Ya tenés liga en LigaPlus?</div>
         <h2 className="font-display text-4xl md:text-5xl text-green-deep tracking-display mb-3">
           ENTRÁ A TU PORTAL
         </h2>
@@ -115,9 +115,9 @@ export function MarketingHome(): React.ReactElement {
 
       <footer className="bg-green-deep text-chalk">
         <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col md:flex-row items-center justify-between gap-4">
-          <FixturaLockup inverse />
+          <LigaPlusLockup inverse />
           <div className="text-xs text-green-lime uppercase tracking-widest">
-            © 2026 Fixtura
+            © 2026 LigaPlus
           </div>
         </div>
       </footer>
