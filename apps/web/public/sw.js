@@ -16,7 +16,7 @@
  *
  * Versión cache — bumpear cuando cambien las estrategias.
  */
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const STATIC_CACHE = `fixtura-static-${CACHE_VERSION}`;
 const API_CACHE = `fixtura-api-${CACHE_VERSION}`;
 const ACTA_CACHE = `fixtura-acta-${CACHE_VERSION}`;
@@ -49,7 +49,8 @@ const PRECACHE_ASSETS = [
   '/',
   '/manifest.json',
   '/favicon.svg',
-  '/icons/icon.svg',
+  '/brand/logo.png',
+  '/brand/mark.png',
   '/offline.html',
 ];
 
@@ -243,8 +244,8 @@ self.addEventListener('push', (event) => {
   const title = payload.title || 'LigaPlus';
   const options = {
     body: payload.body || '',
-    icon: '/icons/icon.svg',
-    badge: '/icons/icon.svg',
+    icon: '/brand/mark.png',
+    badge: '/brand/mark.png',
     tag: payload.tag || undefined,
     data: { url: payload.url || '/', ...(payload.data || {}) },
   };

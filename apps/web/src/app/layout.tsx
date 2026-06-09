@@ -57,8 +57,8 @@ export const metadata: Metadata = {
   creator: 'LigaPlus',
   manifest: '/manifest.json',
   icons: {
-    icon: '/favicon.svg',
-    apple: '/icons/icon.svg',
+    icon: '/brand/mark.png',
+    apple: '/brand/mark.png',
   },
   appleWebApp: {
     capable: true,
