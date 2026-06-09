@@ -13,6 +13,7 @@ import {
   Heart,
   Layers,
   Megaphone,
+  Menu,
   PiggyBank,
   ScrollText,
   Settings,
@@ -23,10 +24,11 @@ import {
   UserCog,
   Users,
   Wallet,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { ImpersonationBanner } from '@/components/impersonation-banner';
 import { useIsSuperAdmin } from '@/hooks/use-admin';
@@ -108,21 +110,85 @@ const NAV_SUPER: NavSection = {
   ],
 };
 
+/** Lista de secciones de navegación — reutilizada en sidebar y drawer. */
+function NavBody({
+  sections,
+  pathname,
+  onNavigate,
+}: {
+  sections: NavSection[];
+  pathname: string;
+  onNavigate?: () => void;
+}): React.ReactElement {
+  return (
+    <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+      {sections.map((section) => (
+        <div key={section.title}>
+          <div className="px-2 mb-2 text-[10px] uppercase tracking-[0.18em] text-green-lime font-semibold">
+            → {section.title}
+          </div>
+          <ul className="space-y-0.5">
+            {section.items.map((item) => {
+              const active =
+                !item.comingSoon &&
+                (pathname === item.href ||
+                  (item.href !== '/admin' && pathname.startsWith(`${item.href}/`)));
+              const Icon = item.icon;
+              if (item.comingSoon) {
+                return (
+                  <li key={item.href}>
+                    <div
+                      aria-disabled="true"
+                      title="Disponible en próximos sprints"
+                      className="flex items-center gap-3 px-2 py-2 rounded-card text-sm text-chalk/40 cursor-not-allowed"
+                    >
+                      <Icon size={16} className="flex-shrink-0" />
+                      <span className="flex-1">{item.label}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-chalk/10 text-chalk/60">
+                        pronto
+                      </span>
+                    </div>
+                  </li>
+                );
+              }
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={onNavigate}
+                    className={cn(
+                      'flex items-center gap-3 px-2 py-2 rounded-card text-sm transition-colors',
+                      active
+                        ? 'bg-green-mid text-chalk'
+                        : 'text-chalk/80 hover:bg-green-mid/50 hover:text-chalk',
+                    )}
+                  >
+                    <Icon size={16} className="flex-shrink-0" />
+                    <span className="flex-1">{item.label}</span>
+                    {item.badge && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-accent text-chalk">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }): React.ReactElement | null {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
   const isSuperAdmin = useIsSuperAdmin();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // SUPER_ADMIN ve SOLO el menú de plataforma — no opera ligas directamente.
-  // Para ver/editar datos de una liga, usa el flujo Impersonar (Sprint 21):
-  // entra como un LIGA_ADMIN de esa liga, opera, y sale del modo soporte.
-  // Esto separa responsabilidades:
-  //   - Super Admin = plataforma (tenants, planes, métricas, health).
-  //   - Liga Admin  = competición / operaciones / personal / ajustes.
-  // Cuando un super admin está impersonando, el JWT que tiene es el del
-  // user impersonado (LIGA_ADMIN), así que `isSuperAdmin` es false y ve
-  // el NAV de liga normal + el banner naranja de impersonación.
   const sections: NavSection[] = isSuperAdmin ? [NAV_SUPER] : NAV;
 
   useEffect(() => {
@@ -130,12 +196,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.replace('/');
       return;
     }
-    // Super admin que entra a /admin (panel de liga) lo mandamos al
-    // panel de plataforma. Si querés ver una liga, usá Impersonar.
     if (isSuperAdmin && pathname === '/admin') {
       router.replace('/admin/super');
     }
   }, [accessToken, isSuperAdmin, pathname, router]);
+
+  // Cerrar el drawer al navegar (cambio de ruta).
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
 
   if (!accessToken) {
     return null;
@@ -145,81 +214,82 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-paper">
       <ImpersonationBanner />
       <div className="flex">
-      <aside className="hidden md:flex w-64 flex-col bg-green-deep text-chalk">
-        <div className="px-5 py-6 border-b border-green-mid">
+        {/* Sidebar desktop */}
+        <aside className="hidden md:flex w-64 flex-col bg-green-deep text-chalk">
+          <div className="px-5 py-6 border-b border-green-mid">
+            <Link href="/">
+              <FixturaLockup inverse showTag={false} />
+            </Link>
+          </div>
+          <NavBody sections={sections} pathname={pathname} />
+          <div className="px-5 py-4 border-t border-green-mid">
+            <Link
+              href="/"
+              className="text-[10px] text-green-lime uppercase tracking-widest hover:text-chalk"
+            >
+              ← Portal público
+            </Link>
+          </div>
+        </aside>
+
+        {/* Topbar móvil */}
+        <div className="md:hidden fixed top-0 inset-x-0 z-30 flex items-center justify-between bg-green-deep text-chalk px-4 h-14 border-b border-green-mid">
           <Link href="/">
             <FixturaLockup inverse showTag={false} />
           </Link>
-        </div>
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-          {sections.map((section) => (
-            <div key={section.title}>
-              <div className="px-2 mb-2 text-[10px] uppercase tracking-[0.18em] text-green-lime font-semibold">
-                → {section.title}
-              </div>
-              <ul className="space-y-0.5">
-                {section.items.map((item) => {
-                  const active =
-                    !item.comingSoon &&
-                    (pathname === item.href ||
-                      (item.href !== '/admin' && pathname.startsWith(`${item.href}/`)));
-                  const Icon = item.icon;
-                  if (item.comingSoon) {
-                    return (
-                      <li key={item.href}>
-                        <div
-                          aria-disabled="true"
-                          title="Disponible en próximos sprints"
-                          className="flex items-center gap-3 px-2 py-2 rounded-card text-sm text-chalk/40 cursor-not-allowed"
-                        >
-                          <Icon size={16} className="flex-shrink-0" />
-                          <span className="flex-1">{item.label}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-chalk/10 text-chalk/60">
-                            pronto
-                          </span>
-                        </div>
-                      </li>
-                    );
-                  }
-                  return (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        className={cn(
-                          'flex items-center gap-3 px-2 py-2 rounded-card text-sm transition-colors',
-                          active
-                            ? 'bg-green-mid text-chalk'
-                            : 'text-chalk/80 hover:bg-green-mid/50 hover:text-chalk',
-                        )}
-                      >
-                        <Icon size={16} className="flex-shrink-0" />
-                        <span className="flex-1">{item.label}</span>
-                        {item.badge && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-accent text-chalk">
-                            {item.badge}
-                          </span>
-                        )}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </nav>
-        <div className="px-5 py-4 border-t border-green-mid">
-          <Link
-            href="/"
-            className="text-[10px] text-green-lime uppercase tracking-widest hover:text-chalk"
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Abrir menú"
+            className="p-2 -mr-2 rounded-card hover:bg-green-mid/50"
           >
-            ← Portal público
-          </Link>
+            <Menu size={22} />
+          </button>
         </div>
-      </aside>
 
-      <div className="flex-1 min-w-0">
-        <main className="px-6 md:px-10 py-8 max-w-7xl">{children}</main>
-      </div>
+        {/* Drawer móvil */}
+        {menuOpen && (
+          <div className="md:hidden fixed inset-0 z-40">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setMenuOpen(false)}
+              aria-hidden="true"
+            />
+            <div className="absolute left-0 top-0 h-full w-72 max-w-[85%] bg-green-deep text-chalk flex flex-col shadow-xl">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-green-mid">
+                <FixturaLockup inverse showTag={false} />
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen(false)}
+                  aria-label="Cerrar menú"
+                  className="p-2 -mr-2 rounded-card hover:bg-green-mid/50"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <NavBody
+                sections={sections}
+                pathname={pathname}
+                onNavigate={() => setMenuOpen(false)}
+              />
+              <div className="px-5 py-4 border-t border-green-mid">
+                <Link
+                  href="/"
+                  onClick={() => setMenuOpen(false)}
+                  className="text-[10px] text-green-lime uppercase tracking-widest hover:text-chalk"
+                >
+                  ← Portal público
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0">
+          {/* Spacer para la topbar fija en móvil */}
+          <div className="h-14 md:hidden" />
+          <main className="px-6 md:px-10 py-8 max-w-7xl">{children}</main>
+        </div>
       </div>
     </div>
   );
