@@ -16,7 +16,7 @@
  *
  * Versión cache — bumpear cuando cambien las estrategias.
  */
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const STATIC_CACHE = `fixtura-static-${CACHE_VERSION}`;
 const API_CACHE = `fixtura-api-${CACHE_VERSION}`;
 const ACTA_CACHE = `fixtura-acta-${CACHE_VERSION}`;
@@ -227,4 +227,44 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+// ─── Web Push (F56.4) ────────────────────────────────────────────────
+// El backend (PushService) envía un payload JSON { title, body, url, tag,
+// data }. Mostramos la notificación y, al tocarla, abrimos/enfocamos la
+// URL indicada (ej. el detalle del partido).
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { title: 'Fixtura', body: event.data ? event.data.text() : '' };
+  }
+  const title = payload.title || 'Fixtura';
+  const options = {
+    body: payload.body || '',
+    icon: '/icons/icon.svg',
+    badge: '/icons/icon.svg',
+    tag: payload.tag || undefined,
+    data: { url: payload.url || '/', ...(payload.data || {}) },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      // Si ya hay una ventana abierta, la enfocamos y navegamos.
+      for (const w of wins) {
+        if ('focus' in w) {
+          w.focus();
+          if ('navigate' in w) w.navigate(url).catch(() => {});
+          return undefined;
+        }
+      }
+      return clients.openWindow(url);
+    }),
+  );
 });
