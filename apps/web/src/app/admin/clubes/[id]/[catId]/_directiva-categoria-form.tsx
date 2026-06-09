@@ -128,6 +128,58 @@ export function DirectivaCategoriaForm({
     FIELD_LABEL,
   );
 
+  // Acceso al sistema (delegado) — reutilizable para el presidente y para
+  // cada delegado. El acceso es a nivel CLUB (ve todas las categorías).
+  const renderAccesoSistema = (nombre: string, email: string): React.ReactNode => {
+    const e = (email ?? '').trim();
+    const n = (nombre ?? '').trim();
+    if (!e) {
+      return (
+        <span className="text-[11px] text-ink-mute italic">
+          Agregá un email para poder darle acceso al sistema.
+        </span>
+      );
+    }
+    const esCuenta =
+      !!cuentaDelegado?.email && cuentaDelegado.email.toLowerCase() === e.toLowerCase();
+    if (esCuenta && cuentaDelegado?.estado === 'ACTIVA') {
+      return (
+        <span className="text-[11px] font-semibold px-2 py-1 rounded bg-green-bright/15 text-green-bright inline-flex items-center gap-1">
+          <CheckCircle2 size={12} /> Tiene acceso al sistema
+        </span>
+      );
+    }
+    if (esCuenta && cuentaDelegado?.estado === 'PENDIENTE') {
+      return (
+        <span className="text-[11px] font-semibold px-2 py-1 rounded bg-orange-700/15 text-orange-700 inline-flex items-center gap-1">
+          <Clock size={12} /> Invitación enviada — pendiente de activar
+        </span>
+      );
+    }
+    const invitandoEste =
+      invitar.isPending && invitar.variables?.email?.toLowerCase() === e.toLowerCase();
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={invitar.isPending}
+        loading={invitandoEste}
+        onClick={() =>
+          invitar.mutate(
+            { nombre: n || e, email: e, canal: 'EMAIL' },
+            {
+              onSuccess: (r) => toastSuccess(r.mensaje),
+              onError: (err) => toastError(err),
+            },
+          )
+        }
+      >
+        <Send size={12} /> Dar acceso al sistema
+      </Button>
+    );
+  };
+
   return (
     <form
       onSubmit={form.handleSubmit(
@@ -168,6 +220,12 @@ export function DirectivaCategoriaForm({
             error={form.formState.errors.presidenteTelefono?.message}
           />
         </div>
+        <div className="mt-2">
+          {renderAccesoSistema(
+            form.watch('presidenteNombre') ?? '',
+            form.watch('presidenteEmail') ?? '',
+          )}
+        </div>
       </div>
 
       {/* Delegados */}
@@ -199,88 +257,44 @@ export function DirectivaCategoriaForm({
         )}
         {fields.length > 0 && (
           <div className="space-y-3">
-            {fields.map((field, idx) => {
-              const emailRow = (form.watch(`delegados.${idx}.email`) ?? '').trim();
-              const nombreRow = (form.watch(`delegados.${idx}.nombre`) ?? '').trim();
-              const esCuenta =
-                !!cuentaDelegado?.email &&
-                !!emailRow &&
-                cuentaDelegado.email.toLowerCase() === emailRow.toLowerCase();
-              const invitandoEste =
-                invitar.isPending &&
-                invitar.variables?.email?.toLowerCase() === emailRow.toLowerCase();
-              return (
-                <div key={field.id} className="rounded-card border border-line/60 p-3 space-y-2">
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
-                    <Input
-                      label={idx === 0 ? 'Nombre' : undefined}
-                      placeholder="Apellido Nombre"
-                      {...form.register(`delegados.${idx}.nombre`)}
-                      error={form.formState.errors.delegados?.[idx]?.nombre?.message}
-                    />
-                    <Input
-                      label={idx === 0 ? 'Email' : undefined}
-                      type="email"
-                      placeholder="email@club.cl"
-                      {...form.register(`delegados.${idx}.email`)}
-                      error={form.formState.errors.delegados?.[idx]?.email?.message}
-                    />
-                    <Input
-                      label={idx === 0 ? 'Teléfono' : undefined}
-                      placeholder="+56 9 1234 5678"
-                      {...form.register(`delegados.${idx}.telefono`)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => remove(idx)}
-                      className="h-9 w-9 flex items-center justify-center rounded-card hover:bg-danger/10 text-danger"
-                      aria-label="Eliminar delegado"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-
-                  {/* Acceso al sistema para este delegado */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {esCuenta && cuentaDelegado?.estado === 'ACTIVA' && (
-                      <span className="text-[11px] font-semibold px-2 py-1 rounded bg-green-bright/15 text-green-bright flex items-center gap-1">
-                        <CheckCircle2 size={12} /> Tiene acceso al sistema
-                      </span>
-                    )}
-                    {esCuenta && cuentaDelegado?.estado === 'PENDIENTE' && (
-                      <span className="text-[11px] font-semibold px-2 py-1 rounded bg-orange-700/15 text-orange-700 flex items-center gap-1">
-                        <Clock size={12} /> Invitación enviada — pendiente de activar
-                      </span>
-                    )}
-                    {!esCuenta && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={!emailRow || invitar.isPending}
-                        loading={invitandoEste}
-                        onClick={() =>
-                          invitar.mutate(
-                            { nombre: nombreRow || emailRow, email: emailRow, canal: 'EMAIL' },
-                            {
-                              onSuccess: (r) => toastSuccess(r.mensaje),
-                              onError: (e) => toastError(e),
-                            },
-                          )
-                        }
-                      >
-                        <Send size={12} /> Dar acceso al sistema
-                      </Button>
-                    )}
-                    {!emailRow && (
-                      <span className="text-[11px] text-ink-mute italic">
-                        Agregá un email para poder darle acceso.
-                      </span>
-                    )}
-                  </div>
+            {fields.map((field, idx) => (
+              <div key={field.id} className="rounded-card border border-line/60 p-3 space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                  <Input
+                    label={idx === 0 ? 'Nombre' : undefined}
+                    placeholder="Apellido Nombre"
+                    {...form.register(`delegados.${idx}.nombre`)}
+                    error={form.formState.errors.delegados?.[idx]?.nombre?.message}
+                  />
+                  <Input
+                    label={idx === 0 ? 'Email' : undefined}
+                    type="email"
+                    placeholder="email@club.cl"
+                    {...form.register(`delegados.${idx}.email`)}
+                    error={form.formState.errors.delegados?.[idx]?.email?.message}
+                  />
+                  <Input
+                    label={idx === 0 ? 'Teléfono' : undefined}
+                    placeholder="+56 9 1234 5678"
+                    {...form.register(`delegados.${idx}.telefono`)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => remove(idx)}
+                    className="h-9 w-9 flex items-center justify-center rounded-card hover:bg-danger/10 text-danger"
+                    aria-label="Eliminar delegado"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-              );
-            })}
+                <div>
+                  {renderAccesoSistema(
+                    form.watch(`delegados.${idx}.nombre`) ?? '',
+                    form.watch(`delegados.${idx}.email`) ?? '',
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
