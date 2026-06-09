@@ -76,7 +76,7 @@ export default function CanchasPage(): React.ReactElement {
             <div className="px-5 py-3 bg-paper-dark border-b border-line">
               <CardLabel>Canchas del complejo</CardLabel>
             </div>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead className="bg-paper border-b border-line">
                 <tr>
                   <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold text-ink-mute">
@@ -101,7 +101,7 @@ export default function CanchasPage(): React.ReactElement {
                   />
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </Card>
         )}
       </div>

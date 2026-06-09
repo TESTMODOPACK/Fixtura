@@ -96,7 +96,7 @@ export default function HorariosTorneoPage({
               <CardLabel>Slots cargados</CardLabel>
               <div className="text-xs text-ink-mute">{horarios.length} slot(s)</div>
             </div>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead className="bg-paper border-b border-line">
                 <tr>
                   <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold text-ink-mute">
@@ -119,7 +119,7 @@ export default function HorariosTorneoPage({
                   <FilaHorario key={h.id} torneoId={id} horario={h} />
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </Card>
         )}
       </div>

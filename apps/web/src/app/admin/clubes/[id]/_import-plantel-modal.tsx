@@ -586,7 +586,7 @@ function PreviewStep({
       </div>
 
       <div className="border border-line rounded overflow-hidden">
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto"><table className="w-full text-xs">
           <thead className="bg-paper-dark border-b border-line">
             <tr className="text-left text-[10px] uppercase tracking-[0.15em] text-ink-mute font-semibold">
               <th className="px-3 py-2">RUT</th>
@@ -608,7 +608,7 @@ function PreviewStep({
               </tr>
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );

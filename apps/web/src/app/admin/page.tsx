@@ -116,7 +116,7 @@ export default function AdminDashboardPage(): React.ReactElement {
               <div className="text-[10px] uppercase tracking-[0.18em] text-ink-mute font-semibold mb-2">
                 → Top 5 tabla
               </div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-[10px] uppercase tracking-wider text-ink-mute">
                     <th className="pb-1.5">#</th>
@@ -147,7 +147,7 @@ export default function AdminDashboardPage(): React.ReactElement {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           ) : (
             data?.torneoActivo && (

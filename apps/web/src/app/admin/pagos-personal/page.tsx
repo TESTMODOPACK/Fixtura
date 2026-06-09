@@ -265,7 +265,7 @@ function CuentasTab({
 
                 {abierto && (
                   <div className="mt-3 border-t border-line pt-3">
-                    <table className="w-full text-sm">
+                    <div className="overflow-x-auto"><table className="w-full text-sm">
                       <thead>
                         <tr className="text-left text-ink-mute">
                           <th className="pb-2 font-medium">Fecha</th>
@@ -292,7 +292,7 @@ function CuentasTab({
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </table></div>
                   </div>
                 )}
               </Card>
@@ -523,7 +523,7 @@ function HistorialTab(): React.ReactElement {
 
   return (
     <Card padding="tight">
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto"><table className="w-full text-sm">
         <thead>
           <tr className="text-left text-ink-mute">
             <th className="pb-2 font-medium">Fecha</th>
@@ -568,7 +568,7 @@ function HistorialTab(): React.ReactElement {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </Card>
   );
 }
@@ -728,7 +728,7 @@ function NuevaNominaForm({
               </p>
             </div>
           )}
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead>
               <tr className="text-left text-ink-mute">
                 <th className="pb-2" />
@@ -769,7 +769,7 @@ function NuevaNominaForm({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </Card>
       )}
 
@@ -894,7 +894,7 @@ function NominasLista(): React.ReactElement {
 
   return (
     <Card padding="tight">
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto"><table className="w-full text-sm">
         <thead>
           <tr className="text-left text-ink-mute">
             <th className="pb-2 font-medium">Período</th>
@@ -942,7 +942,7 @@ function NominasLista(): React.ReactElement {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </Card>
   );
 }
