@@ -2,6 +2,7 @@ import { GeistSans } from 'geist/font/sans';
 import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
 
+import { InstallPrompt } from '@/components/install-prompt';
 import { OfflineBanner } from '@/components/offline-banner';
 import { ServiceWorkerRegister } from '@/components/service-worker-register';
 import { Providers } from '@/providers/providers';
@@ -87,6 +88,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
           <ServiceWorkerRegister />
           <OfflineBanner />
           {children}
+          <InstallPrompt />
         </Providers>
       </body>
     </html>
