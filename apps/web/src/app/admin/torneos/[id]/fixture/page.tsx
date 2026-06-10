@@ -39,6 +39,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import { apiFetch, ApiError } from '@/lib/api';
+import { formatFecha } from '@/lib/format';
 import {
   useFixtureDetail,
   useReactivarFecha,
@@ -706,7 +707,7 @@ function SuspenderFechaForm({
                         {candidatasReusar.map((f) => (
                           <option key={f.id} value={f.id}>
                             Fecha {f.numero}
-                            {f.fechaInicio ? ` · ${f.fechaInicio}` : ''}
+                            {f.fechaInicio ? ` · ${formatFecha(f.fechaInicio)}` : ''}
                             {f.etiqueta ? ` (${f.etiqueta})` : ''}
                           </option>
                         ))}

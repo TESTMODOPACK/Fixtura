@@ -45,6 +45,7 @@ import {
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { formatFecha } from '@/lib/format';
 
 type Tab = 'branding' | 'dominio' | 'reglamento' | 'equipo' | 'calendario';
 
@@ -1005,7 +1006,7 @@ function CalendarioTab(): React.ReactElement {
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm(`Eliminar día bloqueado del ${d.fecha}?`)) {
+                    if (confirm(`Eliminar día bloqueado del ${formatFecha(d.fecha)}?`)) {
                       eliminar.mutate(d.id);
                     }
                   }}

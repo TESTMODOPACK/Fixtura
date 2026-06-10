@@ -59,6 +59,7 @@ import {
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { formatFecha } from '@/lib/format';
 
 type Filtro = 'todos' | 'pendientes' | 'vencidos' | 'pagados' | 'cancelados';
 
@@ -791,7 +792,7 @@ function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
             )}
             {cobro.vencimiento && (
               <span>
-                Vence: <span className="font-mono">{cobro.vencimiento}</span>
+                Vence: <span className="font-mono">{formatFecha(cobro.vencimiento)}</span>
               </span>
             )}
             {cobro.pagadoAt && (

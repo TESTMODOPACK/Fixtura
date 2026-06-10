@@ -51,6 +51,7 @@ import {
   useUpdatePersonal,
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
+import { formatFecha } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
 /**
@@ -348,7 +349,7 @@ function PersonaRow({
           {persona.carnetAnfaNumero && (
             <span className="font-mono">
               <Activity size={11} className="inline mr-1" /> ANFA #{persona.carnetAnfaNumero}
-              {persona.carnetAnfaVence ? ` · vence ${persona.carnetAnfaVence}` : ''}
+              {persona.carnetAnfaVence ? ` · vence ${formatFecha(persona.carnetAnfaVence)}` : ''}
             </span>
           )}
           {persona.tarifaBase != null && (
