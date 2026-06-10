@@ -61,6 +61,7 @@ import {
 } from '@/hooks/use-admin';
 import { ApiError, API_URL } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { formatFechaHora } from '@/lib/format';
 import { toastError } from '@/lib/toast';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -159,12 +160,7 @@ export default function PartidoDetallePage({
             <div className="flex items-center gap-2 text-ink-mute">
               <Calendar size={14} />
               {partido.fechaHora
-                ? new Date(partido.fechaHora).toLocaleString('es-CL', {
-                    day: '2-digit',
-                    month: 'short',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
+                ? formatFechaHora(partido.fechaHora)
                 : 'Sin horario'}
             </div>
             <div className="flex items-center gap-2 text-ink-mute">
@@ -265,12 +261,7 @@ function ActaSection({
         <div className="font-display text-2xl text-green-deep tracking-display mb-2">CERRADA</div>
         <p className="text-sm text-green-deep/85 font-serif italic mb-4">
           Cerrada el{' '}
-          {new Date(partido.actaCerradaAt!).toLocaleString('es-CL', {
-            day: '2-digit',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
+          {formatFechaHora(partido.actaCerradaAt)}
           . La tabla y los rankings ya reflejan este resultado.
         </p>
         <Button
@@ -704,7 +695,7 @@ function SuspensionCard({
                 <div className="text-xs text-ink-mute mt-1">
                   Registrado el{' '}
                   <span className="font-mono">
-                    {new Date(partido.suspendidoAt).toLocaleString('es-CL')}
+                    {formatFechaHora(partido.suspendidoAt)}
                   </span>
                 </div>
               )}
@@ -1168,7 +1159,7 @@ function CertificacionSection({
         {roster.presentesCertificadosAt && (
           <span className="text-xs text-ink-mute">
             Última certificación:{' '}
-            {new Date(roster.presentesCertificadosAt).toLocaleString('es-CL')}
+            {formatFechaHora(roster.presentesCertificadosAt)}
           </span>
         )}
       </div>

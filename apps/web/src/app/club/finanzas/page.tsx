@@ -9,6 +9,7 @@ import { PageHead } from '@/components/ui/page-head';
 import { useDelegadoFinanzas, usePagarCobroDelegado } from '@/hooks/use-delegado';
 import { toastError } from '@/lib/toast';
 import { cn } from '@/lib/cn';
+import { formatFecha } from '@/lib/format';
 
 function clp(n: number): string {
   return `$${n.toLocaleString('es-CL')}`;
@@ -84,9 +85,7 @@ export default function ClubFinanzasPage(): React.ReactElement {
                           <td className="py-2 pr-3 font-medium text-ink">{c.concepto}</td>
                           <td className="py-2 pr-3 text-ink-mute">{c.torneoNombre ?? '—'}</td>
                           <td className="py-2 pr-3 text-ink-mute">
-                            {c.vencimiento
-                              ? new Date(c.vencimiento).toLocaleDateString('es-CL')
-                              : '—'}
+                            {c.vencimiento ? formatFecha(c.vencimiento) : '—'}
                           </td>
                           <td className="py-2 pr-3 text-right tabular-nums font-semibold">
                             {clp(c.monto)}

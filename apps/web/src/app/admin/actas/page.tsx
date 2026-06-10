@@ -17,6 +17,7 @@ import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import { useActasGlobal, useFixtureDetail, useTorneos } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
+import { formatFecha } from '@/lib/format';
 
 type Filtro = 'todas' | 'pendientes' | 'cerradas';
 
@@ -190,11 +191,7 @@ function FiltroChip({
 
 function ActaRow({ acta }: { acta: ActaResumen }): React.ReactElement {
   const fecha = acta.fechaHora ? new Date(acta.fechaHora) : null;
-  const dia = fecha?.toLocaleDateString('es-CL', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-  });
+  const dia = formatFecha(fecha);
   const hora = fecha?.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
   const cerrada = !!acta.actaCerradaAt;
 

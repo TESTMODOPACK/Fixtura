@@ -19,6 +19,7 @@ import { SponsorBanner } from '@/components/sponsor-banner';
 import { Card, CardLabel } from '@/components/ui/card';
 import { usePublicTorneos, useResumenLiga } from '@/hooks/use-portal';
 import { cn } from '@/lib/cn';
+import { formatFecha } from '@/lib/format';
 
 /**
  * Sprint 36B — `torneoSlug` opcional: si se pasa, la vista se arma con
@@ -264,13 +265,7 @@ export function TenantHome({
 function TorneoCard({ torneo }: { torneo: TorneoListaPublico }): React.ReactElement {
   const esActivo = torneo.estado === 'ACTIVO';
   const fechaRef = esActivo ? torneo.proximoPartidoAt : torneo.ultimoPartidoAt;
-  const fechaFormat = fechaRef
-    ? new Date(fechaRef).toLocaleDateString('es-CL', {
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric',
-      })
-    : null;
+  const fechaFormat = fechaRef ? formatFecha(fechaRef) : null;
   return (
     <Link href={`/torneos/${torneo.slug}`} className="contents">
       <Card
@@ -339,11 +334,7 @@ function PartidoCardDark({ partido }: { partido: PartidoPublico }): React.ReactE
     hour: '2-digit',
     minute: '2-digit',
   });
-  const dia = new Date(partido.fechaHora).toLocaleDateString('es-CL', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-  });
+  const dia = formatFecha(partido.fechaHora);
   return (
     <div className="bg-green-mid/40 border border-green-mid rounded-card p-3">
       <div className="text-[10px] uppercase tracking-[0.18em] text-green-lime mb-1.5">

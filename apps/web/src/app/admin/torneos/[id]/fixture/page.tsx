@@ -263,12 +263,7 @@ function FechaCard({
           </div>
           {fecha.fechaInicio && (
             <div className="text-xs text-ink-mute mt-0.5">
-              {new Date(fecha.fechaInicio + 'T12:00:00').toLocaleDateString('es-CL', {
-                weekday: 'long',
-                day: '2-digit',
-                month: 'long',
-                year: 'numeric',
-              })}
+              {formatFecha(fecha.fechaInicio)}
             </div>
           )}
         </div>
@@ -378,11 +373,7 @@ function PartidoRow({
   });
 
   const fecha = partido.fechaHora ? new Date(partido.fechaHora) : null;
-  const dia = fecha?.toLocaleDateString('es-CL', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-  });
+  const dia = formatFecha(fecha);
   const hora = fecha?.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
 
   const style: React.CSSProperties = transform

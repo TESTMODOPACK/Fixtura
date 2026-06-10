@@ -7,6 +7,7 @@ import { Card, CardLabel } from '@/components/ui/card';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { PageHead } from '@/components/ui/page-head';
 import { useDelegadoResumen } from '@/hooks/use-delegado';
+import { formatFechaHora } from '@/lib/format';
 
 function clp(n: number): string {
   return `$${n.toLocaleString('es-CL')}`;
@@ -14,13 +15,7 @@ function clp(n: number): string {
 
 function fmtFechaHora(iso: string | null): string {
   if (!iso) return 'Por confirmar';
-  return new Date(iso).toLocaleString('es-CL', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatFechaHora(iso);
 }
 
 export default function ClubPanelPage(): React.ReactElement {

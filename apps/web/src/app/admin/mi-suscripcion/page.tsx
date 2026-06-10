@@ -21,6 +21,7 @@ import {
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { formatFecha } from '@/lib/format';
 
 export default function MiSuscripcionPage(): React.ReactElement {
   const { data: cuenta, isLoading: loadCuenta, error: errCuenta } = useMiSuscripcion();
@@ -119,9 +120,7 @@ export default function MiSuscripcionPage(): React.ReactElement {
                     {cuenta.ultimaFacturaPagada.periodoAnio}
                   </div>
                   <div className="text-xs text-ink-mute mt-1">
-                    {new Date(cuenta.ultimaFacturaPagada.fechaPago).toLocaleDateString(
-                      'es-CL',
-                    )}
+                    {formatFecha(cuenta.ultimaFacturaPagada.fechaPago)}
                   </div>
                 </>
               ) : (

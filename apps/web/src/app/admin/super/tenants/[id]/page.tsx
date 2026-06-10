@@ -31,6 +31,7 @@ import {
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { formatFechaHora } from '@/lib/format';
 
 const BADGE_ESTADO: Record<EstadoSuscripcion, string> = {
   TRIAL: 'bg-orange-700/15 text-orange-700',
@@ -102,7 +103,7 @@ function fmtDate(value: unknown): string {
   if (!value) return '—';
   try {
     if (typeof value === 'string' || value instanceof Date) {
-      return new Date(value).toLocaleString('es-CL');
+      return formatFechaHora(value);
     }
     return '—';
   } catch {

@@ -6,6 +6,7 @@ import { PublicHeader } from '@/components/public-header';
 import { Card, CardLabel } from '@/components/ui/card';
 import { useFixture } from '@/hooks/use-portal';
 import { cn } from '@/lib/cn';
+import { formatFecha } from '@/lib/format';
 
 interface FixtureViewProps {
   /** Sprint 36C — si está, filtra por torneo específico y los tabs del header navegan dentro del torneo. */
@@ -71,7 +72,7 @@ function FechaEstadoBadge({ partidos }: { partidos: PartidoPublico[] }): React.R
 
 function PartidoRow({ partido }: { partido: PartidoPublico }): React.ReactElement {
   const fecha = new Date(partido.fechaHora);
-  const dia = fecha.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: 'short' });
+  const dia = formatFecha(fecha);
   const hora = fecha.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
 
   return (

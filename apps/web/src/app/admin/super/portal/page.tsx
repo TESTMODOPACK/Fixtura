@@ -12,6 +12,7 @@ import {
   useUpdatePortalConfig,
 } from '@/hooks/use-admin';
 import { toastError, toastSuccess } from '@/lib/toast';
+import { formatFechaHora } from '@/lib/format';
 
 /**
  * Sprint 37 — Mantenedor del tenant por defecto del portal público.
@@ -145,7 +146,7 @@ export default function SuperAdminPortalPage(): React.ReactElement {
           {config.updatedAt && (
             <div className="mt-5 pt-4 border-t border-line text-xs text-ink-mute font-serif italic">
               Última actualización:{' '}
-              {new Date(config.updatedAt).toLocaleString('es-CL')}
+              {formatFechaHora(config.updatedAt)}
             </div>
           )}
 

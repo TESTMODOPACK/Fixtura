@@ -39,6 +39,7 @@ import {
 import { API_URL } from '@/lib/api';
 import { toastError, toastSuccess, toastWarning } from '@/lib/toast';
 import { cn } from '@/lib/cn';
+import { formatFecha as formatFechaCL } from '@/lib/format';
 import { useAuthStore } from '@/store/auth-store';
 
 function formatCLP(n: number): string {
@@ -59,15 +60,7 @@ function rolLabel(rol: string): string {
 
 function formatFecha(iso: string | null): string {
   if (!iso) return '—';
-  // iso puede venir como YYYY-MM-DD (date) o full datetime.
-  const soloFecha = iso.length === 10 ? `${iso}T00:00:00` : iso;
-  const d = new Date(soloFecha);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CL', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(d);
+  return formatFechaCL(iso);
 }
 
 type Tab = 'cuentas' | 'nominas' | 'historial';

@@ -18,6 +18,7 @@ import { PageHead } from '@/components/ui/page-head';
 import { useCanchasOcupacion } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { formatFecha } from '@/lib/format';
 
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'] as const;
 
@@ -34,8 +35,7 @@ function lunesDeSemana(ref: Date): Date {
 function formatRangoSemana(lunes: Date): string {
   const domingo = new Date(lunes);
   domingo.setDate(lunes.getDate() + 6);
-  const fmt = (d: Date): string =>
-    d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' });
+  const fmt = (d: Date): string => formatFecha(d);
   return `${fmt(lunes)} – ${fmt(domingo)}`;
 }
 

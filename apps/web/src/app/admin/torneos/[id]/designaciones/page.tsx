@@ -49,6 +49,7 @@ import {
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { formatFecha, formatFechaHora } from '@/lib/format';
 
 const ROL_LABEL: Record<RolDesignablePartido, string> = {
   ARBITRO_PRINCIPAL: 'Árbitro principal',
@@ -67,15 +68,7 @@ function dobleBookingResumen(detalle: ConflictoDobleBooking[]): string {
   return detalle
     .map((c) => {
       const cancha = c.canchaNombre ?? 'cancha s/i';
-      const cuando = c.fechaHora
-        ? new Date(c.fechaHora).toLocaleString('es-CL', {
-            weekday: 'short',
-            day: 'numeric',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-        : 'sin hora';
+      const cuando = c.fechaHora ? formatFechaHora(c.fechaHora) : 'sin hora';
       return `${cancha} (${cuando})`;
     })
     .join('; ');
@@ -431,9 +424,7 @@ function PartidoCard({
   const hora = fechaHora
     ? fechaHora.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
     : null;
-  const dia = fechaHora
-    ? fechaHora.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })
-    : null;
+  const dia = fechaHora ? formatFecha(fechaHora) : null;
 
   return (
     <Card padding="none" className="overflow-hidden">

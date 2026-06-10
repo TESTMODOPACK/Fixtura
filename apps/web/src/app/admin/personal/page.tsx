@@ -51,7 +51,7 @@ import {
   useUpdatePersonal,
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
-import { formatFecha } from '@/lib/format';
+import { formatFecha, formatFechaHora } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
 /**
@@ -1034,7 +1034,7 @@ function InvitarMenu({
       const partes: string[] = [];
       if (r.emailDestino) partes.push(`email ${r.emailDestino}`);
       if (r.telefonoDestino) partes.push(`WhatsApp ${r.telefonoDestino}`);
-      let msg = `Invitación enviada por ${partes.join(' + ')}.\nExpira el ${new Date(r.expira).toLocaleString('es-CL')}.`;
+      let msg = `Invitación enviada por ${partes.join(' + ')}.\nExpira el ${formatFechaHora(r.expira)}.`;
       if (r.errores.length > 0) {
         msg += `\n\nAdvertencias parciales:\n- ${r.errores.join('\n- ')}`;
       }

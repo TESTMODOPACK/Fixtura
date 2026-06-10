@@ -604,7 +604,7 @@ function BoletaRow({ doc }: { doc: DocumentoTributarioAdmin }): React.ReactEleme
               <span className="text-green-bright">
                 Emitida el{' '}
                 <span className="font-mono">
-                  {new Date(doc.emitidoAt).toLocaleDateString('es-CL')}
+                  {formatFecha(doc.emitidoAt)}
                 </span>
               </span>
             )}
@@ -799,7 +799,7 @@ function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
               <span className="text-green-bright">
                 Pagado el{' '}
                 <span className="font-mono">
-                  {new Date(cobro.pagadoAt).toLocaleDateString('es-CL')}
+                  {formatFecha(cobro.pagadoAt)}
                 </span>
                 {cobro.pagadoMetodo && ` · ${METODO_LABEL[cobro.pagadoMetodo]}`}
                 {cobro.pagadoReferencia && ` · ref: ${cobro.pagadoReferencia}`}
@@ -821,7 +821,7 @@ function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
                   <>
                     {' '}· último el{' '}
                     <span className="font-mono">
-                      {new Date(cobro.dunningUltimoAvisoAt).toLocaleDateString('es-CL')}
+                      {formatFecha(cobro.dunningUltimoAvisoAt)}
                     </span>
                   </>
                 )}

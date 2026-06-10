@@ -4,16 +4,11 @@ import { Card } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import { useDelegadoPartidos } from '@/hooks/use-delegado';
 import { cn } from '@/lib/cn';
+import { formatFechaHora } from '@/lib/format';
 
 function fmt(iso: string | null): string {
   if (!iso) return 'Por confirmar';
-  return new Date(iso).toLocaleString('es-CL', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatFechaHora(iso);
 }
 
 const RESULTADO_CLASS: Record<string, string> = {

@@ -8,6 +8,7 @@ import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import { useSystemHealth } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
+import { formatFechaHora } from '@/lib/format';
 
 export default function HealthPage(): React.ReactElement {
   const { data, isLoading, error, refetch } = useSystemHealth();
@@ -74,7 +75,7 @@ export default function HealthPage(): React.ReactElement {
               <div>
                 <span className="text-ink-mute">Última lectura:</span>{' '}
                 <span className="font-mono">
-                  {new Date(data.timestamp).toLocaleString('es-CL')}
+                  {formatFechaHora(data.timestamp)}
                 </span>
               </div>
             </div>

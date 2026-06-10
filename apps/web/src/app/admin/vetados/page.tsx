@@ -22,6 +22,7 @@ import {
   useVetados,
 } from '@/hooks/use-admin';
 import { toastSuccess } from '@/lib/toast';
+import { formatFecha } from '@/lib/format';
 
 const VetadoFormSchema = z.object({
   rut: z
@@ -210,11 +211,7 @@ export default function VetadosPage(): React.ReactElement {
                     )}
                     <span>
                       ·{' '}
-                      {new Date(v.createdAt).toLocaleDateString('es-CL', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatFecha(v.createdAt)}
                     </span>
                   </div>
                 </div>

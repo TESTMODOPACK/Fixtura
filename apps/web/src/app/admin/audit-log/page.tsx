@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import { useAuditActions, useAuditLog } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
+import { formatFechaHora } from '@/lib/format';
 
 export default function AuditLogPage(): React.ReactElement {
   const [page, setPage] = useState(1);
@@ -159,14 +160,7 @@ export default function AuditLogPage(): React.ReactElement {
                 {data.items.map((it) => (
                   <li key={it.id} className="px-5 py-3 grid grid-cols-12 gap-3 items-start text-sm">
                     <div className="col-span-12 md:col-span-3 text-ink-mute font-mono text-xs">
-                      {new Date(it.createdAt).toLocaleString('es-CL', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                      })}
+                      {formatFechaHora(it.createdAt)}
                     </div>
                     <div className="col-span-12 md:col-span-3 font-semibold text-ink truncate">
                       {it.action}

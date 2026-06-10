@@ -4,6 +4,7 @@ import { PublicHeader } from '@/components/public-header';
 import { Card } from '@/components/ui/card';
 import { useTabla } from '@/hooks/use-portal';
 import { cn } from '@/lib/cn';
+import { formatFechaHora } from '@/lib/format';
 
 interface TablaViewProps {
   /** Sprint 36C — si está, filtra por torneo específico y los tabs del header navegan dentro del torneo. */
@@ -75,7 +76,7 @@ export function TablaView({ torneoSlug }: TablaViewProps): React.ReactElement {
 
         {data && (
           <p className="mt-4 text-xs text-ink-mute font-serif italic">
-            Actualizada al cierre de la última acta · {new Date(data.actualizadaAt).toLocaleString('es-CL')}
+            Actualizada al cierre de la última acta · {formatFechaHora(data.actualizadaAt)}
           </p>
         )}
       </main>

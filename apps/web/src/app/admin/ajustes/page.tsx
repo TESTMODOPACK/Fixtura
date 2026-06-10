@@ -704,11 +704,7 @@ function MiembroRow({ miembro }: { miembro: MiembroAdmin }): React.ReactElement 
           <span>
             Último login:{' '}
             {miembro.ultimoLoginAt
-              ? new Date(miembro.ultimoLoginAt).toLocaleDateString('es-CL', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                })
+              ? formatFecha(miembro.ultimoLoginAt)
               : 'nunca'}
           </span>
         </div>
@@ -982,12 +978,7 @@ function CalendarioTab(): React.ReactElement {
               >
                 <div>
                   <div className="font-semibold text-ink">
-                    {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CL', {
-                      weekday: 'long',
-                      day: '2-digit',
-                      month: 'long',
-                      year: 'numeric',
-                    })}
+                    {formatFecha(d.fecha)}
                   </div>
                   <div className="text-sm text-ink-mute">
                     {d.motivo}
