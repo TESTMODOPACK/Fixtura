@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+import { GuiaUso } from '@/components/guia-uso';
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { KpiCard } from '@/components/ui/kpi-card';
@@ -38,6 +39,8 @@ export default function AdminDashboardPage(): React.ReactElement {
           </Button>
         </Link>
       </PageHead>
+
+      <GuiaUso />
 
       {/* Alertas críticas */}
       {data && (
