@@ -9,6 +9,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { DatabaseModule } from './database/database.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { SubscriptionGuard } from './common/guards/subscription.guard';
 import { TenantContextInterceptor } from './common/interceptors/tenant-context.interceptor';
 import { RlsModule } from './common/rls/rls.module';
 import { AdminModule } from './modules/admin/admin.module';
@@ -94,6 +95,8 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // F57 — bloquea operaciones de ligas con suscripción suspendida/cancelada.
+    { provide: APP_GUARD, useClass: SubscriptionGuard },
   ],
 })
 export class AppModule {}

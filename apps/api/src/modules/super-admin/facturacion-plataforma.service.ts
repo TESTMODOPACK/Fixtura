@@ -263,7 +263,38 @@ export class FacturacionPlataformaService {
     if (opts?.observaciones)
       f.observaciones = (f.observaciones ?? '') + '\n' + opts.observaciones;
     await this.repo.save(f);
+    // F57 — si la liga estaba suspendida por mora y, tras este pago, ya no
+    // acumula ≥2 facturas vencidas, se reactiva automáticamente.
+    await this.reactivarSiCorresponde(f.tenantId);
     return this.findOne(f.id);
+  }
+
+  /**
+   * F57 — Reactiva el tenant a ACTIVO si estaba SUSPENDIDO y ya no debe
+   * ≥2 facturas vencidas. La tabla `tenants` no tiene RLS.
+   */
+  private async reactivarSiCorresponde(tenantId: string): Promise<void> {
+    const rows: Array<{ estado_suscripcion: string }> = await this.ds.query(
+      `SELECT estado_suscripcion FROM tenants WHERE id = $1`,
+      [tenantId],
+    );
+    if (rows[0]?.estado_suscripcion !== 'SUSPENDIDO') return;
+    const venc: Array<{ n: number }> = await this.ds.query(
+      `SELECT COUNT(*)::int AS n FROM facturas_plataforma
+        WHERE tenant_id = $1 AND estado = 'VENCIDA'`,
+      [tenantId],
+    );
+    if (Number(venc[0]?.n ?? 0) < 2) {
+      await this.ds.query(
+        `UPDATE tenants
+            SET estado_suscripcion = 'ACTIVO',
+                suspendido_at = NULL,
+                suspendido_motivo = NULL,
+                is_active = true
+          WHERE id = $1`,
+        [tenantId],
+      );
+    }
   }
 
   @Transactional()

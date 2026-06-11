@@ -32,6 +32,8 @@ export class FacturacionPlataformaCron {
   static readonly DIAS_RECORDATORIO_2 = 10;
   static readonly DIAS_RECORDATORIO_3 = 20;
   static readonly DIAS_SUSPENSION = 30;
+  /** F57 — se suspende la liga al acumular esta cantidad de facturas vencidas. */
+  static readonly FACTURAS_VENCIDAS_SUSPENSION = 2;
 
   constructor(
     @InjectDataSource() private readonly ds: DataSource,
@@ -82,7 +84,8 @@ export class FacturacionPlataformaCron {
         this.log.log(`[cron] ${actualizadas} facturas marcadas VENCIDAS.`);
       }
       await this.enviarRecordatorios();
-      await this.suspenderMorososPorMaxDias();
+      await this.suspenderTrialesVencidos();
+      await this.suspenderMorosos();
     } catch (err) {
       this.log.error(
         `[cron] facturacion-mora FALLÓ: ${err instanceof Error ? err.message : String(err)}`,
@@ -188,38 +191,78 @@ export class FacturacionPlataformaCron {
     }
   }
 
-  private async suspenderMorososPorMaxDias(): Promise<void> {
+  /**
+   * F57 — Suspende ligas que acumulan ≥2 facturas vencidas (≈2 meses de
+   * suscripción impagos). El SubscriptionGuard usa `estado_suscripcion`
+   * para cortar el acceso; el pago confirmado reactiva (ver service).
+   */
+  private async suspenderMorosos(): Promise<void> {
     await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
-    // Buscar tenants ACTIVOS con alguna factura VENCIDA con ≥ 30 días.
-    const rows: Array<{ tenant_id: string; dias_max: number }> = await this.ds.query(
+    const rows: Array<{ tenant_id: string; vencidas: number }> = await this.ds.query(
       `
       SELECT f.tenant_id AS tenant_id,
-             MAX(CURRENT_DATE - f.fecha_vencimiento)::int AS dias_max
+             COUNT(*)::int AS vencidas
         FROM facturas_plataforma f
         JOIN tenants t ON t.id = f.tenant_id
        WHERE f.estado = 'VENCIDA'
-         AND t.estado_suscripcion = 'ACTIVO'
+         AND t.estado_suscripcion IN ('ACTIVO', 'TRIAL')
        GROUP BY f.tenant_id
-      HAVING MAX(CURRENT_DATE - f.fecha_vencimiento) >= $1
+      HAVING COUNT(*) >= $1
       `,
-      [FacturacionPlataformaCron.DIAS_SUSPENSION],
+      [FacturacionPlataformaCron.FACTURAS_VENCIDAS_SUSPENSION],
     );
 
     for (const row of rows) {
       try {
         const t = await this.tenantRepo.findOne({ where: { id: row.tenant_id } });
-        if (!t || t.estadoSuscripcion === 'SUSPENDIDO') continue;
+        if (!t || t.estadoSuscripcion === 'SUSPENDIDO' || t.estadoSuscripcion === 'CANCELADO')
+          continue;
         t.estadoSuscripcion = 'SUSPENDIDO';
         t.suspendidoAt = new Date();
-        t.suspendidoMotivo = `Mora de ${row.dias_max} días en facturas plataforma`;
+        t.suspendidoMotivo = `${row.vencidas} facturas vencidas (≥2 meses de suscripción impagos)`;
         t.isActive = false;
         await this.tenantRepo.save(t);
         this.log.warn(
-          `[cron] Tenant ${t.slug} (${t.id}) SUSPENDIDO por ${row.dias_max} días de mora.`,
+          `[cron] Tenant ${t.slug} (${t.id}) SUSPENDIDO por ${row.vencidas} facturas vencidas.`,
         );
       } catch (err) {
         this.log.error(
           `[cron] Error suspendiendo tenant=${row.tenant_id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+  }
+
+  /**
+   * F57 — Cierra el período de prueba: los trials vencidos pasan a ACTIVO
+   * si ya tienen plan asignado, o a SUSPENDIDO si nunca contrataron.
+   */
+  private async suspenderTrialesVencidos(): Promise<void> {
+    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    const triales = await this.tenantRepo
+      .createQueryBuilder('t')
+      .where(`t.estado_suscripcion = 'TRIAL'`)
+      .andWhere('t.trial_expira_at IS NOT NULL')
+      .andWhere('t.trial_expira_at < NOW()')
+      .getMany();
+
+    for (const t of triales) {
+      try {
+        if (t.planId) {
+          t.estadoSuscripcion = 'ACTIVO';
+        } else {
+          t.estadoSuscripcion = 'SUSPENDIDO';
+          t.suspendidoAt = new Date();
+          t.suspendidoMotivo = 'Período de prueba vencido sin plan contratado';
+          t.isActive = false;
+        }
+        await this.tenantRepo.save(t);
+        this.log.warn(`[cron] Trial vencido tenant ${t.slug} → ${t.estadoSuscripcion}.`);
+      } catch (err) {
+        this.log.error(
+          `[cron] Error cerrando trial tenant=${t.id}: ${
             err instanceof Error ? err.message : String(err)
           }`,
         );

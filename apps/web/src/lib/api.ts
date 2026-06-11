@@ -181,6 +181,15 @@ export async function apiFetch<T = unknown>(path: string, opts: FetchOpts = {}):
     } catch {
       /* ignore */
     }
+    // F57 — suscripción suspendida: el backend responde 402 (Payment
+    // Required), usado SOLO para este caso. Mandamos a la pantalla de pago.
+    if (
+      res.status === 402 &&
+      typeof window !== 'undefined' &&
+      !window.location.pathname.startsWith('/suscripcion')
+    ) {
+      window.location.href = '/suscripcion';
+    }
     let message: string;
     if (parsed && typeof parsed === 'object' && 'message' in parsed) {
       const raw = (parsed as { message: unknown }).message;
