@@ -31,6 +31,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { ImpersonationBanner } from '@/components/impersonation-banner';
+import { SuscripcionAviso } from '@/components/suscripcion-aviso';
 import { useIsSuperAdmin } from '@/hooks/use-admin';
 
 import { LigaPlusLockup } from '@/components/ui/logo';
@@ -213,6 +214,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-paper">
       <ImpersonationBanner />
+      <SuscripcionAviso />
       <div className="flex">
         {/* Sidebar desktop */}
         <aside className="hidden md:flex w-64 flex-col bg-green-deep text-chalk">

@@ -1831,11 +1831,13 @@ export function useGenerarFacturasMes() {
 }
 
 // ─── Sprint 24A: Mi suscripción (LIGA_ADMIN) ────────────────────────
-export function useMiSuscripcion() {
+export function useMiSuscripcion(enabled = true) {
   return useQuery({
     queryKey: ['mi-suscripcion'],
     queryFn: () => apiFetch<EstadoCuentaLiga>('/admin/mi-suscripcion'),
     staleTime: 30_000,
+    enabled,
+    retry: false,
   });
 }
 
