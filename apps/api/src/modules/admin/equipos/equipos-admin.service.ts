@@ -121,7 +121,26 @@ export class EquiposAdminService {
           'Para agregar equipos, el torneo debe estar en DRAFT.',
       );
     }
-    if (!torneo.categoriaId) {
+    // La categoría y la serie las define el torneo, no el form de
+    // inscripción (que manda serieSlug = null). Las tomamos de
+    // categoriasSeries (Sprint 26D/42); torneo.categoriaId es solo fallback
+    // legacy. Sin esto, un torneo con serie (ej. "Honor") nunca matchea.
+    const combos = Array.isArray(torneo.categoriasSeries)
+      ? torneo.categoriasSeries
+      : [];
+    let categoriaId: string | null = torneo.categoriaId ?? null;
+    let serieSlug: string | null = input.serieSlug ?? null;
+    if (combos.length === 1) {
+      categoriaId = combos[0]!.categoriaId;
+      serieSlug = combos[0]!.serieSlug ?? null;
+    } else if (combos.length > 1 && categoriaId) {
+      const deLaCategoria = combos.filter((c) => c.categoriaId === categoriaId);
+      if (deLaCategoria.length === 1) {
+        serieSlug = deLaCategoria[0]!.serieSlug ?? null;
+      }
+    }
+
+    if (!categoriaId) {
       throw new BadRequestException(
         'El torneo no tiene una categoría asignada. Editá el torneo y asigná ' +
           'una categoría antes de inscribir clubes desde acá.',
@@ -139,8 +158,8 @@ export class EquiposAdminService {
 
     const dto = await this.inscripcionesSvc.inscribir(torneoId, tenantId, {
       clubId: club.id,
-      categoriaId: torneo.categoriaId,
-      serieSlug: input.serieSlug ?? null,
+      categoriaId,
+      serieSlug,
     });
     return this.findOne(dto.id, tenantId);
   }
