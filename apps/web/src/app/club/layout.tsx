@@ -14,6 +14,7 @@ import { useEffect } from 'react';
 
 import { LigaPlusLockup } from '@/components/ui/logo';
 import { useMiClub } from '@/hooks/use-delegado';
+import { useLogout } from '@/hooks/use-logout';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -39,7 +40,7 @@ export default function ClubLayout({
   const pathname = usePathname() ?? '';
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
-  const clearTokens = useAuthStore((s) => s.clearTokens);
+  const logout = useLogout();
   // La página de activación es pública (el delegado aún no tiene sesión).
   const esActivar = pathname?.startsWith('/club/activar');
   const { data: club } = useMiClub(!!accessToken && !esActivar);
@@ -106,10 +107,7 @@ export default function ClubLayout({
             </Link>
             <button
               type="button"
-              onClick={() => {
-                clearTokens();
-                router.replace('/');
-              }}
+              onClick={logout}
               className="text-[10px] text-chalk/60 uppercase tracking-widest hover:text-chalk text-left"
             >
               Cerrar sesión

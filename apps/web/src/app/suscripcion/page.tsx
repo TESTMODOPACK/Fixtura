@@ -12,6 +12,7 @@ import {
   useMisFacturas,
   usePagarFacturaWebpay,
 } from '@/hooks/use-admin';
+import { useLogout } from '@/hooks/use-logout';
 import { formatFecha } from '@/lib/format';
 import { toastError } from '@/lib/toast';
 import { useAuthStore } from '@/store/auth-store';
@@ -28,7 +29,7 @@ function clp(n: number): string {
 export default function SuscripcionSuspendidaPage(): React.ReactElement | null {
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
-  const clearTokens = useAuthStore((s) => s.clearTokens);
+  const logout = useLogout();
 
   const { data: cuenta, isLoading } = useMiSuscripcion();
   const { data: facturas } = useMisFacturas();
@@ -165,10 +166,7 @@ export default function SuscripcionSuspendidaPage(): React.ReactElement | null {
           <div className="mt-6 flex items-center justify-between">
             <button
               type="button"
-              onClick={() => {
-                clearTokens();
-                router.replace('/');
-              }}
+              onClick={logout}
               className="inline-flex items-center gap-1.5 text-xs text-ink-mute hover:text-green-deep"
             >
               <LogOut size={14} /> Cerrar sesión

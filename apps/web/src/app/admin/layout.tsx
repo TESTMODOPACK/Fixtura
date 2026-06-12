@@ -34,6 +34,7 @@ import { useEffect, useState } from 'react';
 import { ImpersonationBanner } from '@/components/impersonation-banner';
 import { SuscripcionAviso } from '@/components/suscripcion-aviso';
 import { useIsSuperAdmin } from '@/hooks/use-admin';
+import { useLogout } from '@/hooks/use-logout';
 
 import { LigaPlusLockup } from '@/components/ui/logo';
 import { cn } from '@/lib/cn';
@@ -187,7 +188,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname() ?? '';
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
-  const clearTokens = useAuthStore((s) => s.clearTokens);
+  const logout = useLogout();
   const isSuperAdmin = useIsSuperAdmin();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -235,10 +236,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </Link>
             <button
               type="button"
-              onClick={() => {
-                clearTokens();
-                router.replace('/');
-              }}
+              onClick={logout}
               className="inline-flex items-center gap-1.5 text-[10px] text-chalk/60 uppercase tracking-widest hover:text-chalk text-left"
             >
               <LogOut size={12} /> Cerrar sesión
@@ -298,8 +296,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
-                    clearTokens();
-                    router.replace('/');
+                    logout();
                   }}
                   className="inline-flex items-center gap-1.5 text-[10px] text-chalk/60 uppercase tracking-widest hover:text-chalk text-left"
                 >
