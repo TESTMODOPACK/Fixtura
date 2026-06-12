@@ -12,6 +12,7 @@ import {
   FileText,
   Heart,
   Layers,
+  LogOut,
   Megaphone,
   Menu,
   PiggyBank,
@@ -186,6 +187,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname() ?? '';
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const clearTokens = useAuthStore((s) => s.clearTokens);
   const isSuperAdmin = useIsSuperAdmin();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -224,13 +226,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </Link>
           </div>
           <NavBody sections={sections} pathname={pathname} />
-          <div className="px-5 py-4 border-t border-green-mid">
+          <div className="px-5 py-4 border-t border-green-mid flex flex-col gap-2">
             <Link
               href="/"
               className="text-[10px] text-green-lime uppercase tracking-widest hover:text-chalk"
             >
               ← Portal público
             </Link>
+            <button
+              type="button"
+              onClick={() => {
+                clearTokens();
+                router.replace('/');
+              }}
+              className="inline-flex items-center gap-1.5 text-[10px] text-chalk/60 uppercase tracking-widest hover:text-chalk text-left"
+            >
+              <LogOut size={12} /> Cerrar sesión
+            </button>
           </div>
         </aside>
 
@@ -274,7 +286,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 pathname={pathname}
                 onNavigate={() => setMenuOpen(false)}
               />
-              <div className="px-5 py-4 border-t border-green-mid">
+              <div className="px-5 py-4 border-t border-green-mid flex flex-col gap-2">
                 <Link
                   href="/"
                   onClick={() => setMenuOpen(false)}
@@ -282,6 +294,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 >
                   ← Portal público
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    clearTokens();
+                    router.replace('/');
+                  }}
+                  className="inline-flex items-center gap-1.5 text-[10px] text-chalk/60 uppercase tracking-widest hover:text-chalk text-left"
+                >
+                  <LogOut size={12} /> Cerrar sesión
+                </button>
               </div>
             </div>
           </div>
