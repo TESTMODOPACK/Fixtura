@@ -74,7 +74,7 @@ export default function TribunalIndexPage(): React.ReactElement {
         <Card padding="roomy">
           <CardLabel>Sin torneos</CardLabel>
           <p className="font-serif italic text-ink-mute mt-2">
-            Creá un torneo primero — el tribunal opera por torneo.
+            Crea un torneo primero — el tribunal opera por torneo.
           </p>
         </Card>
       )}

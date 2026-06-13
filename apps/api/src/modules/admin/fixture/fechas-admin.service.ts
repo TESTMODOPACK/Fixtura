@@ -82,7 +82,7 @@ export class FechasAdminService {
 
     if (fecha.estado === 'FINALIZADA') {
       throw new ConflictException(
-        'No se puede suspender una fecha ya finalizada. Si querés revisar resultados, hacelo desde Tribunal.',
+        'No se puede suspender una fecha ya finalizada. Si quieres revisar resultados, hazlo desde Tribunal.',
       );
     }
     if (fecha.estado === 'SUSPENDIDA') {
@@ -98,7 +98,7 @@ export class FechasAdminService {
       .getCount();
     if (enCurso > 0) {
       throw new ConflictException(
-        `No se puede suspender la fecha: hay ${enCurso} partido(s) EN_CURSO. Cerrá o reabrí esos partidos primero.`,
+        `No se puede suspender la fecha: hay ${enCurso} partido(s) EN_CURSO. Cierra o reabre esos partidos primero.`,
       );
     }
 
@@ -155,7 +155,7 @@ export class FechasAdminService {
         throw new ConflictException(
           `La fecha ${fecha.numero} ya es una REPROGRAMADA. ` +
             'No se puede crear otra REPROGRAMADA encima. ' +
-            'Usá la estrategia REUSAR_EXISTENTE apuntando a otra fecha, o MANUAL.',
+            'Usa la estrategia REUSAR_EXISTENTE apuntando a otra fecha, o MANUAL.',
         );
       }
       // Si ya existe una REPROGRAMADA paralela, idem.
@@ -170,7 +170,7 @@ export class FechasAdminService {
       if (existeRepro) {
         throw new ConflictException(
           `Ya existe una fecha ${fecha.numero} REPROGRAMADA. ` +
-            'Eliminala o reactivala antes de crear otra (o usá la estrategia REUSAR_EXISTENTE apuntando a ella).',
+            'Elimínala o reactívala antes de crear otra (o usa la estrategia REUSAR_EXISTENTE apuntando a ella).',
         );
       }
     }
@@ -249,7 +249,7 @@ export class FechasAdminService {
     }
 
     // Detectar REPROGRAMADA asociada que ya tenga partidos clonados.
-    // Si los partidos están en otra fecha y vivos, reactivar acá generaría
+    // Si los partidos están en otra fecha y vivos, reactivar aquí generaría
     // duplicados.
     const reprogramadaAsociada = await this.fechaRepo
       .createQueryBuilder('f')
@@ -267,7 +267,7 @@ export class FechasAdminService {
         throw new ConflictException(
           `No se puede reactivar: existe una fecha REPROGRAMADA (id=${reprogramadaAsociada.id}) ` +
             `con ${partidosEnRepro} partido(s) clonados. ` +
-            'Eliminá primero la fecha reprogramada (o sus partidos), después podés reactivar la original.',
+            'Elimina primero la fecha reprogramada (o sus partidos), después puedes reactivar la original.',
         );
       }
     }
@@ -616,7 +616,7 @@ export class FechasAdminService {
         throw new ConflictException(
           `No se puede clonar el partido a la nueva fecha: la cancha ya tiene "${local} vs ${visita}" ` +
             `el ${hora}. Las citas deben separarse al menos ${VENTANA_MIN} min. ` +
-            `Cambiá el día de inicio de la fecha reprogramada o moveelo de cancha primero.`,
+            `Cambia el día de inicio de la fecha reprogramada o moveelo de cancha primero.`,
         );
       }
     }

@@ -96,7 +96,7 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
     prevalidacion?.advertencias.some((a) => a.nivel === 'ERROR') ?? false;
   const tieneError = tieneErrorPrevalidacion || faltaConfig;
 
-  // Sprint 44 UX — Horarios y canchas YA no se ingresan acá. El backend
+  // Sprint 44 UX — Horarios y canchas YA no se ingresan aquí. El backend
   // los toma de:
   //   - tab "Horarios →" del torneo (plantilla por día de semana, Sprint 39)
   //   - módulo /admin/canchas (catálogo con estado DISPONIBLE, Sprint 40)
@@ -133,7 +133,7 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
             <p className="text-xs text-accent font-semibold mt-2">
               ⚠ {mutation.data.partidosSinHorario} partido(s) quedaron sin
               día ni cancha porque no alcanzaron los horarios para esa fecha.
-              Cargá más horarios en el tab Horarios o asignalos a mano abriendo
+              Carga más horarios en el tab Horarios o asígnalos a mano abriendo
               cada partido.
             </p>
           )}
@@ -141,8 +141,8 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
             <p className="text-xs text-accent font-semibold mt-2">
               ⚠ {mutation.data.partidosEnCanchaNoDisponible.length} partido(s)
               quedaron en canchas marcadas como no disponibles. Si la cancha
-              no se va a habilitar a tiempo, abrí el partido y elegí otra
-              cancha o reprogramá la fecha.
+              no se va a habilitar a tiempo, abre el partido y elige otra
+              cancha o reprograma la fecha.
             </p>
           )}
           {mutation.data.fechaInicioAjustada && (
@@ -211,11 +211,11 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
           disabled={tieneError}
           title={
             faltanHorarios
-              ? 'Cargá al menos un horario en el tab Horarios.'
+              ? 'Carga al menos un horario en el tab Horarios.'
               : faltanCanchas
-                ? 'Asigná una cancha a cada horario antes de generar.'
+                ? 'Asigna una cancha a cada horario antes de generar.'
                 : tieneErrorPrevalidacion
-                  ? 'Resolvé los problemas marcados arriba antes de generar.'
+                  ? 'Resuelve los problemas marcados arriba antes de generar.'
                   : undefined
           }
         >
@@ -279,7 +279,7 @@ function PrevalidacionPanel({
       ))}
       {!ok && (
         <div className="text-xs font-semibold text-danger px-3 py-2">
-          Resolvé los problemas marcados antes de generar el calendario.
+          Resuelve los problemas marcados antes de generar el calendario.
         </div>
       )}
     </div>
@@ -409,7 +409,7 @@ function CanchasPanel({
           <MapPin size={11} /> Canchas que se van a usar
         </div>
         <p className="text-xs text-ink-mute leading-snug font-serif italic">
-          Primero cargá los horarios — al definir cada horario elegís en
+          Primero carga los horarios — al definir cada horario eliges en
           qué cancha se juega.
         </p>
       </div>
@@ -424,14 +424,14 @@ function CanchasPanel({
           <XCircle size={11} /> Falta asignar canchas
         </div>
         <p className="text-xs text-ink leading-snug">
-          Cargaste horarios pero ninguno tiene cancha elegida. Andá al{' '}
+          Cargaste horarios pero ninguno tiene cancha elegida. Ve al{' '}
           <Link
             href={`/admin/torneos/${torneoId}/horarios`}
             className="text-accent font-semibold hover:underline"
           >
             tab Horarios
           </Link>{' '}
-          y editá cada horario para elegir su cancha.
+          y edita cada horario para elegir su cancha.
         </p>
       </div>
     );
@@ -465,7 +465,7 @@ function CanchasPanel({
       {horariosSinCancha > 0 && (
         <p className="text-[11px] text-accent mt-2 leading-snug">
           ⚠ {horariosSinCancha} horario(s) todavía sin cancha asignada.
-          Editalos en el tab Horarios.
+          Edítalos en el tab Horarios.
         </p>
       )}
     </div>

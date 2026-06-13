@@ -91,7 +91,7 @@ export class VetadosAdminService {
   ): Promise<JugadorVetadoDto> {
     if (!validarRut(input.rut)) {
       throw new BadRequestException(
-        'RUT inválido: chequeá el dígito verificador.',
+        'RUT inválido: revisa el dígito verificador.',
       );
     }
     const rut = limpiarRut(input.rut);

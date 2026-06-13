@@ -55,14 +55,14 @@ export default function HorariosTorneoPage({
         <div className="flex gap-3">
           <Info size={18} className="text-accent flex-shrink-0 mt-0.5" />
           <div className="text-sm text-ink-mute leading-relaxed">
-            <strong className="text-ink">¿Cómo funciona?</strong> Cargá un slot por cada
-            combinación de día + hora + cancha que se va a usar. Ejemplo: si tenés{' '}
-            <em>4 partidos por fecha los domingos</em>, cargá 4 slots (Domingo 09:00 Cancha 1,
+            <strong className="text-ink">¿Cómo funciona?</strong> Carga un slot por cada
+            combinación de día + hora + cancha que se va a usar. Ejemplo: si tienes{' '}
+            <em>4 partidos por fecha los domingos</em>, carga 4 slots (Domingo 09:00 Cancha 1,
             Domingo 11:00 Cancha 1, Domingo 13:00 Cancha 1, Domingo 15:00 Cancha 1).
             <br />
             El generador del fixture toma los partidos de cada fecha y los pone en orden
             sobre los slots disponibles. Si hay más partidos que slots, los excedentes quedan
-            sin horario y los asignás manualmente.
+            sin horario y los asignas manualmente.
           </div>
         </div>
       </Card>

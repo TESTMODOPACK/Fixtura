@@ -22,7 +22,7 @@ import { FacturaPlataforma } from './entities/factura-plataforma.entity';
  * Sprint 24A — Facturación que LigaPlus cobra a las ligas suscriptas.
  *
  * Distinto al módulo Cobros (Sprint 7C) que es para que la liga cobre a
- * sus equipos. Acá LigaPlus es el acreedor y la liga el deudor.
+ * sus equipos. Aquí LigaPlus es el acreedor y la liga el deudor.
  *
  * Flujo:
  *   1. Cron mensual día 1 → generarFacturasMes() crea PENDIENTES.

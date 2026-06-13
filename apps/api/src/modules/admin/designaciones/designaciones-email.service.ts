@@ -155,19 +155,19 @@ export class DesignacionesEmailService {
           </p>
 
           <div style="margin:24px 0; padding:16px; background:#f1ece2; border-radius:6px;">
-            <p style="margin:0 0 12px 0; font-size:14px; color:#1a1a1a;">¿Podés cubrirlo?</p>
+            <p style="margin:0 0 12px 0; font-size:14px; color:#1a1a1a;">¿Puedes cubrirlo?</p>
             <a href="${linkConfirmar}" style="display:inline-block; background:#E76F26; color:white; padding:10px 20px; text-decoration:none; border-radius:6px; font-weight:bold; margin-right:8px;">✓ Confirmar</a>
             <a href="${linkRechazar}" style="display:inline-block; background:transparent; color:#1a1a1a; padding:10px 20px; text-decoration:none; border-radius:6px; border:1px solid #1a1a1a; font-weight:bold;">✗ No puedo</a>
           </div>
 
           <p style="font-size:12px; color:#777; line-height:1.4;">
-            Estos enlaces expiran en 7 días. Si no podés decidir ahora, contestá este mail
+            Estos enlaces expiran en 7 días. Si no puedes decidir ahora, responde este mail
             directamente y el responsable de designaciones lo gestiona a mano.
           </p>
           <hr style="margin:24px 0; border:0; border-top:1px solid #e5e0d3;">
           <p style="font-size:11px; color:#777; margin:0;">
             Notificación automática de LigaPlus. No respondas a esta dirección — el remitente
-            es solo de envío. Para hablar con la liga, llamá o escribí al responsable directo.
+            es solo de envío. Para hablar con la liga, llama o escribe al responsable directo.
           </p>
         </div>
       </body>
@@ -185,7 +185,7 @@ Cuándo: ${cuandoStr}
 Dónde: ${dondeStr}
 Honorario: ${montoStr}
 
-¿Podés cubrirlo?
+¿Puedes cubrirlo?
 
 Confirmar:  ${linkConfirmar}
 No puedo:   ${linkRechazar}

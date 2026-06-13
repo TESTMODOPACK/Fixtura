@@ -20,7 +20,7 @@ interface SerieOption {
  *
  * Post Sprint 26 — los equipos del torneo se generan a partir de la ficha
  * de Club registrada en /admin/clubes. No permitimos crear "equipos desde
- * cero" desde acá porque generaba datos huérfanos (sin ficha de club
+ * cero" desde aquí porque generaba datos huérfanos (sin ficha de club
  * reutilizable). Si el operador necesita un club nuevo, el botón "Crear
  * un club nuevo" lo lleva al flujo /admin/clubes/nuevo.
  *
@@ -114,21 +114,21 @@ export function NuevoEquipoForm({
               </p>
               <ul className="text-sm text-green-deep/85 mt-2 list-disc pl-5 space-y-1">
                 <li>
-                  Andá a{' '}
+                  Ve a{' '}
                   <Link
                     href="/admin/clubes"
                     className="text-accent font-semibold hover:underline"
                   >
                     /admin/clubes
                   </Link>{' '}
-                  y habilitá la categoría en un club existente, o
+                  y habilita la categoría en un club existente, o
                 </li>
                 <li>
                   <Link
                     href="/admin/clubes/nuevo"
                     className="text-accent font-semibold hover:underline"
                   >
-                    Creá un club nuevo
+                    Crea un club nuevo
                   </Link>{' '}
                   con esa categoría asignada.
                 </li>
@@ -143,7 +143,7 @@ export function NuevoEquipoForm({
                   href="/admin/clubes/nuevo"
                   className="text-accent font-semibold hover:underline"
                 >
-                  Creá el primer club
+                  Crea el primer club
                 </Link>{' '}
                 — sus datos quedan disponibles para todos los torneos.
               </p>

@@ -30,62 +30,62 @@ interface Paso {
 const PASOS: Paso[] = [
   {
     icon: Settings,
-    titulo: 'Configurá tu liga',
-    desc: 'Datos, calendario y feriados, reglas de desempate y si usás carnet ANFA.',
+    titulo: 'Configura tu liga',
+    desc: 'Datos, calendario y feriados, reglas de desempate y si usas carnet ANFA.',
     href: '/admin/ajustes',
   },
   {
     icon: Calendar,
-    titulo: 'Cargá las canchas',
+    titulo: 'Carga las canchas',
     desc: 'Los recintos donde se juega, con su estado y disponibilidad.',
     href: '/admin/canchas',
   },
   {
     icon: Shield,
-    titulo: 'Creá los clubes y su plantel',
-    desc: 'Cada club por categoría, su directiva y los jugadores (podés importar por Excel).',
+    titulo: 'Crea los clubes y su plantel',
+    desc: 'Cada club por categoría, su directiva y los jugadores (puedes importar por Excel).',
     href: '/admin/clubes',
   },
   {
     icon: UserCog,
-    titulo: 'Registrá el personal',
+    titulo: 'Registra el personal',
     desc: 'Árbitros, planilleros y paramédicos, con su tarifa y datos de pago.',
     href: '/admin/personal',
   },
   {
     icon: Trophy,
-    titulo: 'Creá el torneo',
+    titulo: 'Crea el torneo',
     desc: 'Categoría y serie, duración del partido y el tarifario de cuotas y matrícula.',
     href: '/admin/torneos/nuevo',
   },
   {
     icon: ClipboardList,
-    titulo: 'Inscribí clubes y cargá la planilla',
-    desc: 'Sumá los clubes al torneo y registrá la planilla habilitada por categoría.',
+    titulo: 'Inscribe clubes y carga la planilla',
+    desc: 'Suma los clubes al torneo y registra la planilla habilitada por categoría.',
     href: '/admin/torneos',
   },
   {
     icon: CalendarRange,
-    titulo: 'Generá el fixture',
-    desc: 'Definí los horarios y generá el calendario de partidos automáticamente.',
+    titulo: 'Genera el fixture',
+    desc: 'Define los horarios y genera el calendario de partidos automáticamente.',
     href: '/admin/torneos',
   },
   {
     icon: Activity,
-    titulo: 'Designá el personal',
-    desc: 'Asigná árbitros a cada partido — manual o con auto-asignación.',
+    titulo: 'Designa el personal',
+    desc: 'Asigna árbitros a cada partido — manual o con auto-asignación.',
     href: '/admin/designaciones',
   },
   {
     icon: ClipboardList,
-    titulo: 'Cargá las actas',
+    titulo: 'Carga las actas',
     desc: 'Resultados, goles, tarjetas e incidencias. Las sanciones se aplican solas.',
     href: '/admin/actas',
   },
   {
     icon: PiggyBank,
     titulo: 'Cobros y pagos',
-    desc: 'Seguí cuotas y morosos, habilitá el pago online y liquidá al personal.',
+    desc: 'Sigue cuotas y morosos, habilita el pago online y liquida al personal.',
     href: '/admin/finanzas',
   },
 ];
@@ -174,7 +174,7 @@ export function GuiaUso(): React.ReactElement {
           </ol>
           <p className="text-xs text-ink-mute mt-3 italic">
             No hace falta seguir el orden exacto, pero esta secuencia es la más
-            simple para arrancar. Podés ocultar esta guía con la flecha de arriba.
+            simple para arrancar. Puedes ocultar esta guía con la flecha de arriba.
           </p>
         </div>
       )}

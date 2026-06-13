@@ -34,7 +34,7 @@ import { EditarClubDrawer } from './_editar-club-drawer';
  * Si el club tiene más categorías, aparecen como tabs arriba para
  * navegar entre ellas sin perder contexto.
  *
- * Lo editable acá:
+ * Lo editable aquí:
  *   - Directiva específica de (club, categoría).
  *   - Plantel de la categoría (mismo componente PlantelTab).
  *
@@ -163,7 +163,7 @@ export default function ClubCategoriaPage({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
-        {/* Identidad transversal (read-only acá) */}
+        {/* Identidad transversal (read-only aquí) */}
         <Card padding="roomy" className="lg:col-span-2">
           <div className="flex items-start justify-between gap-3 mb-3">
             <CardLabel>Identidad del club</CardLabel>
@@ -251,8 +251,8 @@ export default function ClubCategoriaPage({
       <Card padding="roomy" className="mb-5">
         <CardLabel>Directiva de {detalle.categoriaNombre}</CardLabel>
         <p className="text-xs font-serif italic text-ink-mute mt-1 mb-4">
-          Cada categoría puede tener distinta directiva. Si las dejás todas
-          iguales, copialas a mano o editá la versión &ldquo;madre&rdquo; del club.
+          Cada categoría puede tener distinta directiva. Si las dejas todas
+          iguales, cópialas a mano o edita la versión &ldquo;madre&rdquo; del club.
         </p>
 
         {/* Resumen visual (lo que está cargado ahora) */}

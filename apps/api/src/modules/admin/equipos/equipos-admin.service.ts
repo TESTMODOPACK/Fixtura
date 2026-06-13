@@ -142,8 +142,8 @@ export class EquiposAdminService {
 
     if (!categoriaId) {
       throw new BadRequestException(
-        'El torneo no tiene una categoría asignada. Editá el torneo y asigná ' +
-          'una categoría antes de inscribir clubes desde acá.',
+        'El torneo no tiene una categoría asignada. Edita el torneo y asigna ' +
+          'una categoría antes de inscribir clubes desde aquí.',
       );
     }
 
@@ -152,7 +152,7 @@ export class EquiposAdminService {
     });
     if (!club) {
       throw new BadRequestException(
-        `No existe un club con slug "${input.slug}". Creá el club en /admin/clubes primero.`,
+        `No existe un club con slug "${input.slug}". Crea el club en /admin/clubes primero.`,
       );
     }
 
@@ -280,7 +280,7 @@ export class EquiposAdminService {
     if (!insc) throw new NotFoundException(`Equipo ${inscripcionId} no encontrado`);
     if (insc.estado === 'SUSPENDIDO') {
       throw new ConflictException(
-        'El equipo ya está suspendido. Reactivalo primero si querés cambiar el motivo.',
+        'El equipo ya está suspendido. Reactívalo primero si quieres cambiar el motivo.',
       );
     }
 
@@ -291,7 +291,7 @@ export class EquiposAdminService {
     if (torneo.estado === 'DRAFT') {
       throw new BadRequestException(
         'El torneo está en DRAFT — no hay fixture activo. Para sacar el ' +
-          'equipo, eliminalo directamente desde la lista.',
+          'equipo, elimínalo directamente desde la lista.',
       );
     }
     if (torneo.estado === 'CERRADO') {

@@ -37,7 +37,7 @@ export default function ClubFinanzasPage(): React.ReactElement {
       <PageHead
         eyebrow="Mi club"
         title="Pagos y deudas"
-        sub="Estado de cuenta de tu club. Podés pagar en línea las deudas pendientes."
+        sub="Estado de cuenta de tu club. Puedes pagar en línea las deudas pendientes."
       />
 
       {isLoading && <p className="text-ink-mute">Cargando…</p>}

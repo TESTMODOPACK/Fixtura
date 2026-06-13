@@ -37,7 +37,7 @@ export default function CategoriasPage(): React.ReactElement {
       <PageHead
         eyebrow="Configuración"
         title="Categorías y series"
-        sub="Definí las categorías por edad de tu liga (Senior, Super Senior, Dorados…) y las series internas de cada una."
+        sub="Define las categorías por edad de tu liga (Senior, Super Senior, Dorados…) y las series internas de cada una."
       >
         {!creating && !editing && (
           <Button variant="accent" size="sm" onClick={() => setCreating(true)}>
@@ -74,7 +74,7 @@ export default function CategoriasPage(): React.ReactElement {
           <Layers size={32} className="mx-auto text-ink-mute mb-3" />
           <CardLabel>Sin categorías</CardLabel>
           <p className="text-sm text-ink-mute mt-2 font-serif italic">
-            Todavía no creaste ninguna categoría. Apretá &quot;Nueva categoría&quot;.
+            Todavía no creaste ninguna categoría. Aprieta &quot;Nueva categoría&quot;.
           </p>
         </Card>
       ) : (

@@ -8,8 +8,8 @@
  *
  *   - calcularEdadCalendario(fechaNacimiento, anioRef?): edad que TENDRÁ
  *     al 31-dic del año de referencia (o del año actual). Es la regla
- *     típica de las ligas para asignar categoría: el año en que cumplís
- *     X define en qué categoría jugás todo ese año, sin importar el mes.
+ *     típica de las ligas para asignar categoría: el año en que cumples
+ *     X define en qué categoría juegas todo ese año, sin importar el mes.
  *
  *     Ejemplos (anioRef=2026):
  *       nacido 30-06-2000 → edadCalendario = 26 (cumple 26 en 2026)

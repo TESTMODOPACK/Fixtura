@@ -121,7 +121,7 @@ async function main(): Promise<void> {
     )) as Array<{ id: string; nombre: string }>;
     if (equipos.length < 2) {
       throw new Error(
-        `Torneo tiene solo ${equipos.length} equipos. Necesitás al menos 2 para generar fixture.`,
+        `Torneo tiene solo ${equipos.length} equipos. Necesitas al menos 2 para generar fixture.`,
       );
     }
     log(`Equipos activos: ${equipos.length}`);

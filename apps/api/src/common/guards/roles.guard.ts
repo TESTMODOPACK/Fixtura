@@ -18,7 +18,7 @@ import type { AuthenticatedRequest } from '../types/authenticated-request';
  *      este check es defensa en profundidad.
  *
  * Roles PLATFORM (SUPER_ADMIN) pasan cualquier tenant.
- * Roles TEAM/PERSONAL no se validan acá — su scope se verifica en la
+ * Roles TEAM/PERSONAL no se validan aquí — su scope se verifica en la
  * lógica de cada service (ej. PartidoService verifica que el equipoId
  * del partido coincida con el equipo del delegado).
  */

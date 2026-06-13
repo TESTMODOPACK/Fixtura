@@ -59,7 +59,7 @@ export default function EquipoDetallePage({
       <PageHead
         eyebrow="Equipo · Plantilla"
         title="Plantilla del equipo"
-        sub="Inscribí los jugadores que van a participar en el torneo. Cargalos uno por uno o pegá la planilla desde Excel."
+        sub="Inscribe los jugadores que van a participar en el torneo. Cárgalos uno por uno o pega la planilla desde Excel."
       >
         <Link href="/admin/torneos">
           <Button variant="default" size="sm">
@@ -121,7 +121,7 @@ export default function EquipoDetallePage({
             <div className="p-12 text-center">
               <UserPlus size={36} className="mx-auto text-line mb-3" />
               <p className="font-serif italic text-ink-mute">
-                Todavía no hay jugadores inscritos. Agregá el primero para empezar.
+                Todavía no hay jugadores inscritos. Agrega el primero para empezar.
               </p>
             </div>
           )}
@@ -247,7 +247,7 @@ function NuevoJugadorForm({
       .string()
       .max(20)
       .optional()
-      .refine((v) => !v || validarRut(v), 'RUT inválido (verificá el dígito verificador)'),
+      .refine((v) => !v || validarRut(v), 'RUT inválido (verifica el dígito verificador)'),
     numeroCamiseta: z.coerce.number().int().min(0).max(99).optional(),
     posicion: z.enum(['ARQUERO', 'DEFENSA', 'MEDIO', 'DELANTERO']).optional(),
     pieHabil: z.enum(['IZQUIERDO', 'DERECHO', 'AMBIDIESTRO']).optional(),
@@ -466,7 +466,7 @@ function ImportCsvForm({
       >
         <UploadCloud size={20} className="mx-auto text-ink-mute mb-1" />
         <p className="text-xs text-ink-mute font-serif italic mb-2">
-          Arrastrá el .csv aquí o seleccionalo
+          Arrastra el .csv aquí o seleccionalo
         </p>
         <input
           type="file"
@@ -479,7 +479,7 @@ function ImportCsvForm({
         />
       </div>
 
-      <label className="label">…o pegá el CSV directamente</label>
+      <label className="label">…o pega el CSV directamente</label>
       <textarea
         className="input min-h-[140px] font-mono text-xs"
         placeholder={`nombre,apellido,rut,numero,posicion,pie,fecha_nac,apodo,capitan\nJuan,Pérez,12345678-9,10,DELANTERO,DERECHO,1995-04-22,,true\n...`}

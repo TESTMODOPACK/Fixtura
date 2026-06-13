@@ -108,7 +108,7 @@ export function useMatchCenter(partidoId: string): {
  *
  * Por qué: mostrar `snapshot.segundosTranscurridos` directo deja el reloj
  * "congelado" entre snapshots (el WS puede venir irregular detrás de un
- * proxy). Acá, mientras el partido está EN_VIVO, avanzamos un segundo por
+ * proxy). Aquí, mientras el partido está EN_VIVO, avanzamos un segundo por
  * segundo localmente; cuando llega un snapshot nuevo (tick o broadcast por
  * una acción como +GOL) reajustamos la base. Así el tiempo avanza fluido y
  * cambiar el marcador NO altera el cronómetro.

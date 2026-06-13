@@ -26,7 +26,7 @@ export class NoImpersonationGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<{ user?: { impersonatorId?: string | null } }>();
     if (req.user?.impersonatorId) {
       throw new ForbiddenException(
-        'Esta acción no se puede realizar en modo impersonación. Salí del modo soporte y volvé a iniciar sesión normalmente.',
+        'Esta acción no se puede realizar en modo impersonación. Sal del modo soporte y vuelve a iniciar sesión normalmente.',
       );
     }
     return true;

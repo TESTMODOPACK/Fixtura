@@ -196,7 +196,7 @@ export class InscripcionesAdminService {
     if (!combo) {
       throw new BadRequestException(
         `El torneo no tiene definida la combinación categoría+serie ` +
-          `solicitada. Editá el torneo para agregarla antes de inscribir.`,
+          `solicitada. Edita el torneo para agregarla antes de inscribir.`,
       );
     }
 
@@ -207,7 +207,7 @@ export class InscripcionesAdminService {
     if (!club) throw new NotFoundException(`Club ${input.clubId} no encontrado.`);
     if (club.estado === 'INACTIVO') {
       throw new BadRequestException(
-        `El club "${club.nombre}" está INACTIVO. Reactivalo antes de inscribirlo.`,
+        `El club "${club.nombre}" está INACTIVO. Reactívalo antes de inscribirlo.`,
       );
     }
 
@@ -218,7 +218,7 @@ export class InscripcionesAdminService {
     if (!enCategoria) {
       throw new BadRequestException(
         `El club "${club.nombre}" no compite en la categoría seleccionada. ` +
-          'Editá la ficha del club para agregar esta categoría primero.',
+          'Edita la ficha del club para agregar esta categoría primero.',
       );
     }
 
@@ -286,7 +286,7 @@ export class InscripcionesAdminService {
     // Sprint 45 — La matrícula ya NO se genera al inscribir. Ahora todos
     // los cobros (matrícula + cuotas) se generan al iniciar el torneo
     // (DRAFT→ACTIVO), anclados al equipo, vía
-    // TarifaAplicadorService.generarCobrosInicioTorneo. Generarla acá
+    // TarifaAplicadorService.generarCobrosInicioTorneo. Generarla aquí
     // produciría una matrícula duplicada (una por inscripción, otra por
     // equipo) al activar. La inscripción solo deja el equipo sombra listo;
     // el cobro nace cuando el torneo arranca.
@@ -452,7 +452,7 @@ export class InscripcionesAdminService {
     if (insc.torneo && insc.torneo.estado !== 'DRAFT') {
       throw new ConflictException(
         'No se pueden desinscribir clubes con el torneo iniciado. ' +
-          'Cambiá el estado a SUSPENDIDO desde la inscripción si necesitás retirarlo.',
+          'Cambia el estado a SUSPENDIDO desde la inscripción si necesitas retirarlo.',
       );
     }
 
@@ -562,7 +562,7 @@ export class InscripcionesAdminService {
       throw new ConflictException(
         `La planilla está completa (${yaEnPlanilla}/` +
           `${torneo.topeJugadoresPorEquipo} jugadores). ` +
-          'Quitá alguno antes de agregar otro.',
+          'Quita alguno antes de agregar otro.',
       );
     }
 

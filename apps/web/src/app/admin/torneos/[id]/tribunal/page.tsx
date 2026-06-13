@@ -104,8 +104,8 @@ export default function TribunalPage({
             <div className="text-sm text-ink">
               <div className="font-semibold mb-0.5">Torneo en borrador</div>
               <p className="font-serif italic text-ink-mute">
-                El tribunal opera cuando el torneo arranca. Iniciá el torneo
-                (ponelo “En curso”) para imponer sanciones — todavía no hay
+                El tribunal opera cuando el torneo arranca. Inicia el torneo
+                (ponlo “En curso”) para imponer sanciones — todavía no hay
                 partidos ni disciplina que registrar.
               </p>
             </div>
@@ -322,7 +322,7 @@ function AjustarSancionForm({
 
   const submit = async (): Promise<void> => {
     if (motivoAjuste.trim().length < 3) {
-      toastError(new Error('Indicá el motivo del ajuste (mín. 3 caracteres).'));
+      toastError(new Error('Indica el motivo del ajuste (mín. 3 caracteres).'));
       return;
     }
     const desde = Number(desdeFechaNumero);
@@ -354,7 +354,7 @@ function AjustarSancionForm({
         <CardLabel>Ajustar sanción del tribunal</CardLabel>
       </div>
       <p className="text-xs text-ink-mute font-serif italic mb-3">
-        Subí las fechas pendientes si hay incidencias extra (agresión, insultos,
+        Sube las fechas pendientes si hay incidencias extra (agresión, insultos,
         etc.). Queda registrado en el historial de la sanción.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -421,7 +421,7 @@ function NuevaSancionTribunalForm({
   const mutation = useCreateSancionTribunal(torneoId);
 
   const Schema = z.object({
-    jugadorInscritoId: z.string().min(1, 'Elegí un jugador'),
+    jugadorInscritoId: z.string().min(1, 'Elige un jugador'),
     fechasSuspension: z.coerce.number().int().min(1).max(20),
     descripcion: z.string().min(3).max(1000),
     // Campo opcional: con valueAsNumber un input vacío entrega NaN, que NO
@@ -452,7 +452,7 @@ function NuevaSancionTribunalForm({
   const onSubmit = async (vals: Form): Promise<void> => {
     if (vals.vetoPermanente) {
       const ok = confirm(
-        '¿Confirmás VETO DE POR VIDA? Esto agrega el RUT del jugador a la ' +
+        '¿Confirmas VETO DE POR VIDA? Esto agrega el RUT del jugador a la ' +
           'lista negra de la liga. No podrá ser fichado por ningún club en ' +
           'ningún torneo futuro hasta que un admin levante el veto manualmente.',
       );
@@ -498,7 +498,7 @@ function NuevaSancionTribunalForm({
               form.setValue('jugadorInscritoId', '');
             }}
           >
-            <option value="">— elegí equipo —</option>
+            <option value="">— elige equipo —</option>
             {equiposQ.data?.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.nombre}
@@ -510,7 +510,7 @@ function NuevaSancionTribunalForm({
         <div>
           <label className="label">Jugador</label>
           <select className="input" {...form.register('jugadorInscritoId')} disabled={!equipoSeleccionado}>
-            <option value="">— elegí jugador —</option>
+            <option value="">— elige jugador —</option>
             {jugadoresQ.data?.map((j) => (
               <option key={j.id} value={j.id}>
                 {j.numeroCamiseta ? `#${j.numeroCamiseta} ` : ''}

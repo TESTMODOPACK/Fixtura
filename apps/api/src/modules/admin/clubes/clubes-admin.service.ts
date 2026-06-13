@@ -321,14 +321,14 @@ export class ClubesAdminService {
     const club = await this.ensureClub(clubId, tenantId);
     if (club.estado === 'INACTIVO') {
       throw new BadRequestException(
-        'El club está INACTIVO. Reactivalo antes de cargar jugadores.',
+        'El club está INACTIVO. Reactívalo antes de cargar jugadores.',
       );
     }
 
     // Validar RUT (formato + dígito verificador chileno).
     if (!validarRut(input.rut)) {
       throw new BadRequestException(
-        'RUT inválido: chequeá el dígito verificador.',
+        'RUT inválido: revisa el dígito verificador.',
       );
     }
     const rutNormalizado = limpiarRut(input.rut);
@@ -404,7 +404,7 @@ export class ClubesAdminService {
       if (det?.estado === 'EN_EXCEPCION' && !input.aceptarExcepcionEdad) {
         throw new ConflictException(
           `El jugador (${det.edadCalendario} años) entra en EXCEPCIÓN de ` +
-            `edad para '${categoria.nombre}'. Confirmá la inscripción ` +
+            `edad para '${categoria.nombre}'. Confirma la inscripción ` +
             `reenviando con aceptarExcepcionEdad=true.`,
         );
       }
@@ -519,7 +519,7 @@ export class ClubesAdminService {
     categoriaIds: string[],
   ): Promise<void> {
     if (categoriaIds.length === 0) {
-      throw new BadRequestException('Elegí al menos una categoría.');
+      throw new BadRequestException('Elige al menos una categoría.');
     }
     // Dedupe
     const ids = Array.from(new Set(categoriaIds));
@@ -570,7 +570,7 @@ export class ClubesAdminService {
         throw new ConflictException(
           'No se pueden quitar categorías con jugadores cargados. ' +
             `Categorías con plantel: ${bloqueadas.map((b) => b.categoriaId).join(', ')}. ` +
-            'Eliminá primero los jugadores o desactivá el club.',
+            'Elimina primero los jugadores o desactiva el club.',
         );
       }
     }

@@ -536,7 +536,7 @@ export class TarifaAplicadorService {
         });
         creadas++;
       } catch (err) {
-        // El UNIQUE INDEX puede saltar acá si hay una race con otro
+        // El UNIQUE INDEX puede saltar aquí si hay una race con otro
         // cron en paralelo (poco probable, pero defensivo). No lo
         // tratamos como error fatal.
         const msg = err instanceof Error ? err.message : String(err);

@@ -22,7 +22,7 @@ function clp(n: number): string {
 }
 
 /**
- * F57 — Pantalla de pago para ligas suspendidas. A acá redirige el front
+ * F57 — Pantalla de pago para ligas suspendidas. A aquí redirige el front
  * cuando el backend responde 402 (SUBSCRIPTION_SUSPENDED). Solo usa los
  * endpoints de mi-suscripción, que el SubscriptionGuard deja pasar.
  */
@@ -80,7 +80,7 @@ export default function SuscripcionSuspendidaPage(): React.ReactElement | null {
               </h1>
               <p className="text-sm text-ink-mute mt-1.5">
                 El acceso de tu liga está bloqueado por falta de pago de la
-                suscripción a LigaPlus. Regularizá el saldo para volver a operar
+                suscripción a LigaPlus. Regulariza el saldo para volver a operar
                 — los datos de tu liga están a salvo.
               </p>
             </div>
@@ -152,7 +152,7 @@ export default function SuscripcionSuspendidaPage(): React.ReactElement | null {
 
               <div className="mt-5 rounded-card bg-paper-dark border border-line p-3 text-xs text-ink-mute leading-relaxed">
                 <div className="font-semibold text-green-deep mb-1">
-                  ¿Pagaste por transferencia o tenés dudas?
+                  ¿Pagaste por transferencia o tienes dudas?
                 </div>
                 Escribinos a{' '}
                 <a href="mailto:contacto@ligaplus.cl" className="text-accent font-semibold">

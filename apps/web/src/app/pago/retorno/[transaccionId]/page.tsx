@@ -84,7 +84,7 @@ export default function PagoRetornoPage({ params }: PageProps): React.ReactEleme
             <CardLabel className="text-danger">No pudimos confirmar el pago</CardLabel>
             <p className="text-ink mt-3">{estado.mensaje}</p>
             <p className="text-sm text-ink-mute font-serif italic mt-4">
-              Si el cargo apareció en tu tarjeta pero ves este error, contactá a
+              Si el cargo apareció en tu tarjeta pero ves este error, contacta a
               la liga con el ID de transacción para resolverlo.
             </p>
             <div className="text-xs text-ink-mute mt-2 font-mono">

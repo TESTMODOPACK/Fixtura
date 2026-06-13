@@ -46,7 +46,7 @@ const EditarJugadorSchema = z.object({
     }, 'Fecha inválida (debe ser pasada y posterior a 1900).'),
   email: z.preprocess(
     (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-    z.email('Email inválido — usá formato nombre@dominio.com').max(150).optional(),
+    z.email('Email inválido — usa formato nombre@dominio.com').max(150).optional(),
   ),
   telefono: z.string().max(50).optional(),
   numeroCamiseta: z

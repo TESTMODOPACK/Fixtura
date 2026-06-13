@@ -61,13 +61,13 @@ export function SuscripcionAviso(): React.ReactElement | null {
             Tu suscripción a LigaPlus tiene <strong>{vencidas}</strong> factura
             {vencidas === 1 ? '' : 's'} vencida{vencidas === 1 ? '' : 's'} ({monto}).
             {vencidas === 1
-              ? ' Si acumulás 2 vencidas se suspende el acceso a tu liga.'
+              ? ' Si acumulas 2 vencidas se suspende el acceso a tu liga.'
               : ' Tu liga está por suspenderse.'}{' '}
-            Regularizá el pago para evitarlo.
+            Regulariza el pago para evitarlo.
           </>
         ) : (
           <>
-            Tenés <strong>{pendientes}</strong> factura{pendientes === 1 ? '' : 's'} de
+            Tienes <strong>{pendientes}</strong> factura{pendientes === 1 ? '' : 's'} de
             suscripción por pagar ({monto}). Pagala a tiempo para no perder el acceso.
           </>
         )}

@@ -29,8 +29,8 @@ const VetadoFormSchema = z.object({
     .string()
     .min(7, 'Mínimo 7 caracteres')
     .max(20)
-    .refine(validarRut, 'RUT inválido (chequeá el dígito verificador)'),
-  motivo: z.string().min(3, 'Indicá el motivo').max(1000),
+    .refine(validarRut, 'RUT inválido (revisa el dígito verificador)'),
+  motivo: z.string().min(3, 'Indica el motivo').max(1000),
 });
 type VetadoForm = z.infer<typeof VetadoFormSchema>;
 

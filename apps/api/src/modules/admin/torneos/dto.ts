@@ -24,7 +24,7 @@ const ESTADO_TORNEO = ['DRAFT', 'ACTIVO', 'CERRADO'] as const;
 type EstadoTorneo = (typeof ESTADO_TORNEO)[number];
 
 // Sprint 12: keys válidas para tiebreakers. Sincronizado con
-// PublicService.compararTiebreaker — agregar acá si se suma criterio.
+// PublicService.compararTiebreaker — agregar aquí si se suma criterio.
 const TIEBREAKER_KEYS = ['pts', 'dg', 'gf', 'gc', 'pg', 'ed', 'nombre'] as const;
 
 export class CreateTorneoDto {
@@ -96,7 +96,7 @@ export class CreateTorneoDto {
   categoriaId?: string | null;
 
   // Sprint 26D — multi-categoría/serie con cupo. Validación profunda
-  // la hace el service (validarCategoriasSeries); acá solo array bound.
+  // la hace el service (validarCategoriasSeries); aquí solo array bound.
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)

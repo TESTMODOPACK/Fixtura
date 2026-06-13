@@ -14,7 +14,7 @@ import { toastWarning } from '@/lib/toast';
  *      validación cliente (Zod) y errores del backend (ApiError).
  *      Con ref para scrollIntoView cuando hay submit fallido.
  *   2. <FormErrorChip /> junto al botón submit: micro-feedback
- *      "Revisá los campos marcados arriba (N)". Visible solo cuando
+ *      "Revisa los campos marcados arriba (N)". Visible solo cuando
  *      el banner está fuera del viewport.
  *
  * El submit handler de RHF llama scrollToBanner() en onError.
@@ -29,7 +29,7 @@ interface FormErrorBannerProps {
   apiError?: unknown;
   /**
    * Texto del título cuando hay errores de validación cliente.
-   * Ej: "Revisá los campos antes de crear el club:".
+   * Ej: "Revisa los campos antes de crear el club:".
    */
   validationTitle?: string;
   /**
@@ -45,7 +45,7 @@ export const FormErrorBanner = forwardRef<HTMLDivElement, FormErrorBannerProps>(
     {
       fieldErrors = [],
       apiError,
-      validationTitle = 'Revisá los siguientes campos:',
+      validationTitle = 'Revisa los siguientes campos:',
       apiTitle = 'No se pudo completar la operación',
       className,
     },
@@ -107,8 +107,8 @@ export function FormErrorChip({
     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger">
       <AlertTriangle size={12} />
       {fieldErrors.length > 0
-        ? `Revisá los campos marcados arriba (${fieldErrors.length})`
-        : 'Revisá el mensaje arriba'}
+        ? `Revisa los campos marcados arriba (${fieldErrors.length})`
+        : 'Revisa el mensaje arriba'}
     </span>
   );
 }
@@ -207,13 +207,13 @@ export function makeRhfErrorHandler(opts: {
     const flat = rhfErrorsToBanner(errors, opts.labelMap);
     if (flat.length > 0) {
       toastWarning(
-        `Revisá: ${flat
+        `Revisa: ${flat
           .slice(0, 3)
           .map((e) => e.label)
           .join(', ')}${flat.length > 3 ? '…' : ''}`,
       );
     } else {
-      toastWarning('Hay errores en el formulario. Revisá los campos marcados.');
+      toastWarning('Hay errores en el formulario. Revisa los campos marcados.');
     }
     if (opts.bannerRef?.current) {
       opts.bannerRef.current.scrollIntoView({

@@ -74,7 +74,7 @@ export class SiiAdminController {
     const doc = await this.svc.findOne(id, tenantId);
     if (doc.estado === 'FALLIDO') {
       throw new BadRequestException(
-        `Documento ${id} está FALLIDO tras ${doc.intentos} intentos. Reseteá manualmente en DB si querés reintentar.`,
+        `Documento ${id} está FALLIDO tras ${doc.intentos} intentos. Resetea manualmente en DB si quieres reintentar.`,
       );
     }
     await this.svc.emitir(id);

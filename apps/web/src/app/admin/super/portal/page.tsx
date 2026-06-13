@@ -160,7 +160,7 @@ export default function SuperAdminPortalPage(): React.ReactElement {
             </Button>
             {cambioPendiente && (
               <span className="text-xs text-accent font-semibold">
-                · Tenés cambios sin guardar
+                · Tienes cambios sin guardar
               </span>
             )}
           </div>

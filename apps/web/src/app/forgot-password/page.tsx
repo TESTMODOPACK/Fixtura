@@ -52,7 +52,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
               <KeyRound size={36} className="mx-auto text-green-deep mb-3" />
               <CardLabel>Recuperar contraseña</CardLabel>
               <p className="text-sm text-ink-mute mt-2">
-                Ingresá tu email y te enviaremos un link para crear una nueva contraseña.
+                Ingresa tu email y te enviaremos un link para crear una nueva contraseña.
               </p>
             </div>
 
@@ -90,7 +90,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
               email con un link para recuperar tu contraseña.
             </p>
             <p className="text-sm text-ink-mute font-serif italic mt-4">
-              El link expira en 30 minutos. Revisá también la carpeta de spam.
+              El link expira en 30 minutos. Revisa también la carpeta de spam.
             </p>
             <div className="mt-6">
               <Link

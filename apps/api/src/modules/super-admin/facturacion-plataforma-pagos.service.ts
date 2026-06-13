@@ -328,6 +328,6 @@ export class FacturacionPlataformaPagosService {
     );
     // El cron FacturacionPlataformaCron tiene el lookup de admins via UserRole.
     // En una iteración futura: extraer ese helper a un service compartido y
-    // llamarlo desde acá.
+    // llamarlo desde aquí.
   }
 }

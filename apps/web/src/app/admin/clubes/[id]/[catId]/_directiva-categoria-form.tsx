@@ -136,7 +136,7 @@ export function DirectivaCategoriaForm({
     if (!e) {
       return (
         <span className="text-[11px] text-ink-mute italic">
-          Agregá un email para poder darle acceso al sistema.
+          Agrega un email para poder darle acceso al sistema.
         </span>
       );
     }
@@ -246,7 +246,7 @@ export function DirectivaCategoriaForm({
           </Button>
         </div>
         <p className="text-[11px] text-ink-mute mb-2 leading-snug">
-          Desde acá podés darle a un delegado <strong>acceso al sistema</strong>:
+          Desde aquí puedes darle a un delegado <strong>acceso al sistema</strong>:
           verá plantel, resultados, sanciones y deudas de <strong>todo el club</strong>
           {' '}y podrá pagar en línea. Necesita un email. El enlace de activación vence en 72 h.
         </p>

@@ -125,7 +125,7 @@ export default function DesignacionesPage({
       <PageHead
         eyebrow={torneo ? `Torneo · ${torneo.nombre}` : 'Designación de personal'}
         title="Designación de personal"
-        sub="Asigná árbitros principales, asistentes y planilleros a cada partido. (Paramédicos y personal de recinto se gestionan desde el catálogo.)"
+        sub="Asigna árbitros principales, asistentes y planilleros a cada partido. (Paramédicos y personal de recinto se gestionan desde el catálogo.)"
       >
         <Link href={`/admin/torneos/${torneoId}`}>
           <Button variant="default" size="sm">
@@ -147,7 +147,7 @@ export default function DesignacionesPage({
         <Card padding="roomy">
           <CardLabel>Sin fixture</CardLabel>
           <p className="font-serif italic text-ink-mute mt-2">
-            Generá el fixture del torneo antes de designar árbitros.
+            Genera el fixture del torneo antes de designar árbitros.
           </p>
           <Link href={`/admin/torneos/${torneoId}`}>
             <Button variant="accent" size="sm" className="mt-3">
@@ -394,7 +394,7 @@ function CoberturaPanel({
 
       {hayDeficit && (
         <div className="text-xs text-ink-mute font-serif italic mt-3">
-          Conseguí personal de apoyo o marcá disponibilidad en el perfil del personal. La
+          Consigue personal de apoyo o marca disponibilidad en el perfil del personal. La
           auto-asignación cubrirá lo que pueda con el personal disponible.
         </div>
       )}
@@ -661,7 +661,7 @@ function AsignarForm({
         value={personalId}
         onChange={(e) => setPersonalId(e.target.value)}
       >
-        <option value="">— elegí persona —</option>
+        <option value="">— elige persona —</option>
         {candidatos.map((p) => {
           const rolBase = p.rol as RolDesignablePartido;
           const abrev = ROL_ABREV[rolBase] ?? p.rol;
@@ -1101,7 +1101,7 @@ function RecintoAsignarForm({
         value={personalId}
         onChange={(e) => setPersonalId(e.target.value)}
       >
-        <option value="">— elegí persona —</option>
+        <option value="">— elige persona —</option>
         {sugeridos.length > 0 && (
           <optgroup label="Sugeridos por rol base">
             {sugeridos.map((p) => (

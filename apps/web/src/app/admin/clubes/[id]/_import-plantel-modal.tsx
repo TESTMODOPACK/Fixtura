@@ -39,11 +39,11 @@ import { cn } from '@/lib/cn';
  *      Parseamos con SheetJS y armamos el array de filas.
  *   2. PREVIEW: el backend evalúa todo. Mostramos tabla con badges
  *      (NUEVO / ACTUALIZAR / INACTIVAR / RECHAZADO / EN_EXCEPCION).
- *      El admin puede cancelar acá sin que se aplique nada.
+ *      El admin puede cancelar aquí sin que se aplique nada.
  *   3. CONFIRMAR: el admin acepta. El backend re-evalúa y aplica.
  *      Mostramos el resumen.
  *
- * El categoriaId viene del PlantelTab activo: importás contra
+ * El categoriaId viene del PlantelTab activo: importas contra
  * la categoría que estás viendo. El backend valida que la
  * categoría sea una asignada al club.
  */
@@ -119,7 +119,7 @@ export function ImportPlantelModal({
       });
       if (raw.length === 0) {
         setParseError(
-          `La hoja "${sheetName}" está vacía. Cargá al menos una fila.`,
+          `La hoja "${sheetName}" está vacía. Carga al menos una fila.`,
         );
         return;
       }
@@ -128,15 +128,15 @@ export function ImportPlantelModal({
         .filter((r): r is BulkImportRow => r !== null);
       if (mapped.length === 0) {
         setParseError(
-          'No se pudo extraer ninguna fila válida. Revisá que las columnas se llamen: rut, nombres, apellidos.',
+          'No se pudo extraer ninguna fila válida. Revisa que las columnas se llamen: rut, nombres, apellidos.',
         );
         return;
       }
       setRows(mapped);
 
-      // Disparar preview inmediatamente. NO atrapamos el error acá:
+      // Disparar preview inmediatamente. NO atrapamos el error aquí:
       // previewMut.error se renderiza solo en la UI (UploadStep).
-      // Atrapar acá enmascararía el mensaje del backend con un
+      // Atrapar aquí enmascararía el mensaje del backend con un
       // genérico "No se pudo leer el archivo".
       const preview = await previewMut
         .mutateAsync({ categoriaId, rows: mapped })
@@ -345,7 +345,7 @@ function UploadStep({
     if (!res.ok) {
       toastError(
         new Error(
-          'No se pudo descargar la plantilla. Revisá tu sesión y volvé a intentar.',
+          'No se pudo descargar la plantilla. Revisa tu sesión y vuelve a intentar.',
         ),
       );
       return;
@@ -362,7 +362,7 @@ function UploadStep({
     <div className="space-y-5">
       <div>
         <p className="text-sm text-ink mb-3">
-          Cargá un archivo Excel (.xlsx) con tu plantel. Si no tenés uno, bajá
+          Carga un archivo Excel (.xlsx) con tu plantel. Si no tienes uno, descarga
           la plantilla con el formato correcto:
         </p>
         <button
@@ -377,7 +377,7 @@ function UploadStep({
       <div className="border-2 border-dashed border-line rounded-lg p-8 text-center">
         <Upload size={32} className="mx-auto text-ink-mute mb-2" />
         <p className="text-sm text-ink mb-3">
-          Seleccioná tu archivo Excel con el plantel completo
+          Selecciona tu archivo Excel con el plantel completo
         </p>
         <input
           ref={fileInputRef}
@@ -510,8 +510,8 @@ function PreviewStep({
           <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
           <span>
             Hay <b>{preview.rechazados}</b> fila(s) con problemas. Esas filas{' '}
-            <b>no se aplicarán</b>. Revisalas en la tabla; si todo es esperable,
-            podés continuar igual.
+            <b>no se aplicarán</b>. Revísalas en la tabla; si todo es esperable,
+            puedes continuar igual.
           </span>
         </div>
       )}
@@ -555,7 +555,7 @@ function PreviewStep({
                 </div>
               </details>
               <div className="text-xs text-ink-mute mt-1">
-                Quedan en la historia (no se borran). Podés reactivarlos
+                Quedan en la historia (no se borran). Puedes reactivarlos
                 manualmente desde la ficha del club.
               </div>
             </div>

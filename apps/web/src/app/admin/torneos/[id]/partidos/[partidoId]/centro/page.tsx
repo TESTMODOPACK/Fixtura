@@ -153,7 +153,7 @@ export default function CentroPage({
             </div>
             {snapshot.estado === 'IDLE' && (
               <p className="mt-4 text-center text-xs font-serif italic text-ink-mute">
-                Iniciá el partido para cargar goles e incidencias.
+                Inicia el partido para cargar goles e incidencias.
               </p>
             )}
           </Card>
@@ -238,7 +238,7 @@ export default function CentroPage({
                   onClick={() => {
                     if (
                       window.confirm(
-                        '¿Finalizar el Match Center? Aún tenés que cerrar el acta para registrar el resultado oficial.',
+                        '¿Finalizar el Match Center? Aún tienes que cerrar el acta para registrar el resultado oficial.',
                       )
                     ) {
                       finalizar.mutate();
@@ -251,7 +251,7 @@ export default function CentroPage({
               )}
               {snapshot.estado === 'FINALIZADO_CENTRO' && (
                 <div className="text-sm font-serif italic text-ink-mute">
-                  El partido en vivo terminó. Cerrá el acta desde la vista detalle.
+                  El partido en vivo terminó. Cierra el acta desde la vista detalle.
                 </div>
               )}
             </div>
@@ -360,7 +360,7 @@ function IncidenciasPanel({
 
   const registrar = async (): Promise<void> => {
     if (!jugadorId) {
-      toastError('Elegí el jugador.');
+      toastError('Elige el jugador.');
       return;
     }
     const minutoFinal = minuto.trim() !== '' ? Number(minuto) : minutoSugerido;
@@ -372,7 +372,7 @@ function IncidenciasPanel({
         minuto: Number.isFinite(minutoFinal) ? minutoFinal : null,
       });
       // F46.6 — el marcador se deriva de las incidencias en el backend; no
-      // tocamos el marcador acá (evita el doble conteo con el botón +GOL).
+      // tocamos el marcador aquí (evita el doble conteo con el botón +GOL).
       setJugadorId('');
       setMinuto('');
     } catch (err) {
@@ -417,7 +417,7 @@ function IncidenciasPanel({
             value={jugadorId}
             onChange={(e) => setJugadorId(e.target.value)}
           >
-            <option value="">— elegí jugador —</option>
+            <option value="">— elige jugador —</option>
             {jugadores.data?.map((j) => (
               <option key={j.id} value={j.id}>
                 {j.numeroCamiseta ? `#${j.numeroCamiseta} ` : ''}
@@ -462,10 +462,10 @@ function IncidenciasPanel({
         </Button>
       </div>
       <p className="mt-3 text-[11px] font-serif italic text-ink-mute">
-        El marcador se arma con las incidencias de gol: registrar un GOL acá
+        El marcador se arma con las incidencias de gol: registrar un GOL aquí
         suma 1 al marcador, y el botón “+ GOL” de arriba crea un gol sin
-        jugador (lo podés atribuir después). Borrar una incidencia de gol
-        baja el marcador. El minuto se autocompleta; podés cambiarlo.
+        jugador (lo puedes atribuir después). Borrar una incidencia de gol
+        baja el marcador. El minuto se autocompleta; puedes cambiarlo.
       </p>
     </Card>
   );

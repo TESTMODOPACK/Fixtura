@@ -12,8 +12,8 @@ import { SetMetadata } from '@nestjs/common';
  *   - `tenant.created`, `tenant.member_invited`
  *   - `admin.impersonate.start`, `admin.impersonate.end`
  *
- * Si necesitás controlar más (extraer entityId del body o response,
- * before/after data, metadata custom), usá AuditLogService.record()
+ * Si necesitas controlar más (extraer entityId del body o response,
+ * before/after data, metadata custom), usa AuditLogService.record()
  * directamente desde el service.
  */
 export interface AuditedOptions {

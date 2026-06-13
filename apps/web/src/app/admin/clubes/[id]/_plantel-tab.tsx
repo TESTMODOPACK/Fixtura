@@ -184,7 +184,7 @@ export function PlantelTab({
       {clubInactivo && (
         <div className="px-5 py-3 bg-accent/10 border-t border-accent/30 text-xs text-ink flex items-center gap-2">
           <AlertTriangle size={14} className="flex-shrink-0" />
-          Club inactivo — no se pueden cargar nuevos jugadores. Reactivalo desde
+          Club inactivo — no se pueden cargar nuevos jugadores. Reactívalo desde
           editar club.
         </div>
       )}

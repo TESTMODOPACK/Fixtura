@@ -179,12 +179,12 @@ export class FacturacionPlataformaCron {
         </a>
       </p>
       <p style="color:#666;font-size:13px">
-        Si ya hiciste el pago por transferencia, ignorá este aviso. Te
+        Si ya hiciste el pago por transferencia, ignora este aviso. Te
         avisaremos cuando lo registremos.
       </p>
       <p>Saludos,<br/>Equipo LigaPlus</p>
     `;
-    const text = `Tu factura ${periodo} de LigaPlus tiene ${dias} días de mora. Monto $${monto} CLP. Pagá en ${linkPago}.`;
+    const text = `Tu factura ${periodo} de LigaPlus tiene ${dias} días de mora. Monto $${monto} CLP. Paga en ${linkPago}.`;
 
     for (const email of emails) {
       await this.email.send({ to: email, subject: asunto, html, text });

@@ -64,7 +64,7 @@ function ActivarInner(): React.ReactElement {
               <CheckCircle2 size={40} className="text-green-bright mx-auto mb-3" />
               <h2 className="font-display text-2xl text-green-deep mb-2">¡Cuenta activada!</h2>
               <p className="text-sm text-ink-mute mb-4">
-                Ya podés iniciar sesión con tu email y la contraseña que creaste.
+                Ya puedes iniciar sesión con tu email y la contraseña que creaste.
               </p>
               <Button variant="accent" onClick={() => router.push('/')}>
                 Ir a iniciar sesión
@@ -80,7 +80,7 @@ function ActivarInner(): React.ReactElement {
               </h2>
               <p className="text-sm text-ink-mute mb-5">
                 Delegado de <strong>{info.clubNombre}</strong>
-                {info.ligaNombre ? ` · ${info.ligaNombre}` : ''}. Creá tu contraseña para
+                {info.ligaNombre ? ` · ${info.ligaNombre}` : ''}. Crea tu contraseña para
                 acceder al portal de tu club.
               </p>
 

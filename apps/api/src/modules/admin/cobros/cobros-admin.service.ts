@@ -172,7 +172,7 @@ export class CobrosAdminService {
       throw new BadRequestException('Este cobro ya está marcado como pagado');
     }
     if (c.cancelado) {
-      throw new BadRequestException('Este cobro está cancelado — reactivá primero');
+      throw new BadRequestException('Este cobro está cancelado — reactiva primero');
     }
     c.pagadoAt = input.pagadoAt ? new Date(input.pagadoAt) : new Date();
     c.pagadoMetodo = input.metodo;

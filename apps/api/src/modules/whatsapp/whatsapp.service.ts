@@ -8,7 +8,7 @@ import { WhatsAppProvider } from './whatsapp-provider';
  * Encapsula la creación del template específico para invitaciones de
  * personal (RF-04b). Si más adelante hay otros casos de uso (designación
  * confirmar/rechazar vía WhatsApp, recordatorios morosidad, etc.), se
- * agregan métodos públicos acá y el provider queda inalterado.
+ * agregan métodos públicos aquí y el provider queda inalterado.
  */
 @Injectable()
 export class WhatsAppService {

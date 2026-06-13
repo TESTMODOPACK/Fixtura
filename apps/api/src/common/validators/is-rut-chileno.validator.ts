@@ -21,7 +21,7 @@ class IsRutChilenoConstraint implements ValidatorConstraintInterface {
   }
 
   defaultMessage(_args: ValidationArguments): string {
-    return 'RUT inválido (verificá el dígito verificador)';
+    return 'RUT inválido (verifica el dígito verificador)';
   }
 }
 

@@ -115,7 +115,7 @@ export const CreateClubSchema = z
     historialManual: z.string().max(5000).nullable().optional(),
     // Categorías en las que el club compite. Al menos UNA para que
     // tenga sentido (sin categoría no se puede armar plantel).
-    categoriaIds: z.array(z.uuid()).min(1, 'Elegí al menos una categoría.'),
+    categoriaIds: z.array(z.uuid()).min(1, 'Elige al menos una categoría.'),
   });
 export type CreateClubRequest = z.infer<typeof CreateClubSchema>;
 

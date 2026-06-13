@@ -286,10 +286,10 @@ export class PagosService {
     const msg: Record<string, string> = {
       APROBADO: '¡Pago aprobado! Recibirás un comprobante por email.',
       RECHAZADO: 'El pago fue rechazado por la pasarela.',
-      EXPIRADO: 'La transacción expiró. Iniciá un nuevo pago.',
+      EXPIRADO: 'La transacción expiró. Inicia un nuevo pago.',
       REVERSADO: 'El pago fue revertido por la pasarela.',
       PENDIENTE: 'La transacción aún está pendiente.',
-      PAGO_EN_TRANSITO: 'El pago está en proceso, esperá un momento.',
+      PAGO_EN_TRANSITO: 'El pago está en proceso, espera un momento.',
     };
     return {
       transaccionId: tx.id,

@@ -59,9 +59,9 @@ const TIPOS_ORDEN: TipoTarifa[] = [
 
 const DESCRIPCION_BREVE: Record<TipoTarifa, string> = {
   MATRICULA:
-    'Pago único por equipo. Se cobra cuando el torneo arranca (al ponerlo "En curso"). Definí en cuántos días vence; si pasa sin pago, queda atrasado.',
+    'Pago único por equipo. Se cobra cuando el torneo arranca (al ponerlo "En curso"). Define en cuántos días vence; si pasa sin pago, queda atrasado.',
   CUOTA:
-    'Cuota mensual por equipo. Al arrancar el torneo se generan todas las cuotas de una vez. Definí cuántas cuotas y qué día del mes vencen.',
+    'Cuota mensual por equipo. Al arrancar el torneo se generan todas las cuotas de una vez. Define cuántas cuotas y qué día del mes vencen.',
   MULTA_AMARILLA:
     'Monto fijo por cada tarjeta amarilla. Se carga al club al cerrar el acta del partido.',
   MULTA_ROJA:
@@ -129,7 +129,7 @@ export default function TarifarioPage({
       <PageHead
         eyebrow={`Torneo · ${torneo.temporadaNombre}`}
         title={`Tarifario — ${torneo.nombre}`}
-        sub="Configurá los montos a cobrar por concepto. Lo que no esté cargado no se cobra (silencioso)."
+        sub="Configura los montos a cobrar por concepto. Lo que no esté cargado no se cobra (silencioso)."
       >
         <Link href={`/admin/torneos/${id}`}>
           <Button variant="default" size="sm">
@@ -155,11 +155,11 @@ export default function TarifarioPage({
           <div className="text-sm text-ink">
             <div className="font-semibold mb-1">Cómo funciona</div>
             <p className="font-serif italic text-ink-mute">
-              Cada fila configura un concepto del torneo. Si no la cargás, el
+              Cada fila configura un concepto del torneo. Si no la cargas, el
               sistema no genera ese cobro. La <b>matrícula</b> y las{' '}
               <b>cuotas</b> se generan para todos los equipos cuando el torneo
               arranca (al ponerlo <b>“En curso”</b>). Las <b>multas</b> se
-              aplican solas al cerrar el acta. Dejá el tarifario listo{' '}
+              aplican solas al cerrar el acta. Deja el tarifario listo{' '}
               <b>antes</b> de arrancar el torneo. <b>Eliminar una tarifa no toca
               los cobros que ya se generaron con ella</b> — solo deja de generar
               nuevos.
@@ -231,8 +231,8 @@ function TarifaCard({
         `Los cobros que ya se generaron NO se tocan, pero quedan sin tarifa ` +
         `origen vinculada. El sistema simplemente dejará de generar nuevos ` +
         `cobros de este tipo en este torneo.\n\n` +
-        `Si querés conservar la trazabilidad, podés desactivarla en lugar de ` +
-        `borrarla (editá la tarifa y desmarcá "Tarifa activa").`,
+        `Si quieres conservar la trazabilidad, puedes desactivarla en lugar de ` +
+        `borrarla (edita la tarifa y desmarca "Tarifa activa").`,
     );
     if (!ok) return;
     deleteTarifa.mutate(tarifa.id, {
@@ -345,7 +345,7 @@ function TarifaCard({
             </div>
           ) : (
             <p className="text-xs text-ink-mute">
-              Cargá un monto para que el sistema empiece a usarlo automáticamente.
+              Carga un monto para que el sistema empiece a usarlo automáticamente.
             </p>
           )}
         </div>
@@ -441,7 +441,7 @@ function validarCamposTarifa(
   if (tipo === 'CUOTA') {
     const n = Number(raw.cantidadCuotas);
     if (!Number.isInteger(n) || n < 1 || n > 60) {
-      return { ok: false, error: 'Indicá cuántas cuotas se cobran (entre 1 y 60).' };
+      return { ok: false, error: 'Indica cuántas cuotas se cobran (entre 1 y 60).' };
     }
     const d = Number(raw.dia);
     if (!Number.isInteger(d) || d < 1 || d > 31) {
@@ -487,7 +487,7 @@ function CrearTarifaModal({
   const onGuardar = async (): Promise<void> => {
     const montoNum = Number(monto);
     if (!Number.isFinite(montoNum) || montoNum < 0) {
-      toastError('Ingresá un monto válido.');
+      toastError('Ingresa un monto válido.');
       return;
     }
     const campos = validarCamposTarifa(tipo, { dia, cantidadCuotas, diasPlazo });
@@ -579,7 +579,7 @@ function EditarTarifaModal({
   const onGuardar = async (): Promise<void> => {
     const montoNum = Number(monto);
     if (!Number.isFinite(montoNum) || montoNum < 0) {
-      toastError('Ingresá un monto válido.');
+      toastError('Ingresa un monto válido.');
       return;
     }
     const campos = validarCamposTarifa(tarifa.tipo, {
@@ -635,8 +635,8 @@ function EditarTarifaModal({
       <div className="text-[11px] font-serif italic text-ink-mute bg-paper/60 p-2 rounded-card mt-3 flex items-start gap-2">
         <AlertTriangle size={11} className="text-accent flex-shrink-0 mt-0.5" />
         El cambio de monto solo afecta cobros futuros. Los cobros ya generados
-        con esta tarifa NO se actualizan automáticamente — si querés ajustarlos,
-        editalos uno por uno desde Finanzas.
+        con esta tarifa NO se actualizan automáticamente — si quieres ajustarlos,
+        edítalos uno por uno desde Finanzas.
       </div>
       <label className="flex items-center gap-2 text-sm mt-3">
         <input

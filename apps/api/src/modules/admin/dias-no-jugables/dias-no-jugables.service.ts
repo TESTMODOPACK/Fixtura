@@ -188,7 +188,7 @@ export class DiasNoJugablesService {
     const existente = await qb.getOne();
     if (existente) {
       throw new ConflictException(
-        `Ya existe un día no jugable para ${fecha} (${scope}). Eliminalo primero si querés cambiar el motivo.`,
+        `Ya existe un día no jugable para ${fecha} (${scope}). Elimínalo primero si quieres cambiar el motivo.`,
       );
     }
   }

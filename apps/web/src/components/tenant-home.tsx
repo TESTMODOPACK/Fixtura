@@ -115,7 +115,7 @@ export function TenantHome({
                 <PushToggle
                   scopeType="TORNEO"
                   scopeId={data.torneoActivo.id}
-                  label="Recibí los resultados"
+                  label="Recibe los resultados"
                 />
               </div>
             </>

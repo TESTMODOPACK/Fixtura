@@ -33,7 +33,7 @@ function ResetContent(): React.ReactElement {
           <CardLabel className="text-danger">Link inválido</CardLabel>
           <p className="text-ink mt-3">Falta el token en la URL.</p>
           <p className="text-sm text-ink-mute font-serif italic mt-4">
-            Si el link es muy viejo, pedí uno nuevo desde la pantalla de inicio.
+            Si el link es muy viejo, pide uno nuevo desde la pantalla de inicio.
           </p>
           <div className="mt-6">
             <Link
@@ -85,7 +85,7 @@ function ResetContent(): React.ReactElement {
           <CheckCircle2 size={56} className="mx-auto text-green-bright mb-4" />
           <CardLabel className="text-green-bright">Contraseña actualizada</CardLabel>
           <p className="text-ink mt-4">
-            Ya podés iniciar sesión con tu nueva contraseña.
+            Ya puedes iniciar sesión con tu nueva contraseña.
           </p>
           <p className="text-sm text-ink-mute font-serif italic mt-4">
             Si tenías sesión abierta en otro dispositivo, vas a tener que volver a
@@ -110,7 +110,7 @@ function ResetContent(): React.ReactElement {
         <KeyRound size={36} className="mx-auto text-green-deep mb-3" />
         <CardLabel>Nueva contraseña</CardLabel>
         <p className="text-sm text-ink-mute mt-2">
-          Elegí una contraseña segura. Mínimo 8 caracteres.
+          Elige una contraseña segura. Mínimo 8 caracteres.
         </p>
       </div>
 

@@ -20,7 +20,7 @@ export function AnularFacturaModal({ factura, onClose }: Props): React.ReactElem
   function submit(e: React.FormEvent): void {
     e.preventDefault();
     if (motivo.trim().length < 2) {
-      alert('Indicá un motivo válido.');
+      alert('Indica un motivo válido.');
       return;
     }
     mut.mutate(

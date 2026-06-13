@@ -95,7 +95,7 @@ export function LoginModal({ open, onClose }: LoginModalProps): React.ReactEleme
           BIENVENIDO
         </h2>
         <p className="font-serif italic text-ink-mute mb-6 text-sm">
-          Ingresá con tu cuenta para gestionar tu liga.
+          Ingresa con tu cuenta para gestionar tu liga.
         </p>
 
         <form

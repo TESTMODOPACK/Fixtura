@@ -73,7 +73,7 @@ export default function FixtureAdminPage({
     const ok = window.confirm(
       '¿Borrar todo el calendario de partidos de este torneo?\n\n' +
         'Se eliminan todas las fechas y partidos generados. Los equipos ' +
-        'inscritos NO se tocan. Después podés volver a generar el ' +
+        'inscritos NO se tocan. Después puedes volver a generar el ' +
         'calendario.\n\nEsta acción no se puede deshacer.',
     );
     if (!ok) return;
@@ -81,7 +81,7 @@ export default function FixtureAdminPage({
       const r = await resetFixture.mutateAsync();
       toastSuccess(
         `Calendario borrado (${r.deleted} fecha${r.deleted === 1 ? '' : 's'}). ` +
-          'Podés generarlo de nuevo desde el torneo.',
+          'Puedes generarlo de nuevo desde el torneo.',
       );
     } catch (err) {
       toastError(err);
@@ -134,7 +134,7 @@ export default function FixtureAdminPage({
       <PageHead
         eyebrow={data ? `Torneo · ${data.torneoNombre}` : 'Fixture'}
         title="Fixture completo"
-        sub="Cargá actas, editá horarios y canchas. Arrastrá un partido a otra fecha para reprogramarlo."
+        sub="Carga actas, edita horarios y canchas. Arrastra un partido a otra fecha para reprogramarlo."
       >
         <div className="flex items-center gap-2">
           {puedeBorrarFixture && (
@@ -172,7 +172,7 @@ export default function FixtureAdminPage({
             FIXTURE VACÍO
           </div>
           <p className="font-serif italic text-ink-mute">
-            Volvé al torneo y generá el fixture con Berger.
+            Vuelve al torneo y genera el fixture con Berger.
           </p>
         </Card>
       )}
@@ -348,7 +348,7 @@ function FechaCard({
         ))}
         {fecha.partidos.length === 0 && (
           <div className="px-5 py-6 text-center text-xs text-ink-mute font-serif italic">
-            Soltá un partido acá para moverlo a esta fecha
+            Suelta un partido aquí para moverlo a esta fecha
           </div>
         )}
       </div>
@@ -399,7 +399,7 @@ function PartidoRow({
         type="button"
         {...attributes}
         {...listeners}
-        title={cerrada ? 'Acta cerrada · no se puede mover' : 'Arrastrá para mover de fecha'}
+        title={cerrada ? 'Acta cerrada · no se puede mover' : 'Arrastra para mover de fecha'}
         disabled={cerrada}
         className={cn(
           'p-1 rounded text-ink-mute',
@@ -528,7 +528,7 @@ function SuspenderFechaForm({
   const razonBloqueo = yaEsReprogramada
     ? 'Esta fecha ya es una reprogramación previa. No se puede crear otra reprogramación encima.'
     : existeReproParalela
-      ? `Ya existe una Fecha ${fecha.numero} reprogramada en este torneo. Eliminala primero o usá "Reusar una fecha existente".`
+      ? `Ya existe una Fecha ${fecha.numero} reprogramada en este torneo. Elimínala primero o usa "Reusar una fecha existente".`
       : null;
 
   const estrategiaInvalida = (e: EstrategiaSuspensionFecha): string | null => {
@@ -553,9 +553,9 @@ function SuspenderFechaForm({
     TRASNOCHE_DOMINO:
       'Intercala una nueva fecha REPROGRAMADA inmediatamente después y corre las siguientes N días para hacer espacio. Las afectadas quedan marcadas como REPROGRAMADAS.',
     REUSAR_EXISTENTE:
-      'No crea fecha nueva. Mueve los partidos no jugados a una fecha existente que vos elijas. Esa fecha pasa a quedar marcada REPROGRAMADA.',
+      'No crea fecha nueva. Mueve los partidos no jugados a una fecha existente que tú elijas. Esa fecha pasa a quedar marcada REPROGRAMADA.',
     MANUAL:
-      'Solo marca la fecha como SUSPENDIDA. Vos reprogramás cada partido a mano desde el detalle. No crea fecha nueva.',
+      'Solo marca la fecha como SUSPENDIDA. Tú reprogramas cada partido a mano desde el detalle. No crea fecha nueva.',
   };
 
   return (
@@ -694,7 +694,7 @@ function SuspenderFechaForm({
                         onChange={(ev) => setFechaDestinoId(ev.target.value)}
                         disabled={loading || candidatasReusar.length === 0}
                       >
-                        <option value="">Elegí una fecha…</option>
+                        <option value="">Elige una fecha…</option>
                         {candidatasReusar.map((f) => (
                           <option key={f.id} value={f.id}>
                             Fecha {f.numero}
@@ -732,17 +732,17 @@ function SuspenderFechaForm({
               return;
             }
             if (estrategia === 'REUSAR_EXISTENTE' && !fechaDestinoId) {
-              alert('Tenés que elegir una fecha destino.');
+              alert('Tienes que elegir una fecha destino.');
               return;
             }
             const msg =
               estrategia === 'AL_FINAL'
-                ? `Vas a crear una NUEVA fecha ${fecha.numero} REPROGRAMADA al final del calendario. ¿Confirmás?`
+                ? `Vas a crear una NUEVA fecha ${fecha.numero} REPROGRAMADA al final del calendario. ¿Confirmas?`
                 : estrategia === 'TRASNOCHE_DOMINO'
-                  ? `Vas a crear una NUEVA fecha ${fecha.numero} REPROGRAMADA intercalada y correr ${diasCorrimiento} días las siguientes. ¿Confirmás?`
+                  ? `Vas a crear una NUEVA fecha ${fecha.numero} REPROGRAMADA intercalada y correr ${diasCorrimiento} días las siguientes. ¿Confirmas?`
                   : estrategia === 'REUSAR_EXISTENTE'
-                    ? `Vas a mover los partidos a la fecha destino seleccionada. La fecha actual queda SUSPENDIDA. ¿Confirmás?`
-                    : 'Vas a marcar esta fecha como SUSPENDIDA sin crear nueva. Vos reprogramás partido por partido. ¿Confirmás?';
+                    ? `Vas a mover los partidos a la fecha destino seleccionada. La fecha actual queda SUSPENDIDA. ¿Confirmas?`
+                    : 'Vas a marcar esta fecha como SUSPENDIDA sin crear nueva. Tú reprogramas partido por partido. ¿Confirmas?';
             if (!window.confirm(msg)) return;
             onSubmit({
               motivo,

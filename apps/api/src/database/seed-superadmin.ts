@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   SUPER ADMIN listo
   Email:       ${email}
   Contraseña:  ${password}
-  (cambiala en producción seteando SEED_SUPERADMIN_PASSWORD)
+  (cámbiala en producción seteando SEED_SUPERADMIN_PASSWORD)
 ════════════════════════════════════════════════════════════
 `);
   } catch (err) {

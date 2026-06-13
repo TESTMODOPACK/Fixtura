@@ -66,7 +66,7 @@ export default function CanchasPage(): React.ReactElement {
               SIN CANCHAS CARGADAS
             </div>
             <div className="text-sm text-ink-mute mt-1 font-serif italic">
-              Cargá tu primera cancha arriba.
+              Carga tu primera cancha arriba.
             </div>
           </Card>
         )}

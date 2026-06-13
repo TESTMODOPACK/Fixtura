@@ -11,7 +11,7 @@ import { useIsSuperAdmin, useMe } from '@/hooks/use-admin';
  * Antes, un admin de liga que aterrizaba en `/admin/super` (URL heredada de una
  * sesión previa, back del navegador o tipeo directo) veía el cascarón del panel
  * de super admin; el backend rechazaba los datos con 403 pero la UI igual se
- * renderizaba. Acá redirigimos al panel de la liga apenas sabemos que la sesión
+ * renderizaba. Aquí redirigimos al panel de la liga apenas sabemos que la sesión
  * no es super admin. Esperamos a que `/auth/me` resuelva para no rebotar al
  * propio super admin durante la carga.
  */

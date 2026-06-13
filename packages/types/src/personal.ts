@@ -116,7 +116,7 @@ export const CreatePersonalSchema = z.object({
   rut: z.string().max(20).optional().nullable(),
   // F53 — roles que la persona puede ejercer (multi). El rol primario se
   // deriva del primero. `rol` queda opcional por compatibilidad.
-  roles: z.array(z.enum(ROL_PERSONAL)).min(1, 'Elegí al menos un rol'),
+  roles: z.array(z.enum(ROL_PERSONAL)).min(1, 'Elige al menos un rol'),
   rol: z.enum(ROL_PERSONAL).optional(),
   telefono: z.string().max(30).optional().nullable(),
   email: z.string().email().max(150).optional().nullable(),

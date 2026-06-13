@@ -126,7 +126,7 @@ export class PlantelImportService {
           nombres,
           apellidos,
           action: 'RECHAZADO',
-          motivo: 'RUT inválido — chequeá el dígito verificador.',
+          motivo: 'RUT inválido — revisa el dígito verificador.',
           edadCalendario: null,
           jugadorId: null,
           cambios: [],
@@ -468,7 +468,7 @@ export class PlantelImportService {
     if (!club) throw new NotFoundException(`Club ${clubId} no encontrado.`);
     if (club.estado === 'INACTIVO') {
       throw new BadRequestException(
-        `El club "${club.nombre}" está INACTIVO. Reactivalo antes de importar.`,
+        `El club "${club.nombre}" está INACTIVO. Reactívalo antes de importar.`,
       );
     }
     const categoria = await this.categoriaRepo.findOne({

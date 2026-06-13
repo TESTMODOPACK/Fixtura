@@ -311,7 +311,7 @@ export class DunningService {
           <p>El cobro <strong>${concepto}</strong> por <strong>${montoStr}</strong>
           tiene <strong>${dias} días</strong> de mora. Según el reglamento de la
           liga, el equipo queda <strong>SUSPENDIDO</strong> hasta regularizar.</p>
-          <p>Para regularizar y reactivar al equipo, ingresá al portal y completá
+          <p>Para regularizar y reactivar al equipo, ingresa al portal y completa
           el pago.</p>
           <p>Saludos,<br/>${tenantName}</p>
         `,
@@ -326,11 +326,11 @@ export class DunningService {
           <p>Hola, equipo <strong>${equipoNombre}</strong>.</p>
           <p>El cobro <strong>${concepto}</strong> por <strong>${montoStr}</strong>
           venció hace <strong>${dias} días</strong>.</p>
-          <p>Por favor regularizá lo antes posible. Si pasás los 30 días el
+          <p>Por favor regulariza lo antes posible. Si pasas los 30 días el
           equipo va a quedar suspendido en el torneo.</p>
           <p>Saludos,<br/>${tenantName}</p>
         `,
-        text: `[${tenantName}] Aviso de mora: ${concepto} ${montoStr} con ${dias} días vencido. Regularizá antes de los 30 días.`,
+        text: `[${tenantName}] Aviso de mora: ${concepto} ${montoStr} con ${dias} días vencido. Regulariza antes de los 30 días.`,
       };
     }
     // Recordatorio amistoso (día 1)
@@ -341,7 +341,7 @@ export class DunningService {
         <p>Hola, equipo <strong>${equipoNombre}</strong>.</p>
         <p>Queríamos avisarte que el cobro <strong>${concepto}</strong> por
         <strong>${montoStr}</strong> venció hace ${dias} día${dias === 1 ? '' : 's'}.</p>
-        <p>Si ya pagaste, ignorá este aviso. Si todavía no, podés regularizar
+        <p>Si ya pagaste, ignora este aviso. Si todavía no, puedes regularizar
         cuando puedas.</p>
         <p>Saludos,<br/>${tenantName}</p>
       `,

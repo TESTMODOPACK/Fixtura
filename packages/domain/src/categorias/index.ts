@@ -121,7 +121,7 @@ export function validarPlantelCategoria(
   const motivosRechazo: string[] = [];
   if (sinFecha > 0) {
     motivosRechazo.push(
-      `${sinFecha} jugador(es) sin fecha de nacimiento. Cargá la fecha para poder validar.`,
+      `${sinFecha} jugador(es) sin fecha de nacimiento. Carga la fecha para poder validar.`,
     );
   }
   if (bloqueados > 0) {

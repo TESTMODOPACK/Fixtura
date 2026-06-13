@@ -99,7 +99,7 @@ export class EquiposItemController {
   /**
    * Sprint 44 — Reactivar un equipo suspendido. Vuelve a INSCRITO. Los
    * walkovers ya disparados se mantienen como historia (no se revierten
-   * automáticamente — si necesitás corregir partidos puntuales, hacelo
+   * automáticamente — si necesitas corregir partidos puntuales, hazlo
    * desde el fixture).
    */
   @Post(':id/reactivar')

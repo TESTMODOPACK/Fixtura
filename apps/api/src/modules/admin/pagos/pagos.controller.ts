@@ -69,7 +69,7 @@ export class PagosAdminController {
 /**
  * Endpoint público para el retorno de la pasarela. Webpay no manda
  * cookies de sesión — sólo el token. El frontend de /pago/retorno
- * llama acá con el transaccionId para confirmar.
+ * llama aquí con el transaccionId para confirmar.
  *
  * No requiere auth porque la pasarela no la tiene. La transacción se
  * identifica por su UUID (no enumerable).

@@ -2,7 +2,7 @@
  * Cola de operaciones offline persistida en IndexedDB.
  *
  * Cuando el cliente intenta una operación crítica (cargar incidencia,
- * cerrar acta) y está sin internet, se encola acá. El listener de
+ * cerrar acta) y está sin internet, se encola aquí. El listener de
  * `online` drena la queue automáticamente y replays cada operación
  * contra el API.
  *

@@ -26,7 +26,7 @@ export default function DesignacionesIndexPage(): React.ReactElement {
       <PageHead
         eyebrow="Operaciones"
         title="Designación de personal"
-        sub="Asigná árbitros, asistentes y planilleros a los partidos de cada fecha. (Paramédicos y personal de recinto se gestionan desde el catálogo.)"
+        sub="Asigna árbitros, asistentes y planilleros a los partidos de cada fecha. (Paramédicos y personal de recinto se gestionan desde el catálogo.)"
       >
         <Link href="/admin/personal">
           <Button variant="default" size="sm">
@@ -43,7 +43,7 @@ export default function DesignacionesIndexPage(): React.ReactElement {
         <Card padding="roomy">
           <CardLabel>Sin torneos</CardLabel>
           <p className="font-serif italic text-ink-mute mt-2">
-            Creá un torneo y generá su fixture para empezar a designar personal.
+            Crea un torneo y genera su fixture para empezar a designar personal.
           </p>
         </Card>
       )}

@@ -67,7 +67,7 @@ export class TribunalAdminService {
     if (torneo.estado === 'DRAFT') {
       throw new BadRequestException(
         'El torneo está en DRAFT — el tribunal opera cuando el torneo arranca. ' +
-          'Iniciá el torneo para imponer sanciones.',
+          'Inicia el torneo para imponer sanciones.',
       );
     }
 

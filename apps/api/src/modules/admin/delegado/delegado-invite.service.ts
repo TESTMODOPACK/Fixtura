@@ -270,7 +270,7 @@ export class DelegadoInviteService {
           </a>
         </p>
         <p style="color:#666;font-size:13px">El enlace vence en 72 horas. Si no
-        esperabas esta invitación, ignorá este correo.</p>
+        esperabas esta invitación, ignora este correo.</p>
       </div>
     `;
   }

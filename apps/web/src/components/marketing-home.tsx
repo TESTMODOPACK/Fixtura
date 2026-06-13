@@ -82,17 +82,17 @@ const PASOS = [
     n: '01',
     titulo: 'Configuramos tu liga',
     texto:
-      'Creamos tu portal con tu dominio, escudo y colores. Definís categorías, series, canchas y tarifas. Te acompañamos en toda la puesta en marcha.',
+      'Creamos tu portal con tu dominio, escudo y colores. Defines categorías, series, canchas y tarifas. Te acompañamos en toda la puesta en marcha.',
   },
   {
     n: '02',
-    titulo: 'Cargás clubes y planteles',
+    titulo: 'Cargas clubes y planteles',
     texto:
       'Los clubes se inscriben con sus planteles — desde Excel o invitando a cada delegado a cargar el suyo. RUT validado, sin duplicados.',
   },
   {
     n: '03',
-    titulo: 'Generás el fixture y a jugar',
+    titulo: 'Generas el fixture y a jugar',
     texto:
       'Un click genera el calendario completo. Desde ahí: actas en cancha, tabla al instante, cobros y designaciones corriendo solos.',
   },
@@ -128,7 +128,7 @@ const FAQ = [
   },
   {
     q: '¿Necesito conocimientos técnicos?',
-    a: 'No. Si manejás WhatsApp y una planilla, manejás LigaPlus. La carga masiva es desde Excel con plantillas descargables, y cada pantalla guía el paso siguiente.',
+    a: 'No. Si manejas WhatsApp y una planilla, manejas LigaPlus. La carga masiva es desde Excel con plantillas descargables, y cada pantalla guía el paso siguiente.',
   },
   {
     q: '¿Qué pasa con los datos de mi liga?',
@@ -392,7 +392,7 @@ export function MarketingHome(): React.ReactElement {
           <div className="max-w-2xl mb-12">
             <div className="eyebrow mb-3">→ Funciones</div>
             <h2 className="font-display text-4xl md:text-5xl text-green-deep tracking-display mb-4">
-              TODO LO QUE HOY HACÉS A MANO
+              TODO LO QUE HOY HACES A MANO
             </h2>
             <p className="font-serif italic text-ink-mute leading-relaxed">
               Cada módulo nació de cómo se administra una liga de verdad: el fixture en la
@@ -627,7 +627,7 @@ export function MarketingHome(): React.ReactElement {
           <div className="relative">
             <LigaPlusMark size={72} className="mx-auto mb-5" />
             <h2 className="font-display text-4xl md:text-5xl tracking-display text-chalk mb-4">
-              PROBALO 30 DÍAS EN TU LIGA
+              PRUÉBALO 30 DÍAS EN TU LIGA
             </h2>
             <p className="font-serif italic text-green-lime leading-relaxed mb-8 max-w-xl mx-auto">
               Plan mensual según el tamaño de tu liga, sin permanencia ni costos de
@@ -692,7 +692,7 @@ export function MarketingHome(): React.ReactElement {
                 <li className="text-chalk/60">Santiago de Chile</li>
               </ul>
               <p className="mt-5 text-[11px] text-chalk/50 leading-relaxed">
-                ¿Tu liga ya usa LigaPlus? Ingresá desde el dominio propio de tu liga — ahí
+                ¿Tu liga ya usa LigaPlus? Ingresa desde el dominio propio de tu liga — ahí
                 está el acceso de administradores, delegados y árbitros.
               </p>
             </div>

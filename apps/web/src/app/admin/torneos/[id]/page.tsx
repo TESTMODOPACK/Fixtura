@@ -297,8 +297,8 @@ function EquiposTab({
   const handleReactivar = async (id: string, nombre: string): Promise<void> => {
     const ok = window.confirm(
       `¿Reactivar "${nombre}"?\n\nVuelve a INSCRITO. Los walkovers ya disparados al ` +
-        `suspenderlo NO se revierten — siguen como historia. Si querés que vuelva ` +
-        `a jugar fechas futuras, lo hacés desde el fixture.`,
+        `suspenderlo NO se revierten — siguen como historia. Si quieres que vuelva ` +
+        `a jugar fechas futuras, lo haces desde el fixture.`,
     );
     if (!ok) return;
     try {
@@ -377,7 +377,7 @@ function EquiposTab({
           <div className="px-5 py-4 bg-accent/10 border-b border-accent/30">
             <div className="text-sm text-ink">
               <strong>Torneo multi-categoría legacy</strong> ({combos.length} combos).
-              Si necesitás asignar serie específica a un equipo, hacelo desde
+              Si necesitas asignar serie específica a un equipo, hazlo desde
               el detalle del equipo (click en la fila).
             </div>
           </div>
@@ -416,7 +416,7 @@ function EquiposTab({
           <div className="px-5 py-4 bg-accent/10 border-b border-accent/30">
             <div className="text-sm text-ink">
               <strong>Hay equipos con 0 jugadores.</strong> Si ya cargaste los planteles
-              en los clubes (vista Clubes), tocá{' '}
+              en los clubes (vista Clubes), toca{' '}
               <button
                 type="button"
                 onClick={handleResync}
@@ -449,7 +449,7 @@ function EquiposTab({
           <div className="p-12 text-center">
             <Users size={36} className="mx-auto text-line mb-3" />
             <p className="font-serif italic text-ink-mute">
-              Inscribí los primeros equipos para poder generar el fixture.
+              Inscribe los primeros equipos para poder generar el fixture.
             </p>
           </div>
         )}
@@ -574,7 +574,7 @@ function EquiposTab({
             MÍNIMO 2 EQUIPOS
           </div>
           <p className="text-sm text-green-deep/85">
-            Para generar el fixture necesitás al menos 2 equipos. Para una liga real,
+            Para generar el fixture necesitas al menos 2 equipos. Para una liga real,
             recomendamos inscribir todos los equipos antes de generar el fixture — agregar
             equipos después requiere regenerar.
           </p>
@@ -597,7 +597,7 @@ function FixtureTab({
 
   // Si el torneo YA tiene fixture, redirigimos directo al detalle.
   // Evita la card intermedia "FIXTURE ACTIVO + Ver detalle" que era ruido
-  // (el header del tab ya navega derecho, esto es defensivo si llegan acá
+  // (el header del tab ya navega derecho, esto es defensivo si llegan aquí
   // por deeplink o por estado interno preservado).
   useEffect(() => {
     if (hasFechas) {
@@ -618,10 +618,10 @@ function FixtureTab({
       <Card padding="roomy" className="text-center">
         <CalendarRange size={36} className="mx-auto text-line mb-3" />
         <div className="font-display text-2xl text-green-deep tracking-display mb-2">
-          INSCRIBÍ EQUIPOS PRIMERO
+          INSCRIBE EQUIPOS PRIMERO
         </div>
         <p className="font-serif italic text-ink-mute">
-          Para generar el fixture necesitás al menos 2 equipos inscritos.
+          Para generar el fixture necesitas al menos 2 equipos inscritos.
         </p>
       </Card>
     );
@@ -636,7 +636,7 @@ function FixtureTab({
       <p className="font-serif italic text-ink-mute mb-6">
         Genera el calendario completo del torneo: cada equipo juega contra
         todos los demás. Si la cantidad de equipos es impar, en cada fecha uno
-        descansa. Después podés editar partidos a mano (cambiar cancha, hora o
+        descansa. Después puedes editar partidos a mano (cambiar cancha, hora o
         fecha) desde el detalle de cada partido.
       </p>
       <GenerarFixtureForm torneoId={torneoId} />
@@ -833,7 +833,7 @@ function ConfiguracionTab({
       next: 'ACTIVO',
       disabled:
         fechasCount === 0
-          ? 'Primero generá el fixture (mínimo 1 fecha)'
+          ? 'Primero genera el fixture (mínimo 1 fecha)'
           : undefined,
     },
     ACTIVO: { label: 'Cerrar torneo', next: 'CERRADO' },
@@ -852,7 +852,7 @@ function ConfiguracionTab({
         `Al activar el torneo se van a generar los cobros del tarifario ` +
           `(matrícula y cuotas) para los ${equiposCount} equipo(s) inscriptos.\n\n` +
           `Asegurate de tener el tarifario configurado antes de continuar. ` +
-          `Si todavía no cargaste matrícula ni cuotas, podés activarlo igual y ` +
+          `Si todavía no cargaste matrícula ni cuotas, puedes activarlo igual y ` +
           `no se genera ningún cobro.\n\n¿Activar el torneo ahora?`,
       );
       if (!ok) return;
@@ -867,7 +867,7 @@ function ConfiguracionTab({
         <div className="font-display text-3xl text-green-deep tracking-display my-2">{estado}</div>
         <p className="font-serif italic text-ink-mute text-sm mb-6">
           {estado === 'DRAFT' &&
-            'En borrador. Solo visible desde el panel admin. Activá el torneo para que aparezca en el portal público.'}
+            'En borrador. Solo visible desde el panel admin. Activa el torneo para que aparezca en el portal público.'}
           {estado === 'ACTIVO' &&
             'Torneo activo. Visible en el portal público. Los hinchas pueden ver tabla, fixture y rankings.'}
           {estado === 'CERRADO' &&
@@ -883,7 +883,7 @@ function ConfiguracionTab({
               <Link href={`/admin/torneos/${torneoId}/tarifario`} className="text-accent underline">
                 tarifario
               </Link>{' '}
-              (matrícula y cuotas) para los {equiposCount} equipo(s). Dejá el
+              (matrícula y cuotas) para los {equiposCount} equipo(s). Deja el
               tarifario listo antes de activar.
             </span>
           </div>
@@ -915,8 +915,8 @@ function ConfiguracionTab({
           <div className="mt-6 pt-5 border-t border-line">
             <CardLabel tone="mute">Zona peligrosa</CardLabel>
             <p className="font-serif italic text-ink-mute text-xs mt-2 mb-3">
-              Si este torneo fue creado por error, podés eliminarlo mientras
-              esté en borrador. Una vez activo, no se puede borrar — usá
+              Si este torneo fue creado por error, puedes eliminarlo mientras
+              esté en borrador. Una vez activo, no se puede borrar — usa
               &ldquo;Cerrar torneo&rdquo; para mantenerlo como histórico.
             </p>
             <Button
@@ -955,7 +955,7 @@ function ConfiguracionTab({
       <Card padding="roomy" className="lg:col-span-2">
         <CardLabel>Categoría de jugadores</CardLabel>
         <p className="text-sm text-ink-mute font-serif italic mt-2 mb-4">
-          La categoría define la edad mínima y las series disponibles. Si lo cambiás,
+          La categoría define la edad mínima y las series disponibles. Si lo cambias,
           los equipos pierden su serie asignada (la tendrás que reasignar).
         </p>
         <div className="flex items-end gap-3 flex-wrap">
@@ -1126,7 +1126,7 @@ function CombosCard({
         </div>
         <p className="text-sm text-green-deep/85">
           Este torneo no tiene categorías asignadas — no se valida edad de
-          jugadores. Asignalas desde la pestaña{' '}
+          jugadores. Asígnalas desde la pestaña{' '}
           <span className="font-semibold">Configuración</span>.
         </p>
       </Card>

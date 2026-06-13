@@ -126,7 +126,7 @@ export default function PersonalPage(): React.ReactElement {
         sub={
           requiereCarnetAnfa
             ? 'Catálogo de árbitros, planilleros, paramédicos. El carnet ANFA es obligatorio para árbitros oficiales.'
-            : 'Catálogo de árbitros, planilleros, paramédicos. El carnet ANFA es opcional (esta liga no es ANFA — cambiá la configuración en Ajustes si corresponde).'
+            : 'Catálogo de árbitros, planilleros, paramédicos. El carnet ANFA es opcional (esta liga no es ANFA — cambia la configuración en Ajustes si corresponde).'
         }
       >
         <Link href="/admin">
@@ -560,11 +560,11 @@ function EditarPersonalForm({
   const Schema = z.object({
     nombre: z.string().min(2).max(100),
     apellido: z.string().min(2).max(100),
-    roles: z.array(z.enum(ROL_PERSONAL)).min(1, 'Elegí al menos un rol'),
+    roles: z.array(z.enum(ROL_PERSONAL)).min(1, 'Elige al menos un rol'),
     rut: z
       .string()
       .optional()
-      .refine((v) => !v || validarRut(v), 'RUT inválido (verificá el dígito verificador)'),
+      .refine((v) => !v || validarRut(v), 'RUT inválido (verifica el dígito verificador)'),
     telefono: z.string().optional(),
     email: z.union([z.literal(''), z.string().email('Email inválido')]).optional(),
     tarifaBase: clpOpcional,
@@ -652,7 +652,7 @@ function EditarPersonalForm({
         error={form.formState.errors.apellido?.message}
       />
       <div className="md:col-span-2">
-        <label className="label">Roles (podés marcar varios)</label>
+        <label className="label">Roles (puedes marcar varios)</label>
         <div className="flex flex-wrap gap-x-4 gap-y-2 mt-1">
           {ROL_PERSONAL.map((r) => (
             <label key={r} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -777,11 +777,11 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
   const Schema = z.object({
     nombre: z.string().min(2, 'Mínimo 2 caracteres').max(100),
     apellido: z.string().min(2, 'Mínimo 2 caracteres').max(100),
-    roles: z.array(z.enum(ROL_PERSONAL)).min(1, 'Elegí al menos un rol'),
+    roles: z.array(z.enum(ROL_PERSONAL)).min(1, 'Elige al menos un rol'),
     rut: z
       .string()
       .optional()
-      .refine((v) => !v || validarRut(v), 'RUT inválido (verificá el dígito verificador)'),
+      .refine((v) => !v || validarRut(v), 'RUT inválido (verifica el dígito verificador)'),
     telefono: z.string().optional(),
     email: z.union([z.literal(''), z.string().email('Email inválido')]).optional(),
     tarifaBase: clpOpcional,
@@ -858,7 +858,7 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
         />
 
         <div className="md:col-span-2">
-          <label className="label">Roles (podés marcar varios)</label>
+          <label className="label">Roles (puedes marcar varios)</label>
           <div className="flex flex-wrap gap-x-4 gap-y-2 mt-1">
             {ROL_PERSONAL.map((r) => (
               <label key={r} className="flex items-center gap-2 text-sm cursor-pointer">

@@ -63,7 +63,7 @@ export default function JugadoresGlobalPage(): React.ReactElement {
       <PageHead
         eyebrow="Comunidad"
         title="Jugadores & ranking"
-        sub="Buscá a cualquier jugador del plantel global de la liga. Las stats se calculan sobre todos los torneos donde participó (match por RUT)."
+        sub="Busca a cualquier jugador del plantel global de la liga. Las stats se calculan sobre todos los torneos donde participó (match por RUT)."
       />
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
@@ -174,7 +174,7 @@ export default function JugadoresGlobalPage(): React.ReactElement {
             <p className="font-serif italic text-ink-mute">
               {deferredSearch
                 ? `No hay jugadores que coincidan con "${deferredSearch}".`
-                : 'No hay jugadores cargados. Cargá clubes y sus planteles desde '}
+                : 'No hay jugadores cargados. Carga clubes y sus planteles desde '}
               {!deferredSearch && (
                 <Link
                   href="/admin/clubes"

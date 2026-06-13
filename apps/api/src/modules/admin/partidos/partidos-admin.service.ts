@@ -271,7 +271,7 @@ export class PartidosAdminService {
    * No verificamos solapamiento de bloques porque no tenemos `duracion`
    * persistida en `partidos` — asumimos slots de 90+30=120min uniformes.
    * Cuando agreguemos duración variable (canchas con baby-fútbol vs F11),
-   * acá comparamos rangos `[a, a+90)` vs `[b, b+90)`.
+   * aquí comparamos rangos `[a, a+90)` vs `[b, b+90)`.
    */
   private async validarChoqueCancha(partido: Partido): Promise<void> {
     if (!partido.canchaId || !partido.fechaHora) return;
@@ -470,7 +470,7 @@ export class PartidosAdminService {
     // cerrar el acta (deja registro de quién jugó y bloquea inhabilitados).
     if (!partido.presentesCertificadosAt) {
       throw new BadRequestException(
-        'Certificá los jugadores presentes de ambos equipos antes de cerrar el acta.',
+        'Certifica los jugadores presentes de ambos equipos antes de cerrar el acta.',
       );
     }
 
@@ -496,7 +496,7 @@ export class PartidosAdminService {
         golesVisitaIncidencias !== input.golesVisita)
     ) {
       throw new BadRequestException(
-        `El marcador (${input.golesLocal}-${input.golesVisita}) no coincide con las incidencias cargadas (${golesLocalIncidencias}-${golesVisitaIncidencias}). Ajustá el detalle o el marcador.`,
+        `El marcador (${input.golesLocal}-${input.golesVisita}) no coincide con las incidencias cargadas (${golesLocalIncidencias}-${golesVisitaIncidencias}). Ajusta el detalle o el marcador.`,
       );
     }
 
@@ -1011,7 +1011,7 @@ export class PartidosAdminService {
     }
     if (partido.estado === 'SUSPENDIDO_FUERZA_MAYOR') {
       throw new BadRequestException(
-        'El partido está suspendido. Reactivalo primero si querés declarar walkover.',
+        'El partido está suspendido. Reactívalo primero si quieres declarar walkover.',
       );
     }
 
@@ -1317,7 +1317,7 @@ export class PartidosAdminService {
     const partido = await this.findPartido(partidoId, tenantId);
     if (partido.actaCerradaAt) {
       throw new ConflictException(
-        'El acta está cerrada. Reabrila para cambiar la certificación.',
+        'El acta está cerrada. Reábrela para cambiar la certificación.',
       );
     }
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });

@@ -176,7 +176,7 @@ export class PagosPersonalService {
   ): Promise<LiquidacionPersonalDetalle> {
     const ids = Array.from(new Set(input.designacionIds));
     if (ids.length === 0) {
-      throw new BadRequestException('Debés seleccionar al menos una designación.');
+      throw new BadRequestException('Debes seleccionar al menos una designación.');
     }
 
     const designaciones = await this.desigRepo.find({
@@ -301,7 +301,7 @@ export class PagosPersonalService {
     );
     if (result.affected !== params.designacionIds.length) {
       throw new BadRequestException(
-        'Una o más designaciones cambiaron de estado o ya fueron liquidadas. Recargá e intentá de nuevo.',
+        'Una o más designaciones cambiaron de estado o ya fueron liquidadas. Recarga e intenta de nuevo.',
       );
     }
     return saved;

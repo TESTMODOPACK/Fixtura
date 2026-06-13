@@ -65,7 +65,7 @@ export class AuthService {
         <h2 style="color:#15803d">Recuperación de contraseña</h2>
         <p>Hola,</p>
         <p>Recibimos una solicitud para recuperar tu contraseña en LigaPlus.
-        Si fuiste vos, hacé click en este botón para crear una nueva:</p>
+        Si fuiste tú, haz click en este botón para crear una nueva:</p>
         <p style="margin: 20px 0">
           <a href="${link}"
              style="background:#15803d;color:#fff;padding:12px 24px;
@@ -74,7 +74,7 @@ export class AuthService {
           </a>
         </p>
         <p style="color:#666;font-size:13px">
-          Este link expira en 30 minutos. Si no fuiste vos, ignorá este email —
+          Este link expira en 30 minutos. Si no fuiste tú, ignora este email —
           tu contraseña actual sigue siendo válida.
         </p>
         <p>Saludos,<br/>LigaPlus</p>

@@ -218,7 +218,7 @@ export class MeService {
     if (!user) throw new NotFoundException('Usuario no encontrado.');
     if (user.scheduledDeletionAt) {
       throw new ConflictException(
-        `Ya tenés un pedido de eliminación programado para ${user.scheduledDeletionAt.toISOString()}.`,
+        `Ya tienes un pedido de eliminación programado para ${user.scheduledDeletionAt.toISOString()}.`,
       );
     }
 
@@ -288,7 +288,7 @@ export class MeService {
       });
       if (otros === 0) {
         throw new ConflictException(
-          `No podés eliminar tu cuenta porque sos el único administrador de una liga. Designá otro admin primero.`,
+          `No puedes eliminar tu cuenta porque eres el único administrador de una liga. Designa otro admin primero.`,
         );
       }
     }

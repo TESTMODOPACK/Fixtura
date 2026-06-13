@@ -86,7 +86,7 @@ export const CreateTarifaSchema = z
           code: 'custom',
           path: ['diaVencimiento'],
           message:
-            'Indicá el día de vencimiento (1-31 para mensual/anual; 1-7 lunes-domingo para semanal).',
+            'Indica el día de vencimiento (1-31 para mensual/anual; 1-7 lunes-domingo para semanal).',
         });
       }
       if (data.frecuencia === 'SEMANAL' && data.diaVencimiento != null) {
@@ -103,7 +103,7 @@ export const CreateTarifaSchema = z
         ctx.addIssue({
           code: 'custom',
           path: ['cantidadCuotas'],
-          message: 'Indicá cuántas cuotas se cobran en total en el torneo.',
+          message: 'Indica cuántas cuotas se cobran en total en el torneo.',
         });
       }
     }

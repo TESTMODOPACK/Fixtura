@@ -57,7 +57,7 @@ export default function SuperAdminError({
               </Link>
             </div>
             <div className="mt-4 pt-3 border-t border-line text-xs text-ink-mute">
-              Si el problema persiste, contactá al equipo técnico con el código de
+              Si el problema persiste, contacta al equipo técnico con el código de
               arriba. El detalle completo del error está en la consola del navegador
               (F12 → Console).
             </div>

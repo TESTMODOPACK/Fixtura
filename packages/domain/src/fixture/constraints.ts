@@ -97,7 +97,7 @@ export function aplicarConstraintsFixture(input: ConstraintsInput): ConstraintsR
         ).length;
         if (restantes > 1) {
           warnings.push(
-            `Fecha ${fecha}: ${restantes} partidos comparten cancha "${cancha}" como local. Ajustá manualmente la cancha o el horario.`,
+            `Fecha ${fecha}: ${restantes} partidos comparten cancha "${cancha}" como local. Ajusta manualmente la cancha o el horario.`,
           );
         }
       }

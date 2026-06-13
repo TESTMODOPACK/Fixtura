@@ -69,7 +69,7 @@ export default function AjustesPage(): React.ReactElement {
       <PageHead
         eyebrow="Configuración"
         title="Ajustes de la liga"
-        sub="Personalizá el branding, el dominio propio y los miembros del equipo administrador."
+        sub="Personaliza el branding, el dominio propio y los miembros del equipo administrador."
       />
 
       {isLoading && (
@@ -88,13 +88,13 @@ export default function AjustesPage(): React.ReactElement {
               <div className="text-sm text-ink-mute font-serif italic mb-3">
                 Causas frecuentes:
                 <ul className="list-disc list-inside mt-1 space-y-1">
-                  <li>Tu sesión expiró — cerrá sesión y volvé a entrar.</li>
+                  <li>Tu sesión expiró — cierra sesión y vuelve a entrar.</li>
                   <li>
                     Tu rol actual no es <span className="font-mono">LIGA_ADMIN</span> (solo ese rol
                     puede modificar ajustes; el coordinador no tiene acceso).
                   </li>
                   <li>
-                    El API todavía no terminó de bootear — esperá 30 segundos y reintentá.
+                    El API todavía no terminó de bootear — espera 30 segundos y reintenta.
                   </li>
                 </ul>
               </div>
@@ -114,7 +114,7 @@ export default function AjustesPage(): React.ReactElement {
         <Card padding="roomy">
           <CardLabel>Sin datos</CardLabel>
           <p className="font-serif italic text-ink-mute mt-2">
-            El endpoint respondió OK pero sin datos. Reportá esto al soporte.
+            El endpoint respondió OK pero sin datos. Reporta esto al soporte.
           </p>
         </Card>
       )}
@@ -372,7 +372,7 @@ function BrandingTab({ settings }: { settings: TenantSettings }): React.ReactEle
                   : '#E76F26',
               }}
             >
-              → {form.watch('lemaCorto') || 'tu lema acá'}
+              → {form.watch('lemaCorto') || 'tu lema aquí'}
             </div>
           </div>
           <div className="p-3 bg-paper text-xs text-ink-mute font-serif italic">
@@ -456,7 +456,7 @@ function DominioTab({ settings }: { settings: TenantSettings }): React.ReactElem
 
         <p className="text-sm text-ink-mute font-serif italic mb-4">
           Cuando registres un dominio (ej. <code className="font-mono">liganunoa.cl</code>) y
-          apuntes su A record a la IP del VPS, ingresalo acá. El portal público de la liga va a
+          apuntes su A record a la IP del VPS, ingrésalo aquí. El portal público de la liga va a
           servirse desde ese dominio automáticamente.
         </p>
 
@@ -509,16 +509,16 @@ function DominioTab({ settings }: { settings: TenantSettings }): React.ReactElem
         <CardLabel tone="mute">¿Cómo apunto un dominio?</CardLabel>
         <ol className="text-sm text-green-deep mt-3 space-y-2 list-decimal list-inside font-serif">
           <li>
-            Comprá el dominio (NIC Chile, Namecheap, GoDaddy — ~10k CLP/año en .cl).
+            Compra el dominio (NIC Chile, Namecheap, GoDaddy — ~10k CLP/año en .cl).
           </li>
           <li>
-            En la zona DNS del proveedor, creá un <code className="font-mono">A record</code>{' '}
+            En la zona DNS del proveedor, crea un <code className="font-mono">A record</code>{' '}
             apuntando a la IP del VPS.
           </li>
-          <li>Esperá 5-30 minutos para que propague.</li>
-          <li>Volvé acá y guardá el dominio.</li>
+          <li>Espera 5-30 minutos para que propague.</li>
+          <li>Vuelve aquí y guarda el dominio.</li>
           <li>
-            Generá certificado Let&apos;s Encrypt en el VPS (ver{' '}
+            Genera certificado Let&apos;s Encrypt en el VPS (ver{' '}
             <code className="font-mono">docs/DEPLOY_HOSTINGER.md</code> paso 7).
           </li>
         </ol>
@@ -666,7 +666,7 @@ function EquipoTab(): React.ReactElement {
           <div className="p-12 text-center">
             <Users size={36} className="mx-auto text-line mb-3" />
             <p className="font-serif italic text-ink-mute">
-              No hay miembros registrados todavía. Sos vos solo.
+              No hay miembros registrados todavía. Eres tú solo.
             </p>
           </div>
         )}
@@ -792,7 +792,7 @@ function InvitarMiembroForm({ onDone }: { onDone: () => void }): React.ReactElem
         </select>
         <p className="text-xs text-ink-mute font-serif italic mt-1">
           {ROLE_DESCRIPTION[form.watch('rol') as Role] ??
-            'Elegí un rol para ver qué permisos otorga.'}
+            'Elige un rol para ver qué permisos otorga.'}
         </p>
       </div>
       <div className="md:col-span-2">
@@ -966,7 +966,7 @@ function CalendarioTab(): React.ReactElement {
         )}
         {!isLoading && (!dias || dias.length === 0) && (
           <p className="font-serif italic text-ink-mute mt-2">
-            No hay días bloqueados. Importá feriados o agregá manuales.
+            No hay días bloqueados. Importa feriados o agrega manuales.
           </p>
         )}
         {dias && dias.length > 0 && (

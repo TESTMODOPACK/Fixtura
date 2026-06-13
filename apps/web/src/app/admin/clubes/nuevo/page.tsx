@@ -29,7 +29,7 @@ import { toastError, toastSuccess, toastWarning } from '@/lib/toast';
  *   2. Categorías: multi-check de categorías activas de la liga.
  *   3. Directiva opcional: presidente + delegados (contactos sin login).
  *
- * Los jugadores NO se cargan acá — se hace en la ficha del club después
+ * Los jugadores NO se cargan aquí — se hace en la ficha del club después
  * de crearlo. Razón: armar la plantilla suele requerir CSV o datos que
  * el admin no tiene a mano al momento de crear el club por primera vez.
  */
@@ -42,7 +42,7 @@ import { toastError, toastSuccess, toastWarning } from '@/lib/toast';
  */
 const optionalEmail = z.preprocess(
   (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-  z.email('Email inválido — usá formato nombre@dominio.com').max(150).optional(),
+  z.email('Email inválido — usa formato nombre@dominio.com').max(150).optional(),
 );
 
 /**
@@ -61,7 +61,7 @@ const optionalUrl = z.preprocess(
     }
     return trimmed;
   },
-  z.url('URL inválida — revisá el formato').max(500).optional(),
+  z.url('URL inválida — revisa el formato').max(500).optional(),
 );
 
 const ContactoSchema = z.object({
@@ -88,7 +88,7 @@ const ClubFormSchema = z.object({
     ),
   paginaWeb: optionalUrl,
   resena: z.string().max(2000).optional(),
-  categoriaIds: z.array(z.string().uuid()).min(1, 'Elegí al menos una categoría'),
+  categoriaIds: z.array(z.string().uuid()).min(1, 'Elige al menos una categoría'),
   presidenteNombre: z.string().max(150).optional(),
   presidenteEmail: optionalEmail,
   presidenteTelefono: z.string().max(50).optional(),
@@ -215,7 +215,7 @@ export default function NuevoClubPage(): React.ReactElement {
   // Cuando handleSubmit detecta errores de validación, llama a onError
   // (en vez de onSubmit). Sin este handler, el botón "Crear club" parece
   // que no hace nada cuando hay un email mal formado u otro campo
-  // inválido. Acá scrolleamos al banner para que el usuario vea qué falta.
+  // inválido. Aquí scrolleamos al banner para que el usuario vea qué falta.
   const onError = (errors: FieldErrors<ClubForm>): void => {
     // eslint-disable-next-line no-console
     console.warn('[nuevo-club] validación falló:', errors);
@@ -227,13 +227,13 @@ export default function NuevoClubPage(): React.ReactElement {
     );
     if (flat.length > 0) {
       toastWarning(
-        `Revisá: ${flat
+        `Revisa: ${flat
           .slice(0, 3)
           .map((e) => e.label)
           .join(', ')}${flat.length > 3 ? '…' : ''}`,
       );
     } else {
-      toastWarning('Hay errores en el formulario. Revisá los campos marcados.');
+      toastWarning('Hay errores en el formulario. Revisa los campos marcados.');
     }
     if (errorBannerRef.current) {
       errorBannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -288,7 +288,7 @@ export default function NuevoClubPage(): React.ReactElement {
       <PageHead
         eyebrow="Comunidad · Crear club"
         title="Nuevo club"
-        sub="Cargá los datos del club. Después podés sumar la plantilla por categoría desde su ficha."
+        sub="Carga los datos del club. Después puedes sumar la plantilla por categoría desde su ficha."
       >
         <Link href="/admin/clubes">
           <Button variant="default" size="sm">
@@ -302,7 +302,7 @@ export default function NuevoClubPage(): React.ReactElement {
         fieldErrors={erroresParaMostrar}
         apiError={apiError}
         apiTitle="No se pudo crear el club"
-        validationTitle="Revisá los campos marcados antes de crear el club:"
+        validationTitle="Revisa los campos marcados antes de crear el club:"
       />
 
 
@@ -361,7 +361,7 @@ export default function NuevoClubPage(): React.ReactElement {
               }
               allowEmpty
               error={form.formState.errors.colorSecundario?.message}
-              help="Color complementario (alterno, vivos). Dejá vacío si no aplica."
+              help="Color complementario (alterno, vivos). Deja vacío si no aplica."
             />
             <Input
               label="Página web (opcional)"

@@ -97,7 +97,7 @@ export default function PartidoDetallePage({
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) {
-      toastError(new Error('No se pudo generar la plantilla PDF. Revisá tu sesión.'));
+      toastError(new Error('No se pudo generar la plantilla PDF. Revisa tu sesión.'));
       return;
     }
     const blob = await res.blob();
@@ -240,7 +240,7 @@ function ActaSection({
 
   // El formulario se monta con defaultValues del primer render. Si el
   // marcador llega/cambia después (ej. el cronista cargó goles en el Match
-  // Center y volvés a esta vista), RHF NO re-aplica los defaults solo. Sin
+  // Center y vuelves a esta vista), RHF NO re-aplica los defaults solo. Sin
   // este reset, el form mostraría 0-0 y al cerrar el acta SOBRESCRIBIRÍA el
   // marcador en vivo con 0-0. Re-sincronizamos cuando cambian los goles.
   useEffect(() => {
@@ -270,7 +270,7 @@ function ActaSection({
           onClick={() => {
             const ok = window.confirm(
               'Vas a reabrir el acta de este partido. Esto deshace el cierre pero NO revierte automáticamente las sanciones disciplinarias que ya se contaron ' +
-                '(ej. fechas pendientes decrementadas, sanciones nuevas generadas). Si lo necesitás, ajustá esas sanciones manualmente desde el Tribunal. ¿Continuar?',
+                '(ej. fechas pendientes decrementadas, sanciones nuevas generadas). Si lo necesitas, ajusta esas sanciones manualmente desde el Tribunal. ¿Continuar?',
             );
             if (ok) reabrirActa.mutate();
           }}
@@ -294,7 +294,7 @@ function ActaSection({
         <div className="mt-3 text-xs bg-orange-700/10 border border-orange-700/30 rounded-card px-3 py-2 text-ink leading-snug flex items-start gap-2">
           <UserCheck size={14} className="text-orange-700 flex-shrink-0 mt-0.5" />
           <span>
-            Certificá los jugadores presentes de ambos equipos (sección más
+            Certifica los jugadores presentes de ambos equipos (sección más
             abajo) antes de cerrar el acta.
           </span>
         </div>
@@ -506,7 +506,7 @@ function EditarPartidoCard({
   // Suele pasar cuando el generador del fixture corrió en un día sin
   // slots cargados (bug del Sprint 44 ya corregido) — los fixtures
   // generados ANTES del fix quedan así. La opción más rápida es borrar
-  // el fixture y regenerar; si solo es 1-2 partidos, asignar a mano acá.
+  // el fixture y regenerar; si solo es 1-2 partidos, asignar a mano aquí.
   const faltaConfigPartido =
     !partido.fechaHora || (!partido.canchaId && !partido.canchaNombre);
 
@@ -517,8 +517,8 @@ function EditarPartidoCard({
         <div className="mb-3 bg-accent/10 border border-accent/30 rounded-card px-3 py-2 text-sm text-ink leading-snug">
           <strong>Este partido quedó sin horario o cancha al generar el
           fixture.</strong>{' '}
-          Asignalos manualmente abajo, o borrá el fixture entero desde el
-          tab Fixture y regenerá — si configuraste los horarios y canchas
+          Asígnalos manualmente abajo, o borra el fixture entero desde el
+          tab Fixture y regenera — si configuraste los horarios y canchas
           después, el generador los va a tomar.
         </div>
       )}
@@ -563,7 +563,7 @@ function EditarPartidoCard({
           {canchaAsignadaFaltante && (
             <p className="text-[11px] text-orange-700 mt-1 leading-snug">
               La cancha asignada está marcada como no disponible. Sigue válida
-              para este partido; elegí otra solo si querés reasignarlo.
+              para este partido; elige otra solo si quieres reasignarlo.
             </p>
           )}
           {!canchaIdSeleccionada && (
@@ -598,7 +598,7 @@ function EditarPartidoCard({
           <Button type="submit" variant="accent" size="sm" loading={mutation.isPending} disabled={cerrada}>
             <Save size={14} /> Guardar
           </Button>
-          {cerrada && <span className="text-xs text-ink-mute">Reabrí el acta para editar.</span>}
+          {cerrada && <span className="text-xs text-ink-mute">Reabre el acta para editar.</span>}
           {error && (
             <span className="text-xs text-danger font-semibold flex-1 min-w-[200px]">
               {error.message}
@@ -858,7 +858,7 @@ function ReprogramarForm({
           size="sm"
           onClick={() => {
             if (!fechaHora) {
-              alert('Tenés que indicar la nueva fecha y hora.');
+              alert('Tienes que indicar la nueva fecha y hora.');
               return;
             }
             onSubmit({
@@ -875,7 +875,7 @@ function ReprogramarForm({
         </Button>
       </div>
       <p className="text-xs text-ink-mute italic mt-2">
-        El sistema valida choque de cancha en la nueva hora. Si hay conflicto, vas a ver el error acá.
+        El sistema valida choque de cancha en la nueva hora. Si hay conflicto, vas a ver el error aquí.
       </p>
     </div>
   );
@@ -960,7 +960,7 @@ function WalkoverCard({
               onChange={(e) => setPerdedor(e.target.value)}
               disabled={walkover.isPending}
             >
-              <option value="">— Elegí el equipo —</option>
+              <option value="">— Elige el equipo —</option>
               <option value={partido.equipoLocalId}>{partido.equipoLocalNombre}</option>
               <option value={partido.equipoVisitaId}>{partido.equipoVisitaNombre}</option>
             </select>
@@ -989,12 +989,12 @@ function WalkoverCard({
               loading={walkover.isPending}
               onClick={() => {
                 if (!perdedor) {
-                  alert('Tenés que elegir cuál equipo no se presentó.');
+                  alert('Tienes que elegir cuál equipo no se presentó.');
                   return;
                 }
                 if (
                   !window.confirm(
-                    `Confirmás declarar walkover 3-0? El acta queda cerrada automáticamente.`,
+                    `Confirmas declarar walkover 3-0? El acta queda cerrada automáticamente.`,
                   )
                 )
                   return;
@@ -1139,7 +1139,7 @@ function CertificacionSection({
         )}
       </div>
       <p className="text-xs text-ink-mute font-serif italic mb-4">
-        Marcá quién jugó en cada equipo. Los sancionados (esta fecha) y vetados
+        Marca quién jugó en cada equipo. Los sancionados (esta fecha) y vetados
         no se pueden certificar. Es requisito para cerrar el acta.
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -1198,7 +1198,7 @@ function IncidenciasSection({
   const error = addIncidencia.error as ApiError | undefined;
 
   const Schema = z.object({
-    jugadorInscritoId: z.string().min(1, 'Elegí un jugador'),
+    jugadorInscritoId: z.string().min(1, 'Elige un jugador'),
     tipo: z.enum(['GOL', 'AUTOGOL', 'AMARILLA', 'ROJA', 'AMARILLA_ROJA', 'ASISTENCIA', 'MVP']),
     minuto: z.coerce.number().int().min(0).max(150).optional(),
   });
@@ -1260,7 +1260,7 @@ function IncidenciasSection({
         <div className="md:col-span-2">
           <label className="label">Jugador</label>
           <select className="input" {...form.register('jugadorInscritoId')}>
-            <option value="">— elegí jugador —</option>
+            <option value="">— elige jugador —</option>
             {jugadoresQuery.data?.map((j) => {
               const sancionado = bloqueadosSet.has(j.id);
               return (

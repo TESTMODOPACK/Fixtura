@@ -58,7 +58,7 @@ export default function ActasGlobalPage(): React.ReactElement {
       <PageHead
         eyebrow="Competición"
         title="Actas & resultados"
-        sub="Vista cross-torneo de todos los partidos. Filtrá por estado, torneo o fecha para encontrar actas pendientes de cierre."
+        sub="Vista cross-torneo de todos los partidos. Filtra por estado, torneo o fecha para encontrar actas pendientes de cierre."
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -121,10 +121,10 @@ export default function ActasGlobalPage(): React.ReactElement {
             value={fechaId}
             onChange={(e) => setFechaId(e.target.value)}
             disabled={!torneoId || !fixture}
-            title={!torneoId ? 'Seleccioná primero un torneo' : undefined}
+            title={!torneoId ? 'Selecciona primero un torneo' : undefined}
           >
             <option value="">
-              {torneoId ? 'Todas las fechas' : 'Elegí un torneo primero'}
+              {torneoId ? 'Todas las fechas' : 'Elige un torneo primero'}
             </option>
             {fixture?.fechas.map((f) => (
               <option key={f.id} value={f.id}>

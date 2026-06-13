@@ -3,7 +3,7 @@
  * dataset realista (auto-asignación, búsqueda, filtros).
  *
  * Idempotente: chequea si el correlativo + apellido ya existen antes
- * de insertar. Podés correrlo varias veces sin duplicar.
+ * de insertar. Puedes correrlo varias veces sin duplicar.
  *
  * Cómo usarlo:
  *   docker compose exec api pnpm db:seed:extra

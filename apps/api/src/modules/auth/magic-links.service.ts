@@ -85,7 +85,7 @@ export class MagicLinksService {
     }
     if (link.expiresAt.getTime() < Date.now()) {
       throw new BadRequestException(
-        'El link expiró. Pedile al admin que te envíe uno nuevo.',
+        'El link expiró. Pídele al admin que te envíe uno nuevo.',
       );
     }
     return link;

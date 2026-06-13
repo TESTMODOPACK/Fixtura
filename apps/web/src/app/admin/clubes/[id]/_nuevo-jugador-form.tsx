@@ -36,7 +36,7 @@ const JugadorFormSchema = z.object({
     .string()
     .min(7, 'Mínimo 7 caracteres')
     .max(20)
-    .refine(validarRut, 'RUT inválido (chequeá el dígito verificador)'),
+    .refine(validarRut, 'RUT inválido (revisa el dígito verificador)'),
   nombres: z.string().min(2).max(100),
   apellidos: z.string().min(2).max(100),
   fechaNac: z
@@ -54,7 +54,7 @@ const JugadorFormSchema = z.object({
   // convierte "" a undefined antes de validar.
   email: z.preprocess(
     (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-    z.email('Email inválido — usá formato nombre@dominio.com').max(150).optional(),
+    z.email('Email inválido — usa formato nombre@dominio.com').max(150).optional(),
   ),
   telefono: z.string().max(50).optional(),
   numeroCamiseta: z
@@ -357,7 +357,7 @@ export function NuevoJugadorForm({
                   {excepcionPendiente.mensaje}
                 </p>
                 <p className="text-xs font-serif italic text-ink-mute mt-2">
-                  Si confirmás, el jugador queda inscripto y cuenta dentro del
+                  Si confirmas, el jugador queda inscripto y cuenta dentro del
                   cupo de excepciones que tiene la categoría.
                 </p>
               </div>

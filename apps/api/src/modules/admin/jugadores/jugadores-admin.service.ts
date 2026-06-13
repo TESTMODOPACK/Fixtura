@@ -18,7 +18,7 @@ import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entit
  * ADR-0005 — Jugadores de un "equipo del torneo" = planilla de la
  * inscripción. El `equipoId` que recibe este servicio es el inscripcionId.
  *
- * Crear un jugador desde acá crea (o reutiliza) un Jugador del plantel del
+ * Crear un jugador desde aquí crea (o reutiliza) un Jugador del plantel del
  * club en la categoría de la inscripción y lo agrega a la planilla del
  * torneo. La regla "un jugador = un solo club" la enforza UNIQUE(tenant,rut)
  * en `jugadores`.
@@ -85,7 +85,7 @@ export class JugadoresAdminService {
     }
     if (dups.length > 0) {
       throw new BadRequestException(
-        `El archivo contiene RUTs duplicados: ${dups.join(', ')}. Revisá y reintentá.`,
+        `El archivo contiene RUTs duplicados: ${dups.join(', ')}. Revisa y reintenta.`,
       );
     }
 

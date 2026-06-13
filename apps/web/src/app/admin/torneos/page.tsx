@@ -53,7 +53,7 @@ export default function TorneosListPage(): React.ReactElement {
             AÚN NO HAY TORNEOS
           </div>
           <p className="font-serif italic text-ink-mute mb-6 max-w-md mx-auto">
-            Creá tu primer torneo para empezar a inscribir equipos y generar el fixture.
+            Crea tu primer torneo para empezar a inscribir equipos y generar el fixture.
           </p>
           <Link href="/admin/torneos/nuevo">
             <Button variant="accent">

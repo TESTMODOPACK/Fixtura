@@ -129,7 +129,7 @@ export default function ClubesPage(): React.ReactElement {
             TODAVÍA NO HAY CLUBES
           </div>
           <p className="font-serif italic text-ink-mute mb-4">
-            Cargá el primer club para empezar a inscribirlo en torneos.
+            Carga el primer club para empezar a inscribirlo en torneos.
           </p>
           <Link href="/admin/clubes/nuevo">
             <Button variant="accent" size="sm">
@@ -255,7 +255,7 @@ export default function ClubesPage(): React.ReactElement {
                 NADA COINCIDE
               </div>
               <p className="font-serif italic text-ink-mute text-sm">
-                Probá cambiando la búsqueda o quitando algún filtro.
+                Prueba cambiando la búsqueda o quitando algún filtro.
               </p>
             </Card>
           )}

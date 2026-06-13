@@ -53,8 +53,8 @@ export class ApiError extends Error {
  */
 export function parseApiErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.statusCode === 401) return 'Tu sesión expiró. Volvé a iniciar sesión.';
-    if (err.statusCode === 403) return 'No tenés permiso para esta acción.';
+    if (err.statusCode === 401) return 'Tu sesión expiró. Vuelve a iniciar sesión.';
+    if (err.statusCode === 403) return 'No tienes permiso para esta acción.';
     if (err.statusCode === 404) return err.message || 'No se encontró el recurso solicitado.';
     if (err.body && typeof err.body === 'object' && 'message' in err.body) {
       const m = (err.body as { message: unknown }).message;

@@ -88,10 +88,10 @@ export class PushService {
    * Dispatch automático al cerrar un acta. Envía push a:
    *   - suscriptos al partido (PARTIDO + partido.id)
    *   - suscriptos a cualquiera de los dos equipos (EQUIPO + equipo.id)
-   *   - suscriptos al torneo (TORNEO + torneo.id) si querés notificar
+   *   - suscriptos al torneo (TORNEO + torneo.id) si quieres notificar
    *     a admins/observers — opcional.
    *
-   * Idempotente vs reintentos: si lo llamás 2 veces, los push viajan
+   * Idempotente vs reintentos: si lo llamas 2 veces, los push viajan
    * 2 veces. El acta de cierre solo llama una vez via @Transactional.
    */
   async notifyPartidoCerrado(partidoId: string): Promise<{ enviados: number; revocados: number }> {

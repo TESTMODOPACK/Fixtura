@@ -79,7 +79,7 @@ export default function NuevoTenantPage(): React.ReactElement {
       <PageHead
         eyebrow="Plataforma"
         title="Registrar nueva liga"
-        sub="Alta de una liga, recinto o federación. Opcionalmente podés crear el usuario administrador inicial."
+        sub="Alta de una liga, recinto o federación. Opcionalmente puedes crear el usuario administrador inicial."
       >
         <Link href="/admin/super/tenants">
           <Button variant="default" size="sm">
@@ -138,8 +138,8 @@ export default function NuevoTenantPage(): React.ReactElement {
         <Card padding="comfortable">
           <CardLabel>Administrador inicial (opcional)</CardLabel>
           <p className="text-xs text-ink-mute italic mt-1 mb-3">
-            Si lo dejás vacío, la liga queda creada sin usuario asociado y lo agregás
-            después. Si completás los datos, se crea el usuario con rol de
+            Si lo dejas vacío, la liga queda creada sin usuario asociado y lo agregas
+            después. Si completas los datos, se crea el usuario con rol de
             Administrador de Liga sobre esta liga.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

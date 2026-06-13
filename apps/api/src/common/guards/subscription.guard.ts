@@ -69,7 +69,7 @@ export class SubscriptionGuard implements CanActivate {
           error: 'Payment Required',
           code: 'SUBSCRIPTION_SUSPENDED',
           message:
-            'La suscripción de tu liga está suspendida por falta de pago. Regularizá el pago para volver a operar.',
+            'La suscripción de tu liga está suspendida por falta de pago. Regulariza el pago para volver a operar.',
         },
         HttpStatus.PAYMENT_REQUIRED,
       );

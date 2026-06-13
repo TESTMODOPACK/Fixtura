@@ -55,7 +55,7 @@ function limpiarRut(rut: string): string {
 }
 
 function validarRutMinimo(rut: string): boolean {
-  // Solo formato: 7-8 dígitos + DV. NO chequea dígito verificador acá —
+  // Solo formato: 7-8 dígitos + DV. NO chequea dígito verificador aquí —
   // confiamos en lo que ya quedó en la base. Si está claramente corrupto
   // (vacío, formato inválido), lo saltamos.
   if (!rut) return false;
@@ -127,7 +127,7 @@ async function main(): Promise<void> {
       if (r.jugadoresSaltadosSinRut > 0) {
         log(
           `  ⚠ ${r.jugadoresSaltadosSinRut} jugador(es) saltados sin RUT válido. ` +
-            `Cargá el RUT en el modelo viejo o asígnalo manualmente al club nuevo.`,
+            `Carga el RUT en el modelo viejo o asígnalo manualmente al club nuevo.`,
         );
       }
       if (r.jugadoresSaltadosEnOtroClub.length > 0) {

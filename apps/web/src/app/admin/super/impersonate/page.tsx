@@ -62,7 +62,7 @@ export default function ImpersonatePage(): React.ReactElement {
       <PageHead
         eyebrow="Plataforma"
         title="Entrar como otro usuario"
-        sub="Modo soporte. Ingresá como otro usuario para ver lo mismo que él ve. Todo lo que hagas queda registrado en el historial de auditoría."
+        sub="Modo soporte. Ingresa como otro usuario para ver lo mismo que él ve. Todo lo que hagas queda registrado en el historial de auditoría."
       >
         <Link href="/admin">
           <Button variant="default" size="sm">

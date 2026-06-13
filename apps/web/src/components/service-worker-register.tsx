@@ -8,9 +8,9 @@ import { useEffect } from 'react';
  * Solo registra en producción (`process.env.NODE_ENV === 'production'`)
  * para no enmascarar bugs durante dev local con cache agresiva.
  *
- * En dev, si necesitás probar offline:
+ * En dev, si necesitas probar offline:
  *   1. Build de producción: `pnpm --filter @fixtura/web build && start`
- *   2. O comentá temporalmente el check de NODE_ENV abajo.
+ *   2. O comenta temporalmente el check de NODE_ENV abajo.
  */
 export function ServiceWorkerRegister(): null {
   useEffect(() => {
@@ -35,7 +35,7 @@ export function ServiceWorkerRegister(): null {
                 // Hay un SW nuevo listo. Notificamos al usuario via console
                 // (toast/UI banner se puede agregar después).
                 // eslint-disable-next-line no-console
-                console.log('[fixtura] Nueva versión disponible. Refrescá para aplicarla.');
+                console.log('[fixtura] Nueva versión disponible. Refresca para aplicarla.');
               }
             });
           });

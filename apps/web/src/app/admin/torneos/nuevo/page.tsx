@@ -62,7 +62,7 @@ const TORNEO_FIELD_LABEL: Record<string, string> = {
 };
 
 const TorneoFormSchema = z.object({
-  temporadaId: z.union([z.literal(''), z.uuid('Elegí una temporada válida')]),
+  temporadaId: z.union([z.literal(''), z.uuid('Elige una temporada válida')]),
   nombre: z.string().min(2, 'Mínimo 2 caracteres').max(200),
   slug: z
     .string()
@@ -239,13 +239,13 @@ export default function NuevoTorneoPage(): React.ReactElement {
     const flat = rhfErrorsToBanner(errors, TORNEO_FIELD_LABEL);
     if (flat.length > 0) {
       toastWarning(
-        `Revisá los campos: ${flat
+        `Revisa los campos: ${flat
           .slice(0, 3)
           .map((e) => e.label)
           .join(', ')}${flat.length > 3 ? '…' : ''}`,
       );
     } else {
-      toastWarning('Hay errores en el formulario. Revisá los campos marcados.');
+      toastWarning('Hay errores en el formulario. Revisa los campos marcados.');
     }
     if (errorBannerRef.current) {
       errorBannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -265,7 +265,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
       <PageHead
         eyebrow="Competición · Crear torneo"
         title="Nuevo torneo"
-        sub="Configurá los parámetros del torneo, las categorías que va a tener con su cupo de equipos, y el tope de jugadores por planilla."
+        sub="Configura los parámetros del torneo, las categorías que va a tener con su cupo de equipos, y el tope de jugadores por planilla."
       >
         <Link href="/admin/torneos">
           <Button variant="default" size="sm">
@@ -279,7 +279,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
         fieldErrors={fieldErrors}
         apiError={apiError}
         apiTitle="No se pudo crear el torneo"
-        validationTitle="Revisá los campos marcados antes de crear el torneo:"
+        validationTitle="Revisa los campos marcados antes de crear el torneo:"
       />
 
       <form
@@ -324,7 +324,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
                 </select>
               ) : (
                 <div className="text-sm text-ink-mute font-serif italic">
-                  No tenés temporadas. Creamos una automáticamente al guardar.
+                  No tienes temporadas. Creamos una automáticamente al guardar.
                 </div>
               )}
             </div>
@@ -402,7 +402,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
             </Button>
           </div>
           <p className="text-xs text-ink-mute font-serif italic mb-3">
-            Definí qué categorías (y opcionalmente series) participan, con el
+            Define qué categorías (y opcionalmente series) participan, con el
             cupo máximo de equipos de cada combo. Ej: Senior Primera = 10,
             Senior Segunda = 8.
           </p>
@@ -430,7 +430,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
 
           {combosFields.length === 0 && categoriasActivas.length > 0 && (
             <p className="text-xs font-serif italic text-ink-mute">
-              Sin categorías agregadas. Si lo dejás vacío, el torneo no aplica
+              Sin categorías agregadas. Si lo dejas vacío, el torneo no aplica
               regla de edad ni cupo por categoría (back-compat).
             </p>
           )}

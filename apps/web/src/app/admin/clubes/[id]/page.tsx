@@ -15,7 +15,7 @@ import { useClub } from '@/hooks/use-admin';
  * (club, categoría). Esta página solo redirige al primer detalle del
  * club (si tiene categorías) o muestra un mensaje claro si no.
  *
- * Antes vivía acá toda la lógica de la ficha — ahora la lógica está
+ * Antes vivía aquí toda la lógica de la ficha — ahora la lógica está
  * en /admin/clubes/[id]/[catId]/page.tsx.
  */
 export default function ClubRedirectPage({
@@ -74,7 +74,7 @@ export default function ClubRedirectPage({
         <Card padding="roomy" className="text-center">
           <AlertTriangle size={28} className="mx-auto text-accent mb-3" />
           <p className="font-serif italic text-ink-mute">
-            Asigná al menos una categoría al club para empezar a cargar
+            Asigna al menos una categoría al club para empezar a cargar
             jugadores y editar su directiva específica.
           </p>
         </Card>

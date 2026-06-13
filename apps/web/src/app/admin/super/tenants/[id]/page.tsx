@@ -390,8 +390,8 @@ export default function DetalleTenantPage({
                 <option value="CANCELADO">Cancelado</option>
               </select>
               <p className="text-xs text-ink-mute italic mt-1">
-                Cambiar a &quot;Suspendido&quot; desde acá NO registra motivo. Para suspensión
-                trazable usá el botón &quot;Suspender&quot; del encabezado.
+                Cambiar a &quot;Suspendido&quot; desde aquí NO registra motivo. Para suspensión
+                trazable usa el botón &quot;Suspender&quot; del encabezado.
               </p>
             </div>
           </div>
@@ -484,7 +484,7 @@ export default function DetalleTenantPage({
               ))}
             </div>
             <p className="text-xs text-ink-mute italic mt-3">
-              Estas funciones sobrescriben las del plan. Para editarlas usá el API.
+              Estas funciones sobrescriben las del plan. Para editarlas usa el API.
             </p>
           </Card>
         );
@@ -493,8 +493,8 @@ export default function DetalleTenantPage({
       <div className="mt-6 flex items-start gap-2 p-4 rounded-card bg-orange-50 text-orange-900 text-xs">
         <Building2 size={16} className="flex-shrink-0 mt-0.5" />
         <div>
-          Recordá: para <strong>ver u operar</strong> los datos internos de esta
-          liga (torneos, partidos, actas, etc.) usá el flujo de{' '}
+          Recuerda: para <strong>ver u operar</strong> los datos internos de esta
+          liga (torneos, partidos, actas, etc.) usa el flujo de{' '}
           <Link href="/admin/super/impersonate" className="underline font-semibold">
             Impersonar
           </Link>

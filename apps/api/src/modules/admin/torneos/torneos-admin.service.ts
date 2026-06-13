@@ -72,7 +72,7 @@ export class TorneosAdminService {
     }
     if (!cat.activa) {
       throw new BadRequestException(
-        `La categoría "${cat.nombre}" está inactiva. Reactivala o elegí otra.`,
+        `La categoría "${cat.nombre}" está inactiva. Reactívala o elige otra.`,
       );
     }
     return cat;
@@ -180,7 +180,7 @@ export class TorneosAdminService {
    * Tabla de posiciones del torneo para el panel admin. Usa la MISMA
    * lógica de dominio que el portal público (packages/domain), así no hay
    * drift entre lo que ve el operador y lo que ven los hinchas. A
-   * diferencia del público, acá funciona para cualquier estado del torneo
+   * diferencia del público, aquí funciona para cualquier estado del torneo
    * (incluido DRAFT, donde sale en ceros porque no hay partidos jugados).
    */
   async getTabla(id: string, tenantId: string): Promise<TablaPosicionesAdmin> {
@@ -299,7 +299,7 @@ export class TorneosAdminService {
       for (const combo of categoriasSeries) {
         if (!categoriasMap.has(combo.categoriaId)) {
           throw new NotFoundException(
-            `La categoría ${combo.categoriaId} ya no existe. Probá recargar el form de torneo.`,
+            `La categoría ${combo.categoriaId} ya no existe. Prueba recargar el form de torneo.`,
           );
         }
       }
@@ -382,13 +382,13 @@ export class TorneosAdminService {
       if (slug.length > 100) {
         throw new BadRequestException(
           `El slug derivado "${slug}" (${slug.length} chars) supera el máximo ` +
-            `de 100. Acortá el slug base del torneo.`,
+            `de 100. Acorta el slug base del torneo.`,
         );
       }
       if (nombre.length > 200) {
         throw new BadRequestException(
           `El nombre derivado supera el máximo de 200 caracteres. ` +
-            `Acortá el nombre base del torneo.`,
+            `Acorta el nombre base del torneo.`,
         );
       }
       const saved = await crearTorneo(
@@ -580,7 +580,7 @@ export class TorneosAdminService {
         );
         throw new InternalServerErrorException(
           'No se pudieron generar los cobros del torneo, así que la activación se ' +
-            'revirtió. Reintentá; si el problema persiste, revisá el tarifario.',
+            'revirtió. Reintenta; si el problema persiste, revisa el tarifario.',
         );
       }
     }
@@ -609,8 +609,8 @@ export class TorneosAdminService {
     if (!torneo) throw new NotFoundException(`Torneo ${id} no encontrado`);
     if (torneo.estado === 'DRAFT') {
       throw new BadRequestException(
-        'El torneo está en DRAFT. Configurá el tarifario y después iniciálo ' +
-          '(ponelo "En curso"): los cobros se generan solos al arrancar.',
+        'El torneo está en DRAFT. Configura el tarifario y después inícialo ' +
+          '(ponlo "En curso"): los cobros se generan solos al arrancar.',
       );
     }
     const r = await this.tarifaAplicador.generarCobrosInicioTorneo(id, tenantId);
@@ -654,7 +654,7 @@ export class TorneosAdminService {
       throw new BadRequestException(
         `Solo se pueden eliminar torneos en estado DRAFT. ` +
           `Este torneo está en ${torneo.estado}. Si fue creado por error, ` +
-          `podés cerrarlo desde la pestaña Configuración para mantenerlo ` +
+          `puedes cerrarlo desde la pestaña Configuración para mantenerlo ` +
           `como histórico.`,
       );
     }

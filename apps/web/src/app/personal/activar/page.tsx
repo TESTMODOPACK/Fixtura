@@ -64,7 +64,7 @@ function ActivarContent(): React.ReactElement {
             <CardLabel className="text-danger">No pudimos activar la cuenta</CardLabel>
             <p className="text-ink mt-3">{estado.mensaje}</p>
             <p className="text-sm text-ink-mute font-serif italic mt-4">
-              Si el link expiró o ya fue usado, pedile al admin de la liga que te envíe
+              Si el link expiró o ya fue usado, pídele al admin de la liga que te envíe
               uno nuevo.
             </p>
             <div className="mt-6">

@@ -44,7 +44,7 @@ async function main(): Promise<void> {
       throw new Error(
         clubIdEnv
           ? `No existe el club ${clubIdEnv}.`
-          : 'No hay clubes ACTIVOS en la base. Creá un club primero.',
+          : 'No hay clubes ACTIVOS en la base. Crea un club primero.',
       );
     }
     const club = clubRows[0]!;
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
         `   Email:    ${email}`,
         `   Password: ${password}`,
         '',
-        '   Iniciá sesión con ese email/clave y deberías aterrizar en /club.',
+        '   Inicia sesión con ese email/clave y deberías aterrizar en /club.',
         '',
       ].join('\n'),
     );

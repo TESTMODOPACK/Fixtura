@@ -28,7 +28,7 @@ const BCRYPT_COST = 12;
  * Sprint 23 — SuperAdmin: gestión cross-tenant.
  *
  * Todas las queries hacen bypass de RLS via `SET LOCAL app.current_tenant_id = ''`.
- * El controller chequea @Roles(SUPER_ADMIN) para que nadie más entre acá.
+ * El controller chequea @Roles(SUPER_ADMIN) para que nadie más entre aquí.
  */
 @Injectable()
 export class SuperAdminTenantsService {

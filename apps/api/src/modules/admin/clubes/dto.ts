@@ -89,7 +89,7 @@ export class CreateClubDto {
   historialManual?: string | null;
 
   @IsArray()
-  @ArrayMinSize(1, { message: 'Elegí al menos una categoría' })
+  @ArrayMinSize(1, { message: 'Elige al menos una categoría' })
   @IsUUID(4, { each: true })
   categoriaIds!: string[];
 }

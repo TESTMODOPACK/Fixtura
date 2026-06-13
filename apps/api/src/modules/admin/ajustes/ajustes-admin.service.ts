@@ -164,7 +164,7 @@ export class AjustesAdminService {
       user = await this.userRepo.save(user);
     } else if (!user.isActive) {
       throw new ConflictException(
-        'Ese email pertenece a un usuario desactivado. Reactivá antes de asignar rol.',
+        'Ese email pertenece a un usuario desactivado. Reactiva antes de asignar rol.',
       );
     }
 
@@ -236,7 +236,7 @@ export class AjustesAdminService {
       });
       if (otrosAdmins === 0) {
         throw new BadRequestException(
-          'No se puede quitar al único LIGA_ADMIN del tenant. Asigná otro admin primero.',
+          'No se puede quitar al único LIGA_ADMIN del tenant. Asigna otro admin primero.',
         );
       }
     }
@@ -244,7 +244,7 @@ export class AjustesAdminService {
     // Si es el actor mismo, advertir
     if (role.userId === actorUserId) {
       throw new BadRequestException(
-        'No podés quitarte el rol a vos mismo. Pedile a otro admin que lo haga.',
+        'No puedes quitarte el rol a ti mismo. Pídele a otro admin que lo haga.',
       );
     }
 

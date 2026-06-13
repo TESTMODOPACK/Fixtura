@@ -175,7 +175,7 @@ export function SuspenderEquipoModal({
               <strong>También cobrar multa por walkover</strong> en cada partido
               pendiente (si el torneo tiene tarifa MULTA_WALKOVER configurada).
               <span className="block text-xs text-ink-mute mt-0.5">
-                Dejá apagado si el motivo es ECONÓMICA — sumaría multas a la
+                Deja apagado si el motivo es ECONÓMICA — sumaría multas a la
                 deuda original.
               </span>
             </span>

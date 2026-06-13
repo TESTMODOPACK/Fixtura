@@ -198,7 +198,7 @@ export class MatchCenterService {
     const partido = await this.ensure(partidoId, tenantId);
     if (partido.centroEstado === 'IDLE') {
       throw new BadRequestException(
-        'Iniciá el partido antes de cargar goles.',
+        'Inicia el partido antes de cargar goles.',
       );
     }
     if (partido.centroEstado === 'FINALIZADO_CENTRO') {
@@ -290,7 +290,7 @@ export class MatchCenterService {
     const partido = await this.ensure(partidoId, tenantId);
     if (partido.centroEstado === 'IDLE') {
       throw new BadRequestException(
-        'Iniciá el partido antes de ajustar el marcador.',
+        'Inicia el partido antes de ajustar el marcador.',
       );
     }
     partido.golesLocal = golesLocal;
@@ -358,7 +358,7 @@ export class MatchCenterService {
     if (faltaPersonal.length > 0) {
       throw new BadRequestException(
         `No se puede iniciar: falta designar ${faltaPersonal.join(' y ')}. ` +
-          'Asigná el personal en "Designación de personal".',
+          'Asigna el personal en "Designación de personal".',
       );
     }
 
@@ -369,7 +369,7 @@ export class MatchCenterService {
     const agendadaISO = this.fechaPartidoISO(partido, fecha);
     if (!agendadaISO) {
       throw new BadRequestException(
-        'El partido no tiene fecha programada. Agendá fecha/hora antes de iniciar.',
+        'El partido no tiene fecha programada. Agenda fecha/hora antes de iniciar.',
       );
     }
     const hoyISO = this.hoySantiagoISO();
@@ -378,7 +378,7 @@ export class MatchCenterService {
       if (!forzarDia) {
         throw new BadRequestException(
           `El partido está agendado para el ${agendadaISO}, no para hoy (${hoyISO}). ` +
-            'Usá "Forzar inicio" para iniciarlo igual, o reprogramá el partido.',
+            'Usa "Forzar inicio" para iniciarlo igual, o reprograma el partido.',
         );
       }
       notaForzado = `[INICIO FORZADO] Iniciado el ${hoyISO}; estaba agendado para ${agendadaISO}.`;

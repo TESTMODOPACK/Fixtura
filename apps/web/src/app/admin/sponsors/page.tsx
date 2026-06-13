@@ -74,7 +74,7 @@ export default function SponsorsPage(): React.ReactElement {
       <PageHead
         eyebrow="Comunidad"
         title="Sponsors & banners"
-        sub="Subí los banners de tus auspiciadores para que aparezcan en el portal público."
+        sub="Sube los banners de tus auspiciadores para que aparezcan en el portal público."
       >
         <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
           <Plus size={14} /> {adding ? 'Cancelar' : 'Nuevo sponsor'}
@@ -473,7 +473,7 @@ function SponsorForm({
               />
             ) : (
               <span className="text-xs text-ink-mute font-serif italic">
-                Pegá la URL de la imagen
+                Pega la URL de la imagen
               </span>
             )}
           </div>

@@ -55,7 +55,7 @@ async function main(): Promise<void> {
       log(
         'SKIP_CLEANUP_ORPHANS=true detectado en NODE_ENV=production — IGNORANDO. ' +
           'En prod, cleanup-orphans es necesario para aplicar cambios aditivos de schema. ' +
-          'Si querés realmente saltarlo, seteá NODE_ENV distinto (no recomendado).',
+          'Si quieres realmente saltarlo, define NODE_ENV distinto (no recomendado).',
       );
     } else {
       log('SKIP_CLEANUP_ORPHANS=true — saltando.');
@@ -345,8 +345,8 @@ async function main(): Promise<void> {
 
     // Sprint 24A (Facturación plataforma): facturas que cobra LigaPlus a sus ligas.
     await ensureFacturasPlataformaTable(client, log);
-    // FK transacciones → facturas_plataforma. Se hace acá porque transacciones
-    // se crea más arriba pero la tabla destino se crea recién acá.
+    // FK transacciones → facturas_plataforma. Se hace aquí porque transacciones
+    // se crea más arriba pero la tabla destino se crea recién aquí.
     await ensureFkTransaccionesFacturaPlataforma(client, log);
 
     // Sprint 25 (Categorías): categorias_jugadores + series. Soporte para
@@ -450,7 +450,7 @@ async function main(): Promise<void> {
     // duracion_entretiempo_minutos: descanso entre períodos (default 10).
     // Cantidad de períodos sigue siendo fija en 2 (los deportes que cubrimos
     // son 2 tiempos). Si en el futuro se quiere soportar cuartos/tercios,
-    // se agrega cantidad_periodos acá.
+    // se agrega cantidad_periodos aquí.
     await client.query(`
       ALTER TABLE torneos
         ADD COLUMN IF NOT EXISTS duracion_periodo_minutos SMALLINT
@@ -899,7 +899,7 @@ async function main(): Promise<void> {
     // ====================================================================
 
     // Columnas de suspensión en inscripciones_torneo (antes vivían en
-    // `equipos`). Se crean ACÁ porque el backfill de equipos huérfanos las
+    // `equipos`). Se crean AQUÍ porque el backfill de equipos huérfanos las
     // necesita. Aditivas + nullable.
     await client.query(`
       ALTER TABLE inscripciones_torneo
@@ -913,7 +913,7 @@ async function main(): Promise<void> {
     // CRÍTICO (ADR-0005) — Equipos "huérfanos": los creados por el viejo
     // EquiposAdminService.create() son `equipos` sueltos SIN inscripción
     // (no tienen quien los referencie por equipo_sombra_id). Al flipear las
-    // lecturas al modelo nuevo desaparecerían del torneo. Acá creamos una
+    // lecturas al modelo nuevo desaparecerían del torneo. Aquí creamos una
     // inscripción por cada uno: matchea el club por slug, toma la categoría
     // del torneo, copia estado/serie/suspensión, y apunta equipo_sombra_id
     // al equipo huérfano para que el resto del backfill (partidos, planilla)

@@ -34,7 +34,7 @@ function RespuestaContent(): React.ReactElement {
         if (!res.ok) {
           setState({
             kind: 'error',
-            mensaje: 'No pudimos registrar tu respuesta. Avisá al responsable de designaciones.',
+            mensaje: 'No pudimos registrar tu respuesta. Avisa al responsable de designaciones.',
           });
           return;
         }
@@ -81,7 +81,7 @@ function RespuestaContent(): React.ReactElement {
           <div className="text-center">
             <XCircle size={48} className="mx-auto text-orange-700 mb-4" />
             <div className="font-display text-2xl text-green-deep tracking-display mb-2">
-              REGISTRAMOS QUE NO PODÉS
+              REGISTRAMOS QUE NO PUEDES
             </div>
             <p className="font-serif italic text-ink-mute">
               Gracias por avisar. El responsable buscará un reemplazo.
@@ -109,7 +109,7 @@ function RespuestaContent(): React.ReactElement {
             </div>
             <p className="font-serif italic text-ink-mute mb-4">{state.mensaje}</p>
             <p className="text-sm text-ink-mute">
-              Los enlaces expiran después de 7 días. Si pasó eso, contactá al responsable
+              Los enlaces expiran después de 7 días. Si pasó eso, contacta al responsable
               de la liga directamente.
             </p>
           </div>

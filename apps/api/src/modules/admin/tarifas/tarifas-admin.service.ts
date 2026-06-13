@@ -66,7 +66,7 @@ export class TarifasAdminService {
     if (yaExiste) {
       throw new ConflictException(
         `Ya hay una tarifa de tipo "${input.tipo}" en este torneo. ` +
-          `Editala en lugar de crear otra.`,
+          `Edítala en lugar de crear otra.`,
       );
     }
 
@@ -173,13 +173,13 @@ export class TarifasAdminService {
     if (tipo !== 'CUOTA' && frecuencia !== 'UNICO') {
       throw new BadRequestException(
         `La frecuencia "${frecuencia}" solo es válida para tipo CUOTA. ` +
-          `Para "${tipo}" usá UNICO.`,
+          `Para "${tipo}" usa UNICO.`,
       );
     }
     if (tipo === 'CUOTA' && frecuencia !== 'UNICO') {
       if (diaVencimiento == null) {
         throw new BadRequestException(
-          'Indicá el día de vencimiento. Para frecuencia mensual o anual ' +
+          'Indica el día de vencimiento. Para frecuencia mensual o anual ' +
             'es el día del mes (1-31). Para semanal es el día de la semana ' +
             '(1=lunes, 7=domingo).',
         );
@@ -193,7 +193,7 @@ export class TarifasAdminService {
       // al activar el torneo. Sin esto el generador de cobros no sabe el N.
       if (cantidadCuotas == null) {
         throw new BadRequestException(
-          'Indicá cuántas cuotas se cobran en total durante el torneo ' +
+          'Indica cuántas cuotas se cobran en total durante el torneo ' +
             '(por ejemplo, 5 cuotas mensuales).',
         );
       }

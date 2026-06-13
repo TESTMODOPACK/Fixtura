@@ -83,7 +83,7 @@ function RetornoInner(): React.ReactElement {
             </div>
             <p className="text-ink-mute mb-2">{errorMsg ?? 'Error desconocido.'}</p>
             <p className="text-ink-mute mb-4 text-sm">
-              No te preocupes — tu factura sigue pendiente y podés intentarlo de nuevo.
+              No te preocupes — tu factura sigue pendiente y puedes intentarlo de nuevo.
             </p>
             <Link href="/admin/mi-suscripcion">
               <Button>Volver a mi suscripción</Button>

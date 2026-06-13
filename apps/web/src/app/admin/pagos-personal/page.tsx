@@ -213,7 +213,7 @@ function CuentasTab({
             <p className="font-medium">No hay cuentas por pagar</p>
             <p className="text-sm">
               Las designaciones marcadas como <strong>ASISTIÓ</strong> con un monto
-              definido aparecerán acá.
+              definido aparecerán aquí.
             </p>
           </div>
         </Card>
@@ -336,7 +336,7 @@ function PagarModal({
 
   async function submit(): Promise<void> {
     if (seleccion.size === 0) {
-      toastWarning('Seleccioná al menos una asistencia para pagar.');
+      toastWarning('Selecciona al menos una asistencia para pagar.');
       return;
     }
     try {
@@ -372,7 +372,7 @@ function PagarModal({
               Pagar a {persona.nombre} {persona.apellido}
             </h2>
             <p className="text-sm text-ink-mute">
-              Seleccioná las asistencias a saldar con este pago.
+              Selecciona las asistencias a saldar con este pago.
             </p>
           </div>
           <button type="button" onClick={onClose} className="text-ink-mute">
@@ -641,7 +641,7 @@ function NuevaNominaForm({
   async function emitirNomina(): Promise<void> {
     const ids = seleccionados.map((p) => p.personalId);
     if (ids.length === 0) {
-      toastWarning('Seleccioná al menos una persona para la nómina.');
+      toastWarning('Selecciona al menos una persona para la nómina.');
       return;
     }
     try {
@@ -716,7 +716,7 @@ function NuevaNominaForm({
               <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-700" />
               <p>
                 {preview.data?.sinCuentaCount} persona(s) sin cuenta bancaria
-                completa — quedan desmarcadas (podés pagarles en efectivo o
+                completa — quedan desmarcadas (puedes pagarles en efectivo o
                 cargar su cuenta en el perfil).
               </p>
             </div>
@@ -841,7 +841,7 @@ function NominasLista(): React.ReactElement {
       { headers: token ? { Authorization: `Bearer ${token}` } : {} },
     );
     if (!res.ok) {
-      toastError(new Error('No se pudo generar el Excel. Revisá tu sesión.'));
+      toastError(new Error('No se pudo generar el Excel. Revisa tu sesión.'));
       return;
     }
     const blob = await res.blob();
@@ -878,7 +878,7 @@ function NominasLista(): React.ReactElement {
           <FileSpreadsheet className="h-10 w-10 opacity-40" />
           <p className="font-medium">Todavía no hay nóminas emitidas</p>
           <p className="text-sm">
-            Creá una nómina para pagar a varias personas a la vez por un período.
+            Crea una nómina para pagar a varias personas a la vez por un período.
           </p>
         </div>
       </Card>

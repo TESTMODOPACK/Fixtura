@@ -30,7 +30,7 @@ import { z } from 'zod';
  * con un motivo claro y aparece en la tabla del preview, en vez de
  * tumbar toda la importación con un 400.
  *
- * Si querés validar estricto en el cliente (RHF), usá las reglas
+ * Si quieres validar estricto en el cliente (RHF), usa las reglas
  * sueltas: nombres.length >= 2, apellidos.length >= 2, etc.
  */
 export const BulkImportRowSchema = z.object({

@@ -82,7 +82,7 @@ export default function MiSuscripcionPage(): React.ReactElement {
               <div className="text-sm text-ink-mute mt-1">
                 {cuenta.plan
                   ? `$${cuenta.plan.precioMensualClp.toLocaleString('es-CL')} CLP / mes`
-                  : 'Contactá a LigaPlus'}
+                  : 'Contacta a LigaPlus'}
               </div>
               <div
                 className={cn(
@@ -144,7 +144,7 @@ export default function MiSuscripcionPage(): React.ReactElement {
                     {cuenta.diasMaxMora >= 20 && (
                       <>
                         {' '}
-                        A los 30 días, tu liga se suspende automáticamente. Pagá ahora
+                        A los 30 días, tu liga se suspende automáticamente. Paga ahora
                         para evitar interrupciones.
                       </>
                     )}
@@ -249,7 +249,7 @@ export default function MiSuscripcionPage(): React.ReactElement {
         <ul className="mt-2 text-sm text-ink-mute space-y-1">
           <li>· Webpay (tarjetas de crédito y débito chilenas)</li>
           <li>· MercadoPago (próximamente)</li>
-          <li>· Transferencia bancaria (pidé los datos a contacto@fixtura.cl)</li>
+          <li>· Transferencia bancaria (pide los datos a contacto@fixtura.cl)</li>
         </ul>
       </Card>
     </>

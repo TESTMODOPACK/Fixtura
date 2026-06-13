@@ -23,7 +23,7 @@ import { toastError, toastSuccess } from '@/lib/toast';
 /**
  * Sprint 32 — drawer para editar los datos transversales del club
  * (nombre, escudo, colores, página web, reseña) y el set de categorías
- * en las que participa. Todo lo de acá afecta a TODAS las categorías
+ * en las que participa. Todo lo de aquí afecta a TODAS las categorías
  * del club.
  *
  * Las categorías nuevas que se agregan heredan la directiva "madre"
@@ -47,7 +47,7 @@ const optionalUrl = z.preprocess(
     if (/^https?:\/\//.test(t)) return t;
     return `https://${t}`;
   },
-  z.url('URL inválida — usá formato https://dominio.com').max(500).optional(),
+  z.url('URL inválida — usa formato https://dominio.com').max(500).optional(),
 );
 
 const FormSchema = z.object({
@@ -247,7 +247,7 @@ export function EditarClubDrawer({
                 </div>
                 <div>
                   Al <b>agregar una categoría nueva</b>, hereda la directiva
-                  actual del club como punto de partida. Después podés ajustarla
+                  actual del club como punto de partida. Después puedes ajustarla
                   desde la ficha de esa categoría.
                 </div>
               </div>
@@ -313,7 +313,7 @@ export function EditarClubDrawer({
                             disabled={tieneJugadores && !aQuitar}
                             title={
                               tieneJugadores && !aQuitar
-                                ? `No se puede quitar: ${detalle?.jugadoresCount} jugador(es) cargados. Eliminalos primero desde la ficha.`
+                                ? `No se puede quitar: ${detalle?.jugadoresCount} jugador(es) cargados. Elimínalos primero desde la ficha.`
                                 : aQuitar
                                   ? 'Deshacer (mantener asignada)'
                                   : 'Quitar del club'
@@ -348,7 +348,7 @@ export function EditarClubDrawer({
               if (disponibles.length === 0) {
                 return (
                   <div className="text-xs font-serif italic text-ink-mute">
-                    No hay otras categorías disponibles. Creá categorías nuevas
+                    No hay otras categorías disponibles. Crea categorías nuevas
                     desde{' '}
                     <a
                       href="/admin/categorias"
@@ -434,7 +434,7 @@ export function EditarClubDrawer({
                       </div>
                     )}
                     <div className="text-ink-mute italic mt-1">
-                      Hacé click en &ldquo;Guardar&rdquo; para aplicar.
+                      Haz click en &ldquo;Guardar&rdquo; para aplicar.
                     </div>
                   </div>
                 </div>

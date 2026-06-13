@@ -48,7 +48,7 @@ export class ImpersonationService {
     userAgent?: string,
   ): Promise<AuthTokens & { targetEmail: string; targetUserId: string }> {
     if (superAdminId === targetUserId) {
-      throw new BadRequestException('No podés impersonarte a vos mismo.');
+      throw new BadRequestException('No puedes impersonarte a ti mismo.');
     }
 
     const target = await this.users.findOne({ where: { id: targetUserId } });
@@ -61,7 +61,7 @@ export class ImpersonationService {
     // Bloqueo de privesc: no impersonar a otro super admin.
     if (roles.some((r) => r.role === 'SUPER_ADMIN')) {
       throw new ForbiddenException(
-        'No podés impersonar a otro super admin (privilege escalation bloqueado).',
+        'No puedes impersonar a otro super admin (privilege escalation bloqueado).',
       );
     }
 

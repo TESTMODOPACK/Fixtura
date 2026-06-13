@@ -46,12 +46,12 @@ export class PersonalAdminService {
     const usaWhatsapp = canal === 'WHATSAPP' || canal === 'AMBOS';
     if (usaEmail && !personal.email) {
       throw new BadRequestException(
-        'Este personal no tiene email registrado. Editá el perfil o cambiá a canal WhatsApp.',
+        'Este personal no tiene email registrado. Edita el perfil o cambia a canal WhatsApp.',
       );
     }
     if (usaWhatsapp && !personal.telefono) {
       throw new BadRequestException(
-        'Este personal no tiene teléfono registrado. Editá el perfil o cambiá a canal Email.',
+        'Este personal no tiene teléfono registrado. Edita el perfil o cambia a canal Email.',
       );
     }
 
@@ -87,7 +87,7 @@ export class PersonalAdminService {
             <h2 style="color:#15803d">¡Hola, ${personal.nombre}!</h2>
             <p><strong>${tenantName}</strong> te dio de alta como
             <strong>${rolHumano}</strong> en LigaPlus.</p>
-            <p>Para activar tu cuenta y poder ver tus designaciones, hacé click en este
+            <p>Para activar tu cuenta y poder ver tus designaciones, haz click en este
             botón:</p>
             <p style="margin: 20px 0">
               <a href="${link}"
@@ -97,11 +97,11 @@ export class PersonalAdminService {
               </a>
             </p>
             <p style="color:#666;font-size:13px">
-              Este link expira en 72 horas. Si no fuiste vos, ignorá este email.
+              Este link expira en 72 horas. Si no fuiste tú, ignora este email.
             </p>
             <p>Saludos,<br/>${tenantName}</p>
           `,
-          text: `Hola ${personal.nombre}, ${tenantName} te invitó a LigaPlus. Activá tu cuenta en: ${link} (expira en 72h).`,
+          text: `Hola ${personal.nombre}, ${tenantName} te invitó a LigaPlus. Activa tu cuenta en: ${link} (expira en 72h).`,
         });
         algunEnviado = true;
       } catch (err) {

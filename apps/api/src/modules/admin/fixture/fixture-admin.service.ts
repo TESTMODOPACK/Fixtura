@@ -101,7 +101,7 @@ export class FixtureAdminService {
     inputRaw: GenerarFixtureRequest,
   ): Promise<FixtureGenerationResult> {
     // Sprint 44 — horariosPorFecha / canchas / diasEntreFechas son opcionales
-    // en el tipo compartido. Aplicamos defaults acá para que el resto del
+    // en el tipo compartido. Aplicamos defaults aquí para que el resto del
     // service (que asume valores presentes) siga funcionando. En modo
     // HORARIOS_TORNEO los horarios reales vienen del repo de horarios y
     // estos defaults solo se usan como fallback legacy.
@@ -119,7 +119,7 @@ export class FixtureAdminService {
     const existingFechas = await this.fechaRepo.count({ where: { torneoId } });
     if (existingFechas > 0) {
       throw new ConflictException(
-        `El torneo ya tiene ${existingFechas} fechas. Borralas antes de regenerar el fixture.`,
+        `El torneo ya tiene ${existingFechas} fechas. Bórralas antes de regenerar el fixture.`,
       );
     }
 
@@ -164,7 +164,7 @@ export class FixtureAdminService {
       );
     }
 
-    // Sprint 39 — cargar horarios del torneo ya acá (antes del loop de
+    // Sprint 39 — cargar horarios del torneo ya aquí (antes del loop de
     // fechas) para que podamos ajustar fechaInicioBase si el día de
     // semana elegido no tiene slots cargados (Sprint 44 fix).
     const horariosTorneoTmp = await this.horarioRepo.find({
@@ -476,9 +476,9 @@ export class FixtureAdminService {
         codigo: 'SIN_EQUIPOS_SUFICIENTES',
         nivel: 'ERROR',
         mensaje:
-          `Necesitás al menos 2 equipos inscritos para generar el ` +
-          `calendario. En este momento hay ${equiposCount}. Andá al tab ` +
-          'Equipos e inscribí más clubes.',
+          `Necesitas al menos 2 equipos inscritos para generar el ` +
+          `calendario. En este momento hay ${equiposCount}. Ve al tab ` +
+          'Equipos e inscribe más clubes.',
         detalle: { equiposCount },
       });
     }
@@ -499,9 +499,9 @@ export class FixtureAdminService {
         codigo: 'SIN_HORARIOS_TORNEO',
         nivel: 'WARN',
         mensaje:
-          'Todavía no cargaste horarios para este torneo. Si generás el ' +
+          'Todavía no cargaste horarios para este torneo. Si generas el ' +
           'calendario sin horarios, los partidos quedan sin día ni cancha y ' +
-          'tenés que asignarlos uno por uno. Andá al tab "Horarios" y cargá ' +
+          'tienes que asignarlos uno por uno. Ve al tab "Horarios" y carga ' +
           'qué días y a qué hora se juega.',
       });
     }
@@ -521,8 +521,8 @@ export class FixtureAdminService {
         codigo: 'SIN_CANCHAS_CATALOGO',
         nivel: 'WARN',
         mensaje:
-          'Todavía no cargaste ninguna cancha en la liga. Andá a "Canchas" ' +
-          'del menú y agregá las canchas que tu liga usa. Después vas a poder ' +
+          'Todavía no cargaste ninguna cancha en la liga. Ve a "Canchas" ' +
+          'del menú y agrega las canchas que tu liga usa. Después vas a poder ' +
           'asignar una cancha a cada horario de este torneo.',
       });
     } else if (canchasDisponiblesCount === 0) {
@@ -531,9 +531,9 @@ export class FixtureAdminService {
         codigo: 'SIN_CANCHAS_DISPONIBLES',
         nivel: usarPlantilla ? 'ERROR' : 'WARN',
         mensaje:
-          `Tenés ${canchas.length} cancha(s) cargada(s) pero todas están ` +
+          `Tienes ${canchas.length} cancha(s) cargada(s) pero todas están ` +
           `marcadas como no disponibles (en mantenimiento o desactivadas). ` +
-          'Andá a "Canchas" y poné al menos una como disponible.',
+          'Ve a "Canchas" y pon al menos una como disponible.',
         detalle: { totalCanchas: canchas.length },
       });
     }
@@ -546,9 +546,9 @@ export class FixtureAdminService {
           codigo: 'SLOTS_SIN_CANCHA',
           nivel: 'WARN',
           mensaje:
-            `Tenés ${slotsSinCancha} horario(s) sin cancha elegida. Los ` +
+            `Tienes ${slotsSinCancha} horario(s) sin cancha elegida. Los ` +
             'partidos asignados a esos horarios van a quedar sin cancha. ' +
-            'Editá cada horario en el tab Horarios y elegí en qué cancha se juega.',
+            'Edita cada horario en el tab Horarios y elige en qué cancha se juega.',
           detalle: { slotsSinCancha },
         });
       }

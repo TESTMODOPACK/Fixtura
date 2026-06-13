@@ -1207,7 +1207,7 @@ export class DesignacionesAdminService {
     const resumen = hayDeficit
       ? `Faltan ${conDeficit
           .map((r) => `${r.deficit} ${ROL_DEFICIT_LABEL[r.rol][r.deficit === 1 ? 0 : 1]}`)
-          .join(', ')} para la fecha ${fechaNumero} — conseguí personal de apoyo.`
+          .join(', ')} para la fecha ${fechaNumero} — consigue personal de apoyo.`
       : null;
 
     return { fechaId: fecha.id, fechaNumero, roles: rolesOut, hayDeficit, resumen };

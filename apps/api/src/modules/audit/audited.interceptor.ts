@@ -25,7 +25,7 @@ import { AUDITED_METADATA_KEY, type AuditedOptions } from './audited.decorator';
  *   - userAgent desde req.headers['user-agent']
  *   - entityId desde el path indicado en opts.entityIdFrom (opcional)
  *
- * Si necesitás guardar before/after data, hacelo desde el service
+ * Si necesitas guardar before/after data, hazlo desde el service
  * con auditLogService.record() — el interceptor no tiene acceso al
  * estado interno del cambio.
  */
