@@ -49,12 +49,40 @@ const spaceGrotesk = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://www.ligaplus.cl'),
   title: 'LigaPlus · Plataforma para ligas amateur',
   description:
-    'Gestión integral de torneos, fixture, designaciones, finanzas y comunidad para ligas amateur de Chile y LATAM.',
+    'Fixture, actas digitales, árbitros, cobros y tabla de posiciones para ligas de fútbol amateur. Tu liga, en su propio sitio web. Hecho en Chile.',
   applicationName: 'LigaPlus',
   authors: [{ name: 'LigaPlus' }],
   creator: 'LigaPlus',
+  keywords: [
+    'liga amateur',
+    'fixture',
+    'fútbol amateur',
+    'gestión de ligas',
+    'acta digital',
+    'designación de árbitros',
+    'tabla de posiciones',
+    'Chile',
+  ],
+  openGraph: {
+    type: 'website',
+    locale: 'es_CL',
+    url: 'https://www.ligaplus.cl',
+    siteName: 'LigaPlus',
+    title: 'LigaPlus · La cancha, organizada',
+    description:
+      'Fixture, actas digitales, árbitros, cobros y tabla de posiciones para ligas de fútbol amateur. Tu liga, en su propio sitio web.',
+    images: [{ url: '/brand/logo.png', width: 1024, height: 1024, alt: 'LigaPlus' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'LigaPlus · La cancha, organizada',
+    description:
+      'Fixture, actas digitales, árbitros, cobros y tabla de posiciones para ligas de fútbol amateur.',
+    images: ['/brand/logo.png'],
+  },
   manifest: '/manifest.json',
   icons: {
     icon: '/brand/mark.png',

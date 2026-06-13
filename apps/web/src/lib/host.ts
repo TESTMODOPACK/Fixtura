@@ -1,19 +1,19 @@
 /**
  * Helpers para detectar si el hostname actual corresponde a:
- *   - Marketing (fixtura.cl, www.fixtura.cl) → muestra landing del SaaS
+ *   - Marketing (ligaplus.cl, www.ligaplus.cl) → muestra landing del SaaS
  *   - Tenant (cualquier otro dominio configurado) → muestra portal de la liga
  *
  * En desarrollo (localhost, IPs, sin dominio) el comportamiento default es
  * "tenant" para que el VPS sin dominio sirva el portal de la liga demo.
  * Para forzar la vista de marketing en dev, agregar `?marketing=1` o usar
- * el dominio fixtura.local en /etc/hosts.
+ * el dominio ligaplus.local en /etc/hosts.
  */
 
 const MARKETING_HOSTS = new Set([
-  'fixtura.cl',
-  'www.fixtura.cl',
-  'fixtura.local',
-  'www.fixtura.local',
+  'ligaplus.cl',
+  'www.ligaplus.cl',
+  'ligaplus.local',
+  'www.ligaplus.local',
 ]);
 
 export function normalizeHost(rawHost: string | null | undefined): string {
