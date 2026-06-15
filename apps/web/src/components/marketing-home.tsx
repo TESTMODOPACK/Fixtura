@@ -17,6 +17,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 
+import { MarketingLoginButton } from '@/components/marketing-login-button';
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { LigaPlusLockup, LigaPlusMark } from '@/components/ui/logo';
@@ -316,11 +317,14 @@ export function MarketingHome(): React.ReactElement {
               Preguntas
             </a>
           </nav>
-          <a href={MAILTO_DEMO}>
-            <Button variant="accent" size="sm">
-              Solicitar demo
-            </Button>
-          </a>
+          <div className="flex items-center gap-2">
+            <MarketingLoginButton />
+            <a href={MAILTO_DEMO}>
+              <Button variant="accent" size="sm">
+                Solicitar demo
+              </Button>
+            </a>
+          </div>
         </div>
       </header>
 
