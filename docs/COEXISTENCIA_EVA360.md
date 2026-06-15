@@ -20,8 +20,9 @@ termina el TLS y reenvía todo; LigaPlus hace su propio routing interno.
 > nunca modificar los suyos. Backup antes de tocar. nginx valida (`nginx -t`)
 > antes de cada reload, así un error no tumba Eva360.
 
-Rutas asumidas (ajustá si difieren): Eva360 en `~/eva360` (su `docker-compose.yml`
-+ `nginx.conf`), LigaPlus en `~/fixtura`.
+Rutas en el VPS: **Eva360 en `/docker/eva360`** (su `docker-compose.yml` +
+`nginx.conf`), **LigaPlus en `/opt/fixtura`**. Redes Docker separadas
+(`eva360_default`, `fixtura_default`). Usuario: `root`.
 
 ---
 
@@ -38,26 +39,19 @@ Esperá a que resuelvan antes de seguir: `nslookup www.ligaplus.cl`.
 
 ---
 
-## Paso 2 — Permitir que el nginx de Eva360 alcance el host
+## Paso 2 — Obtener la IP del host vista desde el nginx de Eva360
 
-El container `eva360_nginx` necesita resolver `host.docker.internal`. En el
-`docker-compose.yml` de Eva360, agregar al servicio `nginx`:
-
-```yaml
-  nginx:
-    # ...lo que ya tiene...
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-```
-
-Recrear solo nginx (reinicio de ~5s de Eva360):
+Como Eva360 y LigaPlus están en redes separadas, el nginx de Eva360 llega a
+LigaPlus por el puerto 8080 publicado en el host. La IP del host desde adentro
+del container es el **gateway de la red `eva360_default`**:
 
 ```bash
-cd ~/eva360
-cp docker-compose.yml docker-compose.yml.bak      # backup
-# editar el compose (agregar extra_hosts)
-docker compose up -d nginx
+docker network inspect eva360_default -f '{{(index .IPAM.Config 0).Gateway}}'
 ```
+
+Anotá esa IP (típicamente `172.x.0.1`) — la vas a usar en el `proxy_pass` del
+Paso 5. **No hace falta editar el compose de Eva360** (cero downtime): el
+`nginx.conf` es un volumen montado, así que alcanza con editarlo y recargar.
 
 ---
 
@@ -67,7 +61,7 @@ LigaPlus NO hace su propio TLS en este escenario (lo hace Eva360). Confirmá
 que su `.env` use el nginx bootstrap y las URLs del dominio:
 
 ```bash
-cd ~/fixtura
+cd /opt/fixtura
 git fetch origin main && git reset --hard origin/main
 
 # NGINX_CONF debe quedar en bootstrap (HTTP). Si lo habías puesto en nginx.conf, revertilo:
@@ -101,7 +95,7 @@ Para eso, primero agregamos SOLO el bloque HTTP de ligaplus.cl a la config de
 Eva360 (sirve el challenge ACME):
 
 ```bash
-cd ~/eva360
+cd /docker/eva360
 cp nginx.conf nginx.conf.bak     # BACKUP — importante
 ```
 
@@ -128,7 +122,7 @@ Emitir el cert (webroot que Eva360 ya monta en /var/www/certbot):
 ```bash
 docker run --rm \
   -v /etc/letsencrypt:/etc/letsencrypt \
-  -v ~/eva360/certbot/www:/var/www/certbot \
+  -v /docker/eva360/certbot/www:/var/www/certbot \
   certbot/certbot certonly --webroot -w /var/www/certbot \
   -d ligaplus.cl -d www.ligaplus.cl \
   --agree-tos -m rmorales.olate@gmail.com --non-interactive
@@ -149,7 +143,7 @@ del repo de LigaPlus — copiá los dos `server { listen 443 ... }` al final del
 Validar y recargar:
 
 ```bash
-cd ~/eva360
+cd /docker/eva360
 docker compose exec nginx nginx -t
 docker compose exec nginx nginx -s reload
 ```
@@ -174,21 +168,20 @@ En el navegador: `https://www.ligaplus.cl` muestra la landing comercial con cand
 ```bash
 sudo crontab -e
 # Renueva (webroot, sin downtime) y recarga el nginx de Eva360:
-0 3 * * * docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v /home/<usuario>/eva360/certbot/www:/var/www/certbot certbot/certbot renew --webroot -w /var/www/certbot --quiet && docker compose -f /home/<usuario>/eva360/docker-compose.yml exec -T nginx nginx -s reload
+0 3 * * * docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v /docker/eva360/certbot/www:/var/www/certbot certbot/certbot renew --webroot -w /var/www/certbot --quiet && docker compose -f /docker/eva360/docker-compose.yml exec -T nginx nginx -s reload
 ```
 
 ---
 
 ## Rollback (si algo sale mal)
 
-Eva360 vuelve a su estado anterior sin LigaPlus:
+Como solo tocamos el `nginx.conf` de Eva360, el rollback es restaurar el
+backup y recargar (sin recrear nada):
 
 ```bash
-cd ~/eva360
+cd /docker/eva360
 cp nginx.conf.bak nginx.conf
-cp docker-compose.yml.bak docker-compose.yml
-docker compose up -d nginx
-docker compose exec nginx nginx -s reload
+docker compose exec nginx nginx -t && docker compose exec nginx nginx -s reload
 ```
 
 `ligaplus.cl` dejará de resolver, pero Eva360 queda intacto. LigaPlus sigue
