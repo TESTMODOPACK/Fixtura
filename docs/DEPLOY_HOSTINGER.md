@@ -312,51 +312,105 @@ En <https://github.com/TESTMODOPACK/Fixtura/actions> debería arrancar el workfl
 
 ---
 
-## Paso 7 — Configurar dominio (cuando lo tengas)
+## Paso 7 — Apuntar el dominio www.ligaplus.cl (con el sistema ya corriendo por IP)
 
-1. Comprar dominio (ej. `fixtura.cl` en NIC Chile, ~10k CLP/año).
-2. Crear A record apuntando a la IP del VPS:
-   ```
-   A    fixtura.cl       <IP-VPS>    TTL 300
-   A    www.fixtura.cl   <IP-VPS>    TTL 300
-   ```
-3. Esperar propagación DNS (5-30 min). Verificar:
-   ```bash
-   dig fixtura.cl  # Debe mostrar la IP del VPS
-   ```
-4. En el VPS, generar certificado Let's Encrypt:
-   ```bash
-   cd ~/fixtura
-   # Detener nginx temporalmente para liberar puerto 80
-   docker compose stop nginx
+> Dominio canónico: **www.ligaplus.cl**. El apex `ligaplus.cl` redirige a www
+> en nginx, así todo el tráfico tiene un único origen y el CORS es simple.
 
-   # Generar cert via standalone
-   docker run --rm -p 80:80 \
-     -v /etc/letsencrypt:/etc/letsencrypt \
-     certbot/certbot certonly --standalone \
-     -d fixtura.cl -d www.fixtura.cl \
-     --agree-tos -m rmorales.olate@gmail.com --non-interactive
+### 7.1 — DNS (en el panel del registrador de ligaplus.cl)
 
-   # Editar nginx/nginx.conf y cambiar fixtura.cl por tu dominio real
-   nano nginx/nginx.conf
+Crear dos A records apuntando a la IP del VPS:
 
-   # Cambiar config a la versión con TLS
-   sed -i 's/NGINX_CONF=.*/NGINX_CONF=nginx.conf/' .env
+```
+A    ligaplus.cl       <IP-VPS>    TTL 300
+A    www.ligaplus.cl   <IP-VPS>    TTL 300
+```
 
-   # Actualizar URLs
-   sed -i 's|APP_URL=.*|APP_URL=https://fixtura.cl|' .env
-   sed -i 's|API_URL=.*|API_URL=https://fixtura.cl/api|' .env
-   sed -i 's|FRONTEND_URL=.*|FRONTEND_URL=https://fixtura.cl|' .env
+Esperar propagación (5-30 min) y verificar desde tu máquina:
 
-   # Recrear nginx y web (NEXT_PUBLIC_API_URL se inyecta en build time)
-   docker compose up -d --build nginx web
-   ```
-5. Configurar renovación automática (cron del host):
-   ```bash
-   sudo crontab -e
-   # Agregar:
-   0 3 * * * cd /home/fixtura/fixtura && docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v $(pwd)/nginx/certbot/www:/var/www/certbot certbot/certbot renew --quiet && docker compose exec nginx nginx -s reload
-   ```
+```bash
+nslookup www.ligaplus.cl   # Debe mostrar la IP del VPS
+nslookup ligaplus.cl
+```
+
+No sigas hasta que ambos resuelvan a la IP correcta — el certbot falla si el
+DNS todavía no propagó.
+
+### 7.2 — Emitir el certificado TLS (en el VPS)
+
+```bash
+ssh fixtura@<IP-VPS>
+cd ~/fixtura
+
+# Liberar el puerto 80 (nginx en modo bootstrap lo está usando)
+docker compose stop nginx
+
+# Un solo cert que cubre apex + www
+docker run --rm -p 80:80 \
+  -v /etc/letsencrypt:/etc/letsencrypt \
+  certbot/certbot certonly --standalone \
+  -d ligaplus.cl -d www.ligaplus.cl \
+  --agree-tos -m rmorales.olate@gmail.com --non-interactive
+```
+
+Debe terminar con "Successfully received certificate". El cert queda en
+`/etc/letsencrypt/live/ligaplus.cl/`.
+
+### 7.3 — Cambiar el .env a las URLs del dominio + activar nginx TLS
+
+`nginx.conf` ya está en el repo apuntando a `ligaplus.cl` (server_name + cert).
+Solo hay que ajustar las URLs y el modo de nginx en el `.env` del VPS:
+
+```bash
+cd ~/fixtura
+
+# nginx con TLS (en vez del bootstrap HTTP)
+sed -i 's/^NGINX_CONF=.*/NGINX_CONF=nginx.conf/' .env || echo 'NGINX_CONF=nginx.conf' >> .env
+
+# URLs del dominio. APP_URL define el CORS y la base de los links de email;
+# API_URL se hornea en el build del web como NEXT_PUBLIC_API_URL.
+sed -i 's|^APP_URL=.*|APP_URL=https://www.ligaplus.cl|' .env
+sed -i 's|^API_URL=.*|API_URL=https://www.ligaplus.cl/api|' .env
+# (Si tu .env tiene FRONTEND_URL suelto, actualizalo también; el compose
+#  lo deriva de APP_URL, así que normalmente no hace falta.)
+```
+
+Confirmar los valores antes de seguir:
+
+```bash
+grep -E '^(NGINX_CONF|APP_URL|API_URL)=' .env
+```
+
+### 7.4 — Rebuild de web + nginx y levantar
+
+`NEXT_PUBLIC_API_URL` se inyecta en **build time** del web, así que un simple
+restart no alcanza: hay que **rebuildear** web. nginx también se rebuildea
+porque la imagen embebe el conf según `NGINX_CONF`.
+
+```bash
+export GIT_SHA=$(git rev-parse --short HEAD)
+docker compose build --no-cache web nginx
+docker compose up -d web nginx
+```
+
+### 7.5 — Verificar
+
+```bash
+curl -I https://www.ligaplus.cl            # 200, sirve la landing
+curl -I https://ligaplus.cl                # 301 → https://www.ligaplus.cl
+curl -s https://www.ligaplus.cl/api/health/live   # {"status":"ok"}
+```
+
+En el navegador: `https://www.ligaplus.cl` muestra la landing comercial con
+el candado verde.
+
+### 7.6 — Renovación automática de certs (cron del host)
+
+```bash
+sudo crontab -e
+# Agregar (renueva si faltan <30 días y recarga nginx):
+0 3 * * * docker run --rm -p 80:80 -v /etc/letsencrypt:/etc/letsencrypt certbot/certbot renew --standalone --pre-hook "cd /home/fixtura/fixtura && docker compose stop nginx" --post-hook "cd /home/fixtura/fixtura && docker compose start nginx" --quiet
+```
 
 ---
 
