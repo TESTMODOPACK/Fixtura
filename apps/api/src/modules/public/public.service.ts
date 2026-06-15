@@ -1,12 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { calcularTablaPosiciones } from '@fixtura/domain';
 
 import type {
+  EnVivoPublico,
   FilaTabla,
   FixturePublico,
+  PartidoEnVivo,
   PartidoPublico,
   Ranking,
   RankingItem,
@@ -50,6 +52,81 @@ export class PublicService {
     @InjectRepository(CategoriaJugadores)
     private readonly categoriaRepo: Repository<CategoriaJugadores>,
   ) {}
+
+  /**
+   * Partidos EN VIVO de toda la liga (Match Center EN_VIVO o PAUSADO).
+   * Para la pestaña "En vivo" del portal de hinchas. El cronómetro se
+   * calcula igual que en MatchCenterService; el front lo avanza local.
+   */
+  async getEnVivo(slug: string): Promise<EnVivoPublico> {
+    const actualizadaAt = new Date().toISOString();
+    const t0 = await this.torneoRepo
+      .createQueryBuilder('t')
+      .innerJoin('t.tenant', 'tenant')
+      .where('tenant.slug = :slug', { slug })
+      .getOne();
+    if (!t0) return { partidos: [], actualizadaAt };
+    const tenantId = t0.tenantId;
+
+    const partidos = await this.partidoRepo
+      .createQueryBuilder('p')
+      .leftJoinAndSelect('p.inscripcionLocal', 'il')
+      .leftJoinAndSelect('il.club', 'ilc')
+      .leftJoinAndSelect('p.inscripcionVisita', 'iv')
+      .leftJoinAndSelect('iv.club', 'ivc')
+      .leftJoinAndSelect('p.cancha', 'cancha')
+      .leftJoinAndSelect('p.fecha', 'f')
+      .where('p.tenant_id = :tenantId', { tenantId })
+      .andWhere(`p.centro_estado IN ('EN_VIVO','PAUSADO')`)
+      .getMany();
+    if (partidos.length === 0) return { partidos: [], actualizadaAt };
+
+    const torneoIds = [
+      ...new Set(
+        partidos.map((p) => p.fecha?.torneoId).filter((x): x is string => !!x),
+      ),
+    ];
+    const torneos = torneoIds.length
+      ? await this.torneoRepo.findBy({ id: In(torneoIds) })
+      : [];
+    const torneoById = new Map(torneos.map((t) => [t.id, t]));
+
+    const items: PartidoEnVivo[] = partidos.map((p) => {
+      const torneo = p.fecha?.torneoId ? torneoById.get(p.fecha.torneoId) : undefined;
+      return {
+        partidoId: p.id,
+        torneoNombre: torneo?.nombre ?? 'Torneo',
+        torneoSlug: torneo?.slug ?? '',
+        fechaNumero: p.fecha?.numero ?? null,
+        estado: p.centroEstado === 'PAUSADO' ? 'PAUSADO' : 'EN_VIVO',
+        periodo: p.centroPeriodo ?? 0,
+        minutosPorPeriodo: p.centroMinutosPorPeriodo ?? 40,
+        segundosTranscurridos: this.calcularSegundosCentro(p),
+        golesLocal: p.golesLocal ?? 0,
+        golesVisita: p.golesVisita ?? 0,
+        equipoLocalNombre: p.inscripcionLocal?.club?.nombre ?? '?',
+        equipoVisitaNombre: p.inscripcionVisita?.club?.nombre ?? '?',
+        canchaNombre: p.cancha?.nombre ?? p.canchaNombre ?? null,
+      };
+    });
+
+    // EN_VIVO primero; dentro, ordenado por torneo.
+    items.sort((a, b) => {
+      if (a.estado !== b.estado) return a.estado === 'EN_VIVO' ? -1 : 1;
+      return a.torneoNombre.localeCompare(b.torneoNombre);
+    });
+    return { partidos: items, actualizadaAt };
+  }
+
+  private calcularSegundosCentro(p: Partido): number {
+    const acumulado = p.centroSegundosAcumulados ?? 0;
+    if (p.centroEstado !== 'EN_VIVO' || !p.centroArrancadoAt) return acumulado;
+    const delta = Math.max(
+      0,
+      Math.floor((Date.now() - p.centroArrancadoAt.getTime()) / 1000),
+    );
+    return acumulado + delta;
+  }
 
   /**
    * Sprint 36A — Lista los torneos publicos del tenant (activos + cerrados,

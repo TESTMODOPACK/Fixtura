@@ -11,15 +11,18 @@ import { useAuthStore } from '@/store/auth-store';
 
 interface PublicHeaderProps {
   ligaNombre: string;
-  active?: 'home' | 'tabla' | 'fixture' | 'goleadores' | 'asistencias' | 'mvp';
+  active?: 'home' | 'envivo' | 'tabla' | 'fixture' | 'goleadores' | 'asistencias' | 'mvp';
   /** Sprint 36C — si está, los tabs apuntan a /torneos/[slug]/... en vez de a las rutas raíz. */
   torneoSlug?: string;
 }
 
 type TabKey = NonNullable<PublicHeaderProps['active']>;
 
+// `envivo` es liga-wide (cross-torneo): siempre apunta a /vivo, sin importar
+// el torneoSlug del header.
 const TAB_DEFS: Array<{ key: TabKey; label: string; suffix: string }> = [
   { key: 'home', label: 'Inicio', suffix: '' },
+  { key: 'envivo', label: 'En vivo', suffix: '/vivo' },
   { key: 'tabla', label: 'Tabla', suffix: '/tabla' },
   { key: 'fixture', label: 'Fixture', suffix: '/fixture' },
   { key: 'goleadores', label: 'Goleadores', suffix: '/goleadores' },
@@ -36,7 +39,12 @@ export function PublicHeader({
   const tabs = TAB_DEFS.map((t) => ({
     key: t.key,
     label: t.label,
-    href: t.key === 'home' ? homeHref : `${torneoSlug ? `/torneos/${torneoSlug}` : ''}${t.suffix}`,
+    href:
+      t.key === 'home'
+        ? homeHref
+        : t.key === 'envivo'
+          ? '/vivo'
+          : `${torneoSlug ? `/torneos/${torneoSlug}` : ''}${t.suffix}`,
   }));
   const [loginOpen, setLoginOpen] = useState(false);
   const accessToken = useAuthStore((s) => s.accessToken);

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type {
+  EnVivoPublico,
   FixturePublico,
   Ranking,
   ResumenLiga,
@@ -38,6 +39,20 @@ export function useResumenLiga(torneoSlug?: string) {
     queryFn: () =>
       apiFetch<ResumenLiga>(`/public${qs(torneoSlug)}`, { skipAuth: true }),
     staleTime: 60 * 1000,
+  });
+}
+
+/**
+ * Partidos EN VIVO de la liga. Poll cada 10s para detectar partidos que
+ * arrancan/terminan; el cronómetro lo avanza el front local entre polls.
+ * `dataUpdatedAt` (de TanStack) sirve de base para resincronizar el reloj.
+ */
+export function useEnVivo() {
+  return useQuery({
+    queryKey: ['public', 'en-vivo'],
+    queryFn: () => apiFetch<EnVivoPublico>('/public/en-vivo', { skipAuth: true }),
+    refetchInterval: 10_000,
+    staleTime: 5_000,
   });
 }
 

@@ -2,6 +2,7 @@ import { Controller, Get, NotFoundException, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 
 import type {
+  EnVivoPublico,
   FixturePublico,
   Ranking,
   ResumenLiga,
@@ -54,6 +55,13 @@ export class PublicController {
   async torneos(@Req() req: Request): Promise<TorneoListaPublico[]> {
     const slug = await this.resolveSlug(req);
     return this.svc.getTorneos(slug);
+  }
+
+  /** Partidos EN VIVO de la liga (pestaña "En vivo" del portal). */
+  @Get('en-vivo')
+  async enVivo(@Req() req: Request): Promise<EnVivoPublico> {
+    const slug = await this.resolveSlug(req);
+    return this.svc.getEnVivo(slug);
   }
 
   @Get('tabla')

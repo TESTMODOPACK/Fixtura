@@ -58,6 +58,35 @@ export const ESTADO_PARTIDO = [
 ] as const;
 export type EstadoPartido = (typeof ESTADO_PARTIDO)[number];
 
+/**
+ * Partidos EN VIVO del portal de hinchas. Lista los partidos con el Match
+ * Center corriendo (EN_VIVO o PAUSADO) en toda la liga, con marcador y
+ * cronómetro para mostrarlo actualizándose. El front avanza el reloj local
+ * y resincroniza con cada poll (ver useEnVivo).
+ */
+export const PartidoEnVivoSchema = z.object({
+  partidoId: z.uuid(),
+  torneoNombre: z.string(),
+  torneoSlug: z.string(),
+  fechaNumero: z.number().int().nullable(),
+  estado: z.enum(['EN_VIVO', 'PAUSADO']),
+  periodo: z.number().int().min(0),
+  minutosPorPeriodo: z.number().int().min(1).max(120),
+  segundosTranscurridos: z.number().int().min(0),
+  golesLocal: z.number().int().min(0),
+  golesVisita: z.number().int().min(0),
+  equipoLocalNombre: z.string(),
+  equipoVisitaNombre: z.string(),
+  canchaNombre: z.string().nullable(),
+});
+export type PartidoEnVivo = z.infer<typeof PartidoEnVivoSchema>;
+
+export const EnVivoPublicoSchema = z.object({
+  partidos: z.array(PartidoEnVivoSchema),
+  actualizadaAt: z.iso.datetime(),
+});
+export type EnVivoPublico = z.infer<typeof EnVivoPublicoSchema>;
+
 export const PartidoPublicoSchema = z.object({
   id: z.uuid(),
   fechaNumero: z.number().int().min(1),
