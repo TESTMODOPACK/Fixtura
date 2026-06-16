@@ -734,6 +734,7 @@ export class PartidosAdminService {
           jugadorId,
           motivo: p.motivo,
           fechasPendientes: p.fechasSuspension,
+          fechasTotales: p.fechasSuspension,
           desdeFechaNumero: p.desdeFechaNumero,
           origenIncidenciaPartidoId: p.origenIncidenciaPartidoId,
           descripcion: this.descripcionAuto(p.motivo),

@@ -1007,6 +1007,20 @@ async function main(): Promise<void> {
     );
     log('Sprint 46: incidencias_partido.jugador_id + sanciones_activas.jugador_id aseguradas.');
 
+    // Informes — total de fechas de la sanción (para mostrar cumplidas vs
+    // pendientes). Aditivo. Backfill: para sanciones existentes el total
+    // real no se guardó, así que estimamos = max(fechas_pendientes, 1).
+    await client.query(`
+      ALTER TABLE sanciones_activas
+        ADD COLUMN IF NOT EXISTS fechas_totales SMALLINT
+    `);
+    await client.query(`
+      UPDATE sanciones_activas
+        SET fechas_totales = GREATEST(fechas_pendientes, 1)
+        WHERE fechas_totales IS NULL
+    `);
+    log('Informes: sanciones_activas.fechas_totales asegurada.');
+
     // Backfill partidos.inscripcion_local/visita_id desde el equipo sombra.
     const bfPartLocal = await client.query(`
       UPDATE partidos p

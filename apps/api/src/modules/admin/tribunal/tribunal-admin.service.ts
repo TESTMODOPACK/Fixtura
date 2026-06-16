@@ -98,6 +98,7 @@ export class TribunalAdminService {
         jugadorId: jugador.id,
         motivo: 'TRIBUNAL',
         fechasPendientes: input.fechasSuspension,
+        fechasTotales: input.fechasSuspension,
         desdeFechaNumero,
         origenIncidenciaPartidoId: null,
         descripcion: input.descripcion,

@@ -48,6 +48,7 @@ import { JugadoresAdminService } from './jugadores/jugadores-admin.service';
 import { JugadoresGlobalController } from './jugadores-global/jugadores-global.controller';
 import { JugadoresGlobalService } from './jugadores-global/jugadores-global.service';
 import { DunningModule } from './dunning/dunning.module';
+import { InformesModule } from './informes/informes.module';
 import { PagosModule } from './pagos/pagos.module';
 import { PagosPersonalController } from './pagos-personal/pagos-personal.controller';
 import { PagosPersonalService } from './pagos-personal/pagos-personal.service';
@@ -102,6 +103,7 @@ import { DelegadoPortalService } from './delegado/delegado-portal.service';
     CompetitionModule,
     PagosModule,
     DunningModule,
+    InformesModule,
     PushModule,
     UsersModule,
     // Ajustes necesita Tenant + User + UserRole — los registramos

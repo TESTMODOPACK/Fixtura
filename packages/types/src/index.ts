@@ -33,3 +33,4 @@ export * from './clubes';
 export * from './plantel-import';
 export * from './horarios-torneo';
 export * from './delegado';
+export * from './informes';

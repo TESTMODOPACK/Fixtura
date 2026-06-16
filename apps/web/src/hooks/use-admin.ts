@@ -2486,3 +2486,51 @@ export function useEliminarNomina() {
     },
   });
 }
+
+// ─── Informes (disciplina) ──────────────────────────────────────────
+import type {
+  EnRiesgoAmarilla,
+  ExpulsadoFecha,
+  SancionVigente,
+} from '@fixtura/types';
+
+export function useInformeExpulsados(
+  torneoId: string | undefined,
+  fechaNumero: number | undefined,
+) {
+  const qs = new URLSearchParams();
+  if (torneoId) qs.set('torneoId', torneoId);
+  if (fechaNumero != null) qs.set('fechaNumero', String(fechaNumero));
+  return useQuery({
+    queryKey: ['admin', 'informes', 'expulsados', { torneoId: torneoId ?? null, fechaNumero: fechaNumero ?? null }],
+    enabled: !!torneoId,
+    queryFn: () =>
+      apiFetch<ExpulsadoFecha[]>(`/admin/informes/disciplina/expulsados?${qs.toString()}`),
+  });
+}
+
+export function useInformeSancionados(filtros: {
+  torneoId?: string;
+  clubId?: string;
+  incluirCumplidas?: boolean;
+}) {
+  const qs = new URLSearchParams();
+  if (filtros.torneoId) qs.set('torneoId', filtros.torneoId);
+  if (filtros.clubId) qs.set('clubId', filtros.clubId);
+  if (filtros.incluirCumplidas) qs.set('incluirCumplidas', 'true');
+  const query = qs.toString();
+  return useQuery({
+    queryKey: ['admin', 'informes', 'sancionados', filtros],
+    queryFn: () =>
+      apiFetch<SancionVigente[]>(`/admin/informes/disciplina/sancionados${query ? `?${query}` : ''}`),
+  });
+}
+
+export function useInformeEnRiesgo(torneoId: string | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'informes', 'en-riesgo', { torneoId: torneoId ?? null }],
+    enabled: !!torneoId,
+    queryFn: () =>
+      apiFetch<EnRiesgoAmarilla[]>(`/admin/informes/disciplina/en-riesgo?torneoId=${torneoId}`),
+  });
+}

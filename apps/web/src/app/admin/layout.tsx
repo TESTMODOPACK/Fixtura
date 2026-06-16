@@ -67,6 +67,7 @@ const NAV: NavSection[] = [
       { href: '/admin/designaciones', label: 'Designación de personal', icon: Activity },
       { href: '/admin/actas', label: 'Actas & resultados', icon: ClipboardList },
       { href: '/admin/tribunal', label: 'Tribunal', icon: Gavel },
+      { href: '/admin/informes', label: 'Informes', icon: BarChart3 },
     ],
   },
   {

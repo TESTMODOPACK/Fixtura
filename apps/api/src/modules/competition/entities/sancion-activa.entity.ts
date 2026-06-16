@@ -72,6 +72,11 @@ export class SancionActiva {
   @Column({ name: 'fechas_pendientes', type: 'smallint', default: 1 })
   fechasPendientes!: number;
 
+  // Total de fechas de la sanción al momento de crearse. fechasPendientes
+  // se decrementa al cumplir; (totales - pendientes) = fechas ya cumplidas.
+  @Column({ name: 'fechas_totales', type: 'smallint', nullable: true })
+  fechasTotales!: number | null;
+
   @Column({ name: 'desde_fecha_numero', type: 'smallint' })
   desdeFechaNumero!: number;
 
