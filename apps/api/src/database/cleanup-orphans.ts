@@ -143,6 +143,16 @@ async function main(): Promise<void> {
     );
     log('tenants.requiere_carnet_anfa asegurada.');
 
+    // Etapa 1 pagos: config de métodos de cobro por liga + secretos cifrados
+    // de la pasarela (Flow/Khipu). pagos_config es JSON no-secreto; las llaves
+    // van en pagos_secretos_enc (AES-256-GCM, ver common/crypto/secret-box).
+    await client.query(`
+      ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS pagos_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+        ADD COLUMN IF NOT EXISTS pagos_secretos_enc TEXT
+    `);
+    log('tenants.pagos_config / pagos_secretos_enc aseguradas.');
+
     // Sprint 6: tabla canchas.
     await ensureCanchasTable(client, log);
 

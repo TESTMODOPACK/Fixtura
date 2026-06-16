@@ -4,7 +4,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
   AlertTriangle,
   CheckCircle2,
+  CreditCard,
   Globe,
+  Landmark,
+  Lock,
   Mail,
   Palette,
   Plus,
@@ -16,11 +19,14 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import {
+  PROVEEDOR_PASARELA,
   ROLES_ADMIN_INVITABLES,
   ROLE_DESCRIPTION,
   ROLE_LABEL as ROLE_LABEL_FULL,
   type Branding,
   type MiembroAdmin,
+  type PagosConfig,
+  type ProveedorPasarela,
   type RolAdminInvitable,
   type Role,
   type TenantSettings,
@@ -47,7 +53,7 @@ import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatFecha } from '@/lib/format';
 
-type Tab = 'branding' | 'dominio' | 'reglamento' | 'equipo' | 'calendario';
+type Tab = 'branding' | 'dominio' | 'reglamento' | 'pagos' | 'equipo' | 'calendario';
 
 // Sprint 22: labels canónicos desde @fixtura/types — 16 roles.
 const ROL_LABEL: Record<RolAdminInvitable, string> = {
@@ -135,6 +141,9 @@ export default function AjustesPage(): React.ReactElement {
               >
                 Reglamento
               </TabButton>
+              <TabButton active={tab === 'pagos'} onClick={() => setTab('pagos')}>
+                Pagos
+              </TabButton>
               <TabButton active={tab === 'equipo'} onClick={() => setTab('equipo')}>
                 Equipo admin
               </TabButton>
@@ -150,6 +159,7 @@ export default function AjustesPage(): React.ReactElement {
           {tab === 'branding' && <BrandingTab settings={settings} />}
           {tab === 'dominio' && <DominioTab settings={settings} />}
           {tab === 'reglamento' && <ReglamentoTab settings={settings} />}
+          {tab === 'pagos' && <PagosTab settings={settings} />}
           {tab === 'equipo' && <EquipoTab />}
           {tab === 'calendario' && <CalendarioTab />}
         </>
@@ -627,6 +637,319 @@ function ReglamentoTab({ settings }: { settings: TenantSettings }): React.ReactE
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+// ─── Tab: Pagos ──────────────────────────────────────────────────────
+const PROVEEDOR_LABEL: Record<ProveedorPasarela, string> = {
+  FLOW: 'Flow',
+  KHIPU: 'Khipu',
+};
+
+function PagosTab({ settings }: { settings: TenantSettings }): React.ReactElement {
+  const update = useUpdateTenantSettings();
+  const [saved, setSaved] = useState(false);
+  const [clientError, setClientError] = useState<string | null>(null);
+
+  // Config no-secreta (datos bancarios + on/off de cada método).
+  const [transferencia, setTransferencia] = useState<PagosConfig['transferencia']>(
+    settings.pagos.transferencia,
+  );
+  const [pasarela, setPasarela] = useState<PagosConfig['pasarela']>(
+    settings.pagos.pasarela,
+  );
+
+  // Llaves de pasarela — write-only. Solo viven en memoria hasta guardar; el
+  // GET nunca las devuelve. Se setean las dos juntas o ninguna.
+  const [flowApiKey, setFlowApiKey] = useState('');
+  const [flowSecretKey, setFlowSecretKey] = useState('');
+
+  useEffect(() => {
+    setTransferencia(settings.pagos.transferencia);
+    setPasarela(settings.pagos.pasarela);
+  }, [settings.pagos]);
+
+  const credCargadas = settings.pasarelaCredencialesCargadas;
+  const error = update.error as ApiError | undefined;
+
+  const setTransf = (
+    key: keyof PagosConfig['transferencia'],
+    value: string,
+  ): void => setTransferencia((t) => ({ ...t, [key]: value }));
+
+  const guardar = async (): Promise<void> => {
+    setClientError(null);
+
+    if (pasarela.habilitada && !pasarela.proveedor) {
+      setClientError('Elige un proveedor (Flow o Khipu) para activar el pago online.');
+      return;
+    }
+
+    const apiKey = flowApiKey.trim();
+    const secretKey = flowSecretKey.trim();
+    // O ambas o ninguna — evitar guardar credenciales a medias.
+    if (Boolean(apiKey) !== Boolean(secretKey)) {
+      setClientError(
+        'Para guardar las credenciales de la pasarela necesito el API Key y el Secret Key juntos.',
+      );
+      return;
+    }
+
+    try {
+      await update.mutateAsync({
+        pagos: { transferencia, pasarela },
+        ...(apiKey && secretKey ? { flowApiKey: apiKey, flowSecretKey: secretKey } : {}),
+      });
+      setFlowApiKey('');
+      setFlowSecretKey('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      // El error del server se muestra desde update.error.
+    }
+  };
+
+  const quitarCredenciales = async (): Promise<void> => {
+    setClientError(null);
+    try {
+      await update.mutateAsync({ limpiarCredencialesPasarela: true });
+      setFlowApiKey('');
+      setFlowSecretKey('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      // idem
+    }
+  };
+
+  const ningunMetodo = !transferencia.habilitada && !pasarela.habilitada;
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      <Card padding="roomy">
+        <CardLabel>Métodos de cobro</CardLabel>
+        <p className="text-sm text-ink-mute font-serif italic mt-2 mb-4">
+          Elige cómo cobra tu liga a los clubes. Puedes ofrecer solo transferencia,
+          solo pago online, o ambos. Lo que actives acá es lo que verán los clubes al
+          pagar sus cuotas.
+        </p>
+
+        {ningunMetodo && (
+          <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-card">
+            <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+            <span>
+              No tienes ningún método activo. Los clubes verán sus cuotas pero no
+              tendrán cómo pagarlas en línea.
+            </span>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Transferencia ── */}
+      <Card padding="roomy">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={transferencia.habilitada}
+            onChange={(e) =>
+              setTransferencia((t) => ({ ...t, habilitada: e.target.checked }))
+            }
+            className="mt-1"
+          />
+          <div className="flex-1">
+            <div className="font-semibold text-ink flex items-center gap-2">
+              <Landmark size={16} className="text-accent" /> Transferencia bancaria
+            </div>
+            <div className="text-xs text-ink-mute font-serif italic mt-1">
+              Mostramos tus datos de cuenta al club. El club transfiere y tú confirmas
+              el pago manualmente en Finanzas. Sin comisiones de pasarela.
+            </div>
+          </div>
+        </label>
+
+        {transferencia.habilitada && (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Banco"
+              placeholder="Banco de Chile"
+              value={transferencia.banco ?? ''}
+              onChange={(e) => setTransf('banco', e.target.value)}
+            />
+            <Input
+              label="Tipo de cuenta"
+              placeholder="Cuenta Corriente / Vista / RUT"
+              value={transferencia.tipoCuenta ?? ''}
+              onChange={(e) => setTransf('tipoCuenta', e.target.value)}
+            />
+            <Input
+              label="Número de cuenta"
+              placeholder="00012345678"
+              value={transferencia.numeroCuenta ?? ''}
+              onChange={(e) => setTransf('numeroCuenta', e.target.value)}
+            />
+            <Input
+              label="Titular"
+              placeholder="Liga Ñuñoa SpA"
+              value={transferencia.titular ?? ''}
+              onChange={(e) => setTransf('titular', e.target.value)}
+            />
+            <Input
+              label="RUT del titular"
+              placeholder="76.123.456-7"
+              value={transferencia.rut ?? ''}
+              onChange={(e) => setTransf('rut', e.target.value)}
+            />
+            <Input
+              label="Email para avisar la transferencia"
+              placeholder="tesoreria@liga.cl"
+              value={transferencia.email ?? ''}
+              onChange={(e) => setTransf('email', e.target.value)}
+            />
+            <div className="md:col-span-2">
+              <label className="block text-sm font-semibold text-ink mb-1">
+                Instrucciones para el club (opcional)
+              </label>
+              <textarea
+                className="w-full rounded-card border border-line px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                rows={3}
+                maxLength={500}
+                placeholder="Ej: indica el nombre del club y la fecha en el detalle de la transferencia."
+                value={transferencia.instrucciones ?? ''}
+                onChange={(e) => setTransf('instrucciones', e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Pasarela (Flow / Khipu) ── */}
+      <Card padding="roomy">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={pasarela.habilitada}
+            onChange={(e) =>
+              setPasarela((p) => ({ ...p, habilitada: e.target.checked }))
+            }
+            className="mt-1"
+          />
+          <div className="flex-1">
+            <div className="font-semibold text-ink flex items-center gap-2">
+              <CreditCard size={16} className="text-accent" /> Pago online (pasarela)
+            </div>
+            <div className="text-xs text-ink-mute font-serif italic mt-1">
+              El club paga con tarjeta o transferencia instantánea y el cobro se marca
+              pagado automáticamente. El dinero llega directo a la cuenta de tu liga en
+              el proveedor que elijas.
+            </div>
+          </div>
+        </label>
+
+        {pasarela.habilitada && (
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-ink mb-1">
+                Proveedor
+              </label>
+              <select
+                className="w-full rounded-card border border-line px-3 py-2 text-sm focus:border-accent focus:outline-none bg-white"
+                value={pasarela.proveedor ?? ''}
+                onChange={(e) =>
+                  setPasarela((p) => ({
+                    ...p,
+                    proveedor: (e.target.value || null) as ProveedorPasarela | null,
+                  }))
+                }
+              >
+                <option value="">Selecciona un proveedor…</option>
+                {PROVEEDOR_PASARELA.map((prov) => (
+                  <option key={prov} value={prov}>
+                    {PROVEEDOR_LABEL[prov]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="rounded-card border border-line p-4 bg-paper/40">
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-semibold text-ink flex items-center gap-2 text-sm">
+                  <Lock size={14} className="text-accent" /> Credenciales del proveedor
+                </div>
+                {credCargadas ? (
+                  <span className="text-xs font-semibold text-green-bright flex items-center gap-1">
+                    <CheckCircle2 size={13} /> Credenciales guardadas
+                  </span>
+                ) : (
+                  <span className="text-xs text-ink-mute font-serif italic">
+                    Sin credenciales
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-ink-mute font-serif italic mb-3">
+                Pega aquí el API Key y el Secret Key de tu cuenta del proveedor. Se
+                guardan cifrados y nunca se vuelven a mostrar. Para reemplazarlas, pega
+                las nuevas y guarda.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="API Key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={credCargadas ? '•••••••• (guardada)' : 'Tu API Key'}
+                  value={flowApiKey}
+                  onChange={(e) => setFlowApiKey(e.target.value)}
+                />
+                <Input
+                  label="Secret Key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={credCargadas ? '•••••••• (guardada)' : 'Tu Secret Key'}
+                  value={flowSecretKey}
+                  onChange={(e) => setFlowSecretKey(e.target.value)}
+                />
+              </div>
+              {credCargadas && (
+                <button
+                  type="button"
+                  onClick={() => void quitarCredenciales()}
+                  disabled={update.isPending}
+                  className="text-xs text-danger hover:underline mt-3 font-semibold disabled:opacity-50"
+                >
+                  Quitar credenciales guardadas
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-card">
+              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+              <span>
+                Estamos finalizando la integración del cobro online con Flow/Khipu.
+                Puedes dejar tu proveedor y credenciales configurados desde ya; el cobro
+                con tarjeta quedará operativo apenas terminemos la conexión. Mientras
+                tanto, la transferencia bancaria funciona sin problemas.
+              </span>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <div className="flex items-center gap-3">
+        <Button variant="accent" onClick={() => void guardar()} disabled={update.isPending}>
+          {update.isPending ? 'Guardando…' : 'Guardar cambios'}
+        </Button>
+        {saved && !error && !clientError && (
+          <span className="text-sm text-green-bright flex items-center gap-2">
+            <CheckCircle2 size={14} /> Cambios guardados
+          </span>
+        )}
+      </div>
+
+      {(clientError || error) && (
+        <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
+          {clientError ?? error?.message}
+        </div>
+      )}
     </div>
   );
 }

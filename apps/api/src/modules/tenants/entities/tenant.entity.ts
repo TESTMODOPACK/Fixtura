@@ -43,6 +43,21 @@ export class Tenant {
   @Column({ name: 'requiere_carnet_anfa', type: 'boolean', default: false })
   requiereCarnetAnfa!: boolean;
 
+  /**
+   * Config de métodos de cobro de la liga (transferencia + on/off pasarela
+   * + proveedor). NO contiene secretos — las llaves de la pasarela viven
+   * cifradas en `pagosSecretosEnc`.
+   */
+  @Column({ name: 'pagos_config', type: 'jsonb', default: () => "'{}'::jsonb" })
+  pagosConfig!: Record<string, unknown>;
+
+  /**
+   * Credenciales de la pasarela (Flow/Khipu) cifradas con AES-256-GCM
+   * (ver common/crypto/secret-box). Nunca se devuelven al cliente.
+   */
+  @Column({ name: 'pagos_secretos_enc', type: 'text', nullable: true })
+  pagosSecretosEnc!: string | null;
+
   // ── Sprint 23: Super Admin / planes ───────────────────────────────
   @Column({ name: 'plan_id', type: 'uuid', nullable: true })
   planId!: string | null;

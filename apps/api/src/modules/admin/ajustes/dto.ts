@@ -12,7 +12,11 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-import { ROLES_ADMIN_INVITABLES, type RolAdminInvitable } from '@fixtura/types';
+import {
+  PROVEEDOR_PASARELA,
+  ROLES_ADMIN_INVITABLES,
+  type RolAdminInvitable,
+} from '@fixtura/types';
 
 export class BrandingDto {
   @IsOptional()
@@ -55,6 +59,35 @@ export class BrandingDto {
   footerTexto?: string;
 }
 
+class PagosTransferenciaDto {
+  @IsOptional() @IsBoolean() habilitada?: boolean;
+  @IsOptional() @IsString() @MaxLength(80) banco?: string;
+  @IsOptional() @IsString() @MaxLength(40) tipoCuenta?: string;
+  @IsOptional() @IsString() @MaxLength(40) numeroCuenta?: string;
+  @IsOptional() @IsString() @MaxLength(120) titular?: string;
+  @IsOptional() @IsString() @MaxLength(20) rut?: string;
+  @IsOptional() @IsString() @MaxLength(150) email?: string;
+  @IsOptional() @IsString() @MaxLength(500) instrucciones?: string;
+}
+
+class PagosPasarelaDto {
+  @IsOptional() @IsBoolean() habilitada?: boolean;
+  // '' (vacío) = sin proveedor; lo normaliza el service a null.
+  @IsOptional() @IsIn([...PROVEEDOR_PASARELA, '']) proveedor?: string;
+}
+
+class PagosConfigDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PagosTransferenciaDto)
+  transferencia?: PagosTransferenciaDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PagosPasarelaDto)
+  pasarela?: PagosPasarelaDto;
+}
+
 export class UpdateTenantSettingsDto {
   @IsOptional()
   @IsString()
@@ -75,6 +108,16 @@ export class UpdateTenantSettingsDto {
   @IsOptional()
   @IsBoolean()
   requiereCarnetAnfa?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PagosConfigDto)
+  pagos?: PagosConfigDto;
+
+  // Llaves de pasarela — write-only (el GET nunca las devuelve).
+  @IsOptional() @IsString() @MaxLength(200) flowApiKey?: string;
+  @IsOptional() @IsString() @MaxLength(400) flowSecretKey?: string;
+  @IsOptional() @IsBoolean() limpiarCredencialesPasarela?: boolean;
 }
 
 export class InvitarMiembroDto {

@@ -116,6 +116,10 @@ services:
       FRONTEND_URL: ${APP_URL:?Debe definir APP_URL}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-Fixtura <onboarding@resend.dev>}
+      # Clave para cifrar credenciales de pasarela de pago por liga (AES-256-GCM).
+      # Generar con: openssl rand -base64 32. Sin esto, no se pueden guardar
+      # las llaves de Flow/Khipu (pero transferencia manual funciona igual).
+      PAGOS_ENC_KEY: ${PAGOS_ENC_KEY:-}
       DB_POOL_MAX: ${DB_POOL_MAX:-20}
       DB_POOL_MIN: ${DB_POOL_MIN:-2}
       LOG_LEVEL: ${LOG_LEVEL:-info}

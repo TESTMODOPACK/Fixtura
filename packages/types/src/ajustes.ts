@@ -39,6 +39,41 @@ export const BrandingSchema = z.object({
 });
 export type Branding = z.infer<typeof BrandingSchema>;
 
+/**
+ * Configuración de cobros de la liga (Etapa 1 de pagos). Cada liga elige
+ * qué métodos ofrece a sus clubes:
+ *   - transferencia: datos bancarios que se muestran al club (no secreto).
+ *   - pasarela: pago online vía Flow/Khipu. Las llaves NO viven acá — se
+ *     guardan cifradas aparte y nunca se devuelven (ver
+ *     pasarelaCredencialesCargadas en TenantSettings).
+ */
+export const PagosTransferenciaSchema = z.object({
+  habilitada: z.boolean(),
+  banco: z.string().max(80).optional(),
+  tipoCuenta: z.string().max(40).optional(),
+  numeroCuenta: z.string().max(40).optional(),
+  titular: z.string().max(120).optional(),
+  rut: z.string().max(20).optional(),
+  email: z.string().max(150).optional(),
+  instrucciones: z.string().max(500).optional(),
+});
+export type PagosTransferencia = z.infer<typeof PagosTransferenciaSchema>;
+
+export const PROVEEDOR_PASARELA = ['FLOW', 'KHIPU'] as const;
+export type ProveedorPasarela = (typeof PROVEEDOR_PASARELA)[number];
+
+export const PagosPasarelaSchema = z.object({
+  habilitada: z.boolean(),
+  proveedor: z.enum(PROVEEDOR_PASARELA).nullable(),
+});
+export type PagosPasarela = z.infer<typeof PagosPasarelaSchema>;
+
+export const PagosConfigSchema = z.object({
+  transferencia: PagosTransferenciaSchema,
+  pasarela: PagosPasarelaSchema,
+});
+export type PagosConfig = z.infer<typeof PagosConfigSchema>;
+
 export const TenantSettingsSchema = z.object({
   id: z.uuid(),
   slug: z.string(),
@@ -55,6 +90,11 @@ export const TenantSettingsSchema = z.object({
    * carnets vencidos y la UI muestra alertas. Default false.
    */
   requiereCarnetAnfa: z.boolean(),
+  // Métodos de cobro de la liga.
+  pagos: PagosConfigSchema,
+  // ¿Hay llaves de pasarela guardadas? El GET nunca devuelve las llaves
+  // en sí (solo este booleano); se setean write-only desde el update.
+  pasarelaCredencialesCargadas: z.boolean(),
 });
 export type TenantSettings = z.infer<typeof TenantSettingsSchema>;
 
@@ -75,6 +115,13 @@ export const UpdateTenantSettingsSchema = z.object({
     .optional(),
   branding: BrandingSchema.optional(),
   requiereCarnetAnfa: z.boolean().optional(),
+  // Config de cobros (se envía el objeto completo desde la pestaña Pagos).
+  pagos: PagosConfigSchema.optional(),
+  // Llaves de pasarela — write-only. Se setean juntas (las dos) o no se
+  // tocan. El GET nunca las devuelve. Para borrarlas: limpiarCredencialesPasarela.
+  flowApiKey: z.string().max(200).optional(),
+  flowSecretKey: z.string().max(400).optional(),
+  limpiarCredencialesPasarela: z.boolean().optional(),
 });
 export type UpdateTenantSettingsRequest = z.infer<typeof UpdateTenantSettingsSchema>;
 

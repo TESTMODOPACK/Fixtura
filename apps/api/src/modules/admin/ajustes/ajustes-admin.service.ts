@@ -13,9 +13,12 @@ import {
   ROLE_SCOPE,
   type Branding,
   type MiembroAdmin,
+  type PagosConfig,
+  type ProveedorPasarela,
   type TenantSettings,
 } from '@fixtura/types';
 
+import { cifrarSecreto } from '../../../common/crypto/secret-box';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { User } from '../../users/entities/user.entity';
 import { UserRole } from '../../users/entities/user-role.entity';
@@ -107,6 +110,44 @@ export class AjustesAdminService {
 
     if (input.requiereCarnetAnfa !== undefined) {
       t.requiereCarnetAnfa = input.requiereCarnetAnfa;
+    }
+
+    if (input.pagos !== undefined) {
+      const actual = this.pagosConfigDe(t);
+      const merged: PagosConfig = {
+        transferencia: { ...actual.transferencia, ...input.pagos.transferencia },
+        pasarela: {
+          habilitada: input.pagos.pasarela?.habilitada ?? actual.pasarela.habilitada,
+          proveedor:
+            input.pagos.pasarela?.proveedor !== undefined
+              ? ((input.pagos.pasarela.proveedor || null) as ProveedorPasarela | null)
+              : actual.pasarela.proveedor,
+        },
+      };
+      if (merged.pasarela.habilitada && !merged.pasarela.proveedor) {
+        throw new BadRequestException(
+          'Elige un proveedor de pasarela (Flow o Khipu) para activar el pago online.',
+        );
+      }
+      t.pagosConfig = merged as unknown as Record<string, unknown>;
+    }
+
+    // Credenciales de pasarela — write-only. Se setean las dos juntas para no
+    // dejar credenciales a medias; o se limpian con la flag.
+    if (input.limpiarCredencialesPasarela) {
+      t.pagosSecretosEnc = null;
+    } else if (
+      (input.flowApiKey && input.flowApiKey.trim()) ||
+      (input.flowSecretKey && input.flowSecretKey.trim())
+    ) {
+      const apiKey = (input.flowApiKey ?? '').trim();
+      const secretKey = (input.flowSecretKey ?? '').trim();
+      if (!apiKey || !secretKey) {
+        throw new BadRequestException(
+          'Para guardar las credenciales de Flow necesito el API Key y el Secret Key juntos.',
+        );
+      }
+      t.pagosSecretosEnc = cifrarSecreto(JSON.stringify({ flowApiKey: apiKey, flowSecretKey: secretKey }));
     }
 
     const saved = await this.tenantRepo.save(t);
@@ -264,6 +305,30 @@ export class AjustesAdminService {
       tipo: t.tipo,
       isActive: t.isActive,
       requiereCarnetAnfa: t.requiereCarnetAnfa ?? false,
+      pagos: this.pagosConfigDe(t),
+      // Nunca exponemos las llaves; solo si hay credenciales guardadas.
+      pasarelaCredencialesCargadas: !!t.pagosSecretosEnc,
+    };
+  }
+
+  /** pagos_config del tenant con defaults defensivos. */
+  private pagosConfigDe(t: Tenant): PagosConfig {
+    const raw = (t.pagosConfig ?? {}) as Partial<PagosConfig>;
+    return {
+      transferencia: {
+        habilitada: raw.transferencia?.habilitada ?? false,
+        banco: raw.transferencia?.banco,
+        tipoCuenta: raw.transferencia?.tipoCuenta,
+        numeroCuenta: raw.transferencia?.numeroCuenta,
+        titular: raw.transferencia?.titular,
+        rut: raw.transferencia?.rut,
+        email: raw.transferencia?.email,
+        instrucciones: raw.transferencia?.instrucciones,
+      },
+      pasarela: {
+        habilitada: raw.pasarela?.habilitada ?? false,
+        proveedor: raw.pasarela?.proveedor ?? null,
+      },
     };
   }
 }
