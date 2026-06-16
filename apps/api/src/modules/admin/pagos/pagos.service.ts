@@ -433,10 +433,13 @@ export class PagosService {
 
   /** Base pública del API (https://dominio/api/v1) para armar el webhook. */
   private apiPublicBase(): string {
+    // OJO: usar `||` y no `??`. docker-compose pasa API_URL=${API_URL:-},
+    // así que en el contenedor llega como string vacío (no undefined) cuando
+    // no está en el .env; con `??` el fallback a FRONTEND_URL nunca correría.
     const raw =
-      process.env.API_URL ??
-      process.env.APP_URL ??
-      (process.env.FRONTEND_URL ?? '').split(',')[0] ??
+      process.env.API_URL ||
+      process.env.APP_URL ||
+      (process.env.FRONTEND_URL ?? '').split(',')[0] ||
       '';
     const stripped = raw
       .trim()
