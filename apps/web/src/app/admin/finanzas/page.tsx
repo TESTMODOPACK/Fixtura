@@ -81,6 +81,73 @@ function formatCLP(n: number): string {
   return `$${n.toLocaleString('es-CL')}`;
 }
 
+const MESES_CUOTA = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+];
+
+/**
+ * Deriva el sub-grupo de una cuota para poder listarlas agrupadas por número
+ * de cuota (Cuota 1, Cuota 2, …) en vez de un único listado largo. El backend
+ * genera dos formatos de concepto:
+ *   - "Cuota N/M — …"        → agrupamos por el índice N.
+ *   - "Cuota <mes> <año> …"  → agrupamos por período (mes / semana / año).
+ * Si no calza ninguno (otra categoría, o cuota sin datos), devuelve null.
+ */
+function cuotaSubgrupo(
+  c: CobroAdmin,
+): { key: string; label: string; orden: number } | null {
+  if (c.categoria !== 'CUOTA') return null;
+  const m = /cuota\s+(\d+)\s*\/\s*(\d+)/i.exec(c.concepto);
+  if (m) {
+    const n = Number(m[1]);
+    const total = Number(m[2]);
+    return { key: `idx:${n}`, label: `Cuota ${n} de ${total}`, orden: n };
+  }
+  if (c.periodoMes && c.periodoAnio) {
+    return {
+      key: `mes:${c.periodoAnio}-${c.periodoMes}`,
+      label: `${MESES_CUOTA[c.periodoMes - 1] ?? `Mes ${c.periodoMes}`} ${c.periodoAnio}`,
+      orden: c.periodoAnio * 100 + c.periodoMes,
+    };
+  }
+  if (c.periodoSemana && c.periodoAnio) {
+    return {
+      key: `sem:${c.periodoAnio}-${c.periodoSemana}`,
+      label: `Semana ${c.periodoSemana} · ${c.periodoAnio}`,
+      orden: c.periodoAnio * 100 + c.periodoSemana,
+    };
+  }
+  return null;
+}
+
+/** Opciones del filtro "Cuota N°", ordenadas y con el conteo de cada una. */
+function cuotaOpcionesDe(
+  cobros: CobroAdmin[] | undefined,
+): Array<{ key: string; label: string; count: number }> {
+  const map = new Map<string, { label: string; orden: number; count: number }>();
+  for (const c of cobros ?? []) {
+    const sg = cuotaSubgrupo(c);
+    if (!sg) continue;
+    const cur = map.get(sg.key) ?? { label: sg.label, orden: sg.orden, count: 0 };
+    cur.count += 1;
+    map.set(sg.key, cur);
+  }
+  return [...map.entries()]
+    .sort((a, b) => a[1].orden - b[1].orden)
+    .map(([key, v]) => ({ key, label: v.label, count: v.count }));
+}
+
 type Tab = 'cobros' | 'boletas';
 
 export default function FinanzasPage(): React.ReactElement {
@@ -92,6 +159,8 @@ export default function FinanzasPage(): React.ReactElement {
   const [clubFiltro, setClubFiltro] = useState<string>('');
   const [soloAuto, setSoloAuto] = useState<'todos' | 'auto' | 'manual'>('todos');
   const [conceptoFiltro, setConceptoFiltro] = useState<string>('');
+  // Filtro client-side por número de cuota (la API no conoce el "1/10").
+  const [cuotaFiltro, setCuotaFiltro] = useState<string>('');
   const { data: cobros, isLoading, error } = useCobros({
     filtro: filtro === 'todos' ? undefined : filtro,
     torneoId: torneoFiltro || undefined,
@@ -101,8 +170,21 @@ export default function FinanzasPage(): React.ReactElement {
   });
   const apiError = error as ApiError | undefined;
 
+  // Opciones del selector de cuota se calculan sobre la lista completa (sin
+  // el filtro de cuota), para que el dropdown siempre liste todas.
+  const cuotaOpciones = useMemo(() => cuotaOpcionesDe(cobros), [cobros]);
+  // Ignorar un cuotaFiltro que ya no exista (p. ej. al cambiar de concepto).
+  const cuotaActiva = useMemo(
+    () => (cuotaFiltro && cuotaOpciones.some((o) => o.key === cuotaFiltro) ? cuotaFiltro : ''),
+    [cuotaFiltro, cuotaOpciones],
+  );
+  const cobrosVisibles = useMemo(() => {
+    if (!cuotaActiva) return cobros;
+    return (cobros ?? []).filter((c) => cuotaSubgrupo(c)?.key === cuotaActiva);
+  }, [cobros, cuotaActiva]);
+
   const stats = useMemo(() => {
-    const all = cobros ?? [];
+    const all = cobrosVisibles ?? [];
     const inicioMes = new Date();
     inicioMes.setDate(1);
     inicioMes.setHours(0, 0, 0, 0);
@@ -120,7 +202,7 @@ export default function FinanzasPage(): React.ReactElement {
       pendienteTotal,
       morosos,
     };
-  }, [cobros]);
+  }, [cobrosVisibles]);
 
   return (
     <>
@@ -151,7 +233,7 @@ export default function FinanzasPage(): React.ReactElement {
         <BoletasTab />
       ) : (
         <CobrosTab
-          cobros={cobros}
+          cobros={cobrosVisibles}
           stats={stats}
           isLoading={isLoading}
           apiError={apiError}
@@ -165,6 +247,9 @@ export default function FinanzasPage(): React.ReactElement {
           setSoloAuto={setSoloAuto}
           conceptoFiltro={conceptoFiltro}
           setConceptoFiltro={setConceptoFiltro}
+          cuotaFiltro={cuotaActiva}
+          setCuotaFiltro={setCuotaFiltro}
+          cuotaOpciones={cuotaOpciones}
           adding={adding}
           setAdding={setAdding}
         />
@@ -214,6 +299,9 @@ interface CobrosTabProps {
   setSoloAuto: React.Dispatch<React.SetStateAction<'todos' | 'auto' | 'manual'>>;
   conceptoFiltro: string;
   setConceptoFiltro: React.Dispatch<React.SetStateAction<string>>;
+  cuotaFiltro: string;
+  setCuotaFiltro: React.Dispatch<React.SetStateAction<string>>;
+  cuotaOpciones: Array<{ key: string; label: string; count: number }>;
   adding: boolean;
   setAdding: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -233,6 +321,9 @@ function CobrosTab({
   setSoloAuto,
   conceptoFiltro,
   setConceptoFiltro,
+  cuotaFiltro,
+  setCuotaFiltro,
+  cuotaOpciones,
   adding,
   setAdding,
 }: CobrosTabProps): React.ReactElement {
@@ -252,9 +343,25 @@ function CobrosTab({
     }));
   }, [cobros]);
 
-  // Lista agrupada por concepto, ordenada: las CUOTAS de menor a mayor
-  // (por club, año, mes); el resto por club + vencimiento.
+  // Lista agrupada por concepto. Las CUOTAS se sub-agrupan por número de
+  // cuota (Cuota 1, Cuota 2, …) para no ser un listado plano de 90 filas;
+  // cada sub-grupo va ordenado por club. El resto de categorías van planas,
+  // ordenadas por club + vencimiento.
   const grupos = useMemo(() => {
+    type SubGrupo = {
+      key: string;
+      label: string;
+      items: CobroAdmin[];
+      subtotal: number;
+    };
+    type Grupo = {
+      categoria: CategoriaCobro;
+      count: number;
+      subtotal: number;
+      subgrupos: SubGrupo[] | null;
+      items: CobroAdmin[] | null;
+    };
+
     const byCat = new Map<CategoriaCobro, CobroAdmin[]>();
     for (const c of cobros ?? []) {
       const arr = byCat.get(c.categoria) ?? [];
@@ -266,22 +373,55 @@ function CobrosTab({
         b.clubNombre ?? b.equipoNombre ?? '',
         'es',
       );
-    const cmpCuota = (a: CobroAdmin, b: CobroAdmin): number =>
-      cmpClub(a, b) ||
-      (a.periodoAnio ?? 0) - (b.periodoAnio ?? 0) ||
-      (a.periodoMes ?? 0) - (b.periodoMes ?? 0) ||
-      (a.periodoSemana ?? 0) - (b.periodoSemana ?? 0);
     const cmpOtros = (a: CobroAdmin, b: CobroAdmin): number =>
       cmpClub(a, b) || (a.vencimiento ?? '').localeCompare(b.vencimiento ?? '');
-    return CATEGORIA_COBRO.filter((cat) => byCat.has(cat)).map((cat) => {
-      const items = byCat
-        .get(cat)!
-        .slice()
-        .sort(cat === 'CUOTA' ? cmpCuota : cmpOtros);
+
+    return CATEGORIA_COBRO.filter((cat) => byCat.has(cat)).map((cat): Grupo => {
+      const lista = byCat.get(cat)!;
+      const subtotal = lista.reduce((acc, c) => acc + c.monto, 0);
+
+      if (cat === 'CUOTA') {
+        const bySub = new Map<
+          string,
+          { label: string; orden: number; items: CobroAdmin[] }
+        >();
+        const sinSub: CobroAdmin[] = [];
+        for (const c of lista) {
+          const sg = cuotaSubgrupo(c);
+          if (!sg) {
+            sinSub.push(c);
+            continue;
+          }
+          const cur =
+            bySub.get(sg.key) ?? { label: sg.label, orden: sg.orden, items: [] };
+          cur.items.push(c);
+          bySub.set(sg.key, cur);
+        }
+        const subgrupos: SubGrupo[] = [...bySub.entries()]
+          .sort((a, b) => a[1].orden - b[1].orden)
+          .map(([key, v]) => ({
+            key,
+            label: v.label,
+            items: v.items.slice().sort(cmpClub),
+            subtotal: v.items.reduce((acc, c) => acc + c.monto, 0),
+          }));
+        if (sinSub.length) {
+          subgrupos.push({
+            key: 'sin',
+            label: 'Otras cuotas',
+            items: sinSub.slice().sort(cmpOtros),
+            subtotal: sinSub.reduce((acc, c) => acc + c.monto, 0),
+          });
+        }
+        return { categoria: cat, count: lista.length, subtotal, subgrupos, items: null };
+      }
+
       return {
         categoria: cat,
-        items,
-        subtotal: items.reduce((acc, c) => acc + c.monto, 0),
+        count: lista.length,
+        subtotal,
+        subgrupos: null,
+        items: lista.slice().sort(cmpOtros),
       };
     });
   }, [cobros]);
@@ -363,7 +503,8 @@ function CobrosTab({
         </Card>
       )}
 
-      {/* Sprint 34E — selectores por torneo / club / origen. F51.1 — concepto. */}
+      {/* Sprint 34E — selectores por torneo / club / origen. F51.1 — concepto.
+          + filtro por número de cuota. */}
       <FiltrosAvanzados
         torneoFiltro={torneoFiltro}
         setTorneoFiltro={setTorneoFiltro}
@@ -373,6 +514,9 @@ function CobrosTab({
         setSoloAuto={setSoloAuto}
         conceptoFiltro={conceptoFiltro}
         setConceptoFiltro={setConceptoFiltro}
+        cuotaFiltro={cuotaFiltro}
+        setCuotaFiltro={setCuotaFiltro}
+        cuotaOpciones={cuotaOpciones}
       />
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -419,17 +563,40 @@ function CobrosTab({
                 <div className="px-5 py-2 bg-green-deep/5 border-y border-line flex items-center justify-between gap-3">
                   <span className="text-[11px] uppercase tracking-[0.18em] font-semibold text-green-deep">
                     {CATEGORIA_LABEL[g.categoria]}
-                    <span className="text-ink-mute font-normal"> · {g.items.length}</span>
+                    <span className="text-ink-mute font-normal"> · {g.count}</span>
                   </span>
                   <span className="text-xs font-semibold text-ink-mute">
                     {formatCLP(g.subtotal)}
                   </span>
                 </div>
-                <div className="divide-y divide-line">
-                  {g.items.map((c) => (
-                    <CobroRow key={c.id} cobro={c} />
-                  ))}
-                </div>
+                {g.subgrupos ? (
+                  g.subgrupos.map((sg) => (
+                    <div key={sg.key}>
+                      <div className="px-5 py-1.5 bg-paper/50 border-b border-line flex items-center justify-between gap-3">
+                        <span className="text-[11px] uppercase tracking-wider font-semibold text-ink">
+                          {sg.label}
+                          <span className="text-ink-mute font-normal">
+                            {' '}· {sg.items.length}
+                          </span>
+                        </span>
+                        <span className="text-[11px] font-semibold text-ink-mute">
+                          {formatCLP(sg.subtotal)}
+                        </span>
+                      </div>
+                      <div className="divide-y divide-line">
+                        {sg.items.map((c) => (
+                          <CobroRow key={c.id} cobro={c} />
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="divide-y divide-line">
+                    {g.items!.map((c) => (
+                      <CobroRow key={c.id} cobro={c} />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1096,6 +1263,9 @@ function FiltrosAvanzados({
   setSoloAuto,
   conceptoFiltro,
   setConceptoFiltro,
+  cuotaFiltro,
+  setCuotaFiltro,
+  cuotaOpciones,
 }: {
   torneoFiltro: string;
   setTorneoFiltro: React.Dispatch<React.SetStateAction<string>>;
@@ -1105,11 +1275,18 @@ function FiltrosAvanzados({
   setSoloAuto: React.Dispatch<React.SetStateAction<'todos' | 'auto' | 'manual'>>;
   conceptoFiltro: string;
   setConceptoFiltro: React.Dispatch<React.SetStateAction<string>>;
+  cuotaFiltro: string;
+  setCuotaFiltro: React.Dispatch<React.SetStateAction<string>>;
+  cuotaOpciones: Array<{ key: string; label: string; count: number }>;
 }): React.ReactElement {
   const { data: torneos } = useTorneos();
   const { data: clubes } = useClubes();
   const hayFiltro =
-    !!torneoFiltro || !!clubFiltro || soloAuto !== 'todos' || !!conceptoFiltro;
+    !!torneoFiltro ||
+    !!clubFiltro ||
+    soloAuto !== 'todos' ||
+    !!conceptoFiltro ||
+    !!cuotaFiltro;
 
   return (
     <div
@@ -1118,8 +1295,8 @@ function FiltrosAvanzados({
         hayFiltro ? 'border-accent/40 bg-accent/5' : 'border-line bg-paper/40',
       )}
     >
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto_auto] gap-3 items-end">
-        <div>
+      <div className="flex flex-col md:flex-row md:flex-wrap gap-3 md:items-end">
+        <div className="md:flex-1 md:min-w-[180px]">
           <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
             Torneo
           </label>
@@ -1136,7 +1313,7 @@ function FiltrosAvanzados({
             ))}
           </select>
         </div>
-        <div>
+        <div className="md:flex-1 md:min-w-[180px]">
           <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
             Club
           </label>
@@ -1153,12 +1330,12 @@ function FiltrosAvanzados({
             ))}
           </select>
         </div>
-        <div>
+        <div className="md:min-w-[150px]">
           <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
             Origen
           </label>
           <select
-            className="input"
+            className="input w-full"
             value={soloAuto}
             onChange={(e) =>
               setSoloAuto(e.target.value as 'todos' | 'auto' | 'manual')
@@ -1169,12 +1346,12 @@ function FiltrosAvanzados({
             <option value="manual">Solo manuales</option>
           </select>
         </div>
-        <div>
+        <div className="md:min-w-[150px]">
           <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
             Concepto
           </label>
           <select
-            className="input"
+            className="input w-full"
             value={conceptoFiltro}
             onChange={(e) => setConceptoFiltro(e.target.value)}
           >
@@ -1186,6 +1363,25 @@ function FiltrosAvanzados({
             ))}
           </select>
         </div>
+        {cuotaOpciones.length > 0 && (
+          <div className="md:min-w-[160px]">
+            <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
+              Cuota N°
+            </label>
+            <select
+              className="input w-full"
+              value={cuotaFiltro}
+              onChange={(e) => setCuotaFiltro(e.target.value)}
+            >
+              <option value="">Todas las cuotas</option>
+              {cuotaOpciones.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label} ({o.count})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {hayFiltro && (
           <Button
             variant="ghost"
@@ -1195,6 +1391,7 @@ function FiltrosAvanzados({
               setClubFiltro('');
               setSoloAuto('todos');
               setConceptoFiltro('');
+              setCuotaFiltro('');
             }}
             title="Limpiar filtros"
           >
