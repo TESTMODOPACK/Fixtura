@@ -1,7 +1,11 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { CompetitionModule } from '../../competition/competition.module';
+import { Tenant } from '../../tenants/entities/tenant.entity';
+import { User } from '../../users/entities/user.entity';
 import { SIIModule } from '../sii/sii.module';
+import { FlowProvider } from './flow-provider';
 import {
   PagosAdminController,
   PagosPublicController,
@@ -14,19 +18,20 @@ import {
 } from './webpay-provider';
 
 /**
- * Módulo de pagos. Selecciona el provider Webpay según `WEBPAY_MODE`:
+ * Módulo de pagos.
  *
- *   - mock (default)  → WebpayMockProvider (simula la pasarela)
- *   - sandbox|production → WebpayPlusProvider (Transbank SDK, no implementado)
- *
- * En cualquier modo, el `PagosService` orquesta el flujo Cobro →
- * Transacción → pasarela y mantiene la idempotencia.
+ * La pasarela activa se resuelve POR LIGA en runtime (PagosService lee
+ * tenants.pagos_config + credenciales cifradas). Flow es la integración
+ * real (FlowProvider, entorno global vía FLOW_MODE). El provider Webpay
+ * (mock por default vía WEBPAY_MODE) queda como fallback "modo prueba"
+ * para ligas sin pasarela configurada.
  */
 @Module({
-  imports: [CompetitionModule, SIIModule],
+  imports: [CompetitionModule, SIIModule, TypeOrmModule.forFeature([Tenant, User])],
   controllers: [PagosAdminController, PagosPublicController],
   providers: [
     PagosService,
+    FlowProvider,
     WebpayMockProvider,
     WebpayPlusProvider,
     {

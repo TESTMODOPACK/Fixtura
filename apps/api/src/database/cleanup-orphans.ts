@@ -1596,7 +1596,7 @@ async function ensureTransaccionesTable(
       monto               INTEGER NOT NULL CHECK (monto >= 0),
       pasarela            VARCHAR(30) NOT NULL
                             CHECK (pasarela IN (
-                              'WEBPAY','MERCADOPAGO','MACH','MOCK'
+                              'WEBPAY','MERCADOPAGO','MACH','FLOW','KHIPU','MOCK'
                             )),
       estado              VARCHAR(30) NOT NULL DEFAULT 'PENDIENTE'
                             CHECK (estado IN (
@@ -1638,6 +1638,24 @@ async function ensureTransaccionesTable(
   // La FK transacciones.factura_plataforma_id → facturas_plataforma(id) se
   // agrega en ensureFkTransaccionesFacturaPlataforma() — corre DESPUÉS de
   // crear ambas tablas para no depender del orden de invocación.
+
+  // Etapa 2 pagos — ampliar el CHECK de pasarela para admitir FLOW/KHIPU.
+  // Es aditivo (solo agrega valores permitidos, nunca toca datos) e
+  // idempotente: dropea el constraint con cualquiera de sus nombres
+  // conocidos y lo recrea con nombre estable.
+  await client.query(
+    `ALTER TABLE transacciones DROP CONSTRAINT IF EXISTS transacciones_pasarela_check`,
+  );
+  await client.query(
+    `ALTER TABLE transacciones DROP CONSTRAINT IF EXISTS chk_transacciones_pasarela`,
+  );
+  await client.query(`
+    ALTER TABLE transacciones
+      ADD CONSTRAINT chk_transacciones_pasarela
+      CHECK (pasarela IN ('WEBPAY','MERCADOPAGO','MACH','FLOW','KHIPU','MOCK'))
+  `);
+  log('transacciones.pasarela CHECK ampliado con FLOW/KHIPU (Etapa 2 pagos).');
+
   await ensureRls(client, 'transacciones');
   await client.query(
     `CREATE INDEX IF NOT EXISTS idx_transacciones_tenant ON transacciones(tenant_id)`,

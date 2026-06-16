@@ -921,15 +921,26 @@ function PagosTab({ settings }: { settings: TenantSettings }): React.ReactElemen
               )}
             </div>
 
-            <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-card">
-              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-              <span>
-                Estamos finalizando la integración del cobro online con Flow/Khipu.
-                Puedes dejar tu proveedor y credenciales configurados desde ya; el cobro
-                con tarjeta quedará operativo apenas terminemos la conexión. Mientras
-                tanto, la transferencia bancaria funciona sin problemas.
-              </span>
-            </div>
+            {pasarela.proveedor === 'KHIPU' ? (
+              <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-card">
+                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                <span>
+                  La integración de Khipu todavía está en preparación. Por ahora elige
+                  Flow para cobrar en línea (o usa transferencia). Puedes dejar Khipu
+                  preconfigurado.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 text-xs text-green-bright bg-green-bright/10 border border-green-bright/30 px-3 py-2 rounded-card">
+                <CheckCircle2 size={14} className="flex-shrink-0 mt-0.5" />
+                <span>
+                  Con Flow activo y tus credenciales cargadas, los clubes pagan con
+                  tarjeta y el cobro se marca pagado automáticamente. El dinero llega a
+                  tu cuenta Flow. No necesitas configurar nada más en Flow: la
+                  confirmación se conecta sola.
+                </span>
+              </div>
+            )}
           </div>
         )}
       </Card>

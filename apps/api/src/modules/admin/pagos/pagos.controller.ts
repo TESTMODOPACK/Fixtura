@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Logger,
   Param,
   ParseUUIDPipe,
   Post,
@@ -77,7 +78,34 @@ export class PagosAdminController {
 @Controller('public/pagos')
 @Public()
 export class PagosPublicController {
+  private readonly log = new Logger(PagosPublicController.name);
   constructor(private readonly svc: PagosService) {}
+
+  /**
+   * Webhook server-to-server de Flow (urlConfirmation). Flow POSTea el
+   * `token` (form-urlencoded) cuando el pago se resuelve. Confirmamos
+   * consultando getStatus. Siempre respondemos 200: si devolviéramos un
+   * error, Flow reintentaría en loop. Los problemas se loggean.
+   */
+  @Post('flow/confirmacion')
+  @Audited({ action: 'pago.webhook.flow', entityType: 'Transaccion' })
+  async flowConfirmacion(
+    @Body() body: { token?: string },
+  ): Promise<{ ok: boolean }> {
+    const token = typeof body?.token === 'string' ? body.token : null;
+    if (!token) {
+      this.log.warn('Webhook Flow sin token — ignorado.');
+      return { ok: false };
+    }
+    try {
+      await this.svc.confirmarPorToken(token);
+    } catch (err) {
+      this.log.error(
+        `Error procesando webhook Flow: ${(err as Error).message}`,
+      );
+    }
+    return { ok: true };
+  }
 
   /**
    * Confirma el pago consultando a la pasarela. Idempotente: si ya está

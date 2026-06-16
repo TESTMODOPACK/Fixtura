@@ -13,7 +13,13 @@ import { Tenant } from '../../tenants/entities/tenant.entity';
 import { User } from '../../users/entities/user.entity';
 import { Cobro } from './cobro.entity';
 
-export type PasarelaPago = 'WEBPAY' | 'MERCADOPAGO' | 'MACH' | 'MOCK';
+export type PasarelaPago =
+  | 'WEBPAY'
+  | 'MERCADOPAGO'
+  | 'MACH'
+  | 'FLOW'
+  | 'KHIPU'
+  | 'MOCK';
 
 export type EstadoTransaccion =
   | 'PENDIENTE'

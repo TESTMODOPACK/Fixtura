@@ -13,13 +13,22 @@ import { z } from 'zod';
  *   REVERSADO          → aprobada y luego revertida (conflicto/admin)
  */
 
-export const PASARELA_PAGO = ['WEBPAY', 'MERCADOPAGO', 'MACH', 'MOCK'] as const;
+export const PASARELA_PAGO = [
+  'WEBPAY',
+  'MERCADOPAGO',
+  'MACH',
+  'FLOW',
+  'KHIPU',
+  'MOCK',
+] as const;
 export type PasarelaPago = (typeof PASARELA_PAGO)[number];
 
 export const PASARELA_LABEL: Record<PasarelaPago, string> = {
   WEBPAY: 'Webpay',
   MERCADOPAGO: 'MercadoPago',
   MACH: 'MACH',
+  FLOW: 'Flow',
+  KHIPU: 'Khipu',
   MOCK: 'Modo prueba',
 };
 

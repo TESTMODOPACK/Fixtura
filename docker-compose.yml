@@ -120,6 +120,12 @@ services:
       # Generar con: openssl rand -base64 32. Sin esto, no se pueden guardar
       # las llaves de Flow/Khipu (pero transferencia manual funciona igual).
       PAGOS_ENC_KEY: ${PAGOS_ENC_KEY:-}
+      # Base pública del API — la usa el PagosService para armar la URL del
+      # webhook de Flow (urlConfirmation). En prod = https://www.ligaplus.cl/api.
+      API_URL: ${API_URL:-}
+      # Entorno de Flow para TODAS las ligas: sandbox (default) | production.
+      # Las credenciales que cargue cada liga deben ser del mismo entorno.
+      FLOW_MODE: ${FLOW_MODE:-sandbox}
       DB_POOL_MAX: ${DB_POOL_MAX:-20}
       DB_POOL_MIN: ${DB_POOL_MIN:-2}
       LOG_LEVEL: ${LOG_LEVEL:-info}

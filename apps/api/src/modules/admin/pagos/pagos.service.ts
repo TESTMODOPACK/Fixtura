@@ -11,37 +11,50 @@ import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
-import type { ConfirmarPagoResponse, IniciarPagoResponse } from '@fixtura/types';
+import type {
+  ConfirmarPagoResponse,
+  IniciarPagoResponse,
+  MetodoPago,
+  PagosConfig,
+} from '@fixtura/types';
 
+import { descifrarSecreto } from '../../../common/crypto/secret-box';
 import { Cobro } from '../../competition/entities/cobro.entity';
-import { Transaccion } from '../../competition/entities/transaccion.entity';
+import {
+  PasarelaPago,
+  Transaccion,
+} from '../../competition/entities/transaccion.entity';
+import { Tenant } from '../../tenants/entities/tenant.entity';
+import { User } from '../../users/entities/user.entity';
 import { SIIService } from '../sii/sii.service';
+import { FlowCredenciales, FlowProvider } from './flow-provider';
 import { WEBPAY_PROVIDER, WebpayProvider } from './webpay-provider';
+
+/** Resultado normalizado de consultar una pasarela por el estado de un pago. */
+interface ResultadoConfirmacion {
+  estado: 'APROBADO' | 'RECHAZADO' | 'PENDIENTE';
+  authorizationCode: string | null;
+  raw: Record<string, unknown>;
+}
 
 /**
  * Servicio de pagos: orquesta el flujo Cobro → Transaccion → pasarela.
  *
- * Flujo end-to-end (Webpay):
- *  1. iniciarPago(cobroId)
- *     - Valida cobro no pagado / no cancelado
- *     - Crea transaccion PENDIENTE con idempotency_key
- *     - Llama webpayProvider.iniciarPago() → token + url
- *     - Actualiza transaccion: estado=PAGO_EN_TRANSITO, token, url
- *     - Devuelve { transaccionId, urlRedireccion, token, modoMock }
+ * La pasarela se resuelve POR LIGA (Etapa 2): cada tenant configura en
+ * Ajustes → Pagos si cobra con Flow (credenciales propias cifradas) o no.
+ * Si no hay pasarela configurada, cae al provider mock (modo prueba), que
+ * preserva el flujo histórico sin cobrar de verdad.
  *
- *  2. El user va a la URL, completa el pago en Webpay (o lo simulamos
- *     en MOCK), Webpay lo redirige a `urlRetorno` con el token.
- *
- *  3. confirmarPago(token)
- *     - Busca transaccion por token
- *     - Llama webpayProvider.confirmarPago() → aprobado/rechazado
- *     - Si APROBADO: marca transaccion APROBADO + actualiza Cobro
- *       (pagado_at, pagado_metodo='WEBPAY', referencia=transaccion.id)
- *     - Si RECHAZADO: marca transaccion RECHAZADO
- *     - Devuelve estado final al frontend
- *
- * Idempotencia: si `confirmarPago` se llama dos veces con el mismo token,
- * la segunda devuelve el estado ya guardado sin volver a tocar el Cobro.
+ * Flujo end-to-end (Flow):
+ *  1. iniciarPago(cobroId) → crea transaccion, llama flow.crearPago()
+ *     con urlConfirmation (webhook server-to-server) + urlReturn (navegador),
+ *     guarda token + url, devuelve la URL a la que redirigir al pagador.
+ *  2. El pagador paga en Flow. Flow:
+ *       - POSTea `token` a urlConfirmation (webhook) → confirmarPorToken().
+ *       - redirige el navegador a urlReturn/{txId} → la página llama a
+ *         /public/pagos/{txId}/confirmar (confirmarPago()).
+ *     Ambos caminos consultan getStatus y convergen en confirmarTx() —
+ *     idempotente, el que llegue primero marca el cobro pagado.
  */
 @Injectable()
 export class PagosService {
@@ -55,8 +68,13 @@ export class PagosService {
     private readonly txRepo: Repository<Transaccion>,
     @InjectRepository(Cobro)
     private readonly cobroRepo: Repository<Cobro>,
+    @InjectRepository(Tenant)
+    private readonly tenantRepo: Repository<Tenant>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     @Inject(WEBPAY_PROVIDER)
     private readonly webpay: WebpayProvider,
+    private readonly flow: FlowProvider,
     private readonly sii: SIIService,
   ) {}
 
@@ -103,12 +121,14 @@ export class PagosService {
         transaccionId: txVigente.id,
         urlRedireccion: txVigente.urlRedireccion,
         token: txVigente.tokenPasarela,
-        modoMock: this.webpay.nombre === 'MOCK',
+        modoMock: txVigente.pasarela === 'MOCK',
       };
     }
 
+    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    const pasarela = this.resolverPasarela(tenant);
+
     const idempotencyKey = `cobro-${cobroId}-${randomUUID()}`;
-    const ordenCompra = `FIX-${cobroId.slice(0, 8)}-${Date.now()}`;
     const expiraAt = new Date(
       Date.now() + PagosService.TTL_TRANSACCION_MIN * 60 * 1000,
     );
@@ -119,7 +139,12 @@ export class PagosService {
       tenantId,
       cobroId: cobro.id,
       monto: cobro.monto,
-      pasarela: this.webpay.nombre,
+      pasarela:
+        pasarela.tipo === 'FLOW'
+          ? 'FLOW'
+          : pasarela.tipo === 'KHIPU'
+            ? 'KHIPU'
+            : this.webpay.nombre,
       estado: 'PENDIENTE',
       idempotencyKey,
       userPagadorId: actorUserId,
@@ -128,15 +153,44 @@ export class PagosService {
     tx = await this.txRepo.save(tx);
 
     try {
-      const sessionId = `tx-${tx.id}`;
       const urlRetorno = `${urlRetornoBase.replace(/\/$/, '')}/${tx.id}`;
+
+      if (pasarela.tipo === 'KHIPU') {
+        throw new Error(
+          'Khipu todavía no está integrado. Usa Flow o transferencia por ahora.',
+        );
+      }
+
+      if (pasarela.tipo === 'FLOW') {
+        const email = await this.emailPagador(actorUserId, tenant);
+        const result = await this.flow.crearPago(pasarela.creds, {
+          monto: cobro.monto,
+          comercioOrden: tx.id,
+          asunto: cobro.concepto,
+          email,
+          urlConfirmation: `${this.apiPublicBase()}/public/pagos/flow/confirmacion`,
+          urlRetorno,
+        });
+        tx.estado = 'PAGO_EN_TRANSITO';
+        tx.tokenPasarela = result.token;
+        tx.urlRedireccion = result.url;
+        tx.respuestaPasarela = result.raw;
+        await this.txRepo.save(tx);
+        return {
+          transaccionId: tx.id,
+          urlRedireccion: tx.urlRedireccion!,
+          token: tx.tokenPasarela!,
+          modoMock: false,
+        };
+      }
+
+      // MOCK / WEBPAY (provider global seleccionado por WEBPAY_MODE).
       const result = await this.webpay.iniciarPago({
         monto: cobro.monto,
-        ordenCompra,
-        sessionId,
+        ordenCompra: tx.id,
+        sessionId: `tx-${tx.id}`,
         urlRetorno,
       });
-
       tx.estado = 'PAGO_EN_TRANSITO';
       tx.tokenPasarela = result.token;
       tx.urlRedireccion = result.url;
@@ -162,9 +216,8 @@ export class PagosService {
   }
 
   /**
-   * Confirma una transaccion contra la pasarela. Idempotente — si ya
-   * está en estado final (APROBADO/RECHAZADO/EXPIRADO/REVERSADO),
-   * devuelve el estado guardado sin volver a llamar al provider.
+   * Confirma una transaccion contra la pasarela (camino del retorno del
+   * navegador). Idempotente.
    */
   @Transactional()
   async confirmarPago(transaccionId: string): Promise<ConfirmarPagoResponse> {
@@ -173,15 +226,42 @@ export class PagosService {
       relations: { cobro: true },
     });
     if (!tx) throw new NotFoundException(`Transacción ${transaccionId} no encontrada`);
+    return this.confirmarTx(tx);
+  }
 
-    // Idempotencia: si ya está en estado final, no volver a procesar.
+  /**
+   * Confirma por token de pasarela — usado por el webhook de Flow
+   * (urlConfirmation). Flow nos manda el token; buscamos la transacción y
+   * consultamos getStatus. No lanza si no encuentra la transacción (un
+   * webhook que falla con 4xx/5xx hace que Flow reintente en loop).
+   */
+  @Transactional()
+  async confirmarPorToken(token: string): Promise<void> {
+    const tx = await this.txRepo.findOne({
+      where: { tokenPasarela: token },
+      relations: { cobro: true },
+      order: { createdAt: 'DESC' },
+    });
+    if (!tx) {
+      this.log.warn(
+        `Webhook con token desconocido ${token.slice(0, 12)}… — ignorado.`,
+      );
+      return;
+    }
+    await this.confirmarTx(tx);
+  }
+
+  /**
+   * Lógica compartida de confirmación. Idempotente: si la transacción ya
+   * está en estado final, devuelve el estado guardado sin volver a llamar
+   * a la pasarela.
+   */
+  private async confirmarTx(tx: Transaccion): Promise<ConfirmarPagoResponse> {
     const estadosFinales = ['APROBADO', 'RECHAZADO', 'EXPIRADO', 'REVERSADO'];
     if (estadosFinales.includes(tx.estado)) {
       return this.toConfirmResponse(tx);
     }
 
-    // Verificar expiración antes de consultar al provider — ahorra una
-    // llamada externa si ya pasó el TTL.
     if (tx.expiraAt.getTime() < Date.now()) {
       tx.estado = 'EXPIRADO';
       tx.notas = (tx.notas ?? '') + '\nExpiró antes de confirmación.';
@@ -196,42 +276,44 @@ export class PagosService {
     }
 
     try {
-      const result = await this.webpay.confirmarPago(tx.tokenPasarela);
+      const result = await this.consultarPasarela(tx);
 
       tx.respuestaPasarela = {
         ...(tx.respuestaPasarela ?? {}),
         confirmacion: result.raw,
       };
 
-      if (result.aprobado) {
+      if (result.estado === 'PENDIENTE') {
+        // Flow todavía no resolvió. No tocamos el cobro; el otro camino
+        // (webhook o retorno) o un reintento lo confirmará.
+        await this.txRepo.save(tx);
+        return this.toConfirmResponse(tx);
+      }
+
+      if (result.estado === 'APROBADO') {
         tx.estado = 'APROBADO';
         tx.pagadoAt = new Date();
         await this.txRepo.save(tx);
 
-        // Sincronizar el Cobro asociado: marcarlo como pagado con la
-        // pasarela correspondiente. La referencia apunta a la transaccion
-        // para trazabilidad.
         if (tx.cobroId) {
           const cobro = await this.cobroRepo.findOne({
             where: { id: tx.cobroId, tenantId: tx.tenantId },
           });
           if (cobro && !cobro.pagadoAt) {
             cobro.pagadoAt = tx.pagadoAt;
-            cobro.pagadoMetodo =
-              tx.pasarela === 'MOCK' ? 'OTRO' : (tx.pasarela as 'WEBPAY' | 'MERCADOPAGO');
+            cobro.pagadoMetodo = this.metodoDePasarela(tx.pasarela);
             cobro.pagadoReferencia = `tx:${tx.id}${
               result.authorizationCode ? ` auth:${result.authorizationCode}` : ''
             }`;
             await this.cobroRepo.save(cobro);
             this.log.log(
-              `Pago aprobado: tx=${tx.id} cobro=${cobro.id} monto=${tx.monto}`,
+              `Pago aprobado: tx=${tx.id} cobro=${cobro.id} monto=${tx.monto} via=${tx.pasarela}`,
             );
           }
         }
 
-        // Disparar emisión SII en background. NO await — si Open Factura
-        // está caído, el cron lo va a reintentar más tarde. El user no
-        // espera por esto.
+        // Disparar emisión SII en background. NO await — si el proveedor
+        // está caído, el cron lo reintenta. El user no espera por esto.
         void this.sii
           .crearYEmitirAsync(tx.id)
           .catch((err) =>
@@ -242,7 +324,7 @@ export class PagosService {
       } else {
         tx.estado = 'RECHAZADO';
         await this.txRepo.save(tx);
-        this.log.warn(`Pago rechazado: tx=${tx.id}`);
+        this.log.warn(`Pago rechazado: tx=${tx.id} via=${tx.pasarela}`);
       }
 
       return this.toConfirmResponse(tx);
@@ -253,6 +335,115 @@ export class PagosService {
         `Error confirmando el pago: ${(err as Error).message}`,
       );
     }
+  }
+
+  /** Consulta a la pasarela según el tipo de la transacción. */
+  private async consultarPasarela(
+    tx: Transaccion,
+  ): Promise<ResultadoConfirmacion> {
+    const token = tx.tokenPasarela!;
+
+    if (tx.pasarela === 'FLOW') {
+      const tenant = await this.tenantRepo.findOne({
+        where: { id: tx.tenantId },
+      });
+      const creds = this.leerCredsFlow(tenant);
+      if (!creds) {
+        throw new Error(
+          'No se encontraron las credenciales de Flow de la liga para confirmar el pago.',
+        );
+      }
+      const r = await this.flow.obtenerEstado(creds, token);
+      return { estado: r.estado, authorizationCode: null, raw: r.raw };
+    }
+
+    if (tx.pasarela === 'KHIPU') {
+      throw new Error('Khipu todavía no está integrado.');
+    }
+
+    // MOCK / WEBPAY
+    const r = await this.webpay.confirmarPago(token);
+    return {
+      estado: r.aprobado ? 'APROBADO' : 'RECHAZADO',
+      authorizationCode: r.authorizationCode,
+      raw: r.raw,
+    };
+  }
+
+  // ─── Resolución de pasarela por liga ─────────────────────────────────
+  private resolverPasarela(
+    tenant: Tenant | null,
+  ): { tipo: 'FLOW'; creds: FlowCredenciales } | { tipo: 'KHIPU' } | { tipo: 'MOCK' } {
+    const cfg = (tenant?.pagosConfig ?? {}) as Partial<PagosConfig>;
+    const pasarela = cfg.pasarela;
+    if (pasarela?.habilitada && pasarela.proveedor === 'FLOW') {
+      const creds = this.leerCredsFlow(tenant);
+      if (!creds) {
+        throw new BadRequestException(
+          'La pasarela Flow está activa pero faltan las credenciales. Cárgalas en Ajustes → Pagos.',
+        );
+      }
+      return { tipo: 'FLOW', creds };
+    }
+    if (pasarela?.habilitada && pasarela.proveedor === 'KHIPU') {
+      return { tipo: 'KHIPU' };
+    }
+    return { tipo: 'MOCK' };
+  }
+
+  private leerCredsFlow(tenant: Tenant | null): FlowCredenciales | null {
+    if (!tenant?.pagosSecretosEnc) return null;
+    const json = descifrarSecreto(tenant.pagosSecretosEnc);
+    if (!json) return null;
+    try {
+      const parsed = JSON.parse(json) as {
+        flowApiKey?: string;
+        flowSecretKey?: string;
+      };
+      if (parsed.flowApiKey && parsed.flowSecretKey) {
+        return { apiKey: parsed.flowApiKey, secretKey: parsed.flowSecretKey };
+      }
+    } catch {
+      /* blob corrupto o de otro proveedor */
+    }
+    return null;
+  }
+
+  /** El cobro tiene un CHECK que solo admite estos métodos. */
+  private metodoDePasarela(pasarela: PasarelaPago): MetodoPago {
+    if (pasarela === 'WEBPAY') return 'WEBPAY';
+    if (pasarela === 'MERCADOPAGO') return 'MERCADOPAGO';
+    return 'OTRO';
+  }
+
+  private async emailPagador(
+    actorUserId: string | null,
+    tenant: Tenant | null,
+  ): Promise<string> {
+    if (actorUserId) {
+      const u = await this.userRepo.findOne({ where: { id: actorUserId } });
+      if (u?.email) return u.email;
+    }
+    const branding = (tenant?.brandingJson ?? {}) as { emailContacto?: string };
+    if (branding.emailContacto && branding.emailContacto.includes('@')) {
+      return branding.emailContacto;
+    }
+    return 'no-reply@ligaplus.cl';
+  }
+
+  /** Base pública del API (https://dominio/api/v1) para armar el webhook. */
+  private apiPublicBase(): string {
+    const raw =
+      process.env.API_URL ??
+      process.env.APP_URL ??
+      (process.env.FRONTEND_URL ?? '').split(',')[0] ??
+      '';
+    const stripped = raw
+      .trim()
+      .replace(/\/+$/, '')
+      .replace(/\/api\/v1$/, '')
+      .replace(/\/api$/, '');
+    return `${stripped}/api/v1`;
   }
 
   /**
@@ -269,9 +460,7 @@ export class PagosService {
 
   /**
    * Versión pública — el endpoint corre con RLS en bypass (tenant_id='').
-   * El "auth" es el UUID no enumerable de la transacción. No filtramos
-   * por tenantId porque el usuario que vuelve de Webpay no lo tiene en
-   * contexto.
+   * El "auth" es el UUID no enumerable de la transacción.
    */
   async findOnePublic(transaccionId: string): Promise<Transaccion> {
     const tx = await this.txRepo.findOne({
