@@ -3,6 +3,7 @@
 import {
   BarChart3,
   CalendarDays,
+  Gavel,
   LayoutDashboard,
   type LucideIcon,
   PiggyBank,
@@ -30,6 +31,7 @@ const NAV: NavItem[] = [
   { href: '/club/partidos', label: 'Partidos', icon: CalendarDays },
   { href: '/club/estadisticas', label: 'Estadísticas', icon: BarChart3 },
   { href: '/club/finanzas', label: 'Pagos y deudas', icon: PiggyBank },
+  { href: '/club/disciplina', label: 'Sanciones', icon: Gavel },
 ];
 
 export default function ClubLayout({

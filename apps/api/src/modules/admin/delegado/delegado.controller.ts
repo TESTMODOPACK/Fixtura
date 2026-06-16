@@ -21,6 +21,7 @@ import {
   type PartidoDelegado,
   type PlantelCategoriaDelegado,
   type ResumenDelegado,
+  type SancionVigente,
   type UserContext,
 } from '@fixtura/types';
 
@@ -79,6 +80,11 @@ export class DelegadoController {
   @Get('finanzas')
   finanzas(@CurrentUser() user: UserContext): Promise<FinanzasDelegado> {
     return this.portal.finanzas(resolveClubId(user), resolveTenantId(user));
+  }
+
+  @Get('disciplina/sancionados')
+  misSancionados(@CurrentUser() user: UserContext): Promise<SancionVigente[]> {
+    return this.portal.misSancionados(resolveClubId(user), resolveTenantId(user));
   }
 
   @Post('cobros/:cobroId/pagar')

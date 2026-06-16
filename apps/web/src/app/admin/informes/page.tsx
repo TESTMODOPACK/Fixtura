@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Download, Gavel, ShieldAlert, UserX } from 'lucide-react';
+import { AlertTriangle, Download, FileText, Gavel, ShieldAlert, UserX } from 'lucide-react';
 import { useState } from 'react';
 
 import type {
@@ -13,6 +13,8 @@ import type {
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
+import { API_URL } from '@/lib/api';
+import { useAuthStore } from '@/store/auth-store';
 import {
   useClubes,
   useInformeEnRiesgo,
@@ -51,6 +53,22 @@ async function exportarExcel(
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, hoja);
   XLSX.writeFile(wb, nombreArchivo);
+}
+
+/** Descarga un PDF autenticado (el endpoint exige Bearer) vía blob. */
+async function descargarPdf(path: string, filename: string): Promise<void> {
+  const token = useAuthStore.getState().accessToken;
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function MultaBadge({
@@ -248,6 +266,19 @@ function BotonExcel({ onClick, disabled }: { onClick: () => void; disabled: bool
   );
 }
 
+function BotonPdf({ path, filename, disabled }: { path: string; filename: string; disabled: boolean }) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={() => void descargarPdf(path, filename)}
+      disabled={disabled}
+    >
+      <FileText size={14} /> PDF
+    </Button>
+  );
+}
+
 // ─── Vista: expulsados por fecha ─────────────────────────────────────
 function ExpulsadosView({
   torneoId,
@@ -282,7 +313,16 @@ function ExpulsadosView({
     <Card padding="none" className="overflow-hidden">
       <div className="px-5 py-3 flex items-center justify-between border-b border-line">
         <CardLabel>Expulsados {fechaNumero ? `· fecha ${fechaNumero}` : '· todas las fechas'}</CardLabel>
-        <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+        <div className="flex items-center gap-1">
+          <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+          <BotonPdf
+            path={`/admin/informes/disciplina/expulsados.pdf?torneoId=${torneoId}${
+              fechaNumero ? `&fechaNumero=${fechaNumero}` : ''
+            }`}
+            filename={`expulsados${fechaNumero ? `-fecha-${fechaNumero}` : ''}.pdf`}
+            disabled={filas.length === 0}
+          />
+        </div>
       </div>
       {isLoading && <Vacio texto="Cargando…" />}
       {error && <ErrorBox />}
@@ -373,7 +413,18 @@ function SancionadosView({
     <Card padding="none" className="overflow-hidden">
       <div className="px-5 py-3 flex items-center justify-between border-b border-line">
         <CardLabel>Sancionados</CardLabel>
-        <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+        <div className="flex items-center gap-1">
+          <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+          <BotonPdf
+            path={`/admin/informes/disciplina/sancionados.pdf?${new URLSearchParams({
+              ...(torneoId ? { torneoId } : {}),
+              ...(clubId ? { clubId } : {}),
+              ...(incluirCumplidas ? { incluirCumplidas: 'true' } : {}),
+            }).toString()}`}
+            filename="sancionados.pdf"
+            disabled={filas.length === 0}
+          />
+        </div>
       </div>
       {isLoading && <Vacio texto="Cargando…" />}
       {error && <ErrorBox />}
@@ -455,7 +506,14 @@ function EnRiesgoView({ torneoId }: { torneoId: string }): React.ReactElement {
     <Card padding="none" className="overflow-hidden">
       <div className="px-5 py-3 flex items-center justify-between border-b border-line">
         <CardLabel>A una amarilla de la suspensión (acumulación cada 5)</CardLabel>
-        <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+        <div className="flex items-center gap-1">
+          <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+          <BotonPdf
+            path={`/admin/informes/disciplina/en-riesgo.pdf?torneoId=${torneoId}`}
+            filename="en-riesgo.pdf"
+            disabled={filas.length === 0}
+          />
+        </div>
       </div>
       {isLoading && <Vacio texto="Cargando…" />}
       {error && <ErrorBox />}

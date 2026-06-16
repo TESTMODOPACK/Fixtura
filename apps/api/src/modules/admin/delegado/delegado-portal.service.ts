@@ -12,6 +12,7 @@ import type {
   PlantelCategoriaDelegado,
   ResumenDelegado,
   SancionDelegado,
+  SancionVigente,
 } from '@fixtura/types';
 
 import { Club } from '../../competition/entities/club.entity';
@@ -22,6 +23,7 @@ import { Jugador } from '../../competition/entities/jugador.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { CobrosAdminService } from '../cobros/cobros-admin.service';
+import { InformesAdminService } from '../informes/informes-admin.service';
 import { PagosService } from '../pagos/pagos.service';
 
 /** Estados de partido que cuentan como "jugado" para estadísticas. */
@@ -41,7 +43,14 @@ export class DelegadoPortalService {
     @InjectRepository(Cobro) private readonly cobroRepo: Repository<Cobro>,
     private readonly cobros: CobrosAdminService,
     private readonly pagos: PagosService,
+    private readonly informes: InformesAdminService,
   ) {}
+
+  // ─── Disciplina (acotada al club) ────────────────────────────────────
+  /** Sancionados del club: fechas cumplidas/pendientes, cuándo vuelven, multa. */
+  misSancionados(clubId: string, tenantId: string): Promise<SancionVigente[]> {
+    return this.informes.sancionadosVigentes(tenantId, undefined, clubId, false);
+  }
 
   // ─── Mi club ───────────────────────────────────────────────────────
   async miClub(clubId: string, tenantId: string): Promise<MiClubDelegado> {

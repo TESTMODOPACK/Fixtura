@@ -14,6 +14,7 @@ import type {
   PartidoDelegado,
   PlantelCategoriaDelegado,
   ResumenDelegado,
+  SancionVigente,
 } from '@fixtura/types';
 
 import { apiFetch } from '@/lib/api';
@@ -46,6 +47,14 @@ export function useDelegadoPartidos() {
   return useQuery({
     queryKey: ['delegado', 'partidos'],
     queryFn: () => apiFetch<PartidoDelegado[]>('/delegado/partidos'),
+  });
+}
+
+export function useDelegadoSancionados() {
+  return useQuery({
+    queryKey: ['delegado', 'disciplina', 'sancionados'],
+    queryFn: () =>
+      apiFetch<SancionVigente[]>('/delegado/disciplina/sancionados'),
   });
 }
 
