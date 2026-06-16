@@ -5,6 +5,8 @@ import {
   AlertTriangle,
   Bell,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Coins,
   DollarSign,
   Download,
@@ -112,7 +114,9 @@ function cuotaSubgrupo(
   if (m) {
     const n = Number(m[1]);
     const total = Number(m[2]);
-    return { key: `idx:${n}`, label: `Cuota ${n} de ${total}`, orden: n };
+    // La clave incluye el total: "Cuota 1 de 8" y "Cuota 1 de 10" (torneos
+    // con distinta cantidad de cuotas) son sub-grupos distintos.
+    return { key: `idx:${n}/${total}`, label: `Cuota ${n} de ${total}`, orden: n * 1000 + total };
   }
   if (c.periodoMes && c.periodoAnio) {
     return {
@@ -327,6 +331,19 @@ function CobrosTab({
   adding,
   setAdding,
 }: CobrosTabProps): React.ReactElement {
+  // Sub-grupos de cuota expandidos (colapsados por default para que el
+  // listado sea compacto). Un sub-grupo se ve abierto si está acá, si es el
+  // único del grupo, o si "expandir todo" está activo.
+  const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
+  const [expandirTodo, setExpandirTodo] = useState(false);
+  const toggleSub = (key: string): void =>
+    setExpandidos((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
   // Desglose por concepto de cobro (sobre la lista actualmente visible, que
   // por default son los pendientes): count + monto por categoría.
   const desglose = useMemo(() => {
@@ -558,47 +575,78 @@ function CobrosTab({
         )}
         {!isLoading && cobros && cobros.length > 0 && (
           <div>
-            {grupos.map((g) => (
-              <div key={g.categoria}>
-                <div className="px-5 py-2 bg-green-deep/5 border-y border-line flex items-center justify-between gap-3">
-                  <span className="text-[11px] uppercase tracking-[0.18em] font-semibold text-green-deep">
-                    {CATEGORIA_LABEL[g.categoria]}
-                    <span className="text-ink-mute font-normal"> · {g.count}</span>
-                  </span>
-                  <span className="text-xs font-semibold text-ink-mute">
-                    {formatCLP(g.subtotal)}
-                  </span>
-                </div>
-                {g.subgrupos ? (
-                  g.subgrupos.map((sg) => (
-                    <div key={sg.key}>
-                      <div className="px-5 py-1.5 bg-paper/50 border-b border-line flex items-center justify-between gap-3">
-                        <span className="text-[11px] uppercase tracking-wider font-semibold text-ink">
-                          {sg.label}
-                          <span className="text-ink-mute font-normal">
-                            {' '}· {sg.items.length}
-                          </span>
-                        </span>
-                        <span className="text-[11px] font-semibold text-ink-mute">
-                          {formatCLP(sg.subtotal)}
-                        </span>
-                      </div>
-                      <div className="divide-y divide-line">
-                        {sg.items.map((c) => (
-                          <CobroRow key={c.id} cobro={c} />
-                        ))}
-                      </div>
+            {grupos.map((g) => {
+              const colapsables = !!g.subgrupos && g.subgrupos.length > 1;
+              return (
+                <div key={g.categoria}>
+                  <div className="px-5 py-2 bg-green-deep/5 border-y border-line flex items-center justify-between gap-3">
+                    <span className="text-[11px] uppercase tracking-[0.18em] font-semibold text-green-deep">
+                      {CATEGORIA_LABEL[g.categoria]}
+                      <span className="text-ink-mute font-normal"> · {g.count}</span>
+                    </span>
+                    <div className="flex items-center gap-3">
+                      {colapsables && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandirTodo((v) => !v)}
+                          className="text-[10px] uppercase tracking-wider font-semibold text-accent hover:underline"
+                        >
+                          {expandirTodo ? 'Colapsar todo' : 'Expandir todo'}
+                        </button>
+                      )}
+                      <span className="text-xs font-semibold text-ink-mute">
+                        {formatCLP(g.subtotal)}
+                      </span>
                     </div>
-                  ))
-                ) : (
-                  <div className="divide-y divide-line">
-                    {g.items!.map((c) => (
-                      <CobroRow key={c.id} cobro={c} />
-                    ))}
                   </div>
-                )}
-              </div>
-            ))}
+                  {g.subgrupos ? (
+                    g.subgrupos.map((sg) => {
+                      const abierto =
+                        expandirTodo ||
+                        expandidos.has(sg.key) ||
+                        g.subgrupos!.length === 1;
+                      return (
+                        <div key={sg.key}>
+                          <button
+                            type="button"
+                            onClick={() => toggleSub(sg.key)}
+                            className="w-full px-5 py-2 bg-paper/50 border-b border-line flex items-center justify-between gap-3 hover:bg-paper transition-colors text-left"
+                          >
+                            <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-semibold text-ink">
+                              {abierto ? (
+                                <ChevronDown size={14} className="text-ink-mute" />
+                              ) : (
+                                <ChevronRight size={14} className="text-ink-mute" />
+                              )}
+                              {sg.label}
+                              <span className="text-ink-mute font-normal">
+                                {' '}· {sg.items.length}
+                              </span>
+                            </span>
+                            <span className="text-[11px] font-semibold text-ink-mute">
+                              {formatCLP(sg.subtotal)}
+                            </span>
+                          </button>
+                          {abierto && (
+                            <div className="divide-y divide-line">
+                              {sg.items.map((c) => (
+                                <CobroRow key={c.id} cobro={c} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="divide-y divide-line">
+                      {g.items!.map((c) => (
+                        <CobroRow key={c.id} cobro={c} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>
