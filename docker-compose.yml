@@ -171,7 +171,11 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${API_URL:-https://www.ligaplus.cl/api}
+        # RELATIVA a propósito (/api). El front llama a la API del MISMO host
+        # por el que entró el navegador → sin CORS y con el tenant correcto
+        # resuelto por Host. Una URL absoluta (https://www.ligaplus.cl/api)
+        # rompe el acceso por IP y por subdominios de liga (multi-tenant).
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
         GIT_SHA: ${GIT_SHA:-unknown}
     container_name: fixtura_web
     restart: unless-stopped
@@ -183,7 +187,7 @@ services:
       - api
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${API_URL:-https://www.ligaplus.cl/api}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     # No exponemos 3001 al host — nginx hace el proxy desde 80/443.
     # ports:
     #   - "127.0.0.1:3001:3001"
