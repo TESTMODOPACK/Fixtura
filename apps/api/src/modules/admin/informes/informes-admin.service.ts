@@ -731,14 +731,14 @@ export class InformesAdminService {
       .addSelect('cv.nombre', 'visitaNombre')
       .addSelect('p.fecha_hora', 'fechaHora')
       .addSelect('ca.nombre', 'canchaNombre')
-      .addSelect(`pe.nombres || ' ' || pe.apellidos`, 'personalNombre')
+      .addSelect(`pe.nombre || ' ' || pe.apellido`, 'personalNombre')
       .addSelect('pe.rut', 'rut')
       .addSelect('d.rol_asignado', 'rol')
       .addSelect('d.estado', 'estado')
       .addSelect('d.monto_pago', 'monto')
       .orderBy('f.numero', 'ASC')
       .addOrderBy('p.fecha_hora', 'ASC')
-      .addOrderBy('pe.apellidos', 'ASC')
+      .addOrderBy('pe.apellido', 'ASC')
       .getRawMany<{
         designacionId: string;
         fechaNumero: number;
@@ -880,7 +880,7 @@ export class InformesAdminService {
 
     const rows = await qb
       .select('pe.id', 'personalId')
-      .addSelect(`pe.nombres || ' ' || pe.apellidos`, 'personalNombre')
+      .addSelect(`pe.nombre || ' ' || pe.apellido`, 'personalNombre')
       .addSelect('pe.rut', 'rut')
       .addSelect('pe.rol', 'rol')
       .addSelect(`COUNT(*) FILTER (WHERE d.estado = 'ASISTIO')`, 'designaciones')
@@ -897,13 +897,13 @@ export class InformesAdminService {
         'pendiente',
       )
       .groupBy('pe.id')
-      .addGroupBy('pe.nombres')
-      .addGroupBy('pe.apellidos')
+      .addGroupBy('pe.nombre')
+      .addGroupBy('pe.apellido')
       .addGroupBy('pe.rut')
       .addGroupBy('pe.rol')
       .having(`COUNT(*) FILTER (WHERE d.estado = 'ASISTIO') > 0`)
       .orderBy('"pendiente"', 'DESC')
-      .addOrderBy('pe.apellidos', 'ASC')
+      .addOrderBy('pe.apellido', 'ASC')
       .getRawMany<{
         personalId: string;
         personalNombre: string;
