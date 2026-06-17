@@ -2419,6 +2419,7 @@ export function useLiquidar() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PAGOS_PERSONAL_KEY });
+      qc.invalidateQueries({ queryKey: ['admin', 'informes'] });
     },
   });
 }
@@ -2432,6 +2433,7 @@ export function useEliminarLiquidacion() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PAGOS_PERSONAL_KEY });
+      qc.invalidateQueries({ queryKey: ['admin', 'informes'] });
     },
   });
 }
@@ -2472,6 +2474,7 @@ export function useEmitirNomina() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PAGOS_PERSONAL_KEY });
+      qc.invalidateQueries({ queryKey: ['admin', 'informes'] });
     },
   });
 }
@@ -2483,6 +2486,7 @@ export function useEliminarNomina() {
       apiFetch<void>(`/admin/pagos-personal/nominas/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PAGOS_PERSONAL_KEY });
+      qc.invalidateQueries({ queryKey: ['admin', 'informes'] });
     },
   });
 }
