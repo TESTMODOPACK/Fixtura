@@ -238,13 +238,23 @@ export class FixtureAdminService {
       return true;
     };
 
+    // Fecha calendario de la jornada anterior ya resuelta (con corrimientos).
+    // Si una fecha se corre por un feriado, las siguientes se arrastran para
+    // que dos jornadas NUNCA caigan el mismo día.
+    let fechaInicioPrevia: Date | null = null;
     for (let n = 1; n <= fixture.fechas; n++) {
       const fechaNatural = new Date(fechaInicioBase);
       fechaNatural.setDate(fechaInicioBase.getDate() + (n - 1) * input.diasEntreFechas);
       const fechaNaturalIso = FixtureAdminService.formatFechaLocal(fechaNatural);
 
-      // Buscar el próximo día jugable dentro del límite máximo.
+      // Buscar el próximo día jugable dentro del límite máximo. El candidato
+      // arranca en la fecha natural, pero nunca en o antes de la jornada
+      // anterior: si esa se corrió por feriado, esta se arrastra detrás.
       let candidato = new Date(fechaNatural);
+      if (fechaInicioPrevia && candidato.getTime() <= fechaInicioPrevia.getTime()) {
+        candidato = new Date(fechaInicioPrevia);
+        candidato.setDate(candidato.getDate() + 1);
+      }
       let saltos = 0;
       while (
         !esDiaJugable(candidato) &&
@@ -267,10 +277,14 @@ export class FixtureAdminService {
       const fechaInicioIso = FixtureAdminService.formatFechaLocal(fechaInicio);
 
       if (fechaInicioIso !== fechaNaturalIso) {
-        // Si la fecha natural estaba bloqueada, el motivo es el feriado;
-        // si no, se corrió porque ese día de semana no tiene horarios.
+        // Si la fecha natural estaba bloqueada, el motivo es el feriado; si
+        // era jugable pero igual se corrió, fue para no pisar la jornada
+        // anterior (arrastre); si no, es que ese día no tiene horarios.
         const motivo =
-          bloqueadas.get(fechaNaturalIso) ?? 'El día no tiene horarios cargados';
+          bloqueadas.get(fechaNaturalIso) ??
+          (esDiaJugable(fechaNatural)
+            ? 'Corrida para no coincidir con la jornada anterior'
+            : 'El día no tiene horarios cargados');
         diasNoJugablesAjustados.push({
           fechaNumero: n,
           fechaOriginal: fechaNaturalIso,
@@ -303,6 +317,7 @@ export class FixtureAdminService {
         }),
       );
       fechaIdByNumero.set(n, saved.id);
+      fechaInicioPrevia = fechaInicio;
     }
 
     // Sprint 39 — Modo de generación: si el torneo tiene plantilla de
