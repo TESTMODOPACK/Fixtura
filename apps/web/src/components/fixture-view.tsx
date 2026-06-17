@@ -4,6 +4,7 @@ import type { PartidoPublico } from '@fixtura/types';
 
 import { PublicHeader } from '@/components/public-header';
 import { Card, CardLabel } from '@/components/ui/card';
+import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import { useFixture } from '@/hooks/use-portal';
 import { cn } from '@/lib/cn';
 import { formatFecha } from '@/lib/format';
@@ -37,8 +38,16 @@ export function FixtureView({ torneoSlug }: FixtureViewProps): React.ReactElemen
                     <div className="font-display text-lg text-green-deep tracking-display">
                       {fecha.etiqueta.toUpperCase()}
                     </div>
+                    {fecha.fechaInicio && (
+                      <div className="text-xs text-ink-mute mt-0.5 tabular-nums">
+                        {formatFecha(fecha.fechaInicio)}
+                      </div>
+                    )}
                   </div>
-                  <FechaEstadoBadge partidos={fecha.partidos} />
+                  <div className="flex items-center gap-2">
+                    {fecha.reprogramada && <ReprogramadaBadge />}
+                    <FechaEstadoBadge partidos={fecha.partidos} />
+                  </div>
                 </div>
                 <div className="divide-y divide-line">
                   {fecha.partidos.map((p) => (

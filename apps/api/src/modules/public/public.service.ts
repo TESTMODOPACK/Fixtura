@@ -413,10 +413,13 @@ export class PublicService {
     const torneo = await this.findTorneoActivo(slug, torneoSlug);
     const torneoDto = await this.buildTorneoPublico(torneo);
 
-    const fechas = await this.fechaRepo.find({
+    const fechasRaw = await this.fechaRepo.find({
       where: { torneoId: torneo.id },
       order: { numero: 'ASC' },
     });
+    // No mostramos la jornada SUSPENDIDA original: el hincha ve la
+    // REPROGRAMADA (con su fecha nueva y el distintivo).
+    const fechas = fechasRaw.filter((f) => f.estado !== 'SUSPENDIDA');
 
     const fechaIds = fechas.map((f) => f.id);
     const partidos = fechaIds.length
@@ -449,6 +452,8 @@ export class PublicService {
       fechas: fechas.map((f) => ({
         numero: f.numero,
         etiqueta: f.etiqueta ?? `Fecha ${f.numero}`,
+        fechaInicio: f.fechaInicio ?? null,
+        reprogramada: f.tipoReprogramacion === 'REPROGRAMADA',
         partidos: (partidosPorFecha.get(f.id) ?? []).map((p) => ({
           ...this.toPartidoPublico(p, f.numero),
           arbitros: arbitrosPorPartido.get(p.id) ?? [],

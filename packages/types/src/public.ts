@@ -133,6 +133,10 @@ export const FixturePublicoSchema = z.object({
     z.object({
       numero: z.number().int().min(1),
       etiqueta: z.string(),
+      // Fecha calendario de la jornada (date-only ISO) y si es una
+      // reprogramación, para mostrarlo en el portal público.
+      fechaInicio: z.string().nullable(),
+      reprogramada: z.boolean(),
       partidos: z.array(PartidoPublicoSchema),
     }),
   ),
