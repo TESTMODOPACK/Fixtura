@@ -41,6 +41,7 @@ import {
   OfflineSubmitHint,
 } from '@/components/offline-acta-banner';
 import { PageHead } from '@/components/ui/page-head';
+import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import {
   useAddIncidencia,
   useCanchas,
@@ -157,11 +158,12 @@ export default function PartidoDetallePage({
           </div>
 
           <div className="grid grid-cols-3 gap-3 mt-6 text-sm">
-            <div className="flex items-center gap-2 text-ink-mute">
+            <div className="flex items-center gap-2 text-ink-mute flex-wrap">
               <Calendar size={14} />
               {partido.fechaHora
                 ? formatFechaHora(partido.fechaHora)
                 : 'Sin horario'}
+              {partido.fechaReprogramada && <ReprogramadaBadge />}
             </div>
             <div className="flex items-center gap-2 text-ink-mute">
               <MapPin size={14} />

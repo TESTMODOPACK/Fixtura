@@ -108,6 +108,7 @@ export const PartidoDelegadoSchema = z.object({
   torneoNombre: z.string(),
   categoriaNombre: z.string().nullable(),
   fechaNumero: z.number().int().nullable(),
+  fechaReprogramada: z.boolean(),
   fechaHora: z.iso.datetime().nullable(),
   canchaNombre: z.string().nullable(),
   esLocal: z.boolean(),

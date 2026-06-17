@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Card, CardLabel } from '@/components/ui/card';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { PageHead } from '@/components/ui/page-head';
+import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import { useDelegadoResumen } from '@/hooks/use-delegado';
 import { formatFechaHora } from '@/lib/format';
 
@@ -61,11 +62,14 @@ export default function ClubPanelPage(): React.ReactElement {
                     <CalendarDays size={18} className="text-accent" />
                     {data.proximoPartido.esLocal ? 'vs' : '@'} {data.proximoPartido.rivalNombre}
                   </div>
-                  <div className="text-sm text-ink-mute mt-1">
-                    {fmtFechaHora(data.proximoPartido.fechaHora)}
-                    {data.proximoPartido.canchaNombre
-                      ? ` · ${data.proximoPartido.canchaNombre}`
-                      : ''}
+                  <div className="text-sm text-ink-mute mt-1 flex items-center gap-2 flex-wrap">
+                    <span>
+                      {fmtFechaHora(data.proximoPartido.fechaHora)}
+                      {data.proximoPartido.canchaNombre
+                        ? ` · ${data.proximoPartido.canchaNombre}`
+                        : ''}
+                    </span>
+                    {data.proximoPartido.fechaReprogramada && <ReprogramadaBadge />}
                   </div>
                   <div className="text-xs text-ink-mute mt-1">
                     {data.proximoPartido.torneoNombre}

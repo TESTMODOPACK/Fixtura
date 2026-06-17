@@ -2,6 +2,7 @@
 
 import { Card } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
+import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import { useDelegadoPartidos } from '@/hooks/use-delegado';
 import { cn } from '@/lib/cn';
 import { formatFechaHora } from '@/lib/format';
@@ -39,8 +40,11 @@ export default function ClubPartidosPage(): React.ReactElement {
           return (
             <Card key={p.partidoId} padding="tight" className="flex items-center gap-4 flex-wrap">
               <div className="text-xs text-ink-mute w-32 shrink-0">
-                {p.fechaNumero != null ? `Fecha ${p.fechaNumero} · ` : ''}
-                {fmt(p.fechaHora)}
+                <div>
+                  {p.fechaNumero != null ? `Fecha ${p.fechaNumero} · ` : ''}
+                  {fmt(p.fechaHora)}
+                </div>
+                {p.fechaReprogramada && <ReprogramadaBadge className="mt-1" />}
               </div>
               <div className="flex-1 min-w-[200px]">
                 <div className="font-medium text-ink">

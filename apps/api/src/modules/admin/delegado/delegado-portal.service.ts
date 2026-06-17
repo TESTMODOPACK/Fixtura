@@ -183,6 +183,7 @@ export class DelegadoPortalService {
       torneoNombre: meta?.torneoNombre ?? '',
       categoriaNombre: meta?.categoriaNombre ?? null,
       fechaNumero: p.fecha?.numero ?? null,
+      fechaReprogramada: p.fecha?.tipoReprogramacion === 'REPROGRAMADA',
       fechaHora: p.fechaHora ? p.fechaHora.toISOString() : null,
       canchaNombre: p.canchaNombre,
       esLocal,

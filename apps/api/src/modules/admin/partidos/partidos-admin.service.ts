@@ -120,7 +120,9 @@ export class PartidosAdminService {
         observacionesSuspension: f.observacionesSuspension ?? null,
         tipoReprogramacion: f.tipoReprogramacion,
         reemplazaFechaId: f.reemplazaFechaId,
-        partidos: (partidosPorFecha.get(f.id) ?? []).map((p) => this.toDto(p, f.numero, f.etiqueta)),
+        partidos: (partidosPorFecha.get(f.id) ?? []).map((p) =>
+          this.toDto(p, f.numero, f.etiqueta, f.tipoReprogramacion === 'REPROGRAMADA'),
+        ),
       })),
     };
   }
@@ -132,7 +134,7 @@ export class PartidosAdminService {
     const incidencias = await this.listIncidencias(partidoId);
 
     return {
-      ...this.toDto(partido, fecha.numero, fecha.etiqueta),
+      ...this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA'),
       incidencias,
     };
   }
@@ -260,7 +262,7 @@ export class PartidosAdminService {
 
     await this.repo.save(partido);
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
-    return this.toDto(partido, fecha.numero, fecha.etiqueta);
+    return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
 
   /**
@@ -584,7 +586,7 @@ export class PartidosAdminService {
         ),
       );
 
-    return this.toDto(partido, fecha.numero, fecha.etiqueta);
+    return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
 
   /**
@@ -908,7 +910,7 @@ export class PartidosAdminService {
         .execute();
     }
 
-    return this.toDto(partido, fecha.numero, fecha.etiqueta);
+    return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
 
   // ─── Sprint 8: Suspensión y reprogramación ─────────────────────────
@@ -943,7 +945,7 @@ export class PartidosAdminService {
     partido.observacionesSuspension = input.observaciones?.trim() || null;
     await this.repo.save(partido);
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
-    return this.toDto(partido, fecha.numero, fecha.etiqueta);
+    return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
 
   /**
@@ -1010,7 +1012,7 @@ export class PartidosAdminService {
     }
 
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
-    return this.toDto(partido, fecha.numero, fecha.etiqueta);
+    return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
 
   /**
@@ -1135,7 +1137,7 @@ export class PartidosAdminService {
       );
 
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
-    return this.toDto(partido, fecha.numero, fecha.etiqueta);
+    return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
 
   /**
@@ -1156,7 +1158,7 @@ export class PartidosAdminService {
     partido.observacionesSuspension = null;
     await this.repo.save(partido);
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
-    return this.toDto(partido, fecha.numero, fecha.etiqueta);
+    return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────
@@ -1193,12 +1195,18 @@ export class PartidosAdminService {
     }));
   }
 
-  private toDto(p: Partido, fechaNumero: number, fechaEtiqueta: string | null): PartidoAdmin {
+  private toDto(
+    p: Partido,
+    fechaNumero: number,
+    fechaEtiqueta: string | null,
+    fechaReprogramada: boolean,
+  ): PartidoAdmin {
     return {
       id: p.id,
       fechaId: p.fechaId,
       fechaNumero,
       fechaEtiqueta,
+      fechaReprogramada,
       // ADR-0005 — el campo equipoLocalId expone el inscripcionId (el id del
       // equipo en el torneo). El nombre sale del club de la inscripción.
       equipoLocalId: p.inscripcionLocalId ?? '',

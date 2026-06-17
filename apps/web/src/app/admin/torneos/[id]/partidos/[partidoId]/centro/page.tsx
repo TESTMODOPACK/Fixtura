@@ -19,6 +19,7 @@ import type { TipoIncidencia } from '@fixtura/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
+import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import {
   useAddIncidencia,
   useJugadores,
@@ -79,7 +80,7 @@ export default function CentroPage({
   return (
     <>
       <PageHead
-        eyebrow="Match Center"
+        eyebrow={partido ? `Match Center · Fecha ${partido.fechaNumero}` : 'Match Center'}
         title={snapshot ? `${snapshot.equipoLocalNombre} vs ${snapshot.equipoVisitaNombre}` : 'Cargando…'}
         sub="Panel del cronista — marcador y cronómetro en vivo."
       >
@@ -88,6 +89,7 @@ export default function CentroPage({
             <ArrowLeft size={14} /> Detalle partido
           </Button>
         </Link>
+        {partido?.fechaReprogramada && <ReprogramadaBadge />}
         <span
           className="text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-1"
           title={conectado ? 'WebSocket conectado' : 'Sin conexión — usando polling'}

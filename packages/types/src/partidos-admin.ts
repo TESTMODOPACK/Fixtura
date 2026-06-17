@@ -12,6 +12,7 @@ export const PartidoAdminSchema = z.object({
   fechaId: z.uuid(),
   fechaNumero: z.number().int(),
   fechaEtiqueta: z.string().nullable(),
+  fechaReprogramada: z.boolean(),
   equipoLocalId: z.uuid(),
   equipoLocalNombre: z.string(),
   equipoVisitaId: z.uuid(),
