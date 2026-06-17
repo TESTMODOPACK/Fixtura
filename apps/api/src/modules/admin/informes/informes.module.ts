@@ -25,6 +25,8 @@ import { InformesPdfService } from './informes-pdf.service';
       Tenant,
       Cobro,
       Torneo,
+      InscripcionTorneo,
+      Partido,
     ]),
   ],
   controllers: [InformesAdminController],
