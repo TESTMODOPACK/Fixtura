@@ -146,6 +146,13 @@ export class DesignacionesAdminService {
         // debe generar conflicto de doble booking (consistente con el
         // auto-asignar y el análisis de cobertura).
         .andWhere(`d2.estado NOT IN ('RECHAZADA','AUSENTE')`)
+        // Un partido SUSPENDIDO/REPROGRAMADO no se juega a esa hora, así que
+        // sus designaciones tampoco ocupan a la persona. Evita falsos doble
+        // booking contra una fecha que se suspendió y reprogramó (la original
+        // conserva sus designaciones como historial).
+        .andWhere(
+          `(partido.estado IS NULL OR partido.estado NOT IN ('SUSPENDIDO_FUERZA_MAYOR','REPROGRAMADO'))`,
+        )
         .select([
           'd2.personal_id AS "personalId"',
           'd2.partido_id AS "partidoId"',

@@ -102,7 +102,11 @@ export default function DesignacionesPage({
   const { data: settings } = useTenantSettings();
   const requiereCarnetAnfa = settings?.requiereCarnetAnfa ?? false;
 
-  const fechas = fixture?.fechas ?? [];
+  // Las designaciones se asignan a la fecha que se va a jugar. Una fecha
+  // SUSPENDIDA (reemplazada por una REPROGRAMADA con el mismo número) no se
+  // muestra acá: si no, aparecerían dos chips "F4" (la suspendida + la
+  // reprogramada) y se asignarían árbitros a un partido que no se juega.
+  const fechas = (fixture?.fechas ?? []).filter((f) => f.estado !== 'SUSPENDIDA');
   const [fechaId, setFechaId] = useState<string | null>(null);
 
   // Default: primera fecha programada / en curso. Si todas están finalizadas,
