@@ -193,10 +193,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isSuperAdmin = useIsSuperAdmin();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // El token se persiste en sessionStorage (Zustand persist) y se rehidrata
+  // de forma asíncrona. Sin esperar la rehidratación, el primer render tras
+  // un refresh ve accessToken=null y expulsa a "/" (marketing) aunque la
+  // sesión siga viva. Gate explícito hasta que la rehidratación termine.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    if (useAuthStore.persist.hasHydrated()) {
+      setHydrated(true);
+      return;
+    }
+    return useAuthStore.persist.onFinishHydration(() => setHydrated(true));
+  }, []);
+
   // SUPER_ADMIN ve SOLO el menú de plataforma — no opera ligas directamente.
   const sections: NavSection[] = isSuperAdmin ? [NAV_SUPER] : NAV;
 
   useEffect(() => {
+    if (!hydrated) return;
     if (!accessToken) {
       router.replace('/');
       return;
@@ -204,14 +218,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (isSuperAdmin && pathname === '/admin') {
       router.replace('/admin/super');
     }
-  }, [accessToken, isSuperAdmin, pathname, router]);
+  }, [hydrated, accessToken, isSuperAdmin, pathname, router]);
 
   // Cerrar el drawer al navegar (cambio de ruta).
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
 
-  if (!accessToken) {
+  if (!hydrated || !accessToken) {
     return null;
   }
 

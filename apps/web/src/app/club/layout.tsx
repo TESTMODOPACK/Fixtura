@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { LigaPlusLockup } from '@/components/ui/logo';
 import { useMiClub } from '@/hooks/use-delegado';
@@ -47,14 +47,27 @@ export default function ClubLayout({
   const esActivar = pathname?.startsWith('/club/activar');
   const { data: club } = useMiClub(!!accessToken && !esActivar);
 
+  // El token (sessionStorage / Zustand persist) rehidrata async: sin esperar
+  // la rehidratación, un refresh ve accessToken=null y expulsa a "/" aunque
+  // la sesión siga viva.
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
+    if (useAuthStore.persist.hasHydrated()) {
+      setHydrated(true);
+      return;
+    }
+    return useAuthStore.persist.onFinishHydration(() => setHydrated(true));
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
     if (!accessToken && !esActivar) {
       router.replace('/');
     }
-  }, [accessToken, esActivar, router]);
+  }, [hydrated, accessToken, esActivar, router]);
 
   if (esActivar) return <>{children}</>;
-  if (!accessToken) return null;
+  if (!hydrated || !accessToken) return null;
 
   return (
     <div className="min-h-screen bg-paper">

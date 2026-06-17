@@ -16,7 +16,7 @@
  *
  * Versión cache — bumpear cuando cambien las estrategias.
  */
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const STATIC_CACHE = `fixtura-static-${CACHE_VERSION}`;
 const API_CACHE = `fixtura-api-${CACHE_VERSION}`;
 const ACTA_CACHE = `fixtura-acta-${CACHE_VERSION}`;
@@ -105,10 +105,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // API admin del acta: cacheamos selectivamente para soportar acta
-  // offline (el árbitro en cancha sin señal carga partido + plantel).
+  // API admin del acta: network-first. Online devolvemos SIEMPRE lo fresco
+  // (si fuera stale-while-revalidate, tras cerrar/reabrir el acta el refetch
+  // recibía la versión vieja del cache y el estado no se actualizaba hasta
+  // recargar). El cache se mantiene poblado para servir offline al árbitro
+  // en cancha sin señal.
   if (url.pathname.startsWith('/api/v1/admin/') && esEndpointActa(url.pathname)) {
-    event.respondWith(staleWhileRevalidate(request, ACTA_CACHE));
+    event.respondWith(networkFirst(request, ACTA_CACHE));
     return;
   }
 
@@ -179,6 +182,26 @@ async function staleWhileRevalidate(request, cacheName) {
     })
     .catch(() => cached);
   return cached ?? fetchPromise;
+}
+
+async function networkFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  try {
+    const fresh = await fetch(request);
+    if (fresh.ok) cache.put(request, fresh.clone());
+    return fresh;
+  } catch (err) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    return new Response(
+      JSON.stringify({
+        error: 'Sin conexión',
+        message: 'No se pudo contactar al servidor. Conectate a internet e intentá de nuevo.',
+        offline: true,
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
 }
 
 async function networkOnly(request) {
