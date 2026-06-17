@@ -111,3 +111,44 @@ export const RecaudacionConceptoSchema = z.object({
   cantidad: z.number().int(),
 });
 export type RecaudacionConcepto = z.infer<typeof RecaudacionConceptoSchema>;
+
+// ─── Fase 3: Competición ─────────────────────────────────────────────
+
+/** Fila de la tabla de posiciones (informe exportable por torneo). */
+export const FilaPosicionInformeSchema = z.object({
+  posicion: z.number().int(),
+  clubNombre: z.string(),
+  pj: z.number().int(),
+  pg: z.number().int(),
+  pe: z.number().int(),
+  pp: z.number().int(),
+  gf: z.number().int(),
+  gc: z.number().int(),
+  dg: z.number().int(),
+  pts: z.number().int(),
+});
+export type FilaPosicionInforme = z.infer<typeof FilaPosicionInformeSchema>;
+
+/** Goleador acumulado del torneo. */
+export const GoleadorInformeSchema = z.object({
+  posicion: z.number().int(),
+  jugadorNombre: z.string(),
+  rut: z.string().nullable(),
+  clubNombre: z.string().nullable(),
+  goles: z.number().int(),
+});
+export type GoleadorInforme = z.infer<typeof GoleadorInformeSchema>;
+
+/** Resultado de un partido (informe de resultados por fecha). */
+export const ResultadoPartidoInformeSchema = z.object({
+  partidoId: z.uuid(),
+  fechaNumero: z.number().int(),
+  localNombre: z.string().nullable(),
+  visitaNombre: z.string().nullable(),
+  golesLocal: z.number().int().nullable(),
+  golesVisita: z.number().int().nullable(),
+  estado: z.string(),
+  fechaHora: z.string().nullable(),
+  canchaNombre: z.string().nullable(),
+});
+export type ResultadoPartidoInforme = z.infer<typeof ResultadoPartidoInformeSchema>;

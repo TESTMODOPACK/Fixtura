@@ -15,9 +15,12 @@ import {
   type EstadoCuentaClub,
   type EstadoMultaInforme,
   type ExpulsadoFecha,
+  type FilaPosicionInforme,
+  type GoleadorInforme,
   type Moroso,
   type MultaPendiente,
   type RecaudacionConcepto,
+  type ResultadoPartidoInforme,
   type SancionVigente,
   type UserContext,
 } from '@fixtura/types';
@@ -47,6 +50,21 @@ function multaStr(monto: number | null, estado: EstadoMultaInforme | null): stri
 
 function clp(n: number): string {
   return `$${n.toLocaleString('es-CL')}`;
+}
+
+const ESTADO_PARTIDO_LABEL: Record<string, string> = {
+  PROGRAMADO: 'Programado',
+  EN_CURSO: 'En curso',
+  FINALIZADO: 'Finalizado',
+  SUSPENDIDO_FUERZA_MAYOR: 'Suspendido',
+  REPROGRAMADO: 'Reprogramado',
+  WALKOVER: 'Walkover',
+};
+
+/** Marcador legible: "2 - 1" si jugado, "vs" si todavía no. */
+function marcador(r: ResultadoPartidoInforme): string {
+  if (r.golesLocal == null || r.golesVisita == null) return 'vs';
+  return `${r.golesLocal} - ${r.golesVisita}`;
 }
 
 /**
@@ -372,6 +390,143 @@ export class InformesAdminController {
         clp(r.porCobrar),
         clp(r.total),
         String(r.cantidad),
+      ]),
+    });
+    res.send(buffer);
+  }
+
+  // ─── Fase 3: Competición ────────────────────────────────────────────
+
+  /** Tabla de posiciones del torneo. */
+  @Get('competicion/posiciones')
+  posiciones(
+    @CurrentUser() user: UserContext,
+    @Query('torneoId', new ParseUUIDPipe()) torneoId: string,
+  ): Promise<FilaPosicionInforme[]> {
+    return this.svc.posiciones(ensureTenant(user), torneoId);
+  }
+
+  @Get('competicion/posiciones.pdf')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="posiciones.pdf"')
+  async posicionesPdf(
+    @CurrentUser() user: UserContext,
+    @Res() res: Response,
+    @Query('torneoId', new ParseUUIDPipe()) torneoId: string,
+  ): Promise<void> {
+    const tenantId = ensureTenant(user);
+    const rows = await this.svc.posiciones(tenantId, torneoId);
+    const buffer = await this.pdf.tabla(tenantId, {
+      titulo: 'Tabla de posiciones',
+      columnas: [
+        { label: '#', width: 30, align: 'center' },
+        { label: 'Club', width: 230 },
+        { label: 'PJ', width: 45, align: 'center' },
+        { label: 'PG', width: 45, align: 'center' },
+        { label: 'PE', width: 45, align: 'center' },
+        { label: 'PP', width: 45, align: 'center' },
+        { label: 'GF', width: 45, align: 'center' },
+        { label: 'GC', width: 45, align: 'center' },
+        { label: 'DG', width: 45, align: 'center' },
+        { label: 'Pts', width: 50, align: 'center' },
+      ],
+      filas: rows.map((r) => [
+        String(r.posicion),
+        r.clubNombre,
+        String(r.pj),
+        String(r.pg),
+        String(r.pe),
+        String(r.pp),
+        String(r.gf),
+        String(r.gc),
+        r.dg > 0 ? `+${r.dg}` : String(r.dg),
+        String(r.pts),
+      ]),
+    });
+    res.send(buffer);
+  }
+
+  /** Goleadores acumulados del torneo. */
+  @Get('competicion/goleadores')
+  goleadores(
+    @CurrentUser() user: UserContext,
+    @Query('torneoId', new ParseUUIDPipe()) torneoId: string,
+  ): Promise<GoleadorInforme[]> {
+    return this.svc.goleadores(ensureTenant(user), torneoId);
+  }
+
+  @Get('competicion/goleadores.pdf')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="goleadores.pdf"')
+  async goleadoresPdf(
+    @CurrentUser() user: UserContext,
+    @Res() res: Response,
+    @Query('torneoId', new ParseUUIDPipe()) torneoId: string,
+  ): Promise<void> {
+    const tenantId = ensureTenant(user);
+    const rows = await this.svc.goleadores(tenantId, torneoId);
+    const buffer = await this.pdf.tabla(tenantId, {
+      titulo: 'Tabla de goleadores',
+      columnas: [
+        { label: '#', width: 35, align: 'center' },
+        { label: 'Jugador', width: 240 },
+        { label: 'Club', width: 200 },
+        { label: 'Goles', width: 70, align: 'center' },
+      ],
+      filas: rows.map((g) => [
+        String(g.posicion),
+        `${g.jugadorNombre}${g.rut ? ` (${g.rut})` : ''}`,
+        g.clubNombre ?? '—',
+        String(g.goles),
+      ]),
+    });
+    res.send(buffer);
+  }
+
+  /** Resultados del torneo (opcional por fecha). */
+  @Get('competicion/resultados')
+  resultados(
+    @CurrentUser() user: UserContext,
+    @Query('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Query('fechaNumero') fechaNumero?: string,
+  ): Promise<ResultadoPartidoInforme[]> {
+    return this.svc.resultados(
+      ensureTenant(user),
+      torneoId,
+      this.parseFecha(fechaNumero),
+    );
+  }
+
+  @Get('competicion/resultados.pdf')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="resultados.pdf"')
+  async resultadosPdf(
+    @CurrentUser() user: UserContext,
+    @Res() res: Response,
+    @Query('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Query('fechaNumero') fechaNumero?: string,
+  ): Promise<void> {
+    const tenantId = ensureTenant(user);
+    const fn = this.parseFecha(fechaNumero);
+    const rows = await this.svc.resultados(tenantId, torneoId, fn);
+    const buffer = await this.pdf.tabla(tenantId, {
+      titulo: 'Resultados',
+      subtitulo: fn ? `Fecha ${fn}` : 'Todas las fechas',
+      columnas: [
+        { label: 'Fecha', width: 45, align: 'center' },
+        { label: 'Local', width: 170, align: 'right' },
+        { label: 'Marcador', width: 70, align: 'center' },
+        { label: 'Visita', width: 170 },
+        { label: 'Estado', width: 90 },
+        { label: 'Cancha', width: 130 },
+      ],
+      filas: rows.map((r) => [
+        String(r.fechaNumero),
+        r.localNombre ?? '—',
+        marcador(r),
+        r.visitaNombre ?? '—',
+        ESTADO_PARTIDO_LABEL[r.estado] ?? r.estado,
+        r.canchaNombre ?? '—',
       ]),
     });
     res.send(buffer);

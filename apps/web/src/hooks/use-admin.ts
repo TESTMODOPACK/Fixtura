@@ -2578,3 +2578,50 @@ export function useInformeRecaudacion(torneoId?: string) {
     queryFn: () => apiFetch<RecaudacionConcepto[]>(`/admin/informes/finanzas/recaudacion${qs}`),
   });
 }
+
+// ─── Informes (competición) ─────────────────────────────────────────
+import type {
+  FilaPosicionInforme,
+  GoleadorInforme,
+  ResultadoPartidoInforme,
+} from '@fixtura/types';
+
+export function useInformePosiciones(torneoId: string | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'informes', 'posiciones', { torneoId: torneoId ?? null }],
+    enabled: !!torneoId,
+    queryFn: () =>
+      apiFetch<FilaPosicionInforme[]>(`/admin/informes/competicion/posiciones?torneoId=${torneoId}`),
+  });
+}
+
+export function useInformeGoleadores(torneoId: string | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'informes', 'goleadores', { torneoId: torneoId ?? null }],
+    enabled: !!torneoId,
+    queryFn: () =>
+      apiFetch<GoleadorInforme[]>(`/admin/informes/competicion/goleadores?torneoId=${torneoId}`),
+  });
+}
+
+export function useInformeResultados(
+  torneoId: string | undefined,
+  fechaNumero: number | undefined,
+) {
+  const qs = new URLSearchParams();
+  if (torneoId) qs.set('torneoId', torneoId);
+  if (fechaNumero != null) qs.set('fechaNumero', String(fechaNumero));
+  return useQuery({
+    queryKey: [
+      'admin',
+      'informes',
+      'resultados',
+      { torneoId: torneoId ?? null, fechaNumero: fechaNumero ?? null },
+    ],
+    enabled: !!torneoId,
+    queryFn: () =>
+      apiFetch<ResultadoPartidoInforme[]>(
+        `/admin/informes/competicion/resultados?${qs.toString()}`,
+      ),
+  });
+}

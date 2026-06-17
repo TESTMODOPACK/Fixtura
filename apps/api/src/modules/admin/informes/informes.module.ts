@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
+import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
+import { Partido } from '../../competition/entities/partido.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';

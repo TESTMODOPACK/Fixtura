@@ -1,12 +1,13 @@
 'use client';
 
-import { AlertTriangle, Coins, Download, FileText, Gavel } from 'lucide-react';
+import { AlertTriangle, Coins, Download, FileText, Gavel, Trophy } from 'lucide-react';
 import { useState } from 'react';
 
 import type {
   EnRiesgoAmarilla,
   EstadoMultaInforme,
   ExpulsadoFecha,
+  ResultadoPartidoInforme,
   SancionVigente,
 } from '@fixtura/types';
 
@@ -20,15 +21,18 @@ import {
   useInformeEnRiesgo,
   useInformeEstadoCuenta,
   useInformeExpulsados,
+  useInformeGoleadores,
   useInformeMorosos,
   useInformeMultasPendientes,
+  useInformePosiciones,
   useInformeRecaudacion,
+  useInformeResultados,
   useInformeSancionados,
   useTorneos,
 } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
 
-type Grupo = 'disciplina' | 'finanzas';
+type Grupo = 'disciplina' | 'finanzas' | 'competicion';
 type Vista =
   | 'expulsados'
   | 'sancionados'
@@ -36,11 +40,15 @@ type Vista =
   | 'estadoCuenta'
   | 'multas'
   | 'morosos'
-  | 'recaudacion';
+  | 'recaudacion'
+  | 'posiciones'
+  | 'goleadores'
+  | 'resultados';
 
 const VISTAS_POR_GRUPO: Record<Grupo, Vista[]> = {
   disciplina: ['expulsados', 'sancionados', 'enRiesgo'],
   finanzas: ['estadoCuenta', 'multas', 'morosos', 'recaudacion'],
+  competicion: ['posiciones', 'goleadores', 'resultados'],
 };
 
 const VISTA_LABEL: Record<Vista, string> = {
@@ -51,6 +59,18 @@ const VISTA_LABEL: Record<Vista, string> = {
   multas: 'Multas pendientes',
   morosos: 'Morosos',
   recaudacion: 'Recaudación',
+  posiciones: 'Tabla de posiciones',
+  goleadores: 'Goleadores',
+  resultados: 'Resultados por fecha',
+};
+
+const ESTADO_PARTIDO_LABEL: Record<string, string> = {
+  PROGRAMADO: 'Programado',
+  EN_CURSO: 'En curso',
+  FINALIZADO: 'Finalizado',
+  SUSPENDIDO_FUERZA_MAYOR: 'Suspendido',
+  REPROGRAMADO: 'Reprogramado',
+  WALKOVER: 'Walkover',
 };
 
 function clp(n: number | null): string {
@@ -140,8 +160,13 @@ export default function InformesPage(): React.ReactElement {
   };
 
   // Qué filtros muestra cada vista.
-  const torneoObligatorio = vista === 'expulsados' || vista === 'enRiesgo';
-  const muestraFecha = vista === 'expulsados';
+  const torneoObligatorio =
+    vista === 'expulsados' ||
+    vista === 'enRiesgo' ||
+    vista === 'posiciones' ||
+    vista === 'goleadores' ||
+    vista === 'resultados';
+  const muestraFecha = vista === 'expulsados' || vista === 'resultados';
   const muestraClub = vista === 'sancionados' || vista === 'multas';
   const muestraIncluirCumplidas = vista === 'sancionados';
 
@@ -160,6 +185,9 @@ export default function InformesPage(): React.ReactElement {
         </GrupoBtn>
         <GrupoBtn active={grupo === 'finanzas'} onClick={() => cambiarGrupo('finanzas')}>
           <Coins size={14} className="inline mr-1" /> Finanzas
+        </GrupoBtn>
+        <GrupoBtn active={grupo === 'competicion'} onClick={() => cambiarGrupo('competicion')}>
+          <Trophy size={14} className="inline mr-1" /> Competición
         </GrupoBtn>
       </div>
 
@@ -264,6 +292,14 @@ export default function InformesPage(): React.ReactElement {
       )}
       {vista === 'morosos' && <MorososView torneoId={torneoId || undefined} />}
       {vista === 'recaudacion' && <RecaudacionView torneoId={torneoId || undefined} />}
+      {vista === 'posiciones' && <PosicionesView torneoId={torneoId} />}
+      {vista === 'goleadores' && <GoleadoresView torneoId={torneoId} />}
+      {vista === 'resultados' && (
+        <ResultadosView
+          torneoId={torneoId}
+          fechaNumero={fechaNumero ? Number.parseInt(fechaNumero, 10) : undefined}
+        />
+      )}
     </>
   );
 }
@@ -927,6 +963,251 @@ function RecaudacionView({ torneoId }: { torneoId: string | undefined }): React.
                 <td className="py-2 pr-3 text-right tabular-nums">{clp(totales.total)}</td>
                 <td className="py-2 pr-5"></td>
               </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── Vista: tabla de posiciones ──────────────────────────────────────
+function PosicionesView({ torneoId }: { torneoId: string }): React.ReactElement {
+  const { data, isLoading, error } = useInformePosiciones(torneoId || undefined);
+  if (!torneoId) return <SinTorneo />;
+
+  const filas = data ?? [];
+  const exportar = (): void =>
+    void exportarExcel(
+      filas.map((f) => ({
+        Pos: f.posicion,
+        Club: f.clubNombre,
+        PJ: f.pj,
+        PG: f.pg,
+        PE: f.pe,
+        PP: f.pp,
+        GF: f.gf,
+        GC: f.gc,
+        DG: f.dg,
+        Pts: f.pts,
+      })),
+      'posiciones.xlsx',
+      'Posiciones',
+    );
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="px-5 py-3 flex items-center justify-between border-b border-line">
+        <CardLabel>Tabla de posiciones</CardLabel>
+        <div className="flex items-center gap-1">
+          <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+          <BotonPdf
+            path={`/admin/informes/competicion/posiciones.pdf?torneoId=${torneoId}`}
+            filename="posiciones.pdf"
+            disabled={filas.length === 0}
+          />
+        </div>
+      </div>
+      {isLoading && <Vacio texto="Cargando…" />}
+      {error && <ErrorBox />}
+      {!isLoading && !error && filas.length === 0 && (
+        <Vacio texto="Todavía no hay partidos jugados en este torneo." />
+      )}
+      {filas.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-ink-mute border-b border-line">
+                <th className="py-2 px-5 text-center">#</th>
+                <th className="py-2 pr-3">Club</th>
+                <th className="py-2 pr-3 text-center">PJ</th>
+                <th className="py-2 pr-3 text-center">PG</th>
+                <th className="py-2 pr-3 text-center">PE</th>
+                <th className="py-2 pr-3 text-center">PP</th>
+                <th className="py-2 pr-3 text-center">GF</th>
+                <th className="py-2 pr-3 text-center">GC</th>
+                <th className="py-2 pr-3 text-center">DG</th>
+                <th className="py-2 pr-5 text-center">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((f) => (
+                <tr key={f.posicion} className="border-b border-line/50">
+                  <td className="py-2 px-5 text-center tabular-nums text-ink-mute">{f.posicion}</td>
+                  <td className="py-2 pr-3 font-medium text-ink">{f.clubNombre}</td>
+                  <td className="py-2 pr-3 text-center tabular-nums">{f.pj}</td>
+                  <td className="py-2 pr-3 text-center tabular-nums">{f.pg}</td>
+                  <td className="py-2 pr-3 text-center tabular-nums">{f.pe}</td>
+                  <td className="py-2 pr-3 text-center tabular-nums">{f.pp}</td>
+                  <td className="py-2 pr-3 text-center tabular-nums">{f.gf}</td>
+                  <td className="py-2 pr-3 text-center tabular-nums">{f.gc}</td>
+                  <td className="py-2 pr-3 text-center tabular-nums">
+                    {f.dg > 0 ? `+${f.dg}` : f.dg}
+                  </td>
+                  <td className="py-2 pr-5 text-center tabular-nums font-semibold text-green-deep">
+                    {f.pts}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── Vista: goleadores ───────────────────────────────────────────────
+function GoleadoresView({ torneoId }: { torneoId: string }): React.ReactElement {
+  const { data, isLoading, error } = useInformeGoleadores(torneoId || undefined);
+  if (!torneoId) return <SinTorneo />;
+
+  const filas = data ?? [];
+  const exportar = (): void =>
+    void exportarExcel(
+      filas.map((g) => ({
+        Pos: g.posicion,
+        Jugador: g.jugadorNombre,
+        RUT: g.rut ?? '',
+        Club: g.clubNombre ?? '',
+        Goles: g.goles,
+      })),
+      'goleadores.xlsx',
+      'Goleadores',
+    );
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="px-5 py-3 flex items-center justify-between border-b border-line">
+        <CardLabel>Tabla de goleadores</CardLabel>
+        <div className="flex items-center gap-1">
+          <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+          <BotonPdf
+            path={`/admin/informes/competicion/goleadores.pdf?torneoId=${torneoId}`}
+            filename="goleadores.pdf"
+            disabled={filas.length === 0}
+          />
+        </div>
+      </div>
+      {isLoading && <Vacio texto="Cargando…" />}
+      {error && <ErrorBox />}
+      {!isLoading && !error && filas.length === 0 && (
+        <Vacio texto="Todavía no hay goles registrados en este torneo." />
+      )}
+      {filas.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-ink-mute border-b border-line">
+                <th className="py-2 px-5 text-center">#</th>
+                <th className="py-2 pr-3">Jugador</th>
+                <th className="py-2 pr-3">Club</th>
+                <th className="py-2 pr-5 text-center">Goles</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((g) => (
+                <tr key={`${g.posicion}-${g.jugadorNombre}`} className="border-b border-line/50">
+                  <td className="py-2 px-5 text-center tabular-nums text-ink-mute">{g.posicion}</td>
+                  <td className="py-2 pr-3 font-medium text-ink">
+                    {g.jugadorNombre}
+                    {g.rut && <span className="text-ink-mute text-xs"> · {g.rut}</span>}
+                  </td>
+                  <td className="py-2 pr-3 text-ink-mute">{g.clubNombre ?? '—'}</td>
+                  <td className="py-2 pr-5 text-center tabular-nums font-semibold text-green-deep">
+                    {g.goles}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── Vista: resultados por fecha ─────────────────────────────────────
+function marcador(r: ResultadoPartidoInforme): string {
+  if (r.golesLocal == null || r.golesVisita == null) return 'vs';
+  return `${r.golesLocal} - ${r.golesVisita}`;
+}
+
+function ResultadosView({
+  torneoId,
+  fechaNumero,
+}: {
+  torneoId: string;
+  fechaNumero: number | undefined;
+}): React.ReactElement {
+  const { data, isLoading, error } = useInformeResultados(torneoId || undefined, fechaNumero);
+  if (!torneoId) return <SinTorneo />;
+
+  const filas = data ?? [];
+  const exportar = (): void =>
+    void exportarExcel(
+      filas.map((r) => ({
+        Fecha: r.fechaNumero,
+        Local: r.localNombre ?? '',
+        Marcador: marcador(r),
+        Visita: r.visitaNombre ?? '',
+        Estado: ESTADO_PARTIDO_LABEL[r.estado] ?? r.estado,
+        Cancha: r.canchaNombre ?? '',
+      })),
+      `resultados${fechaNumero ? `-fecha-${fechaNumero}` : ''}.xlsx`,
+      'Resultados',
+    );
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="px-5 py-3 flex items-center justify-between border-b border-line">
+        <CardLabel>
+          Resultados {fechaNumero ? `· fecha ${fechaNumero}` : '· todas las fechas'}
+        </CardLabel>
+        <div className="flex items-center gap-1">
+          <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+          <BotonPdf
+            path={`/admin/informes/competicion/resultados.pdf?torneoId=${torneoId}${
+              fechaNumero ? `&fechaNumero=${fechaNumero}` : ''
+            }`}
+            filename={`resultados${fechaNumero ? `-fecha-${fechaNumero}` : ''}.pdf`}
+            disabled={filas.length === 0}
+          />
+        </div>
+      </div>
+      {isLoading && <Vacio texto="Cargando…" />}
+      {error && <ErrorBox />}
+      {!isLoading && !error && filas.length === 0 && (
+        <Vacio texto="No hay partidos para los filtros elegidos." />
+      )}
+      {filas.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-ink-mute border-b border-line">
+                <th className="py-2 px-5 text-center">Fecha</th>
+                <th className="py-2 pr-3 text-right">Local</th>
+                <th className="py-2 px-2 text-center">Marcador</th>
+                <th className="py-2 pr-3">Visita</th>
+                <th className="py-2 pr-3">Estado</th>
+                <th className="py-2 pr-5">Cancha</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((r) => (
+                <tr key={r.partidoId} className="border-b border-line/50">
+                  <td className="py-2 px-5 text-center tabular-nums text-ink-mute">{r.fechaNumero}</td>
+                  <td className="py-2 pr-3 text-right font-medium text-ink">{r.localNombre ?? '—'}</td>
+                  <td className="py-2 px-2 text-center tabular-nums font-semibold whitespace-nowrap">
+                    {marcador(r)}
+                  </td>
+                  <td className="py-2 pr-3 font-medium text-ink">{r.visitaNombre ?? '—'}</td>
+                  <td className="py-2 pr-3 text-ink-mute">
+                    {ESTADO_PARTIDO_LABEL[r.estado] ?? r.estado}
+                  </td>
+                  <td className="py-2 pr-5 text-ink-mute">{r.canchaNombre ?? '—'}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

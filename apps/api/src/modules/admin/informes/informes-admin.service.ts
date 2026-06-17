@@ -2,20 +2,26 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { calcularTablaPosiciones } from '@fixtura/domain';
 import {
   AMARILLAS_PARA_SUSPENSION,
   type EnRiesgoAmarilla,
   type EstadoCuentaClub,
   type EstadoMultaInforme,
   type ExpulsadoFecha,
+  type FilaPosicionInforme,
+  type GoleadorInforme,
   type Moroso,
   type MultaPendiente,
   type RecaudacionConcepto,
+  type ResultadoPartidoInforme,
   type SancionVigente,
 } from '@fixtura/types';
 
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
+import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
+import { Partido } from '../../competition/entities/partido.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 
@@ -42,6 +48,10 @@ export class InformesAdminService {
     private readonly cobroRepo: Repository<Cobro>,
     @InjectRepository(Torneo)
     private readonly torneoRepo: Repository<Torneo>,
+    @InjectRepository(InscripcionTorneo)
+    private readonly inscRepo: Repository<InscripcionTorneo>,
+    @InjectRepository(Partido)
+    private readonly partidoRepo: Repository<Partido>,
   ) {}
 
   /** Umbral de amarillas del torneo (default 5 si no se encuentra). */
@@ -514,5 +524,177 @@ export class InformesAdminService {
         cantidad: Number(r.cantidad),
       };
     });
+  }
+
+  // ─── Fase 3: Competición ────────────────────────────────────────────
+
+  /**
+   * Tabla de posiciones del torneo. Reusa el cálculo puro de
+   * `calcularTablaPosiciones` (packages/domain) para que coincida exacto
+   * con el portal público y el panel admin. Solo cuentan FINALIZADO y
+   * WALKOVER (los walkover ya persisten 3-0).
+   */
+  async posiciones(
+    tenantId: string,
+    torneoId: string,
+  ): Promise<FilaPosicionInforme[]> {
+    const torneo = await this.torneoRepo.findOne({
+      where: { id: torneoId, tenantId },
+    });
+    if (!torneo) return [];
+
+    const inscripciones = await this.inscRepo.find({
+      where: { torneoId },
+      relations: { club: true },
+    });
+    const equipos = inscripciones
+      .filter((i) => i.estado !== 'RETIRADO')
+      .map((i) => ({
+        id: i.id,
+        nombre: i.club?.nombre ?? '',
+        slug: i.club?.slug ?? '',
+        escudoUrl: i.club?.escudoUrl ?? null,
+      }));
+
+    const partidosRaw = await this.partidoRepo
+      .createQueryBuilder('p')
+      .innerJoin('p.fecha', 'f')
+      .where('f.torneo_id = :torneoId', { torneoId })
+      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .getMany();
+    const partidos = partidosRaw.map((p) => ({
+      equipoLocalId: p.inscripcionLocalId ?? '',
+      equipoVisitaId: p.inscripcionVisitaId ?? '',
+      golesLocal: p.golesLocal,
+      golesVisita: p.golesVisita,
+    }));
+
+    const filas = calcularTablaPosiciones(equipos, partidos, {
+      puntosVictoria: torneo.puntosVictoria,
+      puntosEmpate: torneo.puntosEmpate,
+      puntosDerrota: torneo.puntosDerrota,
+      tiebreakers: Array.isArray(torneo.tablaTiebreakers)
+        ? torneo.tablaTiebreakers
+        : [],
+    });
+
+    return filas.map((f) => ({
+      posicion: f.posicion,
+      clubNombre: f.equipoNombre,
+      pj: f.pj,
+      pg: f.pg,
+      pe: f.pe,
+      pp: f.pp,
+      gf: f.gf,
+      gc: f.gc,
+      dg: f.dg,
+      pts: f.pts,
+    }));
+  }
+
+  /**
+   * Goleadores acumulados del torneo. Cuenta incidencias tipo GOL por
+   * jugador (no incluye AUTOGOL). El club sale de la inscripción de la
+   * incidencia.
+   */
+  async goleadores(
+    tenantId: string,
+    torneoId: string,
+  ): Promise<GoleadorInforme[]> {
+    const rows = await this.incidenciaRepo
+      .createQueryBuilder('i')
+      .select('j.nombres', 'nombre')
+      .addSelect('j.apellidos', 'apellido')
+      .addSelect('j.rut', 'rut')
+      .addSelect('c.nombre', 'clubNombre')
+      .addSelect('COUNT(*)::int', 'goles')
+      .innerJoin('jugadores', 'j', 'j.id = i.jugador_id')
+      .leftJoin('inscripciones_torneo', 'it', 'it.id = i.inscripcion_id')
+      .leftJoin('clubes', 'c', 'c.id = it.club_id')
+      .innerJoin('partidos', 'p', 'p.id = i.partido_id')
+      .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
+      .where('i.tenant_id = :tenantId', { tenantId })
+      .andWhere('f.torneo_id = :torneoId', { torneoId })
+      .andWhere(`i.tipo = 'GOL'`)
+      .andWhere('i.jugador_id IS NOT NULL')
+      .groupBy('i.jugador_id, j.nombres, j.apellidos, j.rut, c.nombre')
+      .orderBy('goles', 'DESC')
+      .addOrderBy('j.apellidos', 'ASC')
+      .getRawMany<{
+        nombre: string;
+        apellido: string;
+        rut: string | null;
+        clubNombre: string | null;
+        goles: number;
+      }>();
+
+    return rows.map((r, idx) => ({
+      posicion: idx + 1,
+      jugadorNombre: `${r.nombre} ${r.apellido}`,
+      rut: r.rut,
+      clubNombre: r.clubNombre,
+      goles: Number(r.goles),
+    }));
+  }
+
+  /**
+   * Resultados de los partidos del torneo (opcionalmente de una fecha).
+   * Útil para imprimir/compartir la programación o lo jugado.
+   */
+  async resultados(
+    tenantId: string,
+    torneoId: string,
+    fechaNumero?: number,
+  ): Promise<ResultadoPartidoInforme[]> {
+    const qb = this.partidoRepo
+      .createQueryBuilder()
+      .from('partidos', 'p')
+      .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
+      .leftJoin('inscripciones_torneo', 'il', 'il.id = p.inscripcion_local_id')
+      .leftJoin('clubes', 'cl', 'cl.id = il.club_id')
+      .leftJoin('inscripciones_torneo', 'iv', 'iv.id = p.inscripcion_visita_id')
+      .leftJoin('clubes', 'cv', 'cv.id = iv.club_id')
+      .leftJoin('canchas', 'ca', 'ca.id = p.cancha_id')
+      .where('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('f.torneo_id = :torneoId', { torneoId });
+    if (fechaNumero != null) {
+      qb.andWhere('f.numero = :fechaNumero', { fechaNumero });
+    }
+
+    const rows = await qb
+      .select('p.id', 'partidoId')
+      .addSelect('f.numero', 'fechaNumero')
+      .addSelect('cl.nombre', 'localNombre')
+      .addSelect('cv.nombre', 'visitaNombre')
+      .addSelect('p.goles_local', 'golesLocal')
+      .addSelect('p.goles_visita', 'golesVisita')
+      .addSelect('p.estado', 'estado')
+      .addSelect('p.fecha_hora', 'fechaHora')
+      .addSelect('ca.nombre', 'canchaNombre')
+      .orderBy('f.numero', 'ASC')
+      .addOrderBy('p.fecha_hora', 'ASC')
+      .getRawMany<{
+        partidoId: string;
+        fechaNumero: number;
+        localNombre: string | null;
+        visitaNombre: string | null;
+        golesLocal: number | null;
+        golesVisita: number | null;
+        estado: string;
+        fechaHora: Date | null;
+        canchaNombre: string | null;
+      }>();
+
+    return rows.map((r) => ({
+      partidoId: r.partidoId,
+      fechaNumero: Number(r.fechaNumero),
+      localNombre: r.localNombre,
+      visitaNombre: r.visitaNombre,
+      golesLocal: r.golesLocal == null ? null : Number(r.golesLocal),
+      golesVisita: r.golesVisita == null ? null : Number(r.golesVisita),
+      estado: r.estado,
+      fechaHora: r.fechaHora ? r.fechaHora.toISOString() : null,
+      canchaNombre: r.canchaNombre,
+    }));
   }
 }
