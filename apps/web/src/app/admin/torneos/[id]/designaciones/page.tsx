@@ -7,6 +7,7 @@ import {
   CalendarRange,
   CheckCircle2,
   Plus,
+  RefreshCw,
   Trash2,
   UserCog,
   Wand2,
@@ -108,6 +109,7 @@ export default function DesignacionesPage({
   // reprogramada) y se asignarían árbitros a un partido que no se juega.
   const fechas = (fixture?.fechas ?? []).filter((f) => f.estado !== 'SUSPENDIDA');
   const [fechaId, setFechaId] = useState<string | null>(null);
+  const fechaActual = fechas.find((f) => f.id === fechaId);
 
   // Default: primera fecha programada / en curso. Si todas están finalizadas,
   // la primera.
@@ -187,6 +189,27 @@ export default function DesignacionesPage({
               </div>
             )}
           </div>
+
+          {/* Fecha real de la jornada seleccionada + distintivo si es reprogramada */}
+          {fechaActual && (
+            <div className="mb-5 flex items-center gap-3 flex-wrap">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-ink-mute font-semibold">
+                  Fecha {fechaActual.numero}
+                </p>
+                <p className="font-display text-2xl text-green-deep tracking-display tabular-nums">
+                  {fechaActual.fechaInicio
+                    ? fechaActual.fechaInicio.slice(0, 10).split('-').reverse().join('-')
+                    : 'Sin fecha asignada'}
+                </p>
+              </div>
+              {fechaActual.tipoReprogramacion === 'REPROGRAMADA' && (
+                <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-orange-700/15 text-orange-700 font-semibold">
+                  <RefreshCw size={11} /> Reprogramada
+                </span>
+              )}
+            </div>
+          )}
 
           {loadingDesig && (
             <div className="font-serif italic text-ink-mute">Cargando designaciones…</div>
