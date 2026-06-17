@@ -7,12 +7,13 @@ import {
   CalendarRange,
   CheckCircle2,
   Plus,
-  RefreshCw,
   Trash2,
   UserCog,
   Wand2,
   X,
 } from 'lucide-react';
+
+import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -203,11 +204,7 @@ export default function DesignacionesPage({
                     : 'Sin fecha asignada'}
                 </p>
               </div>
-              {fechaActual.tipoReprogramacion === 'REPROGRAMADA' && (
-                <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-orange-700/15 text-orange-700 font-semibold">
-                  <RefreshCw size={11} /> Reprogramada
-                </span>
-              )}
+              {fechaActual.tipoReprogramacion === 'REPROGRAMADA' && <ReprogramadaBadge />}
             </div>
           )}
 

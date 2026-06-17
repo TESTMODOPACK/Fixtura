@@ -38,6 +38,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
+import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import { apiFetch, ApiError } from '@/lib/api';
 import { formatFecha } from '@/lib/format';
 import {
@@ -248,9 +249,7 @@ function FechaCard({
           <CardLabel tone="mute">
             Fecha {fecha.numero}
             {fecha.tipoReprogramacion === 'REPROGRAMADA' && (
-              <span className="ml-2 text-[9px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded bg-accent/20 text-accent">
-                Reprogramada
-              </span>
+              <ReprogramadaBadge className="ml-2 align-middle" />
             )}
             {fecha.tipoReprogramacion === 'ORIGINAL' && estaSuspendida && (
               <span className="ml-2 text-[9px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded bg-ink-mute/20 text-ink-mute">
