@@ -2534,3 +2534,47 @@ export function useInformeEnRiesgo(torneoId: string | undefined) {
       apiFetch<EnRiesgoAmarilla[]>(`/admin/informes/disciplina/en-riesgo?torneoId=${torneoId}`),
   });
 }
+
+// ─── Informes (finanzas) ────────────────────────────────────────────
+import type {
+  EstadoCuentaClub,
+  Moroso,
+  MultaPendiente,
+  RecaudacionConcepto,
+} from '@fixtura/types';
+
+export function useInformeEstadoCuenta(torneoId?: string) {
+  const qs = torneoId ? `?torneoId=${torneoId}` : '';
+  return useQuery({
+    queryKey: ['admin', 'informes', 'estado-cuenta', { torneoId: torneoId ?? null }],
+    queryFn: () => apiFetch<EstadoCuentaClub[]>(`/admin/informes/finanzas/estado-cuenta${qs}`),
+  });
+}
+
+export function useInformeMultasPendientes(torneoId?: string, clubId?: string) {
+  const p = new URLSearchParams();
+  if (torneoId) p.set('torneoId', torneoId);
+  if (clubId) p.set('clubId', clubId);
+  const qs = p.toString();
+  return useQuery({
+    queryKey: ['admin', 'informes', 'multas', { torneoId: torneoId ?? null, clubId: clubId ?? null }],
+    queryFn: () =>
+      apiFetch<MultaPendiente[]>(`/admin/informes/finanzas/multas-pendientes${qs ? `?${qs}` : ''}`),
+  });
+}
+
+export function useInformeMorosos(torneoId?: string) {
+  const qs = torneoId ? `?torneoId=${torneoId}` : '';
+  return useQuery({
+    queryKey: ['admin', 'informes', 'morosos', { torneoId: torneoId ?? null }],
+    queryFn: () => apiFetch<Moroso[]>(`/admin/informes/finanzas/morosos${qs}`),
+  });
+}
+
+export function useInformeRecaudacion(torneoId?: string) {
+  const qs = torneoId ? `?torneoId=${torneoId}` : '';
+  return useQuery({
+    queryKey: ['admin', 'informes', 'recaudacion', { torneoId: torneoId ?? null }],
+    queryFn: () => apiFetch<RecaudacionConcepto[]>(`/admin/informes/finanzas/recaudacion${qs}`),
+  });
+}

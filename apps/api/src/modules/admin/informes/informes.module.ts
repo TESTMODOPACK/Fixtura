@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { Cobro } from '../../competition/entities/cobro.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
@@ -14,7 +15,9 @@ import { InformesPdfService } from './informes-pdf.service';
  * acotado a su club.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([SancionActiva, IncidenciaPartido, Tenant])],
+  imports: [
+    TypeOrmModule.forFeature([SancionActiva, IncidenciaPartido, Tenant, Cobro]),
+  ],
   controllers: [InformesAdminController],
   providers: [InformesAdminService, InformesPdfService],
   exports: [InformesAdminService],

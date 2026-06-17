@@ -5,11 +5,16 @@ import { Repository } from 'typeorm';
 import {
   AMARILLAS_PARA_SUSPENSION,
   type EnRiesgoAmarilla,
+  type EstadoCuentaClub,
   type EstadoMultaInforme,
   type ExpulsadoFecha,
+  type Moroso,
+  type MultaPendiente,
+  type RecaudacionConcepto,
   type SancionVigente,
 } from '@fixtura/types';
 
+import { Cobro } from '../../competition/entities/cobro.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 
@@ -32,6 +37,8 @@ export class InformesAdminService {
     private readonly sancionRepo: Repository<SancionActiva>,
     @InjectRepository(IncidenciaPartido)
     private readonly incidenciaRepo: Repository<IncidenciaPartido>,
+    @InjectRepository(Cobro)
+    private readonly cobroRepo: Repository<Cobro>,
   ) {}
 
   private hoy(): string {
@@ -299,6 +306,198 @@ export class InformesAdminService {
         amarillas,
         faltanParaSuspension:
           AMARILLAS_PARA_SUSPENSION - (amarillas % AMARILLAS_PARA_SUSPENSION),
+      };
+    });
+  }
+
+  // ─── Fase 2: Finanzas (sobre tabla cobros) ──────────────────────────
+  // Estado derivado igual que en /admin/finanzas:
+  //   PAGADO    → pagado_at IS NOT NULL
+  //   VENCIDO   → no pagado, no cancelado, vencimiento < hoy
+  //   PENDIENTE → no pagado, no cancelado, sin vencer
+  // CURRENT_DATE usa la TZ del proceso DB (America/Santiago).
+
+  private readonly SQL_VENCIDO =
+    "c.pagado_at IS NULL AND NOT c.cancelado AND c.vencimiento IS NOT NULL AND c.vencimiento < CURRENT_DATE";
+  private readonly SQL_PENDIENTE =
+    "c.pagado_at IS NULL AND NOT c.cancelado AND (c.vencimiento IS NULL OR c.vencimiento >= CURRENT_DATE)";
+
+  /** Estado de cuenta agregado por club. */
+  async estadoCuenta(
+    tenantId: string,
+    torneoId?: string,
+  ): Promise<EstadoCuentaClub[]> {
+    const qb = this.cobroRepo
+      .createQueryBuilder()
+      .from('cobros', 'c')
+      .leftJoin('inscripciones_torneo', 'i', 'i.id = c.inscripcion_id')
+      .leftJoin('clubes', 'cl', 'cl.id = i.club_id')
+      .where('c.tenant_id = :tenantId', { tenantId });
+    if (torneoId) qb.andWhere('c.torneo_id = :torneoId', { torneoId });
+
+    const rows = await qb
+      .select('cl.id', 'clubId')
+      .addSelect('cl.nombre', 'clubNombre')
+      .addSelect('SUM(CASE WHEN NOT c.cancelado THEN c.monto ELSE 0 END)', 'total')
+      .addSelect('SUM(CASE WHEN c.pagado_at IS NOT NULL THEN c.monto ELSE 0 END)', 'pagado')
+      .addSelect(`SUM(CASE WHEN ${this.SQL_PENDIENTE} THEN c.monto ELSE 0 END)`, 'pendiente')
+      .addSelect(`SUM(CASE WHEN ${this.SQL_VENCIDO} THEN c.monto ELSE 0 END)`, 'vencido')
+      .groupBy('cl.id')
+      .addGroupBy('cl.nombre')
+      .orderBy('cl.nombre', 'ASC')
+      .getRawMany<{
+        clubId: string | null;
+        clubNombre: string | null;
+        total: string;
+        pagado: string;
+        pendiente: string;
+        vencido: string;
+      }>();
+
+    return rows.map((r) => {
+      const pendiente = Number(r.pendiente);
+      const vencido = Number(r.vencido);
+      return {
+        clubId: r.clubId,
+        clubNombre: r.clubNombre,
+        total: Number(r.total),
+        pagado: Number(r.pagado),
+        pendiente,
+        vencido,
+        saldo: pendiente + vencido,
+      };
+    });
+  }
+
+  /** Multas pendientes de pago (disciplina × cobros). */
+  async multasPendientes(
+    tenantId: string,
+    torneoId?: string,
+    clubId?: string,
+  ): Promise<MultaPendiente[]> {
+    const qb = this.cobroRepo
+      .createQueryBuilder()
+      .from('cobros', 'c')
+      .leftJoin('inscripciones_torneo', 'i', 'i.id = c.inscripcion_id')
+      .leftJoin('clubes', 'cl', 'cl.id = i.club_id')
+      .leftJoin('torneos', 't', 't.id = c.torneo_id')
+      .where('c.tenant_id = :tenantId', { tenantId })
+      .andWhere('c.pagado_at IS NULL')
+      .andWhere('NOT c.cancelado')
+      .andWhere(`(c.categoria = 'MULTA' OR c.sancion_id IS NOT NULL)`);
+    if (torneoId) qb.andWhere('c.torneo_id = :torneoId', { torneoId });
+    if (clubId) qb.andWhere('i.club_id = :clubId', { clubId });
+
+    const rows = await qb
+      .select('c.id', 'cobroId')
+      .addSelect('c.concepto', 'concepto')
+      .addSelect('cl.nombre', 'clubNombre')
+      .addSelect('t.nombre', 'torneoNombre')
+      .addSelect('c.monto', 'monto')
+      .addSelect('c.vencimiento', 'vencimiento')
+      .addSelect(`(${this.SQL_VENCIDO})`, 'estaVencido')
+      .orderBy('cl.nombre', 'ASC')
+      .addOrderBy('c.vencimiento', 'ASC')
+      .getRawMany<{
+        cobroId: string;
+        concepto: string;
+        clubNombre: string | null;
+        torneoNombre: string | null;
+        monto: string;
+        vencimiento: string | null;
+        estaVencido: boolean;
+      }>();
+
+    return rows.map((r) => ({
+      cobroId: r.cobroId,
+      concepto: r.concepto,
+      clubNombre: r.clubNombre,
+      torneoNombre: r.torneoNombre,
+      monto: Number(r.monto),
+      vencimiento: r.vencimiento,
+      estado: r.estaVencido ? 'VENCIDO' : 'PENDIENTE',
+    }));
+  }
+
+  /** Cobros vencidos (morosos), ordenados por días de mora. */
+  async morosos(tenantId: string, torneoId?: string): Promise<Moroso[]> {
+    const qb = this.cobroRepo
+      .createQueryBuilder()
+      .from('cobros', 'c')
+      .leftJoin('inscripciones_torneo', 'i', 'i.id = c.inscripcion_id')
+      .leftJoin('clubes', 'cl', 'cl.id = i.club_id')
+      .where('c.tenant_id = :tenantId', { tenantId })
+      .andWhere(this.SQL_VENCIDO);
+    if (torneoId) qb.andWhere('c.torneo_id = :torneoId', { torneoId });
+
+    const rows = await qb
+      .select('c.id', 'cobroId')
+      .addSelect('cl.nombre', 'clubNombre')
+      .addSelect('c.concepto', 'concepto')
+      .addSelect('c.monto', 'monto')
+      .addSelect('c.vencimiento', 'vencimiento')
+      .addSelect('(CURRENT_DATE - c.vencimiento)', 'diasMora')
+      .addSelect('c.estado_dunning', 'estadoDunning')
+      .addSelect('c.dunning_avisos_enviados', 'avisos')
+      .orderBy('"diasMora"', 'DESC')
+      .getRawMany<{
+        cobroId: string;
+        clubNombre: string | null;
+        concepto: string;
+        monto: string;
+        vencimiento: string | null;
+        diasMora: string;
+        estadoDunning: string;
+        avisos: string;
+      }>();
+
+    return rows.map((r) => ({
+      cobroId: r.cobroId,
+      clubNombre: r.clubNombre,
+      concepto: r.concepto,
+      monto: Number(r.monto),
+      vencimiento: r.vencimiento,
+      diasMora: Number(r.diasMora),
+      estadoDunning: r.estadoDunning,
+      avisos: Number(r.avisos),
+    }));
+  }
+
+  /** Recaudación por concepto: cobrado vs por cobrar. */
+  async recaudacion(
+    tenantId: string,
+    torneoId?: string,
+  ): Promise<RecaudacionConcepto[]> {
+    const qb = this.cobroRepo
+      .createQueryBuilder()
+      .from('cobros', 'c')
+      .where('c.tenant_id = :tenantId', { tenantId })
+      .andWhere('NOT c.cancelado');
+    if (torneoId) qb.andWhere('c.torneo_id = :torneoId', { torneoId });
+
+    const rows = await qb
+      .select('c.categoria', 'categoria')
+      .addSelect('SUM(CASE WHEN c.pagado_at IS NOT NULL THEN c.monto ELSE 0 END)', 'cobrado')
+      .addSelect('SUM(CASE WHEN c.pagado_at IS NULL THEN c.monto ELSE 0 END)', 'porCobrar')
+      .addSelect('COUNT(*)', 'cantidad')
+      .groupBy('c.categoria')
+      .orderBy('c.categoria', 'ASC')
+      .getRawMany<{
+        categoria: string;
+        cobrado: string;
+        porCobrar: string;
+        cantidad: string;
+      }>();
+
+    return rows.map((r) => {
+      const cobrado = Number(r.cobrado);
+      const porCobrar = Number(r.porCobrar);
+      return {
+        categoria: r.categoria,
+        cobrado,
+        porCobrar,
+        total: cobrado + porCobrar,
+        cantidad: Number(r.cantidad),
       };
     });
   }

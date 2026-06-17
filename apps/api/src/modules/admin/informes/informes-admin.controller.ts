@@ -12,8 +12,12 @@ import type { Response } from 'express';
 import {
   ROLE,
   type EnRiesgoAmarilla,
+  type EstadoCuentaClub,
   type EstadoMultaInforme,
   type ExpulsadoFecha,
+  type Moroso,
+  type MultaPendiente,
+  type RecaudacionConcepto,
   type SancionVigente,
   type UserContext,
 } from '@fixtura/types';
@@ -39,6 +43,10 @@ function multaStr(monto: number | null, estado: EstadoMultaInforme | null): stri
   if (monto == null || estado == null) return '—';
   const e = estado === 'PAGADO' ? 'Pagada' : estado === 'VENCIDO' ? 'Vencida' : 'Pendiente';
   return `$${monto.toLocaleString('es-CL')} (${e})`;
+}
+
+function clp(n: number): string {
+  return `$${n.toLocaleString('es-CL')}`;
 }
 
 /**
@@ -196,6 +204,174 @@ export class InformesAdminController {
         r.clubNombre ?? '—',
         String(r.amarillas),
         String(r.faltanParaSuspension),
+      ]),
+    });
+    res.send(buffer);
+  }
+
+  // ─── Fase 2: Finanzas ───────────────────────────────────────────────
+
+  /** Estado de cuenta agregado por club. */
+  @Get('finanzas/estado-cuenta')
+  estadoCuenta(
+    @CurrentUser() user: UserContext,
+    @Query('torneoId') torneoId?: string,
+  ): Promise<EstadoCuentaClub[]> {
+    return this.svc.estadoCuenta(ensureTenant(user), torneoId || undefined);
+  }
+
+  @Get('finanzas/estado-cuenta.pdf')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="estado-cuenta.pdf"')
+  async estadoCuentaPdf(
+    @CurrentUser() user: UserContext,
+    @Res() res: Response,
+    @Query('torneoId') torneoId?: string,
+  ): Promise<void> {
+    const tenantId = ensureTenant(user);
+    const rows = await this.svc.estadoCuenta(tenantId, torneoId || undefined);
+    const buffer = await this.pdf.tabla(tenantId, {
+      titulo: 'Estado de cuenta por club',
+      columnas: [
+        { label: 'Club', width: 220 },
+        { label: 'Total', width: 110, align: 'right' },
+        { label: 'Pagado', width: 110, align: 'right' },
+        { label: 'Pendiente', width: 110, align: 'right' },
+        { label: 'Vencido', width: 100, align: 'right' },
+        { label: 'Saldo', width: 110, align: 'right' },
+      ],
+      filas: rows.map((r) => [
+        r.clubNombre ?? '— sin club —',
+        clp(r.total),
+        clp(r.pagado),
+        clp(r.pendiente),
+        clp(r.vencido),
+        clp(r.saldo),
+      ]),
+    });
+    res.send(buffer);
+  }
+
+  /** Multas pendientes de pago. */
+  @Get('finanzas/multas-pendientes')
+  multasPendientes(
+    @CurrentUser() user: UserContext,
+    @Query('torneoId') torneoId?: string,
+    @Query('clubId') clubId?: string,
+  ): Promise<MultaPendiente[]> {
+    return this.svc.multasPendientes(
+      ensureTenant(user),
+      torneoId || undefined,
+      clubId || undefined,
+    );
+  }
+
+  @Get('finanzas/multas-pendientes.pdf')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="multas-pendientes.pdf"')
+  async multasPendientesPdf(
+    @CurrentUser() user: UserContext,
+    @Res() res: Response,
+    @Query('torneoId') torneoId?: string,
+    @Query('clubId') clubId?: string,
+  ): Promise<void> {
+    const tenantId = ensureTenant(user);
+    const rows = await this.svc.multasPendientes(
+      tenantId,
+      torneoId || undefined,
+      clubId || undefined,
+    );
+    const buffer = await this.pdf.tabla(tenantId, {
+      titulo: 'Multas pendientes de pago',
+      columnas: [
+        { label: 'Concepto', width: 320 },
+        { label: 'Club', width: 150 },
+        { label: 'Monto', width: 110, align: 'right' },
+        { label: 'Estado', width: 90 },
+      ],
+      filas: rows.map((m) => [
+        m.concepto,
+        m.clubNombre ?? '—',
+        clp(m.monto),
+        m.estado === 'VENCIDO' ? 'Vencida' : 'Pendiente',
+      ]),
+    });
+    res.send(buffer);
+  }
+
+  /** Cobros vencidos (morosos). */
+  @Get('finanzas/morosos')
+  morosos(
+    @CurrentUser() user: UserContext,
+    @Query('torneoId') torneoId?: string,
+  ): Promise<Moroso[]> {
+    return this.svc.morosos(ensureTenant(user), torneoId || undefined);
+  }
+
+  @Get('finanzas/morosos.pdf')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="morosos.pdf"')
+  async morososPdf(
+    @CurrentUser() user: UserContext,
+    @Res() res: Response,
+    @Query('torneoId') torneoId?: string,
+  ): Promise<void> {
+    const tenantId = ensureTenant(user);
+    const rows = await this.svc.morosos(tenantId, torneoId || undefined);
+    const buffer = await this.pdf.tabla(tenantId, {
+      titulo: 'Morosos (cobros vencidos)',
+      columnas: [
+        { label: 'Club', width: 160 },
+        { label: 'Concepto', width: 260 },
+        { label: 'Monto', width: 100, align: 'right' },
+        { label: 'Días mora', width: 80, align: 'center' },
+        { label: 'Avisos', width: 70, align: 'center' },
+      ],
+      filas: rows.map((m) => [
+        m.clubNombre ?? '—',
+        m.concepto,
+        clp(m.monto),
+        String(m.diasMora),
+        String(m.avisos),
+      ]),
+    });
+    res.send(buffer);
+  }
+
+  /** Recaudación por concepto: cobrado vs por cobrar. */
+  @Get('finanzas/recaudacion')
+  recaudacion(
+    @CurrentUser() user: UserContext,
+    @Query('torneoId') torneoId?: string,
+  ): Promise<RecaudacionConcepto[]> {
+    return this.svc.recaudacion(ensureTenant(user), torneoId || undefined);
+  }
+
+  @Get('finanzas/recaudacion.pdf')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="recaudacion.pdf"')
+  async recaudacionPdf(
+    @CurrentUser() user: UserContext,
+    @Res() res: Response,
+    @Query('torneoId') torneoId?: string,
+  ): Promise<void> {
+    const tenantId = ensureTenant(user);
+    const rows = await this.svc.recaudacion(tenantId, torneoId || undefined);
+    const buffer = await this.pdf.tabla(tenantId, {
+      titulo: 'Recaudación por concepto',
+      columnas: [
+        { label: 'Concepto', width: 220 },
+        { label: 'Cobrado', width: 140, align: 'right' },
+        { label: 'Por cobrar', width: 140, align: 'right' },
+        { label: 'Total', width: 140, align: 'right' },
+        { label: 'Cobros', width: 80, align: 'center' },
+      ],
+      filas: rows.map((r) => [
+        r.categoria,
+        clp(r.cobrado),
+        clp(r.porCobrar),
+        clp(r.total),
+        String(r.cantidad),
       ]),
     });
     res.send(buffer);

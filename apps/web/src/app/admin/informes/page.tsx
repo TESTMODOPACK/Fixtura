@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Download, FileText, Gavel, ShieldAlert, UserX } from 'lucide-react';
+import { AlertTriangle, Coins, Download, FileText, Gavel } from 'lucide-react';
 import { useState } from 'react';
 
 import type {
@@ -18,13 +18,40 @@ import { useAuthStore } from '@/store/auth-store';
 import {
   useClubes,
   useInformeEnRiesgo,
+  useInformeEstadoCuenta,
   useInformeExpulsados,
+  useInformeMorosos,
+  useInformeMultasPendientes,
+  useInformeRecaudacion,
   useInformeSancionados,
   useTorneos,
 } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
 
-type Vista = 'expulsados' | 'sancionados' | 'enRiesgo';
+type Grupo = 'disciplina' | 'finanzas';
+type Vista =
+  | 'expulsados'
+  | 'sancionados'
+  | 'enRiesgo'
+  | 'estadoCuenta'
+  | 'multas'
+  | 'morosos'
+  | 'recaudacion';
+
+const VISTAS_POR_GRUPO: Record<Grupo, Vista[]> = {
+  disciplina: ['expulsados', 'sancionados', 'enRiesgo'],
+  finanzas: ['estadoCuenta', 'multas', 'morosos', 'recaudacion'],
+};
+
+const VISTA_LABEL: Record<Vista, string> = {
+  expulsados: 'Expulsados por fecha',
+  sancionados: 'Sancionados',
+  enRiesgo: 'En riesgo',
+  estadoCuenta: 'Estado de cuenta',
+  multas: 'Multas pendientes',
+  morosos: 'Morosos',
+  recaudacion: 'Recaudación',
+};
 
 function clp(n: number | null): string {
   return n == null ? '—' : `$${n.toLocaleString('es-CL')}`;
@@ -97,6 +124,7 @@ function MultaBadge({
 }
 
 export default function InformesPage(): React.ReactElement {
+  const [grupo, setGrupo] = useState<Grupo>('disciplina');
   const [vista, setVista] = useState<Vista>('expulsados');
   const [torneoId, setTorneoId] = useState('');
   const [fechaNumero, setFechaNumero] = useState('');
@@ -106,25 +134,43 @@ export default function InformesPage(): React.ReactElement {
   const { data: torneos } = useTorneos();
   const { data: clubes } = useClubes();
 
+  const cambiarGrupo = (g: Grupo): void => {
+    setGrupo(g);
+    setVista(VISTAS_POR_GRUPO[g][0]!);
+  };
+
+  // Qué filtros muestra cada vista.
+  const torneoObligatorio = vista === 'expulsados' || vista === 'enRiesgo';
+  const muestraFecha = vista === 'expulsados';
+  const muestraClub = vista === 'sancionados' || vista === 'multas';
+  const muestraIncluirCumplidas = vista === 'sancionados';
+
   return (
     <>
       <PageHead
         eyebrow="Reportes"
         title="Informes"
-        sub="Visibilidad de disciplina para la administración. Filtra y descarga a Excel."
+        sub="Visibilidad para la administración. Filtra y descarga a Excel o PDF."
       />
 
+      {/* Grupos */}
+      <div className="flex gap-2 mb-4">
+        <GrupoBtn active={grupo === 'disciplina'} onClick={() => cambiarGrupo('disciplina')}>
+          <Gavel size={14} className="inline mr-1" /> Disciplina
+        </GrupoBtn>
+        <GrupoBtn active={grupo === 'finanzas'} onClick={() => cambiarGrupo('finanzas')}>
+          <Coins size={14} className="inline mr-1" /> Finanzas
+        </GrupoBtn>
+      </div>
+
+      {/* Sub-vistas del grupo activo */}
       <div className="border-b border-line mb-6 -mx-6 md:-mx-10 px-6 md:px-10">
         <nav className="flex gap-1 flex-wrap">
-          <TabBtn active={vista === 'expulsados'} onClick={() => setVista('expulsados')}>
-            <UserX size={14} className="inline mr-1" /> Expulsados por fecha
-          </TabBtn>
-          <TabBtn active={vista === 'sancionados'} onClick={() => setVista('sancionados')}>
-            <Gavel size={14} className="inline mr-1" /> Sancionados
-          </TabBtn>
-          <TabBtn active={vista === 'enRiesgo'} onClick={() => setVista('enRiesgo')}>
-            <ShieldAlert size={14} className="inline mr-1" /> En riesgo
-          </TabBtn>
+          {VISTAS_POR_GRUPO[grupo].map((v) => (
+            <TabBtn key={v} active={vista === v} onClick={() => setVista(v)}>
+              {VISTA_LABEL[v]}
+            </TabBtn>
+          ))}
         </nav>
       </div>
 
@@ -132,7 +178,7 @@ export default function InformesPage(): React.ReactElement {
       <div className="mb-5 p-3 rounded-card border border-line bg-paper/40 flex flex-col md:flex-row md:flex-wrap gap-3 md:items-end">
         <div className="md:min-w-[220px] md:flex-1">
           <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
-            Torneo {vista !== 'sancionados' && <span className="text-danger">*</span>}
+            Torneo {torneoObligatorio && <span className="text-danger">*</span>}
           </label>
           <select
             className="input w-full"
@@ -140,7 +186,7 @@ export default function InformesPage(): React.ReactElement {
             onChange={(e) => setTorneoId(e.target.value)}
           >
             <option value="">
-              {vista === 'sancionados' ? 'Todos los torneos' : 'Selecciona un torneo…'}
+              {torneoObligatorio ? 'Selecciona un torneo…' : 'Todos los torneos'}
             </option>
             {torneos?.map((t) => (
               <option key={t.id} value={t.id}>
@@ -150,7 +196,7 @@ export default function InformesPage(): React.ReactElement {
           </select>
         </div>
 
-        {vista === 'expulsados' && (
+        {muestraFecha && (
           <div className="md:min-w-[120px]">
             <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
               N° de fecha
@@ -166,34 +212,35 @@ export default function InformesPage(): React.ReactElement {
           </div>
         )}
 
-        {vista === 'sancionados' && (
-          <>
-            <div className="md:min-w-[200px]">
-              <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
-                Club
-              </label>
-              <select
-                className="input w-full"
-                value={clubId}
-                onChange={(e) => setClubId(e.target.value)}
-              >
-                <option value="">Todos los clubes</option>
-                {clubes?.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-ink-mute md:pb-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={incluirCumplidas}
-                onChange={(e) => setIncluirCumplidas(e.target.checked)}
-              />
-              Incluir cumplidas
+        {muestraClub && (
+          <div className="md:min-w-[200px]">
+            <label className="block text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
+              Club
             </label>
-          </>
+            <select
+              className="input w-full"
+              value={clubId}
+              onChange={(e) => setClubId(e.target.value)}
+            >
+              <option value="">Todos los clubes</option>
+              {clubes?.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {muestraIncluirCumplidas && (
+          <label className="flex items-center gap-2 text-sm text-ink-mute md:pb-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={incluirCumplidas}
+              onChange={(e) => setIncluirCumplidas(e.target.checked)}
+            />
+            Incluir cumplidas
+          </label>
         )}
       </div>
 
@@ -211,7 +258,38 @@ export default function InformesPage(): React.ReactElement {
         />
       )}
       {vista === 'enRiesgo' && <EnRiesgoView torneoId={torneoId} />}
+      {vista === 'estadoCuenta' && <EstadoCuentaView torneoId={torneoId || undefined} />}
+      {vista === 'multas' && (
+        <MultasView torneoId={torneoId || undefined} clubId={clubId || undefined} />
+      )}
+      {vista === 'morosos' && <MorososView torneoId={torneoId || undefined} />}
+      {vista === 'recaudacion' && <RecaudacionView torneoId={torneoId || undefined} />}
     </>
+  );
+}
+
+function GrupoBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'px-4 py-2 rounded-card text-sm font-semibold tracking-wide border transition-colors',
+        active
+          ? 'bg-green-deep text-chalk border-green-deep'
+          : 'bg-paper text-ink-mute border-line hover:border-green-deep hover:text-ink',
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -561,5 +639,298 @@ function ErrorBox(): React.ReactElement {
       <AlertTriangle size={18} className="flex-shrink-0" />
       <span className="text-sm">No pudimos cargar el informe. Reintenta en unos segundos.</span>
     </div>
+  );
+}
+
+// ─── Vista: estado de cuenta por club ────────────────────────────────
+function EstadoCuentaView({ torneoId }: { torneoId: string | undefined }): React.ReactElement {
+  const { data, isLoading, error } = useInformeEstadoCuenta(torneoId);
+  const filas = data ?? [];
+  const exportar = (): void =>
+    void exportarExcel(
+      filas.map((c) => ({
+        Club: c.clubNombre ?? 'Sin club',
+        Total: c.total,
+        Pagado: c.pagado,
+        Pendiente: c.pendiente,
+        Vencido: c.vencido,
+        Saldo: c.saldo,
+      })),
+      'estado-cuenta.xlsx',
+      'Estado de cuenta',
+    );
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="px-5 py-3 flex items-center justify-between border-b border-line">
+        <CardLabel>Estado de cuenta por club</CardLabel>
+        <div className="flex items-center gap-1">
+          <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+          <BotonPdf
+            path={`/admin/informes/finanzas/estado-cuenta.pdf${torneoId ? `?torneoId=${torneoId}` : ''}`}
+            filename="estado-cuenta.pdf"
+            disabled={filas.length === 0}
+          />
+        </div>
+      </div>
+      {isLoading && <Vacio texto="Cargando…" />}
+      {error && <ErrorBox />}
+      {!isLoading && !error && filas.length === 0 && <Vacio texto="Sin cobros." />}
+      {filas.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-ink-mute border-b border-line">
+                <th className="py-2 px-5">Club</th>
+                <th className="py-2 pr-3 text-right">Total</th>
+                <th className="py-2 pr-3 text-right">Pagado</th>
+                <th className="py-2 pr-3 text-right">Pendiente</th>
+                <th className="py-2 pr-3 text-right">Vencido</th>
+                <th className="py-2 pr-5 text-right">Saldo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((c) => (
+                <tr key={c.clubId ?? 'sin'} className="border-b border-line/50">
+                  <td className="py-2 px-5 font-medium text-ink">{c.clubNombre ?? '— sin club —'}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{clp(c.total)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums text-green-bright">{clp(c.pagado)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums text-orange-700">{clp(c.pendiente)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums text-danger">{clp(c.vencido)}</td>
+                  <td className="py-2 pr-5 text-right tabular-nums font-semibold">{clp(c.saldo)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── Vista: multas pendientes ────────────────────────────────────────
+function MultasView({
+  torneoId,
+  clubId,
+}: {
+  torneoId: string | undefined;
+  clubId: string | undefined;
+}): React.ReactElement {
+  const { data, isLoading, error } = useInformeMultasPendientes(torneoId, clubId);
+  const filas = data ?? [];
+  const exportar = (): void =>
+    void exportarExcel(
+      filas.map((m) => ({
+        Concepto: m.concepto,
+        Club: m.clubNombre ?? '',
+        Torneo: m.torneoNombre ?? '',
+        Monto: m.monto,
+        Estado: m.estado === 'VENCIDO' ? 'Vencida' : 'Pendiente',
+      })),
+      'multas-pendientes.xlsx',
+      'Multas',
+    );
+
+  const path = `/admin/informes/finanzas/multas-pendientes.pdf?${new URLSearchParams({
+    ...(torneoId ? { torneoId } : {}),
+    ...(clubId ? { clubId } : {}),
+  }).toString()}`;
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="px-5 py-3 flex items-center justify-between border-b border-line">
+        <CardLabel>Multas pendientes de pago</CardLabel>
+        <div className="flex items-center gap-1">
+          <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+          <BotonPdf path={path} filename="multas-pendientes.pdf" disabled={filas.length === 0} />
+        </div>
+      </div>
+      {isLoading && <Vacio texto="Cargando…" />}
+      {error && <ErrorBox />}
+      {!isLoading && !error && filas.length === 0 && (
+        <Vacio texto="No hay multas pendientes. 👏" />
+      )}
+      {filas.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-ink-mute border-b border-line">
+                <th className="py-2 px-5">Concepto</th>
+                <th className="py-2 pr-3">Club</th>
+                <th className="py-2 pr-3 text-right">Monto</th>
+                <th className="py-2 pr-5">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((m) => (
+                <tr key={m.cobroId} className="border-b border-line/50">
+                  <td className="py-2 px-5 text-ink">{m.concepto}</td>
+                  <td className="py-2 pr-3 text-ink-mute">{m.clubNombre ?? '—'}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums font-semibold">{clp(m.monto)}</td>
+                  <td className="py-2 pr-5">
+                    <span
+                      className={cn(
+                        'text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold',
+                        m.estado === 'VENCIDO'
+                          ? 'bg-danger/15 text-danger'
+                          : 'bg-orange-700/15 text-orange-700',
+                      )}
+                    >
+                      {m.estado === 'VENCIDO' ? 'Vencida' : 'Pendiente'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── Vista: morosos ──────────────────────────────────────────────────
+function MorososView({ torneoId }: { torneoId: string | undefined }): React.ReactElement {
+  const { data, isLoading, error } = useInformeMorosos(torneoId);
+  const filas = data ?? [];
+  const exportar = (): void =>
+    void exportarExcel(
+      filas.map((m) => ({
+        Club: m.clubNombre ?? '',
+        Concepto: m.concepto,
+        Monto: m.monto,
+        'Días mora': m.diasMora,
+        Estado: m.estadoDunning,
+        Avisos: m.avisos,
+      })),
+      'morosos.xlsx',
+      'Morosos',
+    );
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="px-5 py-3 flex items-center justify-between border-b border-line">
+        <CardLabel>Morosos (cobros vencidos)</CardLabel>
+        <div className="flex items-center gap-1">
+          <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+          <BotonPdf
+            path={`/admin/informes/finanzas/morosos.pdf${torneoId ? `?torneoId=${torneoId}` : ''}`}
+            filename="morosos.pdf"
+            disabled={filas.length === 0}
+          />
+        </div>
+      </div>
+      {isLoading && <Vacio texto="Cargando…" />}
+      {error && <ErrorBox />}
+      {!isLoading && !error && filas.length === 0 && (
+        <Vacio texto="No hay cobros vencidos. 👏" />
+      )}
+      {filas.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-ink-mute border-b border-line">
+                <th className="py-2 px-5">Club</th>
+                <th className="py-2 pr-3">Concepto</th>
+                <th className="py-2 pr-3 text-right">Monto</th>
+                <th className="py-2 pr-3 text-center">Días mora</th>
+                <th className="py-2 pr-5 text-center">Avisos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((m) => (
+                <tr key={m.cobroId} className="border-b border-line/50">
+                  <td className="py-2 px-5 font-medium text-ink">{m.clubNombre ?? '—'}</td>
+                  <td className="py-2 pr-3 text-ink-mute">{m.concepto}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{clp(m.monto)}</td>
+                  <td className="py-2 pr-3 text-center tabular-nums font-semibold text-danger">
+                    {m.diasMora}
+                  </td>
+                  <td className="py-2 pr-5 text-center tabular-nums">{m.avisos}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── Vista: recaudación por concepto ─────────────────────────────────
+function RecaudacionView({ torneoId }: { torneoId: string | undefined }): React.ReactElement {
+  const { data, isLoading, error } = useInformeRecaudacion(torneoId);
+  const filas = data ?? [];
+  const totales = filas.reduce(
+    (acc, r) => ({
+      cobrado: acc.cobrado + r.cobrado,
+      porCobrar: acc.porCobrar + r.porCobrar,
+      total: acc.total + r.total,
+    }),
+    { cobrado: 0, porCobrar: 0, total: 0 },
+  );
+  const exportar = (): void =>
+    void exportarExcel(
+      filas.map((r) => ({
+        Concepto: r.categoria,
+        Cobrado: r.cobrado,
+        'Por cobrar': r.porCobrar,
+        Total: r.total,
+        Cobros: r.cantidad,
+      })),
+      'recaudacion.xlsx',
+      'Recaudación',
+    );
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="px-5 py-3 flex items-center justify-between border-b border-line">
+        <CardLabel>Recaudación por concepto</CardLabel>
+        <div className="flex items-center gap-1">
+          <BotonExcel onClick={exportar} disabled={filas.length === 0} />
+          <BotonPdf
+            path={`/admin/informes/finanzas/recaudacion.pdf${torneoId ? `?torneoId=${torneoId}` : ''}`}
+            filename="recaudacion.pdf"
+            disabled={filas.length === 0}
+          />
+        </div>
+      </div>
+      {isLoading && <Vacio texto="Cargando…" />}
+      {error && <ErrorBox />}
+      {!isLoading && !error && filas.length === 0 && <Vacio texto="Sin cobros." />}
+      {filas.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-ink-mute border-b border-line">
+                <th className="py-2 px-5">Concepto</th>
+                <th className="py-2 pr-3 text-right">Cobrado</th>
+                <th className="py-2 pr-3 text-right">Por cobrar</th>
+                <th className="py-2 pr-3 text-right">Total</th>
+                <th className="py-2 pr-5 text-center">Cobros</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((r) => (
+                <tr key={r.categoria} className="border-b border-line/50">
+                  <td className="py-2 px-5 font-medium text-ink">{r.categoria}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums text-green-bright">{clp(r.cobrado)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums text-orange-700">{clp(r.porCobrar)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{clp(r.total)}</td>
+                  <td className="py-2 pr-5 text-center tabular-nums">{r.cantidad}</td>
+                </tr>
+              ))}
+              <tr className="bg-green-deep/5 font-semibold">
+                <td className="py-2 px-5">Total</td>
+                <td className="py-2 pr-3 text-right tabular-nums text-green-bright">{clp(totales.cobrado)}</td>
+                <td className="py-2 pr-3 text-right tabular-nums text-orange-700">{clp(totales.porCobrar)}</td>
+                <td className="py-2 pr-3 text-right tabular-nums">{clp(totales.total)}</td>
+                <td className="py-2 pr-5"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
