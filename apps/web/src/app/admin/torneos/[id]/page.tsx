@@ -200,6 +200,7 @@ export default function TorneoDetailPage({
           duracionPeriodoMinutos={torneo.duracionPeriodoMinutos}
           duracionEntretiempoMinutos={torneo.duracionEntretiempoMinutos}
           minJugadoresParaIniciar={torneo.minJugadoresParaIniciar}
+          amarillasParaSuspension={torneo.amarillasParaSuspension}
         />
       )}
     </>
@@ -749,6 +750,7 @@ function ConfiguracionTab({
   duracionPeriodoMinutos,
   duracionEntretiempoMinutos,
   minJugadoresParaIniciar,
+  amarillasParaSuspension,
 }: {
   torneoId: string;
   estado: string;
@@ -758,6 +760,7 @@ function ConfiguracionTab({
   duracionPeriodoMinutos: number;
   duracionEntretiempoMinutos: number;
   minJugadoresParaIniciar: number;
+  amarillasParaSuspension: number;
 }): React.ReactElement {
   const mutation = useUpdateTorneo(torneoId);
   const deleteTorneo = useDeleteTorneo();
@@ -787,16 +790,26 @@ function ConfiguracionTab({
     duracionEntretiempoMinutos,
   );
   const [minJugadores, setMinJugadores] = useState<number>(minJugadoresParaIniciar);
+  const [amarillasSuspension, setAmarillasSuspension] = useState<number>(
+    amarillasParaSuspension,
+  );
   useEffect(() => {
     setDuracionPeriodo(duracionPeriodoMinutos);
     setDuracionEntretiempo(duracionEntretiempoMinutos);
     setMinJugadores(minJugadoresParaIniciar);
-  }, [duracionPeriodoMinutos, duracionEntretiempoMinutos, minJugadoresParaIniciar]);
+    setAmarillasSuspension(amarillasParaSuspension);
+  }, [
+    duracionPeriodoMinutos,
+    duracionEntretiempoMinutos,
+    minJugadoresParaIniciar,
+    amarillasParaSuspension,
+  ]);
 
   const cambioDuracion =
     duracionPeriodo !== duracionPeriodoMinutos ||
     duracionEntretiempo !== duracionEntretiempoMinutos ||
-    minJugadores !== minJugadoresParaIniciar;
+    minJugadores !== minJugadoresParaIniciar ||
+    amarillasSuspension !== amarillasParaSuspension;
 
   const guardarDuracion = (): void => {
     if (!cambioDuracion) return;
@@ -804,6 +817,7 @@ function ConfiguracionTab({
       duracionPeriodoMinutos: duracionPeriodo,
       duracionEntretiempoMinutos: duracionEntretiempo,
       minJugadoresParaIniciar: minJugadores,
+      amarillasParaSuspension: amarillasSuspension,
     });
   };
 
@@ -995,7 +1009,7 @@ function ConfiguracionTab({
           Cuánto dura cada tiempo y el descanso. El match center y la vista en
           vivo van a heredar estos valores al arrancar el cronómetro.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
           <div>
             <label className="block text-xs uppercase tracking-wider text-ink-mute font-semibold mb-1">
               Minutos por tiempo
@@ -1035,6 +1049,19 @@ function ConfiguracionTab({
               onChange={(e) => setMinJugadores(Number(e.target.value))}
             />
           </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-ink-mute font-semibold mb-1">
+              Amarillas para suspensión
+            </label>
+            <input
+              type="number"
+              min={2}
+              max={20}
+              className="input w-full"
+              value={amarillasSuspension}
+              onChange={(e) => setAmarillasSuspension(Number(e.target.value))}
+            />
+          </div>
         </div>
         <div className="mt-3">
           <Button
@@ -1049,8 +1076,9 @@ function ConfiguracionTab({
         </div>
         <p className="text-xs font-serif italic text-ink-mute mt-3">
           Default: 40 min / 10 min entretiempo · mínimo 7 jugadores por equipo
-          para iniciar. La duración aplica solo a partidos que todavía no
-          arrancaron el match center.
+          para iniciar · 5 amarillas para suspensión. La duración aplica solo a
+          partidos que todavía no arrancaron el match center. El umbral de
+          amarillas se evalúa al cerrar cada acta.
         </p>
       </Card>
     </div>

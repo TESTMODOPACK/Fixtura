@@ -148,6 +148,11 @@ export class Torneo {
   @Column({ name: 'min_jugadores_para_iniciar', type: 'smallint', default: 7 })
   minJugadoresParaIniciar!: number;
 
+  // Cuántas amarillas acumuladas en el torneo generan una fecha de
+  // suspensión automática. Default 5. Lo usa el motor de sanciones.
+  @Column({ name: 'amarillas_para_suspension', type: 'smallint', default: 5 })
+  amarillasParaSuspension!: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

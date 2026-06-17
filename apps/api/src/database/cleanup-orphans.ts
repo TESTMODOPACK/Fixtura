@@ -203,6 +203,15 @@ async function main(): Promise<void> {
     `);
     log('torneos.min_jugadores_para_iniciar asegurada (F46.3).');
 
+    // Umbral de amarillas para suspensión, configurable por torneo. Aditiva.
+    await client.query(`
+      ALTER TABLE torneos
+        ADD COLUMN IF NOT EXISTS amarillas_para_suspension SMALLINT
+          NOT NULL DEFAULT 5
+          CHECK (amarillas_para_suspension BETWEEN 2 AND 20)
+    `);
+    log('torneos.amarillas_para_suspension asegurada.');
+
     // F46.4 — Certificación de jugadores presentes por partido (roster del
     // acta) + timestamp de certificación en partidos. Aditivo e idempotente.
     await client.query(`

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
+import { Torneo } from '../../competition/entities/torneo.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { InformesAdminController } from './informes-admin.controller';
 import { InformesAdminService } from './informes-admin.service';
@@ -16,7 +17,13 @@ import { InformesPdfService } from './informes-pdf.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([SancionActiva, IncidenciaPartido, Tenant, Cobro]),
+    TypeOrmModule.forFeature([
+      SancionActiva,
+      IncidenciaPartido,
+      Tenant,
+      Cobro,
+      Torneo,
+    ]),
   ],
   controllers: [InformesAdminController],
   providers: [InformesAdminService, InformesPdfService],

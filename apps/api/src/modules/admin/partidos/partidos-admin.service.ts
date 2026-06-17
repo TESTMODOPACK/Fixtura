@@ -645,6 +645,14 @@ export class PartidosAdminService {
       porJugador.set(key, bucket);
     }
 
+    // Umbral de amarillas configurable por torneo (default 5).
+    const torneoCfg = await this.torneoRepo.findOne({ where: { id: torneoId } });
+    const configDisc = {
+      amarillasPorSuspension: torneoCfg?.amarillasParaSuspension ?? 5,
+      fechasPorRoja: 1,
+      fechasPorDobleAmarilla: 1,
+    };
+
     // Para cada jugador, calcular sanciones contra historial
     for (const bucket of porJugador.values()) {
       const previas = await this.getIncidenciasPreviasEnTorneo(
@@ -654,7 +662,11 @@ export class PartidosAdminService {
         partido.id,
       );
 
-      const propuestas = calcularSancionesPostPartido(previas, bucket.incidencias);
+      const propuestas = calcularSancionesPostPartido(
+        previas,
+        bucket.incidencias,
+        configDisc,
+      );
       await this.persistirPropuestas(
         propuestas,
         tenantId,
@@ -751,7 +763,7 @@ export class PartidosAdminService {
       case 'DOBLE_AMARILLA':
         return 'Sanción automática por doble amarilla en el partido.';
       case 'ACUMULACION_AMARILLAS':
-        return 'Sanción automática por acumulación de 5 amarillas en el torneo.';
+        return 'Sanción automática por acumulación de amarillas en el torneo.';
     }
   }
 

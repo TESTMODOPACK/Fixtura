@@ -38,7 +38,7 @@ import { cn } from '@/lib/cn';
 import { toastError, toastSuccess } from '@/lib/toast';
 
 const MOTIVO_LABEL: Record<string, string> = {
-  ACUMULACION_AMARILLAS: '5 amarillas acumuladas',
+  ACUMULACION_AMARILLAS: 'Amarillas acumuladas',
   ROJA_DIRECTA: 'Roja directa',
   DOBLE_AMARILLA: 'Doble amarilla',
   TRIBUNAL: 'Tribunal',

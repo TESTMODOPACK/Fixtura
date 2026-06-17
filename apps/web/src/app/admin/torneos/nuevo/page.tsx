@@ -59,6 +59,7 @@ const TORNEO_FIELD_LABEL: Record<string, string> = {
   duracionPeriodoMinutos: 'Minutos por tiempo',
   duracionEntretiempoMinutos: 'Minutos de entretiempo',
   minJugadoresParaIniciar: 'Mínimo de jugadores para iniciar',
+  amarillasParaSuspension: 'Amarillas para suspensión',
 };
 
 const TorneoFormSchema = z.object({
@@ -86,6 +87,8 @@ const TorneoFormSchema = z.object({
   duracionEntretiempoMinutos: z.coerce.number().int().min(0).max(60),
   // F46.3 — mínimo de jugadores en planilla por equipo para iniciar.
   minJugadoresParaIniciar: z.coerce.number().int().min(1).max(30),
+  // Amarillas acumuladas que generan una fecha de suspensión.
+  amarillasParaSuspension: z.coerce.number().int().min(2).max(20),
 });
 type TorneoForm = z.infer<typeof TorneoFormSchema>;
 
@@ -124,6 +127,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
       duracionPeriodoMinutos: 40,
       duracionEntretiempoMinutos: 10,
       minJugadoresParaIniciar: 7,
+      amarillasParaSuspension: 5,
     },
     mode: 'onChange',
   });
@@ -202,6 +206,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
       duracionPeriodoMinutos: vals.duracionPeriodoMinutos,
       duracionEntretiempoMinutos: vals.duracionEntretiempoMinutos,
       minJugadoresParaIniciar: vals.minJugadoresParaIniciar,
+      amarillasParaSuspension: vals.amarillasParaSuspension,
     });
       // Sprint 42 — Si el form tenía N combos (>=2), el backend creó N
       // torneos. La respuesta solo trae el primero, así que mostramos
@@ -523,6 +528,28 @@ export default function NuevoTorneoPage(): React.ReactElement {
             Default: 40 min por tiempo, 10 min de entretiempo (estándar amateur).
             El mínimo de jugadores (default 7) bloquea el inicio de un partido si
             algún equipo no tiene suficiente plantel registrado.
+          </p>
+        </Card>
+
+        <Card padding="roomy">
+          <CardLabel>Disciplina</CardLabel>
+          <p className="text-xs font-serif italic text-ink-mute mt-1 mb-4">
+            Cuántas tarjetas amarillas acumuladas en el torneo gatillan una
+            fecha de suspensión automática.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Amarillas para suspensión"
+              type="number"
+              min={2}
+              max={20}
+              {...form.register('amarillasParaSuspension', { valueAsNumber: true })}
+            />
+          </div>
+          <p className="text-xs font-serif italic text-ink-mute mt-3">
+            Default: 5. Al cerrar un acta, cuando un jugador llega al múltiplo
+            del umbral (5, 10, 15…) se le genera una fecha de suspensión
+            automática.
           </p>
         </Card>
 

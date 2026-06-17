@@ -86,6 +86,8 @@ export const CreateTorneoSchema = z.object({
   // F46.3 — mínimo de jugadores en planilla por equipo para poder iniciar
   // un partido. Configurable por formato (fútbol 11, baby, senior).
   minJugadoresParaIniciar: z.number().int().min(1).max(30).optional(),
+  // Amarillas acumuladas en el torneo que generan una fecha de suspensión.
+  amarillasParaSuspension: z.number().int().min(2).max(20).optional(),
 });
 export type CreateTorneoRequest = z.infer<typeof CreateTorneoSchema>;
 
@@ -126,6 +128,8 @@ export const TorneoAdminSchema = z.object({
   duracionEntretiempoMinutos: z.number().int().min(0).max(60),
   // F46.3 — mínimo de jugadores en planilla por equipo para iniciar.
   minJugadoresParaIniciar: z.number().int().min(1).max(30),
+  // Amarillas acumuladas que generan una fecha de suspensión.
+  amarillasParaSuspension: z.number().int().min(2).max(20),
   createdAt: z.iso.datetime(),
 });
 export type TorneoAdmin = z.infer<typeof TorneoAdminSchema>;

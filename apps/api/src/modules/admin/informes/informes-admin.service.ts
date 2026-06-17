@@ -17,6 +17,7 @@ import {
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
+import { Torneo } from '../../competition/entities/torneo.entity';
 
 /** Fila cruda de la multa asociada a una sanción. */
 interface MultaRaw {
@@ -39,7 +40,20 @@ export class InformesAdminService {
     private readonly incidenciaRepo: Repository<IncidenciaPartido>,
     @InjectRepository(Cobro)
     private readonly cobroRepo: Repository<Cobro>,
+    @InjectRepository(Torneo)
+    private readonly torneoRepo: Repository<Torneo>,
   ) {}
+
+  /** Umbral de amarillas del torneo (default 5 si no se encuentra). */
+  private async umbralAmarillas(
+    tenantId: string,
+    torneoId: string,
+  ): Promise<number> {
+    const torneo = await this.torneoRepo.findOne({
+      where: { id: torneoId, tenantId },
+    });
+    return torneo?.amarillasParaSuspension ?? AMARILLAS_PARA_SUSPENSION;
+  }
 
   private hoy(): string {
     return new Date().toISOString().slice(0, 10);
@@ -263,6 +277,7 @@ export class InformesAdminService {
     tenantId: string,
     torneoId: string,
   ): Promise<EnRiesgoAmarilla[]> {
+    const umbral = await this.umbralAmarillas(tenantId, torneoId);
     const rows = await this.incidenciaRepo
       .createQueryBuilder()
       .from('incidencias_partido', 'i')
@@ -279,8 +294,8 @@ export class InformesAdminService {
       .addGroupBy('j.rut')
       .addGroupBy('c.nombre')
       .having(`COUNT(*) % :umbral = :resto`, {
-        umbral: AMARILLAS_PARA_SUSPENSION,
-        resto: AMARILLAS_PARA_SUSPENSION - 1,
+        umbral,
+        resto: umbral - 1,
       })
       .select('j.id', 'jugadorId')
       .addSelect(`j.nombres || ' ' || j.apellidos`, 'jugadorNombre')
@@ -304,8 +319,7 @@ export class InformesAdminService {
         rut: r.rut,
         clubNombre: r.clubNombre,
         amarillas,
-        faltanParaSuspension:
-          AMARILLAS_PARA_SUSPENSION - (amarillas % AMARILLAS_PARA_SUSPENSION),
+        faltanParaSuspension: umbral - (amarillas % umbral),
       };
     });
   }
