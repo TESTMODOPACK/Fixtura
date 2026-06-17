@@ -83,8 +83,13 @@ export GIT_SHA="$NEW_SHA"
 
 # ── Build ────────────────────────────────────────────────────────────
 if [ "$MODO" != "quick" ]; then
-  echo "==> docker compose build --no-cache api web"
-  docker compose build --no-cache api web
+  # KVM 2 tiene RAM limitada: buildear api y web EN PARALELO con --no-cache
+  # agota la memoria y buildkit muere con "Unavailable: error reading from
+  # server: EOF". Buildeamos SECUENCIAL para bajar el pico de memoria.
+  echo "==> docker compose build --no-cache api (1/2)"
+  docker compose build --no-cache api
+  echo "==> docker compose build --no-cache web (2/2)"
+  docker compose build --no-cache web
   echo ""
 fi
 
