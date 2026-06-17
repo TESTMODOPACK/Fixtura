@@ -83,8 +83,7 @@ export class InformesAdminService {
     fechaNumero?: number,
   ): Promise<ExpulsadoFecha[]> {
     const qb = this.incidenciaRepo
-      .createQueryBuilder()
-      .from('incidencias_partido', 'i')
+      .createQueryBuilder('i')
       .innerJoin('partidos', 'p', 'p.id = i.partido_id')
       .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
       .innerJoin('jugadores', 'j', 'j.id = i.jugador_id')
@@ -131,8 +130,7 @@ export class InformesAdminService {
     // indexadas por (partido, rut|jugador) para cruzarlas en memoria sin
     // duplicar filas de la query principal.
     const sanciones = await this.sancionRepo
-      .createQueryBuilder()
-      .from('sanciones_activas', 's')
+      .createQueryBuilder('s')
       .leftJoin(
         'cobros',
         'co',
@@ -200,8 +198,7 @@ export class InformesAdminService {
     incluirCumplidas = false,
   ): Promise<SancionVigente[]> {
     const qb = this.sancionRepo
-      .createQueryBuilder()
-      .from('sanciones_activas', 's')
+      .createQueryBuilder('s')
       .innerJoin(
         'jugadores',
         'j',
@@ -289,8 +286,7 @@ export class InformesAdminService {
   ): Promise<EnRiesgoAmarilla[]> {
     const umbral = await this.umbralAmarillas(tenantId, torneoId);
     const rows = await this.incidenciaRepo
-      .createQueryBuilder()
-      .from('incidencias_partido', 'i')
+      .createQueryBuilder('i')
       .innerJoin('partidos', 'p', 'p.id = i.partido_id')
       .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
       .innerJoin('jugadores', 'j', 'j.id = i.jugador_id')
@@ -352,8 +348,7 @@ export class InformesAdminService {
     torneoId?: string,
   ): Promise<EstadoCuentaClub[]> {
     const qb = this.cobroRepo
-      .createQueryBuilder()
-      .from('cobros', 'c')
+      .createQueryBuilder('c')
       .leftJoin('inscripciones_torneo', 'i', 'i.id = c.inscripcion_id')
       .leftJoin('clubes', 'cl', 'cl.id = i.club_id')
       .where('c.tenant_id = :tenantId', { tenantId });
@@ -400,8 +395,7 @@ export class InformesAdminService {
     clubId?: string,
   ): Promise<MultaPendiente[]> {
     const qb = this.cobroRepo
-      .createQueryBuilder()
-      .from('cobros', 'c')
+      .createQueryBuilder('c')
       .leftJoin('inscripciones_torneo', 'i', 'i.id = c.inscripcion_id')
       .leftJoin('clubes', 'cl', 'cl.id = i.club_id')
       .leftJoin('torneos', 't', 't.id = c.torneo_id')
@@ -446,8 +440,7 @@ export class InformesAdminService {
   /** Cobros vencidos (morosos), ordenados por días de mora. */
   async morosos(tenantId: string, torneoId?: string): Promise<Moroso[]> {
     const qb = this.cobroRepo
-      .createQueryBuilder()
-      .from('cobros', 'c')
+      .createQueryBuilder('c')
       .leftJoin('inscripciones_torneo', 'i', 'i.id = c.inscripcion_id')
       .leftJoin('clubes', 'cl', 'cl.id = i.club_id')
       .where('c.tenant_id = :tenantId', { tenantId })
@@ -493,8 +486,7 @@ export class InformesAdminService {
     torneoId?: string,
   ): Promise<RecaudacionConcepto[]> {
     const qb = this.cobroRepo
-      .createQueryBuilder()
-      .from('cobros', 'c')
+      .createQueryBuilder('c')
       .where('c.tenant_id = :tenantId', { tenantId })
       .andWhere('NOT c.cancelado');
     if (torneoId) qb.andWhere('c.torneo_id = :torneoId', { torneoId });
@@ -647,8 +639,7 @@ export class InformesAdminService {
     fechaNumero?: number,
   ): Promise<ResultadoPartidoInforme[]> {
     const qb = this.partidoRepo
-      .createQueryBuilder()
-      .from('partidos', 'p')
+      .createQueryBuilder('p')
       .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
       .leftJoin('inscripciones_torneo', 'il', 'il.id = p.inscripcion_local_id')
       .leftJoin('clubes', 'cl', 'cl.id = il.club_id')
