@@ -11,14 +11,18 @@ import type { Response } from 'express';
 
 import {
   ROLE,
+  type CoberturaPartido,
+  type DesignacionInforme,
   type EnRiesgoAmarilla,
   type EstadoCuentaClub,
+  type EstadoDesignacionInforme,
   type EstadoMultaInforme,
   type ExpulsadoFecha,
   type FilaPosicionInforme,
   type GoleadorInforme,
   type Moroso,
   type MultaPendiente,
+  type PagoPersonal,
   type RecaudacionConcepto,
   type ResultadoPartidoInforme,
   type SancionVigente,
@@ -65,6 +69,26 @@ const ESTADO_PARTIDO_LABEL: Record<string, string> = {
 function marcador(r: ResultadoPartidoInforme): string {
   if (r.golesLocal == null || r.golesVisita == null) return 'vs';
   return `${r.golesLocal} - ${r.golesVisita}`;
+}
+
+const ROL_PERSONAL_LABEL: Record<string, string> = {
+  ARBITRO_PRINCIPAL: 'Árbitro principal',
+  ARBITRO_ASISTENTE: 'Árbitro asistente',
+  PLANILLERO: 'Planillero',
+  PARAMEDICO: 'Paramédico',
+  OTRO: 'Otro',
+};
+
+const ESTADO_DESIGNACION_LABEL: Record<EstadoDesignacionInforme, string> = {
+  PROPUESTA: 'Propuesta',
+  CONFIRMADA: 'Confirmada',
+  RECHAZADA: 'Rechazada',
+  ASISTIO: 'Asistió',
+  AUSENTE: 'Ausente',
+};
+
+function rolLabel(rol: string): string {
+  return ROL_PERSONAL_LABEL[rol] ?? rol;
 }
 
 /**
@@ -527,6 +551,147 @@ export class InformesAdminController {
         r.visitaNombre ?? '—',
         ESTADO_PARTIDO_LABEL[r.estado] ?? r.estado,
         r.canchaNombre ?? '—',
+      ]),
+    });
+    res.send(buffer);
+  }
+
+  // ─── Fase 4: Arbitraje / operación ──────────────────────────────────
+
+  /** Designaciones de un torneo (opcional por fecha). */
+  @Get('arbitraje/designaciones')
+  designaciones(
+    @CurrentUser() user: UserContext,
+    @Query('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Query('fechaNumero') fechaNumero?: string,
+  ): Promise<DesignacionInforme[]> {
+    return this.svc.designaciones(
+      ensureTenant(user),
+      torneoId,
+      this.parseFecha(fechaNumero),
+    );
+  }
+
+  @Get('arbitraje/designaciones.pdf')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="designaciones.pdf"')
+  async designacionesPdf(
+    @CurrentUser() user: UserContext,
+    @Res() res: Response,
+    @Query('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Query('fechaNumero') fechaNumero?: string,
+  ): Promise<void> {
+    const tenantId = ensureTenant(user);
+    const fn = this.parseFecha(fechaNumero);
+    const rows = await this.svc.designaciones(tenantId, torneoId, fn);
+    const buffer = await this.pdf.tabla(tenantId, {
+      titulo: 'Designaciones',
+      subtitulo: fn ? `Fecha ${fn}` : 'Todas las fechas',
+      columnas: [
+        { label: 'Fecha', width: 45, align: 'center' },
+        { label: 'Partido', width: 200 },
+        { label: 'Personal', width: 170 },
+        { label: 'Rol', width: 110 },
+        { label: 'Estado', width: 80 },
+        { label: 'Monto', width: 90, align: 'right' },
+      ],
+      filas: rows.map((d) => [
+        String(d.fechaNumero),
+        d.partidoLabel,
+        `${d.personalNombre}${d.rut ? ` (${d.rut})` : ''}`,
+        rolLabel(d.rol),
+        ESTADO_DESIGNACION_LABEL[d.estado],
+        d.monto != null ? clp(d.monto) : '—',
+      ]),
+    });
+    res.send(buffer);
+  }
+
+  /** Cobertura arbitral por partido (slots por rol + gap de árbitro principal). */
+  @Get('arbitraje/cobertura')
+  cobertura(
+    @CurrentUser() user: UserContext,
+    @Query('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Query('fechaNumero') fechaNumero?: string,
+  ): Promise<CoberturaPartido[]> {
+    return this.svc.cobertura(
+      ensureTenant(user),
+      torneoId,
+      this.parseFecha(fechaNumero),
+    );
+  }
+
+  @Get('arbitraje/cobertura.pdf')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="cobertura.pdf"')
+  async coberturaPdf(
+    @CurrentUser() user: UserContext,
+    @Res() res: Response,
+    @Query('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Query('fechaNumero') fechaNumero?: string,
+  ): Promise<void> {
+    const tenantId = ensureTenant(user);
+    const fn = this.parseFecha(fechaNumero);
+    const rows = await this.svc.cobertura(tenantId, torneoId, fn);
+    const buffer = await this.pdf.tabla(tenantId, {
+      titulo: 'Cobertura arbitral',
+      subtitulo: fn ? `Fecha ${fn}` : 'Todas las fechas',
+      columnas: [
+        { label: 'Fecha', width: 45, align: 'center' },
+        { label: 'Partido', width: 230 },
+        { label: 'Árb. ppal', width: 65, align: 'center' },
+        { label: 'Asist.', width: 55, align: 'center' },
+        { label: 'Planill.', width: 60, align: 'center' },
+        { label: 'Cobertura', width: 110 },
+      ],
+      filas: rows.map((c) => [
+        String(c.fechaNumero),
+        c.partidoLabel,
+        String(c.arbitroPrincipal),
+        String(c.arbitroAsistente),
+        String(c.planillero),
+        c.tieneArbitroPrincipal ? 'Con árbitro' : 'SIN ÁRBITRO',
+      ]),
+    });
+    res.send(buffer);
+  }
+
+  /** Pagos a personal (cuentas por pagar). Opcional por torneo. */
+  @Get('arbitraje/pagos-personal')
+  pagosPersonal(
+    @CurrentUser() user: UserContext,
+    @Query('torneoId') torneoId?: string,
+  ): Promise<PagoPersonal[]> {
+    return this.svc.pagosPersonal(ensureTenant(user), torneoId || undefined);
+  }
+
+  @Get('arbitraje/pagos-personal.pdf')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="pagos-personal.pdf"')
+  async pagosPersonalPdf(
+    @CurrentUser() user: UserContext,
+    @Res() res: Response,
+    @Query('torneoId') torneoId?: string,
+  ): Promise<void> {
+    const tenantId = ensureTenant(user);
+    const rows = await this.svc.pagosPersonal(tenantId, torneoId || undefined);
+    const buffer = await this.pdf.tabla(tenantId, {
+      titulo: 'Pagos a personal',
+      columnas: [
+        { label: 'Personal', width: 200 },
+        { label: 'Rol', width: 120 },
+        { label: 'Designac.', width: 70, align: 'center' },
+        { label: 'Devengado', width: 110, align: 'right' },
+        { label: 'Pagado', width: 100, align: 'right' },
+        { label: 'Pendiente', width: 110, align: 'right' },
+      ],
+      filas: rows.map((p) => [
+        `${p.personalNombre}${p.rut ? ` (${p.rut})` : ''}`,
+        rolLabel(p.rol),
+        String(p.designaciones),
+        clp(p.devengado),
+        clp(p.pagado),
+        clp(p.pendiente),
       ]),
     });
     res.send(buffer);

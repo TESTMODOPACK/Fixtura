@@ -5,20 +5,25 @@ import { Repository } from 'typeorm';
 import { calcularTablaPosiciones } from '@fixtura/domain';
 import {
   AMARILLAS_PARA_SUSPENSION,
+  type CoberturaPartido,
+  type DesignacionInforme,
   type EnRiesgoAmarilla,
   type EstadoCuentaClub,
+  type EstadoDesignacionInforme,
   type EstadoMultaInforme,
   type ExpulsadoFecha,
   type FilaPosicionInforme,
   type GoleadorInforme,
   type Moroso,
   type MultaPendiente,
+  type PagoPersonal,
   type RecaudacionConcepto,
   type ResultadoPartidoInforme,
   type SancionVigente,
 } from '@fixtura/types';
 
 import { Cobro } from '../../competition/entities/cobro.entity';
+import { Designacion } from '../../competition/entities/designacion.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Partido } from '../../competition/entities/partido.entity';
@@ -52,6 +57,8 @@ export class InformesAdminService {
     private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Partido)
     private readonly partidoRepo: Repository<Partido>,
+    @InjectRepository(Designacion)
+    private readonly designacionRepo: Repository<Designacion>,
   ) {}
 
   /** Umbral de amarillas del torneo (default 5 si no se encuentra). */
@@ -686,6 +693,237 @@ export class InformesAdminService {
       estado: r.estado,
       fechaHora: r.fechaHora ? r.fechaHora.toISOString() : null,
       canchaNombre: r.canchaNombre,
+    }));
+  }
+
+  // ─── Fase 4: Arbitraje / operación ──────────────────────────────────
+
+  /**
+   * Detalle de designaciones de un torneo (opcional por fecha): quién fue
+   * designado a cada partido, en qué rol, con qué estado y monto.
+   */
+  async designaciones(
+    tenantId: string,
+    torneoId: string,
+    fechaNumero?: number,
+  ): Promise<DesignacionInforme[]> {
+    const qb = this.designacionRepo
+      .createQueryBuilder('d')
+      .innerJoin('partidos', 'p', 'p.id = d.partido_id')
+      .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
+      .innerJoin('personal', 'pe', 'pe.id = d.personal_id')
+      .leftJoin('inscripciones_torneo', 'il', 'il.id = p.inscripcion_local_id')
+      .leftJoin('clubes', 'cl', 'cl.id = il.club_id')
+      .leftJoin('inscripciones_torneo', 'iv', 'iv.id = p.inscripcion_visita_id')
+      .leftJoin('clubes', 'cv', 'cv.id = iv.club_id')
+      .leftJoin('canchas', 'ca', 'ca.id = p.cancha_id')
+      .where('d.tenant_id = :tenantId', { tenantId })
+      .andWhere('f.torneo_id = :torneoId', { torneoId });
+    if (fechaNumero != null) {
+      qb.andWhere('f.numero = :fechaNumero', { fechaNumero });
+    }
+
+    const rows = await qb
+      .select('d.id', 'designacionId')
+      .addSelect('f.numero', 'fechaNumero')
+      .addSelect('p.id', 'partidoId')
+      .addSelect('cl.nombre', 'localNombre')
+      .addSelect('cv.nombre', 'visitaNombre')
+      .addSelect('p.fecha_hora', 'fechaHora')
+      .addSelect('ca.nombre', 'canchaNombre')
+      .addSelect(`pe.nombres || ' ' || pe.apellidos`, 'personalNombre')
+      .addSelect('pe.rut', 'rut')
+      .addSelect('d.rol_asignado', 'rol')
+      .addSelect('d.estado', 'estado')
+      .addSelect('d.monto_pago', 'monto')
+      .orderBy('f.numero', 'ASC')
+      .addOrderBy('p.fecha_hora', 'ASC')
+      .addOrderBy('pe.apellidos', 'ASC')
+      .getRawMany<{
+        designacionId: string;
+        fechaNumero: number;
+        partidoId: string;
+        localNombre: string | null;
+        visitaNombre: string | null;
+        fechaHora: Date | null;
+        canchaNombre: string | null;
+        personalNombre: string;
+        rut: string | null;
+        rol: string;
+        estado: EstadoDesignacionInforme;
+        monto: number | null;
+      }>();
+
+    return rows.map((r) => ({
+      designacionId: r.designacionId,
+      fechaNumero: Number(r.fechaNumero),
+      partidoId: r.partidoId,
+      partidoLabel: `${r.localNombre ?? '—'} vs ${r.visitaNombre ?? '—'}`,
+      fechaHora: r.fechaHora ? r.fechaHora.toISOString() : null,
+      canchaNombre: r.canchaNombre,
+      personalNombre: r.personalNombre,
+      rut: r.rut,
+      rol: r.rol,
+      estado: r.estado,
+      monto: r.monto == null ? null : Number(r.monto),
+    }));
+  }
+
+  /**
+   * Cobertura arbitral de los partidos que requieren designación
+   * (PROGRAMADO / EN_CURSO / FINALIZADO). Cuenta designaciones vigentes
+   * (no rechazadas ni ausentes) por rol y marca el gap crítico de no
+   * tener árbitro principal.
+   */
+  async cobertura(
+    tenantId: string,
+    torneoId: string,
+    fechaNumero?: number,
+  ): Promise<CoberturaPartido[]> {
+    const qb = this.partidoRepo
+      .createQueryBuilder('p')
+      .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
+      .leftJoin('inscripciones_torneo', 'il', 'il.id = p.inscripcion_local_id')
+      .leftJoin('clubes', 'cl', 'cl.id = il.club_id')
+      .leftJoin('inscripciones_torneo', 'iv', 'iv.id = p.inscripcion_visita_id')
+      .leftJoin('clubes', 'cv', 'cv.id = iv.club_id')
+      .leftJoin('canchas', 'ca', 'ca.id = p.cancha_id')
+      .leftJoin(
+        'designaciones',
+        'd',
+        `d.partido_id = p.id AND d.estado NOT IN ('RECHAZADA','AUSENTE')`,
+      )
+      .where('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('f.torneo_id = :torneoId', { torneoId })
+      .andWhere(`p.estado IN ('PROGRAMADO','EN_CURSO','FINALIZADO')`);
+    if (fechaNumero != null) {
+      qb.andWhere('f.numero = :fechaNumero', { fechaNumero });
+    }
+
+    const rows = await qb
+      .select('p.id', 'partidoId')
+      .addSelect('f.numero', 'fechaNumero')
+      .addSelect('cl.nombre', 'localNombre')
+      .addSelect('cv.nombre', 'visitaNombre')
+      .addSelect('p.fecha_hora', 'fechaHora')
+      .addSelect('ca.nombre', 'canchaNombre')
+      .addSelect('p.estado', 'estado')
+      .addSelect(
+        `COUNT(*) FILTER (WHERE d.rol_asignado = 'ARBITRO_PRINCIPAL')`,
+        'arbitroPrincipal',
+      )
+      .addSelect(
+        `COUNT(*) FILTER (WHERE d.rol_asignado = 'ARBITRO_ASISTENTE')`,
+        'arbitroAsistente',
+      )
+      .addSelect(
+        `COUNT(*) FILTER (WHERE d.rol_asignado = 'PLANILLERO')`,
+        'planillero',
+      )
+      .groupBy('p.id')
+      .addGroupBy('f.numero')
+      .addGroupBy('cl.nombre')
+      .addGroupBy('cv.nombre')
+      .addGroupBy('p.fecha_hora')
+      .addGroupBy('ca.nombre')
+      .addGroupBy('p.estado')
+      .orderBy('f.numero', 'ASC')
+      .addOrderBy('p.fecha_hora', 'ASC')
+      .getRawMany<{
+        partidoId: string;
+        fechaNumero: number;
+        localNombre: string | null;
+        visitaNombre: string | null;
+        fechaHora: Date | null;
+        canchaNombre: string | null;
+        estado: string;
+        arbitroPrincipal: string;
+        arbitroAsistente: string;
+        planillero: string;
+      }>();
+
+    return rows.map((r) => {
+      const arbitroPrincipal = Number(r.arbitroPrincipal);
+      return {
+        partidoId: r.partidoId,
+        fechaNumero: Number(r.fechaNumero),
+        partidoLabel: `${r.localNombre ?? '—'} vs ${r.visitaNombre ?? '—'}`,
+        fechaHora: r.fechaHora ? r.fechaHora.toISOString() : null,
+        canchaNombre: r.canchaNombre,
+        estado: r.estado,
+        arbitroPrincipal,
+        arbitroAsistente: Number(r.arbitroAsistente),
+        planillero: Number(r.planillero),
+        tieneArbitroPrincipal: arbitroPrincipal > 0,
+      };
+    });
+  }
+
+  /**
+   * Pagos a personal (cuentas por pagar). Por miembro: devengado de las
+   * designaciones con asistencia, cuánto ya se liquidó (liquidacion_id) y
+   * cuánto queda pendiente. Opcionalmente acotado a un torneo.
+   */
+  async pagosPersonal(
+    tenantId: string,
+    torneoId?: string,
+  ): Promise<PagoPersonal[]> {
+    const qb = this.designacionRepo
+      .createQueryBuilder('d')
+      .innerJoin('personal', 'pe', 'pe.id = d.personal_id')
+      .where('d.tenant_id = :tenantId', { tenantId });
+    if (torneoId) {
+      qb.innerJoin('partidos', 'p', 'p.id = d.partido_id')
+        .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
+        .andWhere('f.torneo_id = :torneoId', { torneoId });
+    }
+
+    const rows = await qb
+      .select('pe.id', 'personalId')
+      .addSelect(`pe.nombres || ' ' || pe.apellidos`, 'personalNombre')
+      .addSelect('pe.rut', 'rut')
+      .addSelect('pe.rol', 'rol')
+      .addSelect(`COUNT(*) FILTER (WHERE d.estado = 'ASISTIO')`, 'designaciones')
+      .addSelect(
+        `COALESCE(SUM(d.monto_pago) FILTER (WHERE d.estado = 'ASISTIO'), 0)`,
+        'devengado',
+      )
+      .addSelect(
+        `COALESCE(SUM(d.monto_pago) FILTER (WHERE d.estado = 'ASISTIO' AND d.liquidacion_id IS NOT NULL), 0)`,
+        'pagado',
+      )
+      .addSelect(
+        `COALESCE(SUM(d.monto_pago) FILTER (WHERE d.estado = 'ASISTIO' AND d.liquidacion_id IS NULL), 0)`,
+        'pendiente',
+      )
+      .groupBy('pe.id')
+      .addGroupBy('pe.nombres')
+      .addGroupBy('pe.apellidos')
+      .addGroupBy('pe.rut')
+      .addGroupBy('pe.rol')
+      .having(`COUNT(*) FILTER (WHERE d.estado = 'ASISTIO') > 0`)
+      .orderBy('"pendiente"', 'DESC')
+      .addOrderBy('pe.apellidos', 'ASC')
+      .getRawMany<{
+        personalId: string;
+        personalNombre: string;
+        rut: string | null;
+        rol: string;
+        designaciones: string;
+        devengado: string;
+        pagado: string;
+        pendiente: string;
+      }>();
+
+    return rows.map((r) => ({
+      personalId: r.personalId,
+      personalNombre: r.personalNombre,
+      rut: r.rut,
+      rol: r.rol,
+      designaciones: Number(r.designaciones),
+      devengado: Number(r.devengado),
+      pagado: Number(r.pagado),
+      pendiente: Number(r.pendiente),
     }));
   }
 }

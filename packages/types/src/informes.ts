@@ -152,3 +152,63 @@ export const ResultadoPartidoInformeSchema = z.object({
   canchaNombre: z.string().nullable(),
 });
 export type ResultadoPartidoInforme = z.infer<typeof ResultadoPartidoInformeSchema>;
+
+// ─── Fase 4: Arbitraje / operación ───────────────────────────────────
+
+/** Estado de la designación (igual que EstadoDesignacion del backend). */
+export const ESTADO_DESIGNACION_INFORME = [
+  'PROPUESTA',
+  'CONFIRMADA',
+  'RECHAZADA',
+  'ASISTIO',
+  'AUSENTE',
+] as const;
+export type EstadoDesignacionInforme = (typeof ESTADO_DESIGNACION_INFORME)[number];
+
+/** Designación de un árbitro / personal a un partido. */
+export const DesignacionInformeSchema = z.object({
+  designacionId: z.uuid(),
+  fechaNumero: z.number().int(),
+  partidoId: z.uuid(),
+  partidoLabel: z.string(), // "Local vs Visita"
+  fechaHora: z.string().nullable(),
+  canchaNombre: z.string().nullable(),
+  personalNombre: z.string(),
+  rut: z.string().nullable(),
+  // Rol asignado en el partido (ARBITRO_PRINCIPAL | ARBITRO_ASISTENTE | PLANILLERO).
+  rol: z.string(),
+  estado: z.enum(ESTADO_DESIGNACION_INFORME),
+  monto: z.number().int().nullable(),
+});
+export type DesignacionInforme = z.infer<typeof DesignacionInformeSchema>;
+
+/** Cobertura arbitral de un partido: slots cubiertos por rol. */
+export const CoberturaPartidoSchema = z.object({
+  partidoId: z.uuid(),
+  fechaNumero: z.number().int(),
+  partidoLabel: z.string(),
+  fechaHora: z.string().nullable(),
+  canchaNombre: z.string().nullable(),
+  estado: z.string(),
+  // Conteo de designaciones vigentes (no rechazadas ni ausentes) por rol.
+  arbitroPrincipal: z.number().int(),
+  arbitroAsistente: z.number().int(),
+  planillero: z.number().int(),
+  // Gap crítico: el partido no tiene árbitro principal asignado.
+  tieneArbitroPrincipal: z.boolean(),
+});
+export type CoberturaPartido = z.infer<typeof CoberturaPartidoSchema>;
+
+/** Pagos a un miembro del personal (cuentas por pagar). */
+export const PagoPersonalSchema = z.object({
+  personalId: z.uuid(),
+  personalNombre: z.string(),
+  rut: z.string().nullable(),
+  rol: z.string(),
+  // Designaciones con asistencia (devengo generado).
+  designaciones: z.number().int(),
+  devengado: z.number().int(),
+  pagado: z.number().int(),
+  pendiente: z.number().int(),
+});
+export type PagoPersonal = z.infer<typeof PagoPersonalSchema>;

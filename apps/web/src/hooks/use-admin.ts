@@ -2581,8 +2581,11 @@ export function useInformeRecaudacion(torneoId?: string) {
 
 // ─── Informes (competición) ─────────────────────────────────────────
 import type {
+  CoberturaPartido,
+  DesignacionInforme,
   FilaPosicionInforme,
   GoleadorInforme,
+  PagoPersonal,
   ResultadoPartidoInforme,
 } from '@fixtura/types';
 
@@ -2623,5 +2626,59 @@ export function useInformeResultados(
       apiFetch<ResultadoPartidoInforme[]>(
         `/admin/informes/competicion/resultados?${qs.toString()}`,
       ),
+  });
+}
+
+// ─── Informes (arbitraje / operación) ───────────────────────────────
+export function useInformeDesignaciones(
+  torneoId: string | undefined,
+  fechaNumero: number | undefined,
+) {
+  const qs = new URLSearchParams();
+  if (torneoId) qs.set('torneoId', torneoId);
+  if (fechaNumero != null) qs.set('fechaNumero', String(fechaNumero));
+  return useQuery({
+    queryKey: [
+      'admin',
+      'informes',
+      'designaciones',
+      { torneoId: torneoId ?? null, fechaNumero: fechaNumero ?? null },
+    ],
+    enabled: !!torneoId,
+    queryFn: () =>
+      apiFetch<DesignacionInforme[]>(
+        `/admin/informes/arbitraje/designaciones?${qs.toString()}`,
+      ),
+  });
+}
+
+export function useInformeCobertura(
+  torneoId: string | undefined,
+  fechaNumero: number | undefined,
+) {
+  const qs = new URLSearchParams();
+  if (torneoId) qs.set('torneoId', torneoId);
+  if (fechaNumero != null) qs.set('fechaNumero', String(fechaNumero));
+  return useQuery({
+    queryKey: [
+      'admin',
+      'informes',
+      'cobertura',
+      { torneoId: torneoId ?? null, fechaNumero: fechaNumero ?? null },
+    ],
+    enabled: !!torneoId,
+    queryFn: () =>
+      apiFetch<CoberturaPartido[]>(
+        `/admin/informes/arbitraje/cobertura?${qs.toString()}`,
+      ),
+  });
+}
+
+export function useInformePagosPersonal(torneoId: string | undefined) {
+  const qs = torneoId ? `?torneoId=${torneoId}` : '';
+  return useQuery({
+    queryKey: ['admin', 'informes', 'pagos-personal', { torneoId: torneoId ?? null }],
+    queryFn: () =>
+      apiFetch<PagoPersonal[]>(`/admin/informes/arbitraje/pagos-personal${qs}`),
   });
 }

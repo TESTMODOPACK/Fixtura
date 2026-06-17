@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Cobro } from '../../competition/entities/cobro.entity';
+import { Designacion } from '../../competition/entities/designacion.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Partido } from '../../competition/entities/partido.entity';
@@ -27,6 +28,7 @@ import { InformesPdfService } from './informes-pdf.service';
       Torneo,
       InscripcionTorneo,
       Partido,
+      Designacion,
     ]),
   ],
   controllers: [InformesAdminController],
