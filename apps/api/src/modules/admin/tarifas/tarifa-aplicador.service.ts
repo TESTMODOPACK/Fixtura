@@ -289,9 +289,18 @@ export class TarifaAplicadorService {
       tenantId,
     );
 
+    // Defensa anti-duplicado: una tarjeta = una multa. Si en la BD hay
+    // incidencias duplicadas de la misma tarjeta (jugador+tipo+minuto)
+    // —p. ej. el acta se cargó dos veces o se re-corrió el seed— NO
+    // generamos N multas idénticas. Colapsamos solo duplicados exactos;
+    // dos amarillas en minutos distintos siguen siendo dos multas.
+    const vistas = new Set<string>();
     let creados = 0;
     for (const inc of incidencias) {
       if (inc.tipo !== 'AMARILLA' && inc.tipo !== 'ROJA') continue;
+      const dedupKey = `${inc.jugadorId ?? `inc:${inc.id}`}|${inc.tipo}|${inc.minuto ?? ''}`;
+      if (vistas.has(dedupKey)) continue;
+      vistas.add(dedupKey);
       const tipoTarifa: TipoTarifa =
         inc.tipo === 'AMARILLA' ? 'MULTA_AMARILLA' : 'MULTA_ROJA';
       const tarifa = await this.buscarTarifa(torneoId, tipoTarifa);

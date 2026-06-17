@@ -622,6 +622,10 @@ export class PartidosAdminService {
       }
     >();
 
+    // Defensa anti-duplicado: si en la BD hay incidencias duplicadas de la
+    // misma tarjeta (jugador+tipo+minuto) no queremos generar sanciones (ni
+    // contar amarillas) por duplicado. Colapsamos solo duplicados exactos.
+    const vistasIncidencia = new Set<string>();
     for (const inc of incidencias) {
       if (!inc.jugadorId) continue;
       if (
@@ -630,6 +634,10 @@ export class PartidosAdminService {
         inc.tipo !== 'AMARILLA_ROJA'
       )
         continue;
+
+      const dedupKey = `${inc.jugadorId}|${inc.tipo}|${inc.minuto ?? ''}`;
+      if (vistasIncidencia.has(dedupKey)) continue;
+      vistasIncidencia.add(dedupKey);
 
       const key = inc.jugadorId;
       const bucket = porJugador.get(key) ?? {
@@ -706,15 +714,36 @@ export class PartidosAdminService {
     }
 
     const rows = await qb
-      .select(['i.tipo AS tipo', 'i.partido_id AS "partidoId"', 'f.numero AS "fechaNumero"'])
+      .select([
+        'i.tipo AS tipo',
+        'i.partido_id AS "partidoId"',
+        'f.numero AS "fechaNumero"',
+        'i.minuto AS minuto',
+      ])
       .orderBy('f.numero', 'ASC')
       .getRawMany<{
         tipo: 'AMARILLA' | 'ROJA' | 'AMARILLA_ROJA';
         partidoId: string;
         fechaNumero: number;
+        minuto: number | null;
       }>();
 
-    return rows;
+    // Defensa anti-duplicado: incidencias duplicadas en el historial
+    // (mismo partido+tipo+minuto) inflarían el conteo de amarillas
+    // acumuladas. Colapsamos solo duplicados exactos.
+    const vistas = new Set<string>();
+    const limpias: IncidenciaJugador[] = [];
+    for (const r of rows) {
+      const k = `${r.partidoId}|${r.tipo}|${r.minuto ?? ''}`;
+      if (vistas.has(k)) continue;
+      vistas.add(k);
+      limpias.push({
+        tipo: r.tipo,
+        partidoId: r.partidoId,
+        fechaNumero: r.fechaNumero,
+      });
+    }
+    return limpias;
   }
 
   private async persistirPropuestas(
