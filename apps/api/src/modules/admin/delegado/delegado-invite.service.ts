@@ -13,6 +13,7 @@ import type {
   DelegadoCuenta,
   InvitarDelegadoResponse,
 } from '@fixtura/types';
+import { validarPasswordSegura } from '@fixtura/domain';
 
 import { MagicLink } from '../../auth/entities/magic-link.entity';
 import { MagicLinksService } from '../../auth/magic-links.service';
@@ -230,6 +231,15 @@ export class DelegadoInviteService {
     const partes = (meta.nombre ?? 'Delegado').trim().split(/\s+/);
     const nombre = partes[0] ?? 'Delegado';
     const apellido = partes.slice(1).join(' ');
+
+    const errorPwd = validarPasswordSegura(password, {
+      email: link.email,
+      nombre,
+      apellido,
+    });
+    if (errorPwd) {
+      throw new BadRequestException(errorPwd);
+    }
 
     const user = await this.users.crearOObtenerPorEmail({
       email: link.email,

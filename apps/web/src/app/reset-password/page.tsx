@@ -5,9 +5,12 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 
+import { validarPasswordSegura } from '@fixtura/domain';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PasswordInput } from '@/components/ui/password-input';
+import { PasswordStrengthMeter } from '@/components/ui/password-strength';
 import { API_URL } from '@/lib/api';
 
 /**
@@ -51,8 +54,9 @@ function ResetContent(): React.ReactElement {
   const onSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setError(null);
-    if (pwd.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres.');
+    const errPwd = validarPasswordSegura(pwd);
+    if (errPwd) {
+      setError(errPwd);
       return;
     }
     if (pwd !== pwd2) {
@@ -110,28 +114,33 @@ function ResetContent(): React.ReactElement {
         <KeyRound size={36} className="mx-auto text-green-deep mb-3" />
         <CardLabel>Nueva contraseña</CardLabel>
         <p className="text-sm text-ink-mute mt-2">
-          Elige una contraseña segura. Mínimo 8 caracteres.
+          Elige una contraseña segura. Mínimo 10 caracteres y que no sea fácil de adivinar.
         </p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-3">
-        <PasswordInput
-          label="Nueva contraseña"
-          value={pwd}
-          onChange={(e) => setPwd(e.target.value)}
-          required
-          minLength={8}
-          maxLength={200}
-          disabled={enviando}
-          autoComplete="new-password"
-        />
+        <div>
+          <PasswordInput
+            label="Nueva contraseña"
+            value={pwd}
+            onChange={(e) => setPwd(e.target.value)}
+            required
+            minLength={10}
+            maxLength={128}
+            disabled={enviando}
+            autoComplete="new-password"
+          />
+          <div className="mt-2">
+            <PasswordStrengthMeter password={pwd} />
+          </div>
+        </div>
         <PasswordInput
           label="Repetir contraseña"
           value={pwd2}
           onChange={(e) => setPwd2(e.target.value)}
           required
-          minLength={8}
-          maxLength={200}
+          minLength={10}
+          maxLength={128}
           disabled={enviando}
           autoComplete="new-password"
         />

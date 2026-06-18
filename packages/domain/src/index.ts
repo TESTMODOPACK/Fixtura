@@ -4,3 +4,4 @@ export * from './permissions';
 export * from './edad';
 export * from './categorias';
 export * from './posiciones';
+export * from './passwords';

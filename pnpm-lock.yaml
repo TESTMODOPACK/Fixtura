@@ -234,6 +234,9 @@ importers:
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@fixtura/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@fixtura/types':
         specifier: workspace:*
         version: link:../../packages/types

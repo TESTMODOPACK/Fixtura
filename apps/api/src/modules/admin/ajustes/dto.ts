@@ -139,7 +139,7 @@ export class InvitarMiembroDto {
   rol!: RolAdminInvitable;
 
   @IsString()
-  @MinLength(8)
-  @MaxLength(128)
+  @MinLength(10, { message: 'La contraseña debe tener al menos 10 caracteres.' })
+  @MaxLength(128, { message: 'La contraseña es demasiado larga (máximo 128 caracteres).' })
   passwordTemporal!: string;
 }

@@ -16,6 +16,7 @@ import type {
   TenantPlatform,
   UpdateTenantPlatformRequest,
 } from '@fixtura/types';
+import { validarPasswordSegura } from '@fixtura/domain';
 
 import { PlanSuscripcion } from '../tenants/entities/plan-suscripcion.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
@@ -165,6 +166,14 @@ export class SuperAdminTenantsService {
       const emailNorm = input.adminEmail.toLowerCase().trim();
       let user = await this.userRepo.findOne({ where: { email: emailNorm } });
       if (!user) {
+        const errorPwd = validarPasswordSegura(input.adminPassword, {
+          email: emailNorm,
+          nombre: input.adminNombre,
+          apellido: input.adminApellido,
+        });
+        if (errorPwd) {
+          throw new BadRequestException(errorPwd);
+        }
         const passwordHash = await bcrypt.hash(input.adminPassword, BCRYPT_COST);
         user = this.userRepo.create({
           email: emailNorm,

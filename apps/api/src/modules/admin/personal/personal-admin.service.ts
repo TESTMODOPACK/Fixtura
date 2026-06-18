@@ -13,6 +13,7 @@ import type {
   RolPersonal,
 } from '@fixtura/types';
 import { ROLE_SCOPE } from '@fixtura/types';
+import { validarPasswordSegura } from '@fixtura/domain';
 
 import { MagicLink } from '../../auth/entities/magic-link.entity';
 import { MagicLinksService } from '../../auth/magic-links.service';
@@ -238,6 +239,15 @@ export class PersonalAdminService {
     }
     if (!link.tenantId) {
       throw new BadRequestException('El link no tiene liga asociada.');
+    }
+
+    const errorPwd = validarPasswordSegura(password, {
+      email: personal.email,
+      nombre: personal.nombre,
+      apellido: personal.apellido,
+    });
+    if (errorPwd) {
+      throw new BadRequestException(errorPwd);
     }
 
     const user = await this.users.crearOObtenerPorEmail({

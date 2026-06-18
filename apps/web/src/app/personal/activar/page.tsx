@@ -5,11 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
 import type { ActivarPersonalInfo } from '@fixtura/types';
+import { validarPasswordSegura } from '@fixtura/domain';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LigaPlusLockup } from '@/components/ui/logo';
 import { PasswordInput } from '@/components/ui/password-input';
+import { PasswordStrengthMeter } from '@/components/ui/password-strength';
 import { API_URL } from '@/lib/api';
 
 /**
@@ -53,8 +55,13 @@ function ActivarContent(): React.ReactElement {
   const onSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setLocalError(null);
-    if (password.length < 8) {
-      setLocalError('La contraseña debe tener al menos 8 caracteres.');
+    const info = estado.tipo === 'form' ? estado.info : null;
+    const errPwd = validarPasswordSegura(password, {
+      email: info?.email,
+      nombre: info?.nombre,
+    });
+    if (errPwd) {
+      setLocalError(errPwd);
       return;
     }
     if (password !== password2) {
@@ -145,9 +152,15 @@ function ActivarContent(): React.ReactElement {
                 <PasswordInput
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mínimo 8 caracteres"
+                  placeholder="Mínimo 10 caracteres"
                   autoComplete="new-password"
                 />
+                <div className="mt-2">
+                  <PasswordStrengthMeter
+                    password={password}
+                    ctx={{ email: estado.info.email, nombre: estado.info.nombre }}
+                  />
+                </div>
               </div>
               <div className="mb-4">
                 <label className="label">Repetir contraseña</label>

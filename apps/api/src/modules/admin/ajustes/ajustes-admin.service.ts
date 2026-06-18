@@ -20,6 +20,7 @@ import {
   type TenantSettings,
   type UsuarioSistema,
 } from '@fixtura/types';
+import { validarPasswordSegura } from '@fixtura/domain';
 
 import { cifrarSecreto } from '../../../common/crypto/secret-box';
 import { Club } from '../../competition/entities/club.entity';
@@ -278,6 +279,14 @@ export class AjustesAdminService {
 
     let user = await this.userRepo.findOne({ where: { email: emailNorm } });
     if (!user) {
+      const errorPwd = validarPasswordSegura(input.passwordTemporal, {
+        email: emailNorm,
+        nombre: input.nombre,
+        apellido: input.apellido,
+      });
+      if (errorPwd) {
+        throw new BadRequestException(errorPwd);
+      }
       const passwordHash = await hash(input.passwordTemporal, 12);
       user = this.userRepo.create({
         email: emailNorm,

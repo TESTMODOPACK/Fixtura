@@ -91,7 +91,7 @@ export const CreateTenantPlatformSchema = z.object({
   adminEmail: z.email().max(150).optional(),
   adminNombre: z.string().min(2).max(100).optional(),
   adminApellido: z.string().min(2).max(100).optional(),
-  adminPassword: z.string().min(8).max(200).optional(),
+  adminPassword: z.string().min(10).max(128).optional(),
   trialDias: z.number().int().min(0).max(365).default(30),
 });
 export type CreateTenantPlatformRequest = z.infer<typeof CreateTenantPlatformSchema>;

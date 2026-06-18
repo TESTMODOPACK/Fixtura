@@ -235,7 +235,8 @@ export class ActivarPersonalDto {
   token!: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(10, { message: 'La contraseña debe tener al menos 10 caracteres.' })
+  @MaxLength(128, { message: 'La contraseña es demasiado larga (máximo 128 caracteres).' })
   password!: string;
 }
 

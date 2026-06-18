@@ -8,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { IsNull, MoreThan, Repository } from 'typeorm';
 
 import type { AuthTokens, UserContext } from '@fixtura/types';
+import { validarPasswordSegura } from '@fixtura/domain';
 
 import { EmailService } from '../email/email.service';
 import { UsersService } from '../users/users.service';
@@ -91,16 +92,18 @@ export class AuthService {
    * dispositivos por seguridad).
    */
   async aplicarResetPassword(token: string, nuevaPassword: string): Promise<{ ok: boolean }> {
-    if (nuevaPassword.length < 8) {
-      throw new BadRequestException('La contraseña debe tener al menos 8 caracteres.');
-    }
-    if (nuevaPassword.length > 200) {
-      throw new BadRequestException('La contraseña es demasiado larga.');
-    }
-
     const link = await this.magicLinks.resolver(token, 'RESET_PASSWORD');
     if (!link.userId) {
       throw new BadRequestException('El link no apunta a un usuario válido.');
+    }
+
+    const errorPwd = validarPasswordSegura(nuevaPassword, {
+      email: link.user?.email ?? link.email,
+      nombre: link.user?.nombre,
+      apellido: link.user?.apellido,
+    });
+    if (errorPwd) {
+      throw new BadRequestException(errorPwd);
     }
 
     const hash = await bcrypt.hash(nuevaPassword, BCRYPT_COST);
