@@ -15,7 +15,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type UseFormRegisterReturn } from 'react-hook-form';
 import { z } from 'zod';
 
 import {
@@ -194,6 +194,47 @@ function TabButton({
 }
 
 // ─── Tab: Branding ───────────────────────────────────────────────────
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+/**
+ * Campo de color: muestra nativa (paleta del sistema) + input de texto hex,
+ * sincronizados. Elegir en la muestra escribe el hex en el form; tipear un
+ * hex válido refleja el color en la muestra.
+ */
+function ColorField({
+  label,
+  placeholder,
+  value,
+  register,
+  error,
+  onPick,
+}: {
+  label: string;
+  placeholder: string;
+  value: string | undefined;
+  register: UseFormRegisterReturn;
+  error?: string;
+  onPick: (hex: string) => void;
+}): React.ReactElement {
+  const swatch = value && HEX_RE.test(value) ? value : placeholder;
+  return (
+    <div>
+      <label className="label">{label}</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          aria-label={label}
+          value={swatch}
+          onChange={(e) => onPick(e.target.value.toUpperCase())}
+          className="h-10 w-12 shrink-0 cursor-pointer rounded-card border border-line bg-paper p-1"
+        />
+        <input className="input flex-1 font-mono" placeholder={placeholder} {...register} />
+      </div>
+      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+    </div>
+  );
+}
+
 function BrandingTab({ settings }: { settings: TenantSettings }): React.ReactElement {
   const update = useUpdateTenantSettings();
   const [saved, setSaved] = useState(false);
@@ -304,17 +345,31 @@ function BrandingTab({ settings }: { settings: TenantSettings }): React.ReactEle
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
+            <ColorField
               label="Color primario (#RRGGBB)"
               placeholder="#0F2A1F"
-              {...form.register('colorPrimario')}
+              value={form.watch('colorPrimario')}
+              register={form.register('colorPrimario')}
               error={form.formState.errors.colorPrimario?.message}
+              onPick={(hex) =>
+                form.setValue('colorPrimario', hex, {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
             />
-            <Input
+            <ColorField
               label="Color secundario (#RRGGBB)"
               placeholder="#E76F26"
-              {...form.register('colorSecundario')}
+              value={form.watch('colorSecundario')}
+              register={form.register('colorSecundario')}
               error={form.formState.errors.colorSecundario?.message}
+              onPick={(hex) =>
+                form.setValue('colorSecundario', hex, {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
             />
           </div>
 
