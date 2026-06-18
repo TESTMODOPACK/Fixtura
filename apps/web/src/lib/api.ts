@@ -159,6 +159,11 @@ export async function apiFetch<T = unknown>(path: string, opts: FetchOpts = {}):
           : JSON.stringify(body)
         : undefined,
       credentials: 'include',
+      // Datos de API siempre frescos: TanStack Query maneja el cache a nivel
+      // de app. Sin esto, el navegador podía servir un GET viejo de su HTTP
+      // cache tras una mutación (ej. cambiar estado de cancha → al refrescar
+      // volvía al valor anterior).
+      cache: 'no-store',
     });
 
   const token = useAuthStore.getState().accessToken;

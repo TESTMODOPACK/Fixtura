@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { In, IsNull, MoreThan, Repository } from 'typeorm';
@@ -324,10 +329,33 @@ export class PersonalAdminService {
     return this.toDto(p);
   }
 
+  /**
+   * El email del personal debe ser único por liga: se usa como usuario de
+   * login (activación de cuenta). Comparación case-insensitive.
+   */
+  private async assertEmailUnico(
+    tenantId: string,
+    email: string,
+    excludeId?: string,
+  ): Promise<void> {
+    const qb = this.repo
+      .createQueryBuilder('p')
+      .where('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('LOWER(p.email) = LOWER(:email)', { email });
+    if (excludeId) qb.andWhere('p.id != :excludeId', { excludeId });
+    if (await qb.getExists()) {
+      throw new ConflictException(
+        'Ya existe otra persona registrada con ese email en esta liga.',
+      );
+    }
+  }
+
   async create(tenantId: string, input: CreatePersonalDto): Promise<PersonalAdmin> {
     // F53 — multi-rol. El rol primario se deriva del primero seleccionado.
     const roles = input.roles?.length ? input.roles : input.rol ? [input.rol] : [];
     const rolPrimario = roles[0];
+    const emailNorm = input.email?.trim() || null;
+    if (emailNorm) await this.assertEmailUnico(tenantId, emailNorm);
     const entity = this.repo.create({
       tenantId,
       nombre: input.nombre,
@@ -336,7 +364,7 @@ export class PersonalAdminService {
       roles,
       rut: input.rut ?? null,
       telefono: input.telefono ?? null,
-      email: input.email ?? null,
+      email: emailNorm,
       tarifaBase: input.tarifaBase ?? null,
       tarifaArbitroPrincipal: input.tarifaArbitroPrincipal ?? null,
       tarifaArbitroAsistente: input.tarifaArbitroAsistente ?? null,
@@ -364,6 +392,9 @@ export class PersonalAdminService {
     // F53 — si llegan roles, recalculamos roles + rol primario.
     const rolesNuevos =
       input.roles && input.roles.length ? input.roles : undefined;
+    const emailNorm =
+      input.email === undefined ? undefined : input.email?.trim() || null;
+    if (emailNorm) await this.assertEmailUnico(tenantId, emailNorm, id);
     Object.assign(p, {
       nombre: input.nombre ?? p.nombre,
       apellido: input.apellido ?? p.apellido,
@@ -371,7 +402,7 @@ export class PersonalAdminService {
       rol: rolesNuevos ? rolesNuevos[0] : input.rol ?? p.rol,
       rut: input.rut === undefined ? p.rut : input.rut,
       telefono: input.telefono === undefined ? p.telefono : input.telefono,
-      email: input.email === undefined ? p.email : input.email,
+      email: emailNorm === undefined ? p.email : emailNorm,
       tarifaBase:
         input.tarifaBase === undefined ? p.tarifaBase : input.tarifaBase,
       tarifaArbitroPrincipal:
