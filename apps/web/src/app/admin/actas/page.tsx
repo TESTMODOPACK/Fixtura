@@ -227,17 +227,19 @@ function ActaRow({ acta }: { acta: ActaResumen }): React.ReactElement {
       <div className="font-semibold truncate">{acta.equipoVisitaNombre}</div>
 
       <div className="flex items-center gap-2 text-xs">
-        {cerrada ? (
+        {acta.estado === 'WALKOVER' ? (
+          // El walkover es un cierre automático (W.O.); lo distinguimos del
+          // cierre normal aunque tenga actaCerradaAt seteado.
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-orange-700/10 text-orange-700 text-[10px] uppercase tracking-wider font-semibold">
+            <Lock size={11} /> Cerrada · Walkover
+          </span>
+        ) : cerrada ? (
           <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-green-bright/10 text-green-bright text-[10px] uppercase tracking-wider font-semibold">
             <Lock size={11} /> Cerrada
           </span>
         ) : acta.estado === 'EN_CURSO' ? (
           <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-accent/10 text-accent text-[10px] uppercase tracking-wider font-semibold">
             <Clock size={11} /> En curso
-          </span>
-        ) : acta.estado === 'WALKOVER' ? (
-          <span className="px-2 py-0.5 rounded bg-orange-700/10 text-orange-700 text-[10px] uppercase tracking-wider font-semibold">
-            Walkover
           </span>
         ) : acta.estado === 'SUSPENDIDO_FUERZA_MAYOR' || acta.estado === 'REPROGRAMADO' ? (
           <span className="px-2 py-0.5 rounded bg-danger/10 text-danger text-[10px] uppercase tracking-wider font-semibold">
