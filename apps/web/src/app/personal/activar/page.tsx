@@ -1,120 +1,181 @@
 'use client';
 
 import { AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
+import type { ActivarPersonalInfo } from '@fixtura/types';
+
 import { Button } from '@/components/ui/button';
-import { Card, CardLabel } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { LigaPlusLockup } from '@/components/ui/logo';
+import { PasswordInput } from '@/components/ui/password-input';
 import { API_URL } from '@/lib/api';
-import { cn } from '@/lib/cn';
 
 /**
- * Página pública de activación de cuenta de personal. Recibe el token
- * en query string, lo manda al backend y muestra el resultado.
- *
- * Por ahora MVP: confirma la activación + invita a iniciar sesión.
- * v2: pedir al user crear su contraseña en el mismo flujo.
+ * Activación de cuenta del personal (árbitros / planilleros). Valida el
+ * token, muestra los datos y deja que la persona cree su contraseña →
+ * recién ahí se crea su cuenta de login (rol según su función).
  */
 type Estado =
   | { tipo: 'cargando' }
-  | { tipo: 'ok'; nombre: string; rol: string }
+  | { tipo: 'form'; info: ActivarPersonalInfo }
+  | { tipo: 'listo' }
   | { tipo: 'error'; mensaje: string };
 
 function ActivarContent(): React.ReactElement {
   const sp = useSearchParams();
+  const router = useRouter();
   const token = sp.get('token');
   const [estado, setEstado] = useState<Estado>({ tipo: 'cargando' });
+  const [password, setPassword] = useState('');
+  const [password2, setPassword2] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
     if (!token) {
       setEstado({ tipo: 'error', mensaje: 'Falta el token en la URL.' });
       return;
     }
-    fetch(`${API_URL}/public/personal/activar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    })
+    fetch(`${API_URL}/public/personal/activacion-info?token=${encodeURIComponent(token)}`)
       .then(async (r) => {
         if (!r.ok) {
-          const body = await r.json().catch(() => ({ message: 'Error desconocido' }));
-          throw new Error(body.message ?? 'Error activando la cuenta');
+          const body = await r.json().catch(() => ({ message: 'Error' }));
+          throw new Error(body.message ?? 'No pudimos validar la invitación.');
         }
-        return r.json() as Promise<{ personalId: string; nombre: string; rol: string }>;
+        return r.json() as Promise<ActivarPersonalInfo>;
       })
-      .then((data) => setEstado({ tipo: 'ok', nombre: data.nombre, rol: data.rol }))
+      .then((info) => setEstado({ tipo: 'form', info }))
       .catch((err) => setEstado({ tipo: 'error', mensaje: (err as Error).message }));
   }, [token]);
 
+  const onSubmit = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    setLocalError(null);
+    if (password.length < 8) {
+      setLocalError('La contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+    if (password !== password2) {
+      setLocalError('Las contraseñas no coinciden.');
+      return;
+    }
+    if (!token) return;
+    setEnviando(true);
+    try {
+      const r = await fetch(`${API_URL}/public/personal/activar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({ message: 'Error' }));
+        throw new Error(body.message ?? 'No pudimos activar la cuenta.');
+      }
+      setEstado({ tipo: 'listo' });
+    } catch (err) {
+      setLocalError((err as Error).message);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-paper flex items-center justify-center px-4 py-10">
-      <Card padding="roomy" className="max-w-lg w-full">
-        {estado.tipo === 'cargando' && (
-          <div className="text-center py-8">
-            <Clock size={48} className="mx-auto text-ink-mute animate-pulse mb-4" />
-            <p className="font-serif italic text-ink-mute">Activando tu cuenta…</p>
-          </div>
-        )}
-
-        {estado.tipo === 'error' && (
-          <div className="text-center py-6">
-            <AlertTriangle size={48} className="mx-auto text-danger mb-4" />
-            <CardLabel className="text-danger">No pudimos activar la cuenta</CardLabel>
-            <p className="text-ink mt-3">{estado.mensaje}</p>
-            <p className="text-sm text-ink-mute font-serif italic mt-4">
-              Si el link expiró o ya fue usado, pídele al admin de la liga que te envíe
-              uno nuevo.
-            </p>
-            <div className="mt-6">
-              <Link
-                href="/"
-                className="inline-block px-4 py-2 rounded-card text-sm font-semibold bg-green-deep text-chalk hover:bg-green-deep/90"
-              >
-                Volver al inicio
-              </Link>
+      <div className="w-full max-w-md">
+        <div className="flex justify-center mb-6">
+          <LigaPlusLockup showTag={false} />
+        </div>
+        <Card padding="roomy">
+          {estado.tipo === 'cargando' && (
+            <div className="text-center py-6">
+              <Clock size={40} className="mx-auto text-ink-mute animate-pulse mb-3" />
+              <p className="font-serif italic text-ink-mute">Validando invitación…</p>
             </div>
-          </div>
-        )}
+          )}
 
-        {estado.tipo === 'ok' && (
-          <div className="text-center py-4">
-            <CheckCircle2 size={56} className={cn('mx-auto mb-4 text-green-bright')} />
-            <CardLabel className="text-green-bright">¡Cuenta activada!</CardLabel>
-            <p className="text-ink mt-4">
-              Bienvenido/a, <strong>{estado.nombre}</strong>.
-            </p>
-            <p className="text-sm text-ink-mute mt-2">
-              Quedaste registrado/a como <strong>{estado.rol.replace('_', ' ').toLowerCase()}</strong>.
-            </p>
-            <p className="text-xs text-ink-mute font-serif italic mt-4">
-              El admin de la liga te va a contactar con los datos de acceso al sistema.
-            </p>
-            <div className="mt-6">
-              <Link
-                href="/"
-                className="inline-block px-4 py-2 rounded-card text-sm font-semibold bg-green-deep text-chalk hover:bg-green-deep/90"
-              >
-                Ir al portal de la liga
-              </Link>
+          {estado.tipo === 'error' && (
+            <div className="text-center py-4">
+              <AlertTriangle size={44} className="mx-auto text-danger mb-3" />
+              <p className="text-danger font-semibold mb-1">No pudimos validar la invitación.</p>
+              <p className="text-sm text-ink-mute">{estado.mensaje}</p>
+              <p className="text-xs text-ink-mute font-serif italic mt-4">
+                Si el link expiró o ya fue usado, pídele al admin de la liga que te envíe uno
+                nuevo.
+              </p>
             </div>
-          </div>
-        )}
-      </Card>
+          )}
+
+          {estado.tipo === 'listo' && (
+            <div className="text-center py-4">
+              <CheckCircle2 size={48} className="text-green-bright mx-auto mb-3" />
+              <h2 className="font-display text-2xl text-green-deep mb-2">¡Cuenta activada!</h2>
+              <p className="text-sm text-ink-mute mb-4">
+                Ya puedes iniciar sesión con tu email y la contraseña que creaste para ver tus
+                designaciones.
+              </p>
+              <Button variant="accent" onClick={() => router.push('/')}>
+                Ir a iniciar sesión
+              </Button>
+            </div>
+          )}
+
+          {estado.tipo === 'form' && (
+            <form onSubmit={onSubmit}>
+              <div className="eyebrow mb-2">→ Activar cuenta</div>
+              <h2 className="font-display text-2xl text-green-deep leading-tight mb-1">
+                Hola {estado.info.nombre}
+              </h2>
+              <p className="text-sm text-ink-mute mb-5">
+                {estado.info.rol.replace('_', ' ').toLowerCase()}
+                {estado.info.ligaNombre ? ` · ${estado.info.ligaNombre}` : ''}. Crea tu
+                contraseña para acceder a tus designaciones.
+              </p>
+
+              {estado.info.email && (
+                <div className="mb-4">
+                  <label className="label">Email (tu usuario)</label>
+                  <input className="input bg-paper-dark" value={estado.info.email} disabled readOnly />
+                </div>
+              )}
+
+              <div className="mb-3">
+                <label className="label">Contraseña</label>
+                <PasswordInput
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 8 caracteres"
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="label">Repetir contraseña</label>
+                <PasswordInput
+                  value={password2}
+                  onChange={(e) => setPassword2(e.target.value)}
+                  autoComplete="new-password"
+                />
+              </div>
+
+              {localError && (
+                <p className="text-sm text-danger font-semibold mb-3">{localError}</p>
+              )}
+
+              <Button type="submit" variant="accent" className="w-full" loading={enviando}>
+                Activar mi cuenta
+              </Button>
+            </form>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }
 
-export default function ActivarPage(): React.ReactElement {
+export default function ActivarPersonalPage(): React.ReactElement {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-paper flex items-center justify-center">
-          <Clock size={36} className="animate-pulse text-ink-mute" />
-        </div>
-      }
-    >
+    <Suspense fallback={<div className="min-h-screen bg-paper" />}>
       <ActivarContent />
     </Suspense>
   );

@@ -79,9 +79,16 @@ export const TIPO_CUENTA_BANCARIA_LABEL: Record<TipoCuentaBancaria, string> = {
   CUENTA_RUT: 'CuentaRUT',
 };
 
+/** Estado de la cuenta de acceso al sistema de un miembro del personal. */
+export const CUENTA_ESTADO = ['SIN_INVITAR', 'PENDIENTE', 'ACTIVA'] as const;
+export type CuentaEstado = (typeof CUENTA_ESTADO)[number];
+
 export const PersonalAdminSchema = z.object({
   id: z.uuid(),
   userId: z.uuid().nullable(),
+  // Estado de acceso al sistema: SIN_INVITAR (sin cuenta ni invitación),
+  // PENDIENTE (invitado, no activó), ACTIVA (ya tiene login).
+  cuentaEstado: z.enum(CUENTA_ESTADO),
   nombre: z.string(),
   apellido: z.string(),
   rut: z.string().nullable(),
@@ -139,6 +146,58 @@ export const UpdatePersonalSchema = CreatePersonalSchema.partial().extend({
   activo: z.boolean().optional(),
 });
 export type UpdatePersonalRequest = z.infer<typeof UpdatePersonalSchema>;
+
+// ─── Activación de cuenta del personal (login) ───────────────────────
+
+/** Info que muestra la pantalla de activación (no consume el token). */
+export const ActivarPersonalInfoSchema = z.object({
+  nombre: z.string(),
+  email: z.string().nullable(),
+  rol: z.string(),
+  ligaNombre: z.string(),
+});
+export type ActivarPersonalInfo = z.infer<typeof ActivarPersonalInfoSchema>;
+
+/** Activación: el personal crea su contraseña. */
+export const ActivarPersonalSchema = z.object({
+  token: z.string().min(10),
+  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
+});
+export type ActivarPersonalRequest = z.infer<typeof ActivarPersonalSchema>;
+
+// ─── Portal del personal: mis designaciones ──────────────────────────
+
+/** Una designación del personal logueado, para su portal /personal. */
+export const MiDesignacionSchema = z.object({
+  designacionId: z.uuid(),
+  partidoId: z.uuid(),
+  torneoNombre: z.string(),
+  fechaNumero: z.number().int().nullable(),
+  fechaHora: z.iso.datetime().nullable(),
+  canchaNombre: z.string().nullable(),
+  rolAsignado: z.enum(ROL_PERSONAL),
+  estado: z.enum(['PROPUESTA', 'CONFIRMADA', 'RECHAZADA', 'ASISTIO', 'AUSENTE']),
+  localNombre: z.string(),
+  visitaNombre: z.string(),
+  partidoEstado: z.string(),
+});
+export type MiDesignacion = z.infer<typeof MiDesignacionSchema>;
+
+export const MiPerfilPersonalSchema = z.object({
+  nombre: z.string(),
+  apellido: z.string(),
+  rol: z.enum(ROL_PERSONAL),
+  roles: z.array(z.enum(ROL_PERSONAL)),
+  carnetAnfaNumero: z.string().nullable(),
+  carnetAnfaVence: z.string().nullable(),
+});
+export type MiPerfilPersonal = z.infer<typeof MiPerfilPersonalSchema>;
+
+export const MiPortalPersonalSchema = z.object({
+  perfil: MiPerfilPersonalSchema,
+  designaciones: z.array(MiDesignacionSchema),
+});
+export type MiPortalPersonal = z.infer<typeof MiPortalPersonalSchema>;
 
 /**
  * F48 — Ausencias del personal por rango de fechas calendario.

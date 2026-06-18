@@ -308,6 +308,16 @@ function PersonaRow({
               inactivo
             </span>
           )}
+          {persona.cuentaEstado === 'ACTIVA' && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-green-bright/15 text-green-bright">
+              tiene acceso
+            </span>
+          )}
+          {persona.cuentaEstado === 'PENDIENTE' && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-orange-700/15 text-orange-700">
+              invitación pendiente
+            </span>
+          )}
           {(persona.roles?.length ? persona.roles : [persona.rol]).map((r) => (
             <span
               key={r}

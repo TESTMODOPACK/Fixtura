@@ -13,8 +13,10 @@ import {
 
 import {
   ROLE,
+  type ActivarPersonalInfo,
   type AusenciaPersonal,
   type InvitarPersonalResponse,
+  type MiPortalPersonal,
   type PersonalAdmin,
   type UserContext,
 } from '@fixtura/types';
@@ -23,8 +25,15 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { AusenciasAdminService } from './ausencias-admin.service';
-import { CrearAusenciaDto, CreatePersonalDto, InvitarPersonalDto, UpdatePersonalDto } from './dto';
+import {
+  ActivarPersonalDto,
+  CrearAusenciaDto,
+  CreatePersonalDto,
+  InvitarPersonalDto,
+  UpdatePersonalDto,
+} from './dto';
 import { PersonalAdminService } from './personal-admin.service';
+import { PersonalPortalService } from './personal-portal.service';
 
 function ensureTenant(user: UserContext): string {
   if (!user.tenantId) {
@@ -129,13 +138,45 @@ export class PersonalAdminController {
 export class PersonalPublicController {
   constructor(private readonly svc: PersonalAdminService) {}
 
-  @Post('activar')
-  activar(
-    @Body() body: { token: string },
-  ): Promise<{ personalId: string; tenantId: string | null; nombre: string; rol: string }> {
-    if (!body.token || typeof body.token !== 'string' || body.token.length < 20) {
+  /** Datos para la pantalla de activación (no consume el token). */
+  @Get('activacion-info')
+  infoActivacion(@Query('token') token?: string): Promise<ActivarPersonalInfo> {
+    if (!token || token.length < 20) {
       throw new BadRequestException('Token inválido');
     }
-    return this.svc.activarPorToken(body.token);
+    return this.svc.infoActivacion(token);
+  }
+
+  /** Activa la cuenta: el personal crea su contraseña. */
+  @Post('activar')
+  activar(@Body() body: ActivarPersonalDto): Promise<{ ok: boolean }> {
+    if (!body.token || body.token.length < 20) {
+      throw new BadRequestException('Token inválido');
+    }
+    if (!body.password || body.password.length < 8) {
+      throw new BadRequestException('La contraseña debe tener al menos 8 caracteres.');
+    }
+    return this.svc.activarConPassword(body.token, body.password);
+  }
+}
+
+/**
+ * Portal del personal logueado (árbitros / planilleros). Auto-acotado al
+ * personal del usuario por user_id.
+ */
+@Controller('personal')
+@Roles(
+  ROLE.ARBITRO,
+  ROLE.PLANILLERO,
+  ROLE.PARAMEDICO,
+  ROLE.SEGURIDAD,
+  ROLE.MANTENIMIENTO,
+)
+export class PersonalPortalController {
+  constructor(private readonly portal: PersonalPortalService) {}
+
+  @Get('mi-portal')
+  miPortal(@CurrentUser() user: UserContext): Promise<MiPortalPersonal> {
+    return this.portal.miPortal(user.userId, ensureTenant(user));
   }
 }

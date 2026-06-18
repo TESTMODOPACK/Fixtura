@@ -1,15 +1,38 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
+import { In, IsNull, MoreThan, Repository } from 'typeorm';
 
-import type { CanalInvitacion, InvitarPersonalResponse, PersonalAdmin } from '@fixtura/types';
+import type {
+  ActivarPersonalInfo,
+  CanalInvitacion,
+  CuentaEstado,
+  InvitarPersonalResponse,
+  PersonalAdmin,
+  Role,
+  RolPersonal,
+} from '@fixtura/types';
+import { ROLE_SCOPE } from '@fixtura/types';
 
+import { MagicLink } from '../../auth/entities/magic-link.entity';
 import { MagicLinksService } from '../../auth/magic-links.service';
 import { EmailService } from '../../email/email.service';
 import { Personal } from '../../competition/entities/personal.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { UsersService } from '../../users/users.service';
 import { WhatsAppService } from '../../whatsapp/whatsapp.service';
 import type { CreatePersonalDto, UpdatePersonalDto } from './dto';
+
+const BCRYPT_COST = 12;
+
+/** Mapea el rol operativo del personal al rol de sistema (login). */
+const ROL_PERSONAL_TO_SYSTEM: Record<RolPersonal, Role | null> = {
+  ARBITRO_PRINCIPAL: 'ARBITRO',
+  ARBITRO_ASISTENTE: 'ARBITRO',
+  PLANILLERO: 'PLANILLERO',
+  PARAMEDICO: 'PARAMEDICO',
+  OTRO: null,
+};
 
 @Injectable()
 export class PersonalAdminService {
@@ -19,9 +42,11 @@ export class PersonalAdminService {
   constructor(
     @InjectRepository(Personal) private readonly repo: Repository<Personal>,
     @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
+    @InjectRepository(MagicLink) private readonly magicLinkRepo: Repository<MagicLink>,
     private readonly magicLinks: MagicLinksService,
     private readonly email: EmailService,
     private readonly whatsapp: WhatsAppService,
+    private readonly users: UsersService,
   ) {}
 
   /**
@@ -153,18 +178,19 @@ export class PersonalAdminService {
    * el frontend muestre confirmación. La creación del User asociado se
    * difiere a v2 (require flow de password setup).
    */
-  async activarPorToken(token: string): Promise<{
-    personalId: string;
-    tenantId: string | null;
-    nombre: string;
-    rol: string;
+  /**
+   * Carga el personal asociado a un token de onboarding, validando tenant.
+   * NO consume el token (se usa para mostrar la pantalla de activación).
+   */
+  private async resolverPersonalDeToken(token: string): Promise<{
+    link: MagicLink;
+    personal: Personal;
   }> {
     const link = await this.magicLinks.resolver(token, 'PERSONAL_ONBOARDING');
     if (!link.personalId) {
       throw new BadRequestException('El link no apunta a un personal válido.');
     }
-
-    // Cargar personal con bypass de RLS — endpoint público.
+    // Bypass de RLS — endpoint público.
     const personal = await this.repo
       .createQueryBuilder('p')
       .where('p.id = :id', { id: link.personalId })
@@ -172,24 +198,80 @@ export class PersonalAdminService {
     if (!personal) {
       throw new NotFoundException('No encontramos el personal asociado al link.');
     }
-
-    // AUDIT-6: defensa en profundidad. El link tiene tenantId firmado;
-    // el personal tiene su propio tenant_id en la tabla. Si no coinciden
-    // (admin malicioso emitió link a personalId de otro tenant), abortar.
+    // AUDIT-6: el link tiene tenantId firmado; debe coincidir con el del personal.
     if (link.tenantId && personal.tenantId !== link.tenantId) {
       throw new BadRequestException(
         'El link no es válido para este personal (mismatch de tenant).',
       );
     }
+    return { link, personal };
+  }
+
+  /** Info para la pantalla de activación (no consume el token). */
+  async infoActivacion(token: string): Promise<ActivarPersonalInfo> {
+    const { link, personal } = await this.resolverPersonalDeToken(token);
+    const tenant = link.tenantId
+      ? await this.tenantRepo.findOne({ where: { id: link.tenantId } })
+      : null;
+    return {
+      nombre: `${personal.nombre} ${personal.apellido}`,
+      email: personal.email,
+      rol: personal.rol,
+      ligaNombre: tenant?.nombre ?? '',
+    };
+  }
+
+  /**
+   * Activa la cuenta del personal: crea (o reusa) el User por email, fija la
+   * contraseña, le asigna los roles de sistema según sus roles operativos y
+   * vincula user_id en el registro de personal. Consume el token.
+   */
+  async activarConPassword(
+    token: string,
+    password: string,
+  ): Promise<{ ok: boolean }> {
+    const { link, personal } = await this.resolverPersonalDeToken(token);
+    if (!personal.email) {
+      throw new BadRequestException(
+        'Este personal no tiene email registrado; no se puede crear la cuenta.',
+      );
+    }
+    if (!link.tenantId) {
+      throw new BadRequestException('El link no tiene liga asociada.');
+    }
+
+    const user = await this.users.crearOObtenerPorEmail({
+      email: personal.email,
+      nombre: personal.nombre,
+      apellido: personal.apellido,
+    });
+    const hash = await bcrypt.hash(password, BCRYPT_COST);
+    await this.users.setPasswordHash(user.id, hash);
+
+    // Mapear roles operativos → roles de sistema (scope PERSONAL, scopeId =
+    // personalId). Dedup. OTRO no mapea a un rol de sistema.
+    const rolesOperativos = personal.roles?.length ? personal.roles : [personal.rol];
+    const sistemaRoles = new Set<Role>();
+    for (const r of rolesOperativos) {
+      const sys = ROL_PERSONAL_TO_SYSTEM[r];
+      if (sys) sistemaRoles.add(sys);
+    }
+    for (const role of sistemaRoles) {
+      await this.users.asignarRol({
+        userId: user.id,
+        tenantId: link.tenantId,
+        role,
+        scopeType: ROLE_SCOPE[role],
+        scopeId: personal.id,
+        grantedBy: link.createdByUserId,
+      });
+    }
+
+    // Vincular el user al registro de personal.
+    await this.repo.update({ id: personal.id }, { userId: user.id });
 
     await this.magicLinks.marcarUsado(link.id);
-
-    return {
-      personalId: personal.id,
-      tenantId: link.tenantId,
-      nombre: `${personal.nombre} ${personal.apellido}`,
-      rol: personal.rol,
-    };
+    return { ok: true };
   }
 
   async list(tenantId: string, soloActivos = false): Promise<PersonalAdmin[]> {
@@ -200,7 +282,30 @@ export class PersonalAdminService {
       .addOrderBy('p.nombre', 'ASC');
     if (soloActivos) qb.andWhere('p.activo = true');
     const rows = await qb.getMany();
-    return rows.map(this.toDto);
+
+    // PENDIENTE = tiene una invitación de onboarding sin usar y no vencida,
+    // y todavía no creó su cuenta (sin userId).
+    const sinCuenta = rows.filter((r) => !r.userId).map((r) => r.id);
+    const pendientes = new Set<string>();
+    if (sinCuenta.length > 0) {
+      const invites = await this.magicLinkRepo.find({
+        where: {
+          purpose: 'PERSONAL_ONBOARDING',
+          personalId: In(sinCuenta),
+          usedAt: IsNull(),
+          expiresAt: MoreThan(new Date()),
+        },
+        select: { personalId: true },
+      });
+      for (const i of invites) if (i.personalId) pendientes.add(i.personalId);
+    }
+
+    return rows.map((p) =>
+      this.toDto(
+        p,
+        p.userId ? 'ACTIVA' : pendientes.has(p.id) ? 'PENDIENTE' : 'SIN_INVITAR',
+      ),
+    );
   }
 
   async findOne(id: string, tenantId: string): Promise<PersonalAdmin> {
@@ -308,10 +413,11 @@ export class PersonalAdminService {
     await this.repo.save(p);
   }
 
-  private toDto(p: Personal): PersonalAdmin {
+  private toDto(p: Personal, cuentaEstado?: CuentaEstado): PersonalAdmin {
     return {
       id: p.id,
       userId: p.userId,
+      cuentaEstado: cuentaEstado ?? (p.userId ? 'ACTIVA' : 'SIN_INVITAR'),
       nombre: p.nombre,
       apellido: p.apellido,
       rut: p.rut,

@@ -228,6 +228,17 @@ export class InvitarPersonalDto {
   canal?: 'EMAIL' | 'WHATSAPP' | 'AMBOS';
 }
 
+/** Activación de cuenta del personal: token del magic link + contraseña. */
+export class ActivarPersonalDto {
+  @IsString()
+  @MinLength(10)
+  token!: string;
+
+  @IsString()
+  @MinLength(8)
+  password!: string;
+}
+
 // ─── F48: ausencias del personal por rango de fechas ───────────────
 export class CrearAusenciaDto {
   @IsDateString()

@@ -61,9 +61,11 @@ import { PartidosAdminService } from './partidos/partidos-admin.service';
 import { PlantillaPdfService } from './partidos/plantilla-pdf.service';
 import {
   PersonalAdminController,
+  PersonalPortalController,
   PersonalPublicController,
 } from './personal/personal-admin.controller';
 import { PersonalAdminService } from './personal/personal-admin.service';
+import { PersonalPortalService } from './personal/personal-portal.service';
 import { AusenciasAdminService } from './personal/ausencias-admin.service';
 import { SponsorsAdminController } from './sponsors/sponsors-admin.controller';
 import { SponsorsAdminService } from './sponsors/sponsors-admin.service';
@@ -125,6 +127,7 @@ import { DelegadoPortalService } from './delegado/delegado-portal.service';
     TribunalAdminController,
     PersonalAdminController,
     PersonalPublicController,
+    PersonalPortalController,
     DesignacionesAdminController,
     DesignacionesRespuestaController,
     ActasAdminController,
@@ -159,6 +162,7 @@ import { DelegadoPortalService } from './delegado/delegado-portal.service';
     PlantillaPdfService,
     TribunalAdminService,
     PersonalAdminService,
+    PersonalPortalService,
     AusenciasAdminService,
     DesignacionesAdminService,
     DesignacionesEmailService,
