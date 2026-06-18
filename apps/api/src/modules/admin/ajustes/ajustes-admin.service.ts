@@ -6,19 +6,23 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { hash } from 'bcrypt';
-import { Not, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 
 import {
   ROLE,
   ROLE_SCOPE,
   type Branding,
+  type CategoriaUsuario,
   type MiembroAdmin,
   type PagosConfig,
   type ProveedorPasarela,
+  type Role,
   type TenantSettings,
+  type UsuarioSistema,
 } from '@fixtura/types';
 
 import { cifrarSecreto } from '../../../common/crypto/secret-box';
+import { Club } from '../../competition/entities/club.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { User } from '../../users/entities/user.entity';
 import { UserRole } from '../../users/entities/user-role.entity';
@@ -44,7 +48,88 @@ export class AjustesAdminService {
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(UserRole)
     private readonly userRoleRepo: Repository<UserRole>,
+    @InjectRepository(Club) private readonly clubRepo: Repository<Club>,
   ) {}
+
+  /**
+   * Vista consolidada de TODAS las cuentas con acceso al sistema en el
+   * tenant (admin + delegados + personal), con sus roles y contexto. Une
+   * user_roles (no revocados) con users; para delegados resuelve el nombre
+   * del club desde scope_id.
+   */
+  async listUsuariosSistema(tenantId: string): Promise<UsuarioSistema[]> {
+    const roles = await this.userRoleRepo
+      .createQueryBuilder('ur')
+      .leftJoinAndSelect('ur.user', 'u')
+      .where('ur.tenant_id = :tenantId', { tenantId })
+      .andWhere('ur.revoked_at IS NULL')
+      .getMany();
+
+    // Nombres de club para los roles de delegado (scope TEAM).
+    const clubIds = Array.from(
+      new Set(
+        roles
+          .filter((r) => r.role === ROLE.DELEGADO_EQUIPO && r.scopeId)
+          .map((r) => r.scopeId as string),
+      ),
+    );
+    const clubNombre = new Map<string, string>();
+    if (clubIds.length > 0) {
+      const clubes = await this.clubRepo.find({
+        where: { id: In(clubIds), tenantId },
+      });
+      for (const c of clubes) clubNombre.set(c.id, c.nombre);
+    }
+
+    const adminRoles = new Set<Role>([...ROLES_ADMIN, ROLE.SUPER_ADMIN]);
+    const personalRoles = new Set<Role>([
+      ROLE.ARBITRO,
+      ROLE.PLANILLERO,
+      ROLE.PARAMEDICO,
+      ROLE.SEGURIDAD,
+      ROLE.MANTENIMIENTO,
+    ]);
+
+    const porUsuario = new Map<string, UsuarioSistema>();
+    for (const r of roles) {
+      if (!r.user) continue;
+      let u = porUsuario.get(r.userId);
+      if (!u) {
+        u = {
+          userId: r.userId,
+          email: r.user.email,
+          nombre: r.user.nombre,
+          apellido: r.user.apellido,
+          activo: r.user.isActive,
+          ultimoLoginAt: r.user.lastLoginAt
+            ? r.user.lastLoginAt.toISOString()
+            : null,
+          categoria: 'OTRO',
+          roles: [],
+        };
+        porUsuario.set(r.userId, u);
+      }
+      const contexto =
+        r.role === ROLE.DELEGADO_EQUIPO && r.scopeId
+          ? (clubNombre.get(r.scopeId) ?? null)
+          : null;
+      u.roles.push({ role: r.role, contexto });
+    }
+
+    // Categoría = la de mayor jerarquía entre los roles del usuario.
+    for (const u of porUsuario.values()) {
+      const set = new Set(u.roles.map((r) => r.role as Role));
+      let categoria: CategoriaUsuario = 'OTRO';
+      if ([...set].some((r) => adminRoles.has(r))) categoria = 'ADMIN';
+      else if (set.has(ROLE.DELEGADO_EQUIPO)) categoria = 'DELEGADO';
+      else if ([...set].some((r) => personalRoles.has(r))) categoria = 'PERSONAL';
+      u.categoria = categoria;
+    }
+
+    return Array.from(porUsuario.values()).sort((a, b) =>
+      `${a.apellido} ${a.nombre}`.localeCompare(`${b.apellido} ${b.nombre}`, 'es'),
+    );
+  }
 
   // ─── Settings ───────────────────────────────────────────────────────
   async getSettings(tenantId: string): Promise<TenantSettings> {

@@ -15,6 +15,7 @@ import {
   type MiembroAdmin,
   type TenantSettings,
   type UserContext,
+  type UsuarioSistema,
 } from '@fixtura/types';
 
 import { Audited } from '../../audit';
@@ -61,6 +62,12 @@ export class AjustesAdminController {
   @Get('miembros')
   listMiembros(@CurrentUser() user: UserContext): Promise<MiembroAdmin[]> {
     return this.svc.listMiembros(ensureTenant(user));
+  }
+
+  /** Vista consolidada: todas las cuentas con acceso (admin + delegados + personal). */
+  @Get('usuarios')
+  listUsuarios(@CurrentUser() user: UserContext): Promise<UsuarioSistema[]> {
+    return this.svc.listUsuariosSistema(ensureTenant(user));
   }
 
   @Post('miembros')

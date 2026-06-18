@@ -11,6 +11,7 @@ import {
   Building2,
   FileText,
   Heart,
+  KeyRound,
   Layers,
   LogOut,
   Megaphone,
@@ -93,6 +94,7 @@ const NAV: NavSection[] = [
     title: 'Configuración',
     items: [
       { href: '/admin/personal', label: 'Personal & roles', icon: UserCog },
+      { href: '/admin/usuarios', label: 'Usuarios del sistema', icon: KeyRound },
       { href: '/admin/categorias', label: 'Categorías y series', icon: Layers },
       { href: '/admin/ajustes', label: 'Ajustes', icon: Settings },
       { href: '/admin/audit-log', label: 'Audit log', icon: ScrollText },

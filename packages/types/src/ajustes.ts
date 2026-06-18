@@ -168,3 +168,29 @@ export const InvitarMiembroSchema = z.object({
   passwordTemporal: z.string().min(8).max(128),
 });
 export type InvitarMiembroRequest = z.infer<typeof InvitarMiembroSchema>;
+
+// ─── Usuarios del sistema (vista consolidada de quién puede conectarse) ──
+
+/** Categoría para agrupar usuarios en la vista consolidada. */
+export const CATEGORIA_USUARIO = ['ADMIN', 'DELEGADO', 'PERSONAL', 'OTRO'] as const;
+export type CategoriaUsuario = (typeof CATEGORIA_USUARIO)[number];
+
+/** Un rol del usuario con su contexto legible (ej. el club del delegado). */
+export const RolUsuarioSistemaSchema = z.object({
+  role: z.string(),
+  contexto: z.string().nullable(),
+});
+export type RolUsuarioSistema = z.infer<typeof RolUsuarioSistemaSchema>;
+
+/** Una cuenta con acceso al sistema (tabla users) y sus roles en el tenant. */
+export const UsuarioSistemaSchema = z.object({
+  userId: z.uuid(),
+  email: z.string(),
+  nombre: z.string(),
+  apellido: z.string(),
+  activo: z.boolean(),
+  ultimoLoginAt: z.string().nullable(),
+  categoria: z.enum(CATEGORIA_USUARIO),
+  roles: z.array(RolUsuarioSistemaSchema),
+});
+export type UsuarioSistema = z.infer<typeof UsuarioSistemaSchema>;

@@ -2686,3 +2686,13 @@ export function useInformePagosPersonal(torneoId: string | undefined) {
       apiFetch<PagoPersonal[]>(`/admin/informes/arbitraje/pagos-personal${qs}`),
   });
 }
+
+// ─── Usuarios del sistema (vista consolidada) ───────────────────────
+import type { UsuarioSistema } from '@fixtura/types';
+
+export function useUsuariosSistema() {
+  return useQuery({
+    queryKey: ['admin', 'usuarios'],
+    queryFn: () => apiFetch<UsuarioSistema[]>('/admin/ajustes/usuarios'),
+  });
+}
