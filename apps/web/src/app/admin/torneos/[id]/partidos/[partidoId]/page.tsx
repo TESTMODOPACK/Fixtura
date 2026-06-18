@@ -192,7 +192,7 @@ export default function PartidoDetallePage({
 
       <WalkoverCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
 
-      <DesignacionesSection partidoId={partido.id} torneoId={torneoId} />
+      <DesignacionesSection partidoId={partido.id} torneoId={torneoId} cerrada={cerrada} />
 
       {!cerrada && partido.estado !== 'WALKOVER' && (
         <CertificacionSection partido={partido} torneoId={torneoId} />
@@ -350,9 +350,11 @@ function ActaSection({
 function DesignacionesSection({
   partidoId,
   torneoId,
+  cerrada,
 }: {
   partidoId: string;
   torneoId: string;
+  cerrada: boolean;
 }): React.ReactElement {
   const { data: designaciones, isLoading } = useDesignacionesPorPartido(partidoId);
 
@@ -360,12 +362,15 @@ function DesignacionesSection({
     <Card padding="comfortable" className="mb-5">
       <div className="flex items-center justify-between mb-3">
         <CardLabel>Personal designado</CardLabel>
-        <Link
-          href={`/admin/torneos/${torneoId}/designaciones`}
-          className="text-xs uppercase tracking-[0.18em] font-semibold text-accent hover:underline"
-        >
-          Gestionar →
-        </Link>
+        {/* Acta cerrada: la designación no se edita desde acá; reabrir primero. */}
+        {!cerrada && (
+          <Link
+            href={`/admin/torneos/${torneoId}/designaciones`}
+            className="text-xs uppercase tracking-[0.18em] font-semibold text-accent hover:underline"
+          >
+            Gestionar →
+          </Link>
+        )}
       </div>
       {isLoading && (
         <div className="font-serif italic text-ink-mute text-sm">Cargando…</div>

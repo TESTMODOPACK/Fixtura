@@ -6,16 +6,24 @@ import PDFDocument from 'pdfkit';
 import { limpiarRut } from '@fixtura/types';
 
 import { Fecha } from '../../competition/entities/fecha.entity';
+import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { JugadorVetado } from '../../competition/entities/jugador-vetado.entity';
 import { Partido } from '../../competition/entities/partido.entity';
+import { PartidoJugador } from '../../competition/entities/partido-jugador.entity';
 import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 
 interface FilaJugador {
+  jugadorId: string;
   numero: number | null;
   rut: string | null;
   nombre: string;
   capitan: boolean;
+  // Solo cuando el acta está cerrada (se completa desde el acta).
+  presente?: boolean;
+  goles?: number;
+  amarillas?: number;
+  rojas?: number;
 }
 
 /**
@@ -35,6 +43,10 @@ export class PlantillaPdfService {
     private readonly planillaRepo: Repository<PlanillaTorneo>,
     @InjectRepository(JugadorVetado)
     private readonly vetadoRepo: Repository<JugadorVetado>,
+    @InjectRepository(PartidoJugador)
+    private readonly partidoJugadorRepo: Repository<PartidoJugador>,
+    @InjectRepository(IncidenciaPartido)
+    private readonly incidenciaRepo: Repository<IncidenciaPartido>,
   ) {}
 
   async generar(partidoId: string, tenantId: string): Promise<Buffer> {
@@ -64,6 +76,17 @@ export class PlantillaPdfService {
       jugadores: await this.cargarPlantilla(partido.inscripcionVisitaId, tenantId, vetadosSet),
     };
 
+    // Acta cerrada: la plantilla deja de ser una hoja en blanco y se completa
+    // con lo registrado en el acta — presencia certificada (✓) y goles /
+    // amarillas / rojas por jugador (desde las incidencias).
+    const cerrada = !!partido.actaCerradaAt;
+    if (cerrada) {
+      await this.completarConActa(partidoId, tenantId, [
+        ...local.jugadores,
+        ...visita.jugadores,
+      ]);
+    }
+
     const fechaHoraStr = partido.fechaHora
       ? new Intl.DateTimeFormat('es-CL', {
           timeZone: 'America/Santiago',
@@ -78,9 +101,48 @@ export class PlantillaPdfService {
       fechaEtiqueta: fecha?.etiqueta ?? null,
       fechaHoraStr,
       canchaNombre: partido.canchaNombre,
+      cerrada,
+      golesLocal: partido.golesLocal,
+      golesVisita: partido.golesVisita,
       local,
       visita,
     });
+  }
+
+  /**
+   * Enriquece las filas con la info del acta: presencia certificada y conteo
+   * de goles / amarillas / rojas por jugador. Muta las filas recibidas.
+   */
+  private async completarConActa(
+    partidoId: string,
+    tenantId: string,
+    filas: FilaJugador[],
+  ): Promise<void> {
+    const presentes = await this.partidoJugadorRepo.find({
+      where: { partidoId, tenantId },
+    });
+    const presenteMap = new Map(presentes.map((p) => [p.jugadorId, p.presente]));
+
+    const incidencias = await this.incidenciaRepo.find({
+      where: { partidoId, tenantId },
+    });
+    const statsMap = new Map<string, { goles: number; amarillas: number; rojas: number }>();
+    for (const inc of incidencias) {
+      if (!inc.jugadorId) continue;
+      const s = statsMap.get(inc.jugadorId) ?? { goles: 0, amarillas: 0, rojas: 0 };
+      if (inc.tipo === 'GOL') s.goles += 1;
+      else if (inc.tipo === 'AMARILLA') s.amarillas += 1;
+      else if (inc.tipo === 'ROJA' || inc.tipo === 'AMARILLA_ROJA') s.rojas += 1;
+      statsMap.set(inc.jugadorId, s);
+    }
+
+    for (const f of filas) {
+      f.presente = presenteMap.get(f.jugadorId) ?? false;
+      const s = statsMap.get(f.jugadorId);
+      f.goles = s?.goles ?? 0;
+      f.amarillas = s?.amarillas ?? 0;
+      f.rojas = s?.rojas ?? 0;
+    }
   }
 
   private async cargarPlantilla(
@@ -101,6 +163,7 @@ export class PlantillaPdfService {
         return !rut || !vetadosSet.has(rut);
       })
       .map((p) => ({
+        jugadorId: p.jugador!.id,
         numero: p.jugador!.numeroCamiseta,
         rut: p.jugador!.rut,
         nombre: `${p.jugador!.apellidos}, ${p.jugador!.nombres}`,
@@ -118,6 +181,9 @@ export class PlantillaPdfService {
     fechaEtiqueta: string | null;
     fechaHoraStr: string;
     canchaNombre: string | null;
+    cerrada: boolean;
+    golesLocal: number | null;
+    golesVisita: number | null;
     local: { nombre: string; jugadores: FilaJugador[] };
     visita: { nombre: string; jugadores: FilaJugador[] };
   }): Promise<Buffer> {
@@ -130,14 +196,14 @@ export class PlantillaPdfService {
 
     // Hoja 1 — equipo local.
     this.dibujarEncabezado(doc, data, 'LOCAL');
-    this.dibujarEquipo(doc, data.local.nombre, data.local.jugadores);
-    this.dibujarFirmas(doc, 'Capitán local');
+    this.dibujarEquipo(doc, data.local.nombre, data.local.jugadores, data.cerrada);
+    this.dibujarFirmas(doc, 'Capitán local', data.cerrada);
 
     // Hoja 2 — equipo visita (hoja independiente).
     doc.addPage();
     this.dibujarEncabezado(doc, data, 'VISITA');
-    this.dibujarEquipo(doc, data.visita.nombre, data.visita.jugadores);
-    this.dibujarFirmas(doc, 'Capitán visita');
+    this.dibujarEquipo(doc, data.visita.nombre, data.visita.jugadores, data.cerrada);
+    this.dibujarFirmas(doc, 'Capitán visita', data.cerrada);
 
     doc.end();
     return done;
@@ -151,12 +217,21 @@ export class PlantillaPdfService {
       fechaEtiqueta: string | null;
       fechaHoraStr: string;
       canchaNombre: string | null;
+      cerrada: boolean;
+      golesLocal: number | null;
+      golesVisita: number | null;
       local: { nombre: string };
       visita: { nombre: string };
     },
     lado: 'LOCAL' | 'VISITA',
   ): void {
-    doc.fontSize(16).font('Helvetica-Bold').fillColor('black').text('Plantilla física del partido', { align: 'center' });
+    doc
+      .fontSize(16)
+      .font('Helvetica-Bold')
+      .fillColor('black')
+      .text(data.cerrada ? 'Acta del partido' : 'Plantilla física del partido', {
+        align: 'center',
+      });
     doc.moveDown(0.3);
     doc
       .fontSize(10)
@@ -165,10 +240,15 @@ export class PlantillaPdfService {
         `${data.torneoNombre} · Fecha ${data.fechaNumero}${data.fechaEtiqueta ? ` — ${data.fechaEtiqueta}` : ''}`,
         { align: 'center' },
       );
+    // Acta cerrada: mostramos el marcador final entre los nombres.
+    const marcador =
+      data.cerrada && data.golesLocal != null && data.golesVisita != null
+        ? `  ${data.golesLocal} : ${data.golesVisita}  `
+        : '  vs  ';
     doc
       .fontSize(13)
       .font('Helvetica-Bold')
-      .text(`${data.local.nombre}  vs  ${data.visita.nombre}`, { align: 'center' });
+      .text(`${data.local.nombre}${marcador}${data.visita.nombre}`, { align: 'center' });
     doc
       .fontSize(9)
       .font('Helvetica')
@@ -187,33 +267,64 @@ export class PlantillaPdfService {
     doc.moveDown(0.8);
   }
 
-  private dibujarFirmas(doc: PDFKit.PDFDocument, capitanLabel: string): void {
+  private dibujarFirmas(
+    doc: PDFKit.PDFDocument,
+    capitanLabel: string,
+    cerrada: boolean,
+  ): void {
     doc.moveDown(2);
-    const yFirmas = doc.y > 720 ? 720 : doc.y;
+    const y = doc.y > 720 ? 720 : doc.y;
     doc.fontSize(9).font('Helvetica').fillColor('black');
-    doc.text('______________________', 70, yFirmas);
-    doc.text('Árbitro', 70, yFirmas + 14);
-    doc.text('______________________', 330, yFirmas);
-    doc.text(capitanLabel, 330, yFirmas + 14);
+    if (cerrada) {
+      // Acta cerrada: ya está certificada en el sistema; no se firma a mano.
+      doc
+        .fontSize(8)
+        .font('Helvetica-Oblique')
+        .fillColor('#555')
+        .text(
+          'Acta cerrada — registro oficial generado desde el sistema. Marcador y novedades reflejan lo cargado en el acta.',
+          36,
+          y,
+          { width: 523 },
+        );
+      doc.fillColor('black');
+      return;
+    }
+    doc.text('______________________', 70, y);
+    doc.text('Árbitro', 70, y + 14);
+    doc.text('______________________', 330, y);
+    doc.text(capitanLabel, 330, y + 14);
   }
 
   private dibujarEquipo(
     doc: PDFKit.PDFDocument,
     nombre: string,
     jugadores: FilaJugador[],
+    cerrada: boolean,
   ): void {
     const left = 36;
     const right = 559; // A4 width 595 - margin 36
-    // Columnas: N° | RUT | Nombre | Goles | Amar. | Rojas | Firma
-    const cols = [
-      { label: 'N°', w: 26 },
-      { label: 'RUT', w: 78 },
-      { label: 'Nombre', w: 150 },
-      { label: 'Goles', w: 38 },
-      { label: 'Amar.', w: 34 },
-      { label: 'Rojas', w: 34 },
-      { label: 'Firma', w: 163 },
-    ];
+    // Abierta: hoja en blanco para llenar a mano (incluye columna Firma).
+    // Cerrada: se completa con el acta — columna Pres. (✓) y conteos.
+    const cols = cerrada
+      ? [
+          { label: 'N°', w: 26 },
+          { label: 'RUT', w: 78 },
+          { label: 'Nombre', w: 185 },
+          { label: 'Pres.', w: 42 },
+          { label: 'Goles', w: 64 },
+          { label: 'Amar.', w: 64 },
+          { label: 'Rojas', w: 64 },
+        ]
+      : [
+          { label: 'N°', w: 26 },
+          { label: 'RUT', w: 78 },
+          { label: 'Nombre', w: 150 },
+          { label: 'Goles', w: 38 },
+          { label: 'Amar.', w: 34 },
+          { label: 'Rojas', w: 34 },
+          { label: 'Firma', w: 163 },
+        ];
     const rowH = 22;
 
     doc.fontSize(12).font('Helvetica-Bold').fillColor('#0f3d2e').text(nombre, left, doc.y);
@@ -232,11 +343,19 @@ export class PlantillaPdfService {
     }
     y += rowH;
 
-    // Filas. Si no hay jugadores, dibujamos 16 filas vacías para escribir a mano.
+    // Filas. Si está abierta y no hay jugadores, 16 filas vacías para llenar.
     const filas: FilaJugador[] =
       jugadores.length > 0
         ? jugadores
-        : Array.from({ length: 16 }, () => ({ numero: null, rut: null, nombre: '', capitan: false }));
+        : cerrada
+          ? []
+          : Array.from({ length: 16 }, () => ({
+              jugadorId: '',
+              numero: null,
+              rut: null,
+              nombre: '',
+              capitan: false,
+            }));
 
     doc.font('Helvetica').fontSize(9);
     for (const j of filas) {
@@ -250,12 +369,22 @@ export class PlantillaPdfService {
         doc.rect(cx, y, c.w, rowH).stroke();
         cx += c.w;
       }
-      // Contenido de las 3 primeras columnas (Goles/Amar./Rojas/Firma en blanco).
-      const valores = [
-        j.numero != null ? String(j.numero) : '',
-        j.rut ?? '',
-        j.nombre + (j.capitan ? '  (C)' : ''),
-      ];
+      const num = (n: number | undefined): string => (n && n > 0 ? String(n) : '');
+      const valores = cerrada
+        ? [
+            j.numero != null ? String(j.numero) : '',
+            j.rut ?? '',
+            j.nombre + (j.capitan ? '  (C)' : ''),
+            j.presente ? 'Sí' : '—',
+            num(j.goles),
+            num(j.amarillas),
+            num(j.rojas),
+          ]
+        : [
+            j.numero != null ? String(j.numero) : '',
+            j.rut ?? '',
+            j.nombre + (j.capitan ? '  (C)' : ''),
+          ];
       x = left;
       valores.forEach((v, i) => {
         doc.text(v, x + 3, y + 7, { width: cols[i]!.w - 6, ellipsis: true });
