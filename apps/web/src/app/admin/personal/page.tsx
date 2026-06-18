@@ -1060,26 +1060,26 @@ function InvitarMenu({
           className="absolute right-0 mt-1 z-10 bg-paper border border-line rounded shadow-lg overflow-hidden min-w-[180px]"
           onMouseLeave={() => setAbierto(false)}
         >
-          {tieneEmail && (
-            <button
-              type="button"
-              onClick={() => enviar('EMAIL')}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-paper-dark flex items-center gap-2"
-            >
-              <Mail size={14} className="text-ink-mute" />
-              <span>Solo email</span>
-            </button>
-          )}
-          {tieneTelefono && (
-            <button
-              type="button"
-              onClick={() => enviar('WHATSAPP')}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-paper-dark flex items-center gap-2"
-            >
-              <MessageCircle size={14} className="text-green-600" />
-              <span>Solo WhatsApp</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => enviar('EMAIL')}
+            disabled={!tieneEmail}
+            title={tieneEmail ? undefined : 'Edita a esta persona y agrégale un email para invitar por correo.'}
+            className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 enabled:hover:bg-paper-dark disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Mail size={14} className="text-ink-mute" />
+            <span>{tieneEmail ? 'Solo email' : 'Solo email · sin email cargado'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => enviar('WHATSAPP')}
+            disabled={!tieneTelefono}
+            title={tieneTelefono ? undefined : 'Esta persona no tiene teléfono cargado.'}
+            className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 enabled:hover:bg-paper-dark disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <MessageCircle size={14} className="text-green-600" />
+            <span>{tieneTelefono ? 'Solo WhatsApp' : 'Solo WhatsApp · sin teléfono'}</span>
+          </button>
           {tieneEmail && tieneTelefono && (
             <button
               type="button"
