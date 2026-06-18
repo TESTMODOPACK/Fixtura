@@ -93,6 +93,11 @@ export class CreateIncidenciaDto {
   minuto?: number | null;
 }
 
+export class AtribuirIncidenciaDto {
+  @IsUUID()
+  jugadorInscritoId!: string;
+}
+
 export class CerrarActaDto {
   @Type(() => Number)
   @IsInt()

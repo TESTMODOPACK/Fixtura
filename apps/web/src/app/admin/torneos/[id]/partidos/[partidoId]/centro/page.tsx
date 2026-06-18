@@ -465,9 +465,10 @@ function IncidenciasPanel({
       </div>
       <p className="mt-3 text-[11px] font-serif italic text-ink-mute">
         El marcador se arma con las incidencias de gol: registrar un GOL aquí
-        suma 1 al marcador, y el botón “+ GOL” de arriba crea un gol sin
-        jugador (lo puedes atribuir después). Borrar una incidencia de gol
-        baja el marcador. El minuto se autocompleta; puedes cambiarlo.
+        suma 1 al marcador, y el botón “+ GOL” de arriba crea un gol provisional
+        sin jugador para no frenar el partido. Importante: cada gol debe quedar
+        atribuido a su goleador antes de cerrar el acta (se asigna en el detalle
+        del partido). Borrar una incidencia de gol baja el marcador.
       </p>
     </Card>
   );

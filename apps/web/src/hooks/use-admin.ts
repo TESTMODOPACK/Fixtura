@@ -368,6 +368,26 @@ export function useRemoveIncidencia(partidoId: string) {
   });
 }
 
+export function useAtribuirIncidencia(partidoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      incidenciaId,
+      jugadorInscritoId,
+    }: {
+      incidenciaId: string;
+      jugadorInscritoId: string;
+    }) =>
+      apiFetch<IncidenciaAdmin>(
+        `/admin/partidos/${partidoId}/incidencias/${incidenciaId}/jugador`,
+        { method: 'PATCH', body: { jugadorInscritoId } },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
+    },
+  });
+}
+
 export function useCerrarActa(partidoId: string, torneoId: string) {
   const qc = useQueryClient();
   return useMutation({

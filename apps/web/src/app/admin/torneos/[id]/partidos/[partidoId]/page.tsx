@@ -44,6 +44,7 @@ import { PageHead } from '@/components/ui/page-head';
 import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import {
   useAddIncidencia,
+  useAtribuirIncidencia,
   useCanchas,
   useCertificarPresentes,
   useCerrarActa,
@@ -223,11 +224,16 @@ function ActaSection({
     actaCerradaAt: string | null;
     presentesCertificadosAt: string | null;
     estado: string;
+    incidencias: Array<{ tipo: string; jugadorInscritoId: string | null }>;
   };
   torneoId: string;
 }): React.ReactElement {
   const cerrarActa = useCerrarActa(partido.id, torneoId);
   const reabrirActa = useReabrirActa(partido.id, torneoId);
+
+  const golesSinJugador = partido.incidencias.filter(
+    (i) => (i.tipo === 'GOL' || i.tipo === 'AUTOGOL') && !i.jugadorInscritoId,
+  ).length;
 
   const ActaSchema = z.object({
     golesLocal: z.coerce.number().int().min(0).max(99),
@@ -301,6 +307,15 @@ function ActaSection({
           </span>
         </div>
       )}
+      {golesSinJugador > 0 && (
+        <div className="mt-3 text-xs bg-danger/10 border border-danger/30 rounded-card px-3 py-2 text-ink leading-snug flex items-start gap-2">
+          <AlertTriangle size={14} className="text-danger flex-shrink-0 mt-0.5" />
+          <span>
+            Hay {golesSinJugador} gol(es) sin goleador asignado. Asígnalos en
+            «Incidencias del partido» antes de cerrar el acta.
+          </span>
+        </div>
+      )}
       <form
         onSubmit={form.handleSubmit(
           (vals) => cerrarActa.mutate(vals),
@@ -330,7 +345,7 @@ function ActaSection({
           type="submit"
           variant="accent"
           loading={cerrarActa.isPending}
-          disabled={requiereCertificacion}
+          disabled={requiereCertificacion || golesSinJugador > 0}
           className="w-full"
         >
           <Lock size={14} /> Cerrar acta
@@ -1326,19 +1341,23 @@ function IncidenciasSection({
 }
 
 // ─── Listado de incidencias del partido ─────────────────────────────
+type IncidenciaItem = {
+  id: string;
+  tipo: string;
+  minuto: number | null;
+  jugadorNombre: string | null;
+  equipoId: string;
+  equipoNombre: string;
+  jugadorInscritoId: string | null;
+};
+
 function IncidenciasList({
   partido,
   cerrada,
 }: {
   partido: {
     id: string;
-    incidencias: Array<{
-      id: string;
-      tipo: string;
-      minuto: number | null;
-      jugadorNombre: string | null;
-      equipoNombre: string;
-    }>;
+    incidencias: IncidenciaItem[];
   };
   cerrada: boolean;
 }): React.ReactElement {
@@ -1356,6 +1375,10 @@ function IncidenciasList({
     LESION: '🚑',
   };
 
+  const golesSinJugador = partido.incidencias.filter(
+    (i) => (i.tipo === 'GOL' || i.tipo === 'AUTOGOL') && !i.jugadorInscritoId,
+  ).length;
+
   return (
     <Card padding="none" className="overflow-hidden">
       <div className="px-5 py-3 bg-paper-dark border-b border-line">
@@ -1365,6 +1388,16 @@ function IncidenciasList({
         </div>
       </div>
 
+      {!cerrada && golesSinJugador > 0 && (
+        <div className="px-5 py-3 bg-danger/5 border-b border-danger/20 flex items-start gap-2">
+          <AlertTriangle size={15} className="text-danger flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-danger">
+            Hay {golesSinJugador} gol(es) sin goleador asignado. Asigna el jugador que
+            marcó cada gol —no se puede cerrar el acta con goles sin jugador.
+          </p>
+        </div>
+      )}
+
       {partido.incidencias.length === 0 && (
         <div className="p-8 text-center text-sm text-ink-mute font-serif italic">
           Todavía no hay incidencias cargadas en este partido.
@@ -1373,34 +1406,96 @@ function IncidenciasList({
 
       {partido.incidencias.length > 0 && (
         <div className="divide-y divide-line">
-          {partido.incidencias.map((i) => (
-            <div key={i.id} className="px-5 py-3 flex items-center gap-3">
-              <span className="text-xl w-8 text-center">{ICONS[i.tipo] ?? '•'}</span>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm truncate">
-                  {i.jugadorNombre ?? 'Sin jugador'}
+          {partido.incidencias.map((i) => {
+            const esGol = i.tipo === 'GOL' || i.tipo === 'AUTOGOL';
+            const sinJugador = !i.jugadorInscritoId;
+            return (
+              <div key={i.id} className="px-5 py-3 flex items-center gap-3 flex-wrap">
+                <span className="text-xl w-8 text-center">{ICONS[i.tipo] ?? '•'}</span>
+                <div className="flex-1 min-w-0">
+                  <div
+                    className={cn(
+                      'font-semibold text-sm truncate',
+                      esGol && sinJugador && 'text-danger',
+                    )}
+                  >
+                    {i.jugadorNombre ?? (esGol ? 'Falta el goleador' : 'Sin jugador')}
+                  </div>
+                  <div className="text-xs text-ink-mute truncate">
+                    {i.tipo.replace('_', ' ')} · {i.equipoNombre}
+                  </div>
                 </div>
-                <div className="text-xs text-ink-mute truncate">
-                  {i.tipo.replace('_', ' ')} · {i.equipoNombre}
+                <div className="text-xs font-mono text-ink-mute w-12 text-right">
+                  {i.minuto != null ? `${i.minuto}'` : '—'}
                 </div>
+                {!cerrada && (
+                  <button
+                    type="button"
+                    onClick={() => remove.mutate(i.id)}
+                    className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
+                    aria-label="Borrar"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+                {!cerrada && esGol && sinJugador && (
+                  <AtribuirGolRow partidoId={partido.id} incidencia={i} />
+                )}
               </div>
-              <div className="text-xs font-mono text-ink-mute w-12 text-right">
-                {i.minuto != null ? `${i.minuto}'` : '—'}
-              </div>
-              {!cerrada && (
-                <button
-                  type="button"
-                  onClick={() => remove.mutate(i.id)}
-                  className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
-                  aria-label="Borrar"
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </Card>
+  );
+}
+
+/** Selector inline para atribuir un gol "sin jugador" al goleador exacto. */
+function AtribuirGolRow({
+  partidoId,
+  incidencia,
+}: {
+  partidoId: string;
+  incidencia: IncidenciaItem;
+}): React.ReactElement {
+  const [jugadorId, setJugadorId] = useState<string>('');
+  const jugadores = useJugadores(incidencia.equipoId);
+  const atribuir = useAtribuirIncidencia(partidoId);
+
+  const asignar = async (): Promise<void> => {
+    if (!jugadorId) return;
+    try {
+      await atribuir.mutateAsync({ incidenciaId: incidencia.id, jugadorInscritoId: jugadorId });
+    } catch (err) {
+      toastError(err);
+    }
+  };
+
+  return (
+    <div className="w-full flex items-end gap-2 pl-11 pt-1">
+      <select
+        className="input flex-1"
+        value={jugadorId}
+        onChange={(e) => setJugadorId(e.target.value)}
+      >
+        <option value="">— asignar goleador —</option>
+        {jugadores.data?.map((j) => (
+          <option key={j.id} value={j.id}>
+            {j.numeroCamiseta ? `#${j.numeroCamiseta} ` : ''}
+            {j.nombre} {j.apellido}
+            {j.capitan ? ' (C)' : ''}
+          </option>
+        ))}
+      </select>
+      <Button
+        variant="accent"
+        size="sm"
+        onClick={asignar}
+        disabled={!jugadorId}
+        loading={atribuir.isPending}
+      >
+        Asignar
+      </Button>
+    </div>
   );
 }

@@ -340,6 +340,19 @@ export class PartidosAdminService {
       throw new BadRequestException('El equipo no pertenece a este partido');
     }
 
+    // Regla de dominio: un gol siempre se atribuye al jugador exacto que lo
+    // hizo. No se puede asignar un gol a un equipo "sin jugador". El único
+    // camino con goles sin goleador es el walkover, que setea el marcador
+    // 3-0 directo (sin incidencias) — ver declararWalkover().
+    if (
+      (input.tipo === 'GOL' || input.tipo === 'AUTOGOL') &&
+      !input.jugadorInscritoId
+    ) {
+      throw new BadRequestException(
+        'Un gol debe tener asignado el jugador que lo marcó. Solo el walkover registra goles sin goleador.',
+      );
+    }
+
     // Validar que el jugador está en la planilla de esa inscripción.
     if (input.jugadorInscritoId) {
       const enPlanilla = await this.planillaRepo.findOne({
@@ -442,6 +455,50 @@ export class PartidosAdminService {
     }
   }
 
+  /**
+   * Atribuye (o reasigna) el jugador de una incidencia ya cargada. Pensado
+   * para los goles provisionales que crea el botón "+GOL" del match-center
+   * (quedan "sin jugador") y deben quedar atribuidos antes de cerrar el acta.
+   * Valida que el jugador pertenezca a la planilla de la inscripción de la
+   * incidencia. No cambia el marcador (la cantidad de goles no varía).
+   */
+  async atribuirJugadorIncidencia(
+    partidoId: string,
+    incidenciaId: string,
+    tenantId: string,
+    jugadorInscritoId: string,
+  ): Promise<IncidenciaAdmin> {
+    const inc = await this.incidenciaRepo.findOne({
+      where: { id: incidenciaId, partidoId, tenantId },
+      relations: { partido: true },
+    });
+    if (!inc) throw new NotFoundException(`Incidencia ${incidenciaId} no encontrada`);
+    if (inc.partido?.actaCerradaAt) {
+      throw new ConflictException(
+        'No se pueden modificar incidencias de un acta cerrada. Reabrir primero.',
+      );
+    }
+    if (!inc.inscripcionId) {
+      throw new BadRequestException('La incidencia no tiene equipo asociado.');
+    }
+    const enPlanilla = await this.planillaRepo.findOne({
+      where: {
+        inscripcionId: inc.inscripcionId,
+        jugadorId: jugadorInscritoId,
+        tenantId,
+      },
+    });
+    if (!enPlanilla) {
+      throw new BadRequestException(
+        'El jugador no está en la planilla del equipo de esta incidencia.',
+      );
+    }
+    inc.jugadorId = jugadorInscritoId;
+    await this.incidenciaRepo.save(inc);
+    const incidencias = await this.listIncidencias(partidoId);
+    return incidencias.find((i) => i.id === incidenciaId)!;
+  }
+
   // ─── Cierre de acta ─────────────────────────────────────────────────
   @Transactional()
   async cerrarActa(
@@ -499,6 +556,28 @@ export class PartidosAdminService {
     ) {
       throw new BadRequestException(
         `El marcador (${input.golesLocal}-${input.golesVisita}) no coincide con las incidencias cargadas (${golesLocalIncidencias}-${golesVisitaIncidencias}). Ajusta el detalle o el marcador.`,
+      );
+    }
+
+    // Regla de dominio: el acta oficial no puede tener goles sin goleador.
+    // Los goles provisionales del botón "+GOL" (match-center) quedan "sin
+    // jugador" y deben atribuirse antes de cerrar. El walkover es el único
+    // caso con goles sin jugador, pero no pasa por aquí (setea 3-0 directo).
+    const golesSinJugador = incidencias.filter(
+      (i) => (i.tipo === 'GOL' || i.tipo === 'AUTOGOL') && !i.jugadorId,
+    );
+    if (golesSinJugador.length > 0) {
+      const enLocal = golesSinJugador.filter(
+        (i) => i.inscripcionId === partido.inscripcionLocalId,
+      ).length;
+      const enVisita = golesSinJugador.filter(
+        (i) => i.inscripcionId === partido.inscripcionVisitaId,
+      ).length;
+      const partes: string[] = [];
+      if (enLocal > 0) partes.push(`${enLocal} del equipo local`);
+      if (enVisita > 0) partes.push(`${enVisita} del visitante`);
+      throw new BadRequestException(
+        `Hay ${golesSinJugador.length} gol(es) sin goleador asignado (${partes.join(' y ')}). Asigna el jugador que marcó cada gol antes de cerrar el acta.`,
       );
     }
 

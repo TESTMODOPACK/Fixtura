@@ -27,6 +27,7 @@ import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import {
+  AtribuirIncidenciaDto,
   CerrarActaDto,
   CertificarPresentesDto,
   CreateIncidenciaDto,
@@ -133,6 +134,22 @@ export class PartidosAdminController {
     @Param('incidenciaId', new ParseUUIDPipe()) incidenciaId: string,
   ): Promise<void> {
     return this.svc.removeIncidencia(incidenciaId, ensureTenant(user));
+  }
+
+  /** Atribuir/reasignar el jugador de una incidencia (ej. goles del +GOL en vivo). */
+  @Patch(':id/incidencias/:incidenciaId/jugador')
+  atribuirJugadorIncidencia(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('incidenciaId', new ParseUUIDPipe()) incidenciaId: string,
+    @Body() dto: AtribuirIncidenciaDto,
+  ): Promise<IncidenciaAdmin> {
+    return this.svc.atribuirJugadorIncidencia(
+      id,
+      incidenciaId,
+      ensureTenant(user),
+      dto.jugadorInscritoId,
+    );
   }
 
   // ── F46.4 — Roster del acta + certificación de presentes ───────────
