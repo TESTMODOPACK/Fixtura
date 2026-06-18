@@ -240,7 +240,7 @@ export default function CentroPage({
                   onClick={() => {
                     if (
                       window.confirm(
-                        '¿Finalizar el Match Center? Aún tienes que cerrar el acta para registrar el resultado oficial.',
+                        '¿Finalizar el partido en vivo? Aún tienes que cerrar el acta para registrar el resultado oficial.',
                       )
                     ) {
                       finalizar.mutate();
@@ -248,7 +248,7 @@ export default function CentroPage({
                   }}
                   disabled={finalizar.isPending}
                 >
-                  <Flag size={16} /> Finalizar centro
+                  <Flag size={16} /> Finalizar partido
                 </Button>
               )}
               {snapshot.estado === 'FINALIZADO_CENTRO' && (

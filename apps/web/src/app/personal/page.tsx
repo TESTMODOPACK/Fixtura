@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, LogOut, ShieldCheck } from 'lucide-react';
+import { CalendarDays, LogOut, ShieldCheck, Wallet } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -14,6 +14,16 @@ import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatFecha, formatFechaHora } from '@/lib/format';
 import { useAuthStore } from '@/store/auth-store';
+
+function formatCLP(n: number): string {
+  return `$${n.toLocaleString('es-CL')}`;
+}
+
+const METODO_PAGO_LABEL: Record<string, string> = {
+  TRANSFERENCIA: 'Transferencia',
+  EFECTIVO: 'Efectivo',
+  OTRO: 'Otro',
+};
 
 const ROL_LABEL: Record<string, string> = {
   ARBITRO_PRINCIPAL: 'Árbitro principal',
@@ -127,6 +137,56 @@ export default function PersonalPortalPage(): React.ReactElement | null {
               )}
             </Card>
 
+            {/* Mis pagos */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Wallet size={16} className="text-accent" />
+                <CardLabel>Mis pagos</CardLabel>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <Card padding="comfortable">
+                  <div className="text-[10px] uppercase tracking-wider font-semibold text-ink-mute">
+                    Pendiente de pago
+                  </div>
+                  <div className="font-display text-2xl text-orange-700 tracking-display mt-1">
+                    {formatCLP(data.pagos.pendienteTotal)}
+                  </div>
+                  <div className="text-[11px] text-ink-mute mt-0.5">
+                    Partidos dirigidos aún no liquidados
+                  </div>
+                </Card>
+                <Card padding="comfortable">
+                  <div className="text-[10px] uppercase tracking-wider font-semibold text-ink-mute">
+                    Total recibido
+                  </div>
+                  <div className="font-display text-2xl text-green-deep tracking-display mt-1">
+                    {formatCLP(data.pagos.recibidoTotal)}
+                  </div>
+                  <div className="text-[11px] text-ink-mute mt-0.5">
+                    {data.pagos.recibidos.length} pago(s) registrado(s)
+                  </div>
+                </Card>
+              </div>
+              {data.pagos.recibidos.length > 0 && (
+                <div className="space-y-2">
+                  {data.pagos.recibidos.map((p) => (
+                    <Card key={p.id} padding="tight" className="flex items-center gap-4 flex-wrap">
+                      <div className="flex-1 min-w-[140px]">
+                        <div className="font-medium text-ink">{formatCLP(p.total)}</div>
+                        <div className="text-[11px] text-ink-mute">
+                          {formatFecha(p.fecha)} · {METODO_PAGO_LABEL[p.metodo] ?? p.metodo}
+                          {p.comprobante ? ` · ${p.comprobante}` : ''}
+                        </div>
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold bg-green-bright/15 text-green-bright">
+                        Pagado
+                      </span>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Designaciones */}
             <div>
               <div className="flex items-center gap-2 mb-3">
@@ -161,14 +221,28 @@ export default function PersonalPortalPage(): React.ReactElement | null {
                           {d.canchaNombre ? ` · ${d.canchaNombre}` : ''}
                         </div>
                       </div>
-                      <span
-                        className={cn(
-                          'text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold',
-                          ESTADO_BADGE[d.estado],
+                      <div className="flex items-center gap-3 ml-auto">
+                        {d.montoPago != null && d.montoPago > 0 && (
+                          <span
+                            className={cn(
+                              'text-xs font-semibold tabular-nums',
+                              d.pagada ? 'text-green-deep' : 'text-orange-700',
+                            )}
+                            title={d.pagada ? 'Pagado' : 'Pendiente de pago'}
+                          >
+                            {formatCLP(d.montoPago)}
+                            {d.pagada ? ' ✓' : ''}
+                          </span>
                         )}
-                      >
-                        {ESTADO_LABEL[d.estado]}
-                      </span>
+                        <span
+                          className={cn(
+                            'text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold',
+                            ESTADO_BADGE[d.estado],
+                          )}
+                        >
+                          {ESTADO_LABEL[d.estado]}
+                        </span>
+                      </div>
                     </Card>
                   ))}
                 </div>

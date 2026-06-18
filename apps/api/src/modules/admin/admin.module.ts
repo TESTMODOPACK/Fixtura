@@ -53,6 +53,7 @@ import { PagosModule } from './pagos/pagos.module';
 import { PagosPersonalController } from './pagos-personal/pagos-personal.controller';
 import { PagosPersonalService } from './pagos-personal/pagos-personal.service';
 import { PushModule } from './push/push.module';
+import { MatchCenterModule } from '../match-center/match-center.module';
 import {
   FixtureDetailController,
   PartidosAdminController,
@@ -107,6 +108,7 @@ import { DelegadoPortalService } from './delegado/delegado-portal.service';
     DunningModule,
     InformesModule,
     PushModule,
+    MatchCenterModule,
     UsersModule,
     // Ajustes necesita Tenant + User + UserRole — los registramos
     // localmente (no se duplican: TypeORM resuelve la metadata).

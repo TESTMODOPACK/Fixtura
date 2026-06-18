@@ -3,18 +3,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import type {
+  MetodoPagoLiquidacion,
   MiDesignacion,
+  MiPagoRecibido,
   MiPortalPersonal,
+  MisPagos,
   RolPersonal,
 } from '@fixtura/types';
 
 import { Designacion } from '../../competition/entities/designacion.entity';
+import { LiquidacionPersonal } from '../../competition/entities/liquidacion-personal.entity';
 import { Personal } from '../../competition/entities/personal.entity';
 
 /**
  * Portal del personal logueado (árbitros / planilleros). Resuelve la ficha
- * de personal por su user_id y devuelve su perfil + designaciones. Las
- * queries usan el repo transaccional (RLS) y se acotan al personal del
+ * de personal por su user_id y devuelve su perfil + designaciones + pagos.
+ * Las queries usan el repo transaccional (RLS) y se acotan al personal del
  * usuario, así un árbitro solo ve lo suyo.
  */
 @Injectable()
@@ -22,6 +26,8 @@ export class PersonalPortalService {
   constructor(
     @InjectRepository(Personal) private readonly personalRepo: Repository<Personal>,
     @InjectRepository(Designacion) private readonly desigRepo: Repository<Designacion>,
+    @InjectRepository(LiquidacionPersonal)
+    private readonly liqRepo: Repository<LiquidacionPersonal>,
   ) {}
 
   async miPortal(userId: string, tenantId: string): Promise<MiPortalPersonal> {
@@ -48,6 +54,8 @@ export class PersonalPortalService {
       .addSelect('d.partido_id', 'partidoId')
       .addSelect('d.rol_asignado', 'rolAsignado')
       .addSelect('d.estado', 'estado')
+      .addSelect('d.monto_pago', 'montoPago')
+      .addSelect('d.liquidacion_id', 'liquidacionId')
       .addSelect('t.nombre', 'torneoNombre')
       .addSelect('f.numero', 'fechaNumero')
       .addSelect('p.fecha_hora', 'fechaHora')
@@ -61,6 +69,8 @@ export class PersonalPortalService {
         partidoId: string;
         rolAsignado: RolPersonal;
         estado: MiDesignacion['estado'];
+        montoPago: number | null;
+        liquidacionId: string | null;
         torneoNombre: string | null;
         fechaNumero: number | null;
         fechaHora: Date | null;
@@ -82,7 +92,30 @@ export class PersonalPortalService {
       localNombre: r.localNombre ?? '—',
       visitaNombre: r.visitaNombre ?? '—',
       partidoEstado: r.partidoEstado,
+      montoPago: r.montoPago == null ? null : Number(r.montoPago),
+      pagada: r.liquidacionId != null,
     }));
+
+    // Pendiente: asistencias devengadas (ASISTIO) aún sin liquidar.
+    const pendienteTotal = designaciones
+      .filter((d) => d.estado === 'ASISTIO' && !d.pagada && (d.montoPago ?? 0) > 0)
+      .reduce((acc, d) => acc + (d.montoPago ?? 0), 0);
+
+    // Recibido: liquidaciones de pago a esta persona.
+    const liqs = await this.liqRepo.find({
+      where: { tenantId, personalId: personal.id },
+      order: { fechaPago: 'DESC' },
+    });
+    const recibidos: MiPagoRecibido[] = liqs.map((l) => ({
+      id: l.id,
+      fecha: l.fechaPago,
+      total: l.total,
+      metodo: l.metodoPago as MetodoPagoLiquidacion,
+      comprobante: l.comprobante,
+    }));
+    const recibidoTotal = recibidos.reduce((acc, r) => acc + r.total, 0);
+
+    const pagos: MisPagos = { pendienteTotal, recibidoTotal, recibidos };
 
     return {
       perfil: {
@@ -94,6 +127,7 @@ export class PersonalPortalService {
         carnetAnfaVence: personal.carnetAnfaVence,
       },
       designaciones,
+      pagos,
     };
   }
 }

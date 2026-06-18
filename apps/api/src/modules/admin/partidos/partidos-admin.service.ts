@@ -42,6 +42,7 @@ import { PartidoJugador } from '../../competition/entities/partido-jugador.entit
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { PushService } from '../push/push.service';
+import { MatchCenterGateway } from '../../match-center/match-center.gateway';
 
 @Injectable()
 export class PartidosAdminService {
@@ -68,6 +69,7 @@ export class PartidosAdminService {
     @InjectRepository(Designacion)
     private readonly designacionRepo: Repository<Designacion>,
     private readonly push: PushService,
+    private readonly matchCenter: MatchCenterGateway,
     // Sprint 34D — hooks de multas automaticas al cerrar acta y walkover.
     private readonly tarifaAplicador: TarifaAplicadorService,
   ) {}
@@ -409,6 +411,10 @@ export class PartidosAdminService {
     // F46.6 — marcador derivado: recalcular goles desde las incidencias.
     if (input.tipo === 'GOL' || input.tipo === 'AUTOGOL') {
       await this.recomputarMarcador(partido);
+      // El marcador del Match Center en vivo se sirve por WebSocket. Sin
+      // este broadcast, registrar un gol por el panel de incidencias NO
+      // refrescaba el marcador del cronista (solo el botón "+GOL" emitía).
+      void this.matchCenter.broadcast(partidoId);
     }
 
     const incidencias = await this.listIncidencias(partidoId);
@@ -452,6 +458,7 @@ export class PartidosAdminService {
     // F46.6 — marcador derivado: recalcular goles tras borrar un gol.
     if (eraGol && inc.partido) {
       await this.recomputarMarcador(inc.partido);
+      void this.matchCenter.broadcast(inc.partido.id);
     }
   }
 

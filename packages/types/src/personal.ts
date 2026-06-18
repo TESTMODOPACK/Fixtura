@@ -180,8 +180,28 @@ export const MiDesignacionSchema = z.object({
   localNombre: z.string(),
   visitaNombre: z.string(),
   partidoEstado: z.string(),
+  // Pago asociado (snapshot del monto). `pagada` = true cuando ya quedó
+  // incluida en una liquidación.
+  montoPago: z.number().int().nullable(),
+  pagada: z.boolean(),
 });
 export type MiDesignacion = z.infer<typeof MiDesignacionSchema>;
+
+export const MiPagoRecibidoSchema = z.object({
+  id: z.uuid(),
+  fecha: z.string(),
+  total: z.number().int(),
+  metodo: z.enum(['TRANSFERENCIA', 'EFECTIVO', 'OTRO']),
+  comprobante: z.string().nullable(),
+});
+export type MiPagoRecibido = z.infer<typeof MiPagoRecibidoSchema>;
+
+export const MisPagosSchema = z.object({
+  pendienteTotal: z.number().int(),
+  recibidoTotal: z.number().int(),
+  recibidos: z.array(MiPagoRecibidoSchema),
+});
+export type MisPagos = z.infer<typeof MisPagosSchema>;
 
 export const MiPerfilPersonalSchema = z.object({
   nombre: z.string(),
@@ -196,6 +216,7 @@ export type MiPerfilPersonal = z.infer<typeof MiPerfilPersonalSchema>;
 export const MiPortalPersonalSchema = z.object({
   perfil: MiPerfilPersonalSchema,
   designaciones: z.array(MiDesignacionSchema),
+  pagos: MisPagosSchema,
 });
 export type MiPortalPersonal = z.infer<typeof MiPortalPersonalSchema>;
 
