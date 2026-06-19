@@ -34,6 +34,10 @@ import { WEBPAY_PROVIDER, WebpayProvider } from './webpay-provider';
 interface ResultadoConfirmacion {
   estado: 'APROBADO' | 'RECHAZADO' | 'PENDIENTE';
   authorizationCode: string | null;
+  /** SEC-4 — monto reportado por la pasarela (Flow); validado contra tx.monto. */
+  monto?: number | null;
+  /** SEC-4 — commerceOrder de la pasarela (Flow); debe coincidir con tx.id. */
+  commerceOrder?: string | null;
   raw: Record<string, unknown>;
 }
 
@@ -291,6 +295,18 @@ export class PagosService {
       }
 
       if (result.estado === 'APROBADO') {
+        // SEC-4 — Defensa antes de acreditar: si la pasarela informó monto u
+        // orden (Flow), deben coincidir con la transacción local. Evita
+        // acreditar un pago por un monto distinto o asociado a otra orden.
+        const discrepancia = this.discrepanciaPago(tx, result);
+        if (discrepancia) {
+          tx.estado = 'RECHAZADO';
+          tx.notas = (tx.notas ?? '') + `\nNo acreditado: ${discrepancia}`;
+          await this.txRepo.save(tx);
+          this.log.warn(`Pago no acreditado por discrepancia: tx=${tx.id} — ${discrepancia}`);
+          return this.toConfirmResponse(tx);
+        }
+
         tx.estado = 'APROBADO';
         tx.pagadoAt = new Date();
         await this.txRepo.save(tx);
@@ -337,6 +353,21 @@ export class PagosService {
     }
   }
 
+  /**
+   * SEC-4 — Devuelve un mensaje si el monto o la orden reportados por la
+   * pasarela no coinciden con la transacción local (solo cuando la pasarela
+   * los informa, p. ej. Flow). null = todo coincide o no se informó (MOCK).
+   */
+  private discrepanciaPago(tx: Transaccion, result: ResultadoConfirmacion): string | null {
+    if (result.monto != null && result.monto !== tx.monto) {
+      return `monto de la pasarela ${result.monto} ≠ esperado ${tx.monto}`;
+    }
+    if (result.commerceOrder != null && result.commerceOrder !== tx.id) {
+      return `commerceOrder de la pasarela ${result.commerceOrder} ≠ transacción ${tx.id}`;
+    }
+    return null;
+  }
+
   /** Consulta a la pasarela según el tipo de la transacción. */
   private async consultarPasarela(
     tx: Transaccion,
@@ -354,7 +385,13 @@ export class PagosService {
         );
       }
       const r = await this.flow.obtenerEstado(creds, token);
-      return { estado: r.estado, authorizationCode: null, raw: r.raw };
+      return {
+        estado: r.estado,
+        authorizationCode: null,
+        monto: r.monto,
+        commerceOrder: r.commerceOrder,
+        raw: r.raw,
+      };
     }
 
     if (tx.pasarela === 'KHIPU') {

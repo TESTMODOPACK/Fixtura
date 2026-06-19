@@ -48,6 +48,8 @@ export type FlowEstadoNorm = 'APROBADO' | 'RECHAZADO' | 'PENDIENTE';
 export interface FlowEstadoResult {
   estado: FlowEstadoNorm;
   monto: number;
+  /** Orden de comercio que Flow asocia al pago (debe ser nuestro tx.id). */
+  commerceOrder: string | null;
   raw: Record<string, unknown>;
 }
 
@@ -176,6 +178,7 @@ export class FlowProvider {
     return {
       estado,
       monto: Number(body.amount ?? 0),
+      commerceOrder: body.commerceOrder ? String(body.commerceOrder) : null,
       raw: body as unknown as Record<string, unknown>,
     };
   }
