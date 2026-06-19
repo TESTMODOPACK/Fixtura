@@ -147,6 +147,14 @@ export class CreateTorneoDto {
   @Max(30)
   minJugadoresParaIniciar?: number;
 
+  // Amarillas acumuladas en el torneo que generan una fecha de suspensión.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2)
+  @Max(20)
+  amarillasParaSuspension?: number;
+
   // Cobertura del recinto que el auto-asignar designa por jornada.
   @IsOptional()
   @Type(() => Number)
@@ -281,6 +289,13 @@ export class UpdateTorneoDto {
   @Min(1)
   @Max(30)
   minJugadoresParaIniciar?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2)
+  @Max(20)
+  amarillasParaSuspension?: number;
 
   @IsOptional()
   @Type(() => Number)
