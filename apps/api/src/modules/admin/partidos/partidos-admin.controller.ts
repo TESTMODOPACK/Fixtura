@@ -46,6 +46,27 @@ function ensureTenant(user: UserContext): string {
   return user.tenantId;
 }
 
+const ROLES_LIGA_ACTA: string[] = [
+  ROLE.LIGA_ADMIN,
+  ROLE.LIGA_COORDINADOR,
+  ROLE.LIGA_COORDINADOR_ARBITROS,
+  ROLE.SUPER_ADMIN,
+];
+
+/**
+ * SEC-3 — Personal del actor que requiere designación para operar el acta.
+ * null ⇒ rol de liga (admin/coordinador/super): sin restricción. Para
+ * ARBITRO/PLANILLERO devuelve sus personalId (scopeId del rol PERSONAL); el
+ * service exige una designación en el partido. RLS no aísla intra-tenant.
+ */
+function actorPersonalScope(user: UserContext): string[] | null {
+  const esLiga = user.roles.some((r) => ROLES_LIGA_ACTA.includes(r.role));
+  if (esLiga) return null;
+  return user.roles
+    .filter((r) => (r.role === ROLE.ARBITRO || r.role === ROLE.PLANILLERO) && r.scopeId)
+    .map((r) => r.scopeId as string);
+}
+
 /**
  * Fixture completo en admin — listado de fechas con sus partidos.
  * Ruta separada porque /admin/torneos/:torneoId/fixture POST genera y
@@ -115,12 +136,14 @@ export class PartidosAdminController {
   }
 
   @Post(':id/incidencias')
-  addIncidencia(
+  async addIncidencia(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: CreateIncidenciaDto,
   ): Promise<IncidenciaAdmin> {
-    return this.svc.addIncidencia(id, ensureTenant(user), {
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperarActa(id, tenantId, actorPersonalScope(user));
+    return this.svc.addIncidencia(id, tenantId, {
       equipoId: dto.equipoId,
       jugadorInscritoId: dto.jugadorInscritoId ?? null,
       tipo: dto.tipo,
@@ -129,11 +152,17 @@ export class PartidosAdminController {
   }
 
   @Delete('incidencias/:incidenciaId')
-  removeIncidencia(
+  async removeIncidencia(
     @CurrentUser() user: UserContext,
     @Param('incidenciaId', new ParseUUIDPipe()) incidenciaId: string,
   ): Promise<void> {
-    return this.svc.removeIncidencia(incidenciaId, ensureTenant(user));
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperarActaPorIncidencia(
+      incidenciaId,
+      tenantId,
+      actorPersonalScope(user),
+    );
+    return this.svc.removeIncidencia(incidenciaId, tenantId);
   }
 
   /** Atribuir/reasignar el jugador de una incidencia (ej. goles del +GOL en vivo). */
@@ -167,24 +196,28 @@ export class PartidosAdminController {
     entityType: 'Partido',
     entityIdFrom: 'params.id',
   })
-  certificarPresentes(
+  async certificarPresentes(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: CertificarPresentesDto,
   ): Promise<ActaRoster> {
-    return this.svc.certificarPresentes(id, ensureTenant(user), user.userId, {
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperarActa(id, tenantId, actorPersonalScope(user));
+    return this.svc.certificarPresentes(id, tenantId, user.userId, {
       jugadorIds: dto.jugadorIds,
     });
   }
 
   @Post(':id/cerrar-acta')
   @Audited({ action: 'partido.acta_cerrada', entityType: 'Partido', entityIdFrom: 'params.id' })
-  cerrarActa(
+  async cerrarActa(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: CerrarActaDto,
   ): Promise<PartidoAdmin> {
-    return this.svc.cerrarActa(id, ensureTenant(user), user.userId, {
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperarActa(id, tenantId, actorPersonalScope(user));
+    return this.svc.cerrarActa(id, tenantId, user.userId, {
       golesLocal: dto.golesLocal,
       golesVisita: dto.golesVisita,
       observaciones: dto.observaciones ?? null,

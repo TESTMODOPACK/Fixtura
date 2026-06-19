@@ -1,11 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
 import {
@@ -29,7 +30,10 @@ import type {
 } from '@fixtura/types';
 
 import { Cancha } from '../../competition/entities/cancha.entity';
-import { Designacion } from '../../competition/entities/designacion.entity';
+import {
+  Designacion,
+  type EstadoDesignacion,
+} from '../../competition/entities/designacion.entity';
 import { DiaNoJugable } from '../../competition/entities/dia-no-jugable.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
@@ -320,6 +324,50 @@ export class PartidosAdminService {
   }
 
   // ─── Incidencias ────────────────────────────────────────────────────
+  /**
+   * SEC-3 — Un ARBITRO/PLANILLERO solo puede operar el acta de un partido
+   * para el que está designado. `actorPersonalIds === null` ⇒ rol de liga
+   * (admin/coordinador/super): sin restricción. RLS no ayuda acá: la
+   * designación ajena pertenece al mismo tenant.
+   */
+  async assertActorPuedeOperarActa(
+    partidoId: string,
+    tenantId: string,
+    actorPersonalIds: string[] | null,
+  ): Promise<void> {
+    if (actorPersonalIds === null) return;
+    const designado =
+      actorPersonalIds.length > 0 &&
+      (await this.designacionRepo.count({
+        where: {
+          partidoId,
+          tenantId,
+          personalId: In(actorPersonalIds),
+          estado: In(['PROPUESTA', 'CONFIRMADA', 'ASISTIO'] as EstadoDesignacion[]),
+        },
+      })) > 0;
+    if (!designado) {
+      throw new ForbiddenException(
+        'Solo puedes operar el acta de un partido para el que estás designado.',
+      );
+    }
+  }
+
+  /** Igual que el anterior, resolviendo el partido desde la incidencia. */
+  async assertActorPuedeOperarActaPorIncidencia(
+    incidenciaId: string,
+    tenantId: string,
+    actorPersonalIds: string[] | null,
+  ): Promise<void> {
+    if (actorPersonalIds === null) return;
+    const inc = await this.incidenciaRepo.findOne({
+      where: { id: incidenciaId, tenantId },
+      select: { id: true, partidoId: true },
+    });
+    if (!inc) throw new NotFoundException('Incidencia no encontrada');
+    await this.assertActorPuedeOperarActa(inc.partidoId, tenantId, actorPersonalIds);
+  }
+
   async addIncidencia(
     partidoId: string,
     tenantId: string,
