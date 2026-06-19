@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 
+import { clearAll as clearOfflineQueue } from '@/lib/offline-queue';
 import { useAuthStore } from '@/store/auth-store';
 
 /**
@@ -24,6 +25,30 @@ export function useLogout(): () => void {
   return useCallback(() => {
     clearTokens();
     qc.clear();
+    // SEC-5 — Limpia datos locales sensibles antes de soltar la sesión:
+    // las caches del SW (respuestas autenticadas: planteles, actas,
+    // personal) y la cola offline en IndexedDB (que persiste el JWT en
+    // claro). Sin esto, en un dispositivo compartido el siguiente usuario
+    // podía leer datos del anterior tras cerrar sesión. Best-effort: no
+    // bloquea el logout.
+    void limpiarDatosLocales();
     router.replace('/');
   }, [clearTokens, qc, router]);
+}
+
+/** Borra caches del Service Worker + cola offline (IndexedDB). */
+async function limpiarDatosLocales(): Promise<void> {
+  try {
+    await clearOfflineQueue();
+  } catch {
+    /* noop — el logout no debe fallar por esto */
+  }
+  try {
+    if (typeof caches !== 'undefined') {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch {
+    /* noop */
+  }
 }
