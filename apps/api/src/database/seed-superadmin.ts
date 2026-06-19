@@ -1,13 +1,15 @@
 /**
- * Crea (o actualiza) el usuario SUPER_ADMIN de plataforma — el perfil que
- * ve y administra TODAS las ligas (tenants), planes y facturación.
+ * Crea el usuario SUPER_ADMIN de plataforma — el perfil que ve y administra
+ * TODAS las ligas (tenants), planes y facturación.
  *
- * Credenciales por variables de entorno (con default):
+ * Credenciales por variables de entorno:
  *   SEED_SUPERADMIN_EMAIL     (default: super@ligaplus.cl)
- *   SEED_SUPERADMIN_PASSWORD  (default: LigaPlus.Super2026!)
+ *   SEED_SUPERADMIN_PASSWORD  (en producción es OBLIGATORIA al crear, sin
+ *                              default; en dev cae a un default local)
  *
- * Idempotente: si el usuario ya existe, actualiza su contraseña y se
- * asegura de que tenga el rol SUPER_ADMIN activo (PLATFORM, sin tenant).
+ * SEC-6: idempotente y seguro de re-correr — si el usuario YA existe NO toca
+ * su contraseña (un re-run no la degrada), solo asegura el rol SUPER_ADMIN
+ * activo. Al crear, valida la fortaleza de la contraseña.
  *
  *   pnpm --filter @fixtura/api db:seed:superadmin       (prod, sobre dist)
  *   pnpm --filter @fixtura/api db:seed:superadmin:dev   (local, ts-node)
@@ -15,11 +17,14 @@
 import 'dotenv/config';
 import { hash } from 'bcrypt';
 
+import { validarPasswordSegura } from '@fixtura/domain';
+
 import AppDataSource from './datasource';
 
 async function main(): Promise<void> {
   const email = (process.env.SEED_SUPERADMIN_EMAIL ?? 'super@ligaplus.cl').toLowerCase();
-  const password = process.env.SEED_SUPERADMIN_PASSWORD ?? 'LigaPlus.Super2026!';
+  const isProd = process.env.NODE_ENV === 'production';
+  const envPassword = process.env.SEED_SUPERADMIN_PASSWORD;
 
   await AppDataSource.initialize();
   try {
@@ -27,27 +32,42 @@ async function main(): Promise<void> {
     // user_roles tiene RLS; '' = bypass para operaciones de plataforma.
     await AppDataSource.query(`SELECT set_config('app.current_tenant_id', '', true)`);
 
-    const passwordHash = await hash(password, 12);
-
     // ─── Upsert del usuario ───────────────────────────────────────────
     const existing = (await AppDataSource.query(`SELECT id FROM users WHERE email = $1`, [
       email,
     ])) as Array<{ id: string }>;
 
     let userId: string;
+    let passwordDefinida = false;
     if (existing.length > 0) {
+      // SEC-6 — NO reescribimos el hash de una cuenta ya creada: un re-run
+      // del seed no debe degradar una contraseña fuerte ya configurada.
       userId = existing[0]!.id;
-      await AppDataSource.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [
-        passwordHash,
-        userId,
-      ]);
     } else {
+      // Creación: en producción exigimos SEED_SUPERADMIN_PASSWORD (sin
+      // default público) y validamos la fortaleza antes de hashear.
+      if (isProd && !envPassword) {
+        throw new Error(
+          'En producción debes definir SEED_SUPERADMIN_PASSWORD para crear el super admin (sin default).',
+        );
+      }
+      const password = envPassword ?? 'LigaPlus.Super2026!'; // default solo en dev
+      const errPwd = validarPasswordSegura(password, {
+        email,
+        nombre: 'Super',
+        apellido: 'Admin',
+      });
+      if (errPwd) {
+        throw new Error(`La contraseña del super admin no cumple la política: ${errPwd}`);
+      }
+      const passwordHash = await hash(password, 12);
       const rows = (await AppDataSource.query(
         `INSERT INTO users (email, password_hash, nombre, apellido, idioma_pref)
          VALUES ($1, $2, 'Super', 'Admin', 'es') RETURNING id`,
         [email, passwordHash],
       )) as Array<{ id: string }>;
       userId = rows[0]!.id;
+      passwordDefinida = true;
     }
 
     // ─── Rol SUPER_ADMIN (PLATFORM, sin tenant) ───────────────────────
@@ -75,8 +95,7 @@ async function main(): Promise<void> {
 ════════════════════════════════════════════════════════════
   SUPER ADMIN listo
   Email:       ${email}
-  Contraseña:  ${password}
-  (cámbiala en producción seteando SEED_SUPERADMIN_PASSWORD)
+  Contraseña:  ${passwordDefinida ? 'definida desde SEED_SUPERADMIN_PASSWORD' : 'sin cambios (la cuenta ya existía)'}
 ════════════════════════════════════════════════════════════
 `);
   } catch (err) {
