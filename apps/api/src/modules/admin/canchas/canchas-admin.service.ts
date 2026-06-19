@@ -195,6 +195,11 @@ export class CanchasAdminService {
     if (!c) throw new NotFoundException(`Cancha ${id} no encontrada`);
     c.estado = estado;
     c.motivoNoDisponible = estado === 'NO_DISPONIBLE' ? (motivo ?? null) : null;
+    // Mantener consistente el flag legacy `activa`: una cancha marcada
+    // DISPONIBLE no puede quedar inactiva (si no, el backfill de arranque o
+    // cualquier chequeo por `activa` la contradice). NO_DISPONIBLE no toca
+    // `activa` — es indisponibilidad temporal, no una baja del catálogo.
+    if (estado === 'DISPONIBLE') c.activa = true;
     const saved = await this.repo.save(c);
     return this.toDto(saved);
   }

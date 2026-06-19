@@ -789,6 +789,15 @@ async function main(): Promise<void> {
     // (direccion, latitud, longitud, capacidad_aforo, superficie,
     // tiene_iluminacion, tiene_camarines) quedan en la tabla pero la UI
     // las oculta. Backfill: is_active=true → DISPONIBLE.
+    // Detectamos si `estado` ya existía ANTES del ALTER: el backfill que
+    // deriva el estado inicial del legacy `activa` debe correr UNA sola vez
+    // (al agregar la columna). Correrlo en cada arranque pisaba los cambios
+    // manuales — un admin marcaba DISPONIBLE una cancha con activa=false y el
+    // siguiente deploy la revertía a NO_DISPONIBLE.
+    const canchasEstadoExistia = await client.query(
+      `SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'canchas' AND column_name = 'estado'`,
+    );
     await client.query(`
       ALTER TABLE canchas
         ADD COLUMN IF NOT EXISTS estado VARCHAR(20)
@@ -796,14 +805,14 @@ async function main(): Promise<void> {
           CHECK (estado IN ('DISPONIBLE','NO_DISPONIBLE')),
         ADD COLUMN IF NOT EXISTS motivo_no_disponible TEXT
     `);
-    // Backfill: si activa=false, dejar NO_DISPONIBLE.
-    // (La columna se llama `activa`, no `is_active` — error tipico
-    // entre tablas de plataforma vs core deportivo.)
-    await client.query(`
-      UPDATE canchas
-      SET estado = 'NO_DISPONIBLE'
-      WHERE activa = FALSE AND estado = 'DISPONIBLE'
-    `);
+    if (canchasEstadoExistia.rowCount === 0) {
+      // Primera vez: las canchas legacy soft-borradas (activa=false) arrancan
+      // NO_DISPONIBLE. (La columna se llama `activa`, no `is_active`.)
+      await client.query(
+        `UPDATE canchas SET estado = 'NO_DISPONIBLE' WHERE activa = FALSE`,
+      );
+      log('canchas: backfill inicial de estado desde activa (una sola vez).');
+    }
     log('canchas.estado + motivo_no_disponible asegurada (Sprint 40).');
 
     // Sprint 44 — Suspension/expulsion de equipos del torneo (conducta
