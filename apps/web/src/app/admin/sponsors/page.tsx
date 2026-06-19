@@ -260,7 +260,7 @@ function SponsorRow({ sponsor }: { sponsor: SponsorAdmin }): React.ReactElement 
           )}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-mute">
-          {sponsor.linkUrl && (
+          {sponsor.linkUrl && /^https?:\/\//i.test(sponsor.linkUrl) && (
             <a
               href={sponsor.linkUrl}
               target="_blank"
@@ -323,8 +323,21 @@ function SponsorForm({
 
   const Schema = z.object({
     nombre: z.string().min(2).max(150),
-    imagenUrl: z.string().url('Debe ser una URL válida').max(500),
-    linkUrl: z.union([z.literal(''), z.string().url('Debe ser una URL válida').max(500)]).optional(),
+    imagenUrl: z
+      .string()
+      .url('Debe ser una URL válida')
+      .max(500)
+      .refine((v) => /^https?:\/\//i.test(v), 'Debe empezar con http:// o https://'),
+    linkUrl: z
+      .union([
+        z.literal(''),
+        z
+          .string()
+          .url('Debe ser una URL válida')
+          .max(500)
+          .refine((v) => /^https?:\/\//i.test(v), 'Debe empezar con http:// o https://'),
+      ])
+      .optional(),
     posicion: z.enum(POSICION_SPONSOR),
     prioridad: z.coerce.number().int().min(0).max(1000).optional(),
     vigenteDesde: z.string().optional(),

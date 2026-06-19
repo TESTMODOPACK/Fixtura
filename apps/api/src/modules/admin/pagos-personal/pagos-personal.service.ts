@@ -23,6 +23,7 @@ import type {
 } from '@fixtura/types';
 import { TIPO_CUENTA_BANCARIA_LABEL } from '@fixtura/types';
 
+import { sanitizarFilaExcel } from '../../../common/excel/sanitize';
 import { AuditLogService } from '../../audit';
 import { Designacion } from '../../competition/entities/designacion.entity';
 import { LiquidacionPersonal } from '../../competition/entities/liquidacion-personal.entity';
@@ -714,7 +715,8 @@ export class PagosPersonalService {
       Monto: l.total,
       Asistencias: l.designacionesCount,
     }));
-    const ws = XLSX.utils.json_to_sheet(rows);
+    // Sanitiza cada celda contra formula injection antes de escribir el .xlsx.
+    const ws = XLSX.utils.json_to_sheet(rows.map(sanitizarFilaExcel));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Nómina');
     return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;

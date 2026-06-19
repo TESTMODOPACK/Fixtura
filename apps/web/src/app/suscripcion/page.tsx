@@ -14,6 +14,7 @@ import {
 } from '@/hooks/use-admin';
 import { useLogout } from '@/hooks/use-logout';
 import { formatFecha } from '@/lib/format';
+import { redirectToPasarela } from '@/lib/pasarela';
 import { toastError } from '@/lib/toast';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -56,7 +57,11 @@ export default function SuscripcionSuspendidaPage(): React.ReactElement | null {
   const onPagar = (facturaId: string): void => {
     pagar.mutate(facturaId, {
       onSuccess: (r) => {
-        window.location.href = r.url;
+        try {
+          redirectToPasarela(r.url);
+        } catch (e) {
+          toastError(e);
+        }
       },
       onError: (e) => toastError(e),
     });

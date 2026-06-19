@@ -11,6 +11,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 import { POSICION_SPONSOR, type PosicionSponsor } from '@fixtura/types';
@@ -21,12 +22,13 @@ export class CreateSponsorDto {
   @MaxLength(150)
   nombre!: string;
 
-  @IsUrl()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   @MaxLength(500)
   imagenUrl!: string;
 
   @IsOptional()
-  @IsString()
+  @ValidateIf((o: CreateSponsorDto) => o.linkUrl !== '' && o.linkUrl != null)
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   @MaxLength(500)
   linkUrl?: string | null;
 
@@ -62,12 +64,13 @@ export class UpdateSponsorDto {
   nombre?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   @MaxLength(500)
   imagenUrl?: string;
 
   @IsOptional()
-  @IsString()
+  @ValidateIf((o: UpdateSponsorDto) => o.linkUrl !== '' && o.linkUrl != null)
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   @MaxLength(500)
   linkUrl?: string | null;
 

@@ -18,6 +18,8 @@ import type {
 } from '@fixtura/types';
 
 import { apiFetch } from '@/lib/api';
+import { redirectToPasarela } from '@/lib/pasarela';
+import { toastError } from '@/lib/toast';
 
 // ─── Portal del delegado (rol DELEGADO_EQUIPO) ──────────────────────
 
@@ -83,7 +85,11 @@ export function usePagarCobroDelegado() {
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['delegado', 'finanzas'] });
       if (res.urlRedireccion) {
-        window.location.href = res.urlRedireccion;
+        try {
+          redirectToPasarela(res.urlRedireccion);
+        } catch (e) {
+          toastError(e);
+        }
       }
     },
   });

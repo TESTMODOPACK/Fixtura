@@ -35,11 +35,14 @@ function ensureTenant(user: UserContext): string {
  * El retorno del flujo Webpay vive en PagosPublicController (sin auth).
  */
 @Controller('admin/pagos')
+// El DELEGADO_EQUIPO NO va acá: este endpoint recibía un cobroId arbitrario y
+// solo validaba tenantId, no que el cobro fuera de su club (IDOR intra-tenant).
+// Los delegados pagan por /delegado/cobros/:id/pagar, que valida la pertenencia
+// vía cobro.inscripcion.clubId.
 @Roles(
   ROLE.LIGA_ADMIN,
   ROLE.LIGA_CONTADOR,
   ROLE.LIGA_COORDINADOR,
-  ROLE.DELEGADO_EQUIPO,
   ROLE.SUPER_ADMIN,
 )
 export class PagosAdminController {

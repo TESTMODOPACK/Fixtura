@@ -31,9 +31,12 @@ import { Torneo } from '../competition/entities/torneo.entity';
 /**
  * Servicio del portal público. Lee directamente de la DB — sin mocks.
  *
- * El tenant context ya viene seteado por TenantContextInterceptor cuando
- * el request llega. RLS filtra los resultados al tenant correcto
- * automáticamente.
+ * OJO: en endpoints @Public() NO hay usuario, así que el
+ * TenantContextInterceptor setea app.current_tenant_id = '' → eso pone TODAS
+ * las policies RLS en modo BYPASS (no filtran por tenant). Por lo tanto CADA
+ * query de este servicio DEBE filtrar explícitamente por el tenant resuelto
+ * por Host (tenantId) o por ids ya acotados a ese tenant. RLS acá NO es una
+ * red de seguridad: olvidar el WHERE = fuga cross-tenant inmediata.
  */
 @Injectable()
 export class PublicService {

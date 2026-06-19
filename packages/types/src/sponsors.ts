@@ -41,10 +41,21 @@ export const SponsorAdminSchema = z.object({
 });
 export type SponsorAdmin = z.infer<typeof SponsorAdminSchema>;
 
+// Solo http(s): z.url() acepta javascript:/data:, que en el portal público
+// (href/src del banner) son vectores de XSS. Restringimos el protocolo.
+const esUrlHttp = (v: string): boolean => /^https?:\/\//i.test(v);
+const MSG_URL_HTTP = 'La URL debe comenzar con http:// o https://';
+
 export const CreateSponsorSchema = z.object({
   nombre: z.string().min(2).max(150),
-  imagenUrl: z.string().url().max(500),
-  linkUrl: z.union([z.literal(''), z.string().url().max(500)]).optional().nullable(),
+  imagenUrl: z.string().url().max(500).refine(esUrlHttp, MSG_URL_HTTP),
+  linkUrl: z
+    .union([
+      z.literal(''),
+      z.string().url().max(500).refine(esUrlHttp, MSG_URL_HTTP),
+    ])
+    .optional()
+    .nullable(),
   posicion: z.enum(POSICION_SPONSOR),
   prioridad: z.number().int().min(0).max(1000).optional(),
   vigenteDesde: z.string().optional().nullable(),

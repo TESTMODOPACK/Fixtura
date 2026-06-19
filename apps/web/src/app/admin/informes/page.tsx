@@ -143,7 +143,15 @@ async function exportarExcel(
 ): Promise<void> {
   if (filas.length === 0) return;
   const XLSX = await import('xlsx');
-  const ws = XLSX.utils.json_to_sheet(filas);
+  // Defensa contra formula injection: una celda de texto que empieza con
+  // = + - @ (o tab/CR) la interpreta Excel como fórmula al abrir el archivo.
+  // Prefijar con comilla simple la fuerza a texto literal (no se muestra).
+  const sanear = (v: unknown): unknown =>
+    typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+  const filasSeguras = filas.map((f) =>
+    Object.fromEntries(Object.entries(f).map(([k, v]) => [k, sanear(v)])),
+  );
+  const ws = XLSX.utils.json_to_sheet(filasSeguras);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, hoja);
   XLSX.writeFile(wb, nombreArchivo);

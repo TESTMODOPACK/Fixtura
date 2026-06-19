@@ -22,6 +22,7 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatFecha } from '@/lib/format';
+import { redirectToPasarela } from '@/lib/pasarela';
 
 export default function MiSuscripcionPage(): React.ReactElement {
   const { data: cuenta, isLoading: loadCuenta, error: errCuenta } = useMiSuscripcion();
@@ -32,8 +33,12 @@ export default function MiSuscripcionPage(): React.ReactElement {
   function handlePagar(facturaId: string): void {
     pagar.mutate(facturaId, {
       onSuccess: (r) => {
-        // Redirige a la pasarela. En modo mock, retorna a la misma URL.
-        window.location.href = r.url;
+        // Redirige a la pasarela (valida destino). En modo mock vuelve a la app.
+        try {
+          redirectToPasarela(r.url);
+        } catch (e) {
+          alert(`Error al iniciar el pago: ${(e as Error).message}`);
+        }
       },
       onError: (e) => alert(`Error al iniciar el pago: ${(e as Error).message}`),
     });

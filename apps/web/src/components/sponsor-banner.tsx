@@ -44,7 +44,19 @@ export function SponsorBanner({
   );
 }
 
-function SponsorItem({ sponsor }: { sponsor: SponsorPublico }): React.ReactElement {
+/** Solo http(s): bloquea javascript:/data: en href y src (defensa XSS). */
+function esUrlSegura(u: string | null | undefined): u is string {
+  return !!u && /^https?:\/\//i.test(u);
+}
+
+function SponsorItem({
+  sponsor,
+}: {
+  sponsor: SponsorPublico;
+}): React.ReactElement | null {
+  // Si la imagen no es una URL http(s) válida, el banner no sirve → no renderiza.
+  if (!esUrlSegura(sponsor.imagenUrl)) return null;
+
   const contenido = (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -58,7 +70,7 @@ function SponsorItem({ sponsor }: { sponsor: SponsorPublico }): React.ReactEleme
     />
   );
 
-  if (sponsor.linkUrl) {
+  if (esUrlSegura(sponsor.linkUrl)) {
     return (
       <a
         href={sponsor.linkUrl}
