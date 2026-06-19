@@ -209,6 +209,26 @@ async function bootstrap(): Promise<void> {
     (await import('@nestjs/typeorm')).getDataSourceToken() as never,
   );
 
+  // SEC-7 — El API NUNCA debe conectar a Postgres como superuser: un
+  // superuser (o un rol con BYPASSRLS) IGNORA Row-Level Security y anula el
+  // aislamiento multi-tenant — FORCE no lo detiene. Si por una env var
+  // faltante la DATABASE_URL cayó al usuario owner, abortamos el arranque:
+  // loud failure > inseguridad silenciosa.
+  if (isProduction) {
+    const roleRows = (await dataSource.query(
+      `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`,
+    )) as Array<{ rolsuper: boolean; rolbypassrls: boolean }>;
+    const dbRole = roleRows[0];
+    if (dbRole?.rolsuper || dbRole?.rolbypassrls) {
+      throw new Error(
+        'El usuario de base de datos del API es superuser o tiene BYPASSRLS, lo que ANULA ' +
+          'el aislamiento multi-tenant (RLS). Configurá DB_APP_USER/DB_APP_PASSWORD con un rol ' +
+          'NO superuser y NOBYPASSRLS.',
+      );
+    }
+    logger.log('DB role check OK — usuario no-superuser, RLS aplicado');
+  }
+
   let tenantOrigins: string[] = [];
   try {
     const rows = (await dataSource.query(
