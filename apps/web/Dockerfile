@@ -22,8 +22,11 @@ COPY packages/ packages/
 COPY apps/web/ apps/web/
 
 # Compilar packages compartidos primero. El web usa @fixtura/types y
-# Next.js no transpila las deps workspace por default.
+# @fixtura/domain (validador de contraseñas, etc.) — Next.js no transpila
+# las deps workspace por default, así que necesitan su dist/ ya compilado.
+# domain importa types, así que types va primero.
 RUN pnpm --filter @fixtura/types run build
+RUN pnpm --filter @fixtura/domain run build
 
 RUN pnpm --filter @fixtura/web run build
 
