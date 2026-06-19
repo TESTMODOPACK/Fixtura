@@ -4,6 +4,7 @@ import {
   DndContext,
   type DragEndEvent,
   PointerSensor,
+  pointerWithin,
   useDraggable,
   useDroppable,
   useSensor,
@@ -64,6 +65,7 @@ export default function FixtureAdminPage({
   const qc = useQueryClient();
   const [moveError, setMoveError] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [activeFechaId, setActiveFechaId] = useState<string | null>(null);
 
   // Borrar el fixture completo. Solo se ofrece en DRAFT: una vez que el
   // torneo arrancó (ACTIVO) hay actas/sanciones colgando del fixture y
@@ -130,12 +132,25 @@ export default function FixtureAdminPage({
     void moverPartido(partidoId, nuevaFechaId);
   };
 
+  // Fecha activa para la vista por pestañas. Por defecto, la primera no
+  // finalizada (la "jornada en curso"); si todas están finalizadas, la
+  // primera. El estado del usuario manda mientras esa fecha siga existiendo.
+  const fechas = data?.fechas ?? [];
+  const activeId =
+    (activeFechaId && fechas.some((f) => f.id === activeFechaId)
+      ? activeFechaId
+      : null) ??
+    fechas.find((f) => f.estado !== 'FINALIZADA')?.id ??
+    fechas[0]?.id ??
+    null;
+  const activeFecha = fechas.find((f) => f.id === activeId) ?? null;
+
   return (
     <>
       <PageHead
         eyebrow={data ? `Torneo · ${data.torneoNombre}` : 'Fixture'}
         title="Fixture completo"
-        sub="Carga actas, edita horarios y canchas. Arrastra un partido a otra fecha para reprogramarlo."
+        sub="Carga actas, edita horarios y canchas. Para reprogramar, arrastra un partido y suéltalo sobre la pestaña de otra fecha."
       >
         <div className="flex items-center gap-2">
           {puedeBorrarFixture && (
@@ -178,22 +193,84 @@ export default function FixtureAdminPage({
         </Card>
       )}
 
-      {data && data.fechas.length > 0 && (
-        <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-          <div className="space-y-5">
-            {data.fechas.map((fecha) => (
-              <FechaCard
-                key={fecha.id}
-                torneoId={torneoId}
-                fecha={fecha}
-                todasLasFechas={data.fechas}
-                movingId={movingId}
-              />
-            ))}
-          </div>
+      {data && fechas.length > 0 && (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={pointerWithin}
+          onDragEnd={onDragEnd}
+        >
+          {fechas.length > 1 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {fechas.map((f) => (
+                <FechaTab
+                  key={f.id}
+                  fecha={f}
+                  active={f.id === activeId}
+                  onClick={() => setActiveFechaId(f.id)}
+                />
+              ))}
+            </div>
+          )}
+          {activeFecha && (
+            <FechaCard
+              key={activeFecha.id}
+              torneoId={torneoId}
+              fecha={activeFecha}
+              todasLasFechas={fechas}
+              movingId={movingId}
+            />
+          )}
         </DndContext>
       )}
     </>
+  );
+}
+
+function FechaTab({
+  fecha,
+  active,
+  onClick,
+}: {
+  fecha: FechaAdmin;
+  active: boolean;
+  onClick: () => void;
+}): React.ReactElement {
+  // La pestaña ES el drop target: arrastrar un partido y soltarlo aquí lo
+  // reprograma a esta fecha (mismo id `fecha-${id}` que consume onDragEnd).
+  const { setNodeRef, isOver } = useDroppable({ id: `fecha-${fecha.id}` });
+  const total = fecha.partidos.length;
+  const jugados = fecha.partidos.filter(
+    (p) => p.estado === 'FINALIZADO' || p.estado === 'WALKOVER',
+  ).length;
+  const suspendida = fecha.estado === 'SUSPENDIDA';
+  const finalizada = fecha.estado === 'FINALIZADA';
+  const dotClass = suspendida
+    ? 'bg-danger'
+    : finalizada
+      ? 'bg-green-bright'
+      : jugados > 0
+        ? 'bg-accent'
+        : 'bg-ink-mute/40';
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      onClick={onClick}
+      title={`${fecha.etiqueta ?? `Fecha ${fecha.numero}`} · ${jugados}/${total} jugados`}
+      className={cn(
+        'inline-flex items-center gap-2 px-3 py-1.5 rounded-card border text-sm font-semibold whitespace-nowrap transition-colors',
+        active
+          ? 'bg-green-deep text-paper border-green-deep'
+          : 'bg-paper text-ink-mute border-line hover:border-ink-mute hover:text-ink',
+        isOver && 'ring-2 ring-accent ring-offset-1 ring-offset-paper',
+      )}
+    >
+      <span className={cn('w-1.5 h-1.5 rounded-full', dotClass)} />
+      Fecha {fecha.numero}
+      {fecha.tipoReprogramacion === 'REPROGRAMADA' && (
+        <span className="text-[9px] font-bold opacity-70">R</span>
+      )}
+    </button>
   );
 }
 
@@ -219,8 +296,6 @@ function FechaCard({
     (suspender.error as ApiError | undefined) ?? (reactivar.error as ApiError | undefined);
   const estaSuspendida = fecha.estado === 'SUSPENDIDA';
 
-  const { setNodeRef, isOver } = useDroppable({ id: `fecha-${fecha.id}` });
-
   const estadoBadgeText = estaSuspendida
     ? 'Suspendida'
     : fecha.estado === 'FINALIZADA'
@@ -235,12 +310,10 @@ function FechaCard({
         : 'bg-ink-mute/10 text-ink-mute';
 
   return (
-    <div ref={setNodeRef}>
     <Card
       padding="none"
       className={cn(
         'overflow-hidden transition-colors',
-        isOver && 'ring-2 ring-accent ring-offset-2 ring-offset-paper',
         estaSuspendida && 'opacity-90',
       )}
     >
@@ -347,12 +420,11 @@ function FechaCard({
         ))}
         {fecha.partidos.length === 0 && (
           <div className="px-5 py-6 text-center text-xs text-ink-mute font-serif italic">
-            Suelta un partido aquí para moverlo a esta fecha
+            No hay partidos en esta fecha.
           </div>
         )}
       </div>
     </Card>
-    </div>
   );
 }
 
