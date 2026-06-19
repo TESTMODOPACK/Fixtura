@@ -248,9 +248,16 @@ export class RecintoAdminService {
   /** Día calendario (YYYY-MM-DD) de la jornada: fecha_inicio o el día del primer partido. */
   private async diaDeLaJornada(fecha: Fecha, tenantId: string): Promise<string | null> {
     if (fecha.fechaInicio) return fecha.fechaInicio;
+    // TO_CHAR fuerza string 'YYYY-MM-DD': en el camino raw (getRawOne) el
+    // parser de pg devolvería las columnas DATE como objeto Date, y ese
+    // valor se compara luego como :dia contra columnas DATE (mismo patrón
+    // que cargarAusenciasMap en designaciones-admin.service).
     const row = await this.partidoRepo
       .createQueryBuilder('p')
-      .select(`MIN((p.fecha_hora AT TIME ZONE 'America/Santiago')::date)`, 'dia')
+      .select(
+        `TO_CHAR(MIN((p.fecha_hora AT TIME ZONE 'America/Santiago')::date), 'YYYY-MM-DD')`,
+        'dia',
+      )
       .where('p.fecha_id = :fechaId', { fechaId: fecha.id })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
       .andWhere('p.fecha_hora IS NOT NULL')
