@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -33,8 +34,13 @@ export class JugadoresAdminService {
     private readonly planillaRepo: Repository<PlanillaTorneo>,
   ) {}
 
-  async listByEquipo(inscripcionId: string, tenantId: string): Promise<JugadorAdmin[]> {
-    await this.ensureInscripcion(inscripcionId, tenantId);
+  async listByEquipo(
+    inscripcionId: string,
+    tenantId: string,
+    scopedClubId: string | null,
+  ): Promise<JugadorAdmin[]> {
+    const insc = await this.ensureInscripcion(inscripcionId, tenantId);
+    this.assertClubScope(insc, scopedClubId);
     const planilla = await this.planillaRepo.find({
       where: { inscripcionId, tenantId },
       relations: { jugador: true },
@@ -53,9 +59,11 @@ export class JugadoresAdminService {
   async create(
     inscripcionId: string,
     tenantId: string,
+    scopedClubId: string | null,
     input: CreateJugadorRequest,
   ): Promise<JugadorAdmin> {
     const insc = await this.ensureInscripcion(inscripcionId, tenantId);
+    this.assertClubScope(insc, scopedClubId);
 
     if (!input.rut || input.rut.trim().length === 0) {
       throw new BadRequestException(
@@ -71,9 +79,11 @@ export class JugadoresAdminService {
   async bulkCreate(
     inscripcionId: string,
     tenantId: string,
+    scopedClubId: string | null,
     inputs: CreateJugadorRequest[],
   ): Promise<JugadorAdmin[]> {
     const insc = await this.ensureInscripcion(inscripcionId, tenantId);
+    this.assertClubScope(insc, scopedClubId);
 
     // Dedupe interno por RUT.
     const ruts = inputs.map((i) => i.rut).filter((r): r is string => !!r);
@@ -107,6 +117,19 @@ export class JugadoresAdminService {
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Defensa intra-tenant: un delegado solo gestiona jugadores de su club.
+   * scopedClubId === null ⇒ rol de liga, sin restricción de club. RLS no
+   * ayuda acá porque la inscripción ajena pertenece al mismo tenant.
+   */
+  private assertClubScope(insc: InscripcionTorneo, scopedClubId: string | null): void {
+    if (scopedClubId !== null && insc.clubId !== scopedClubId) {
+      throw new ForbiddenException(
+        'No puedes gestionar jugadores de un club que no es el tuyo.',
+      );
+    }
+  }
 
   private async findOrCreateJugador(
     insc: InscripcionTorneo,
