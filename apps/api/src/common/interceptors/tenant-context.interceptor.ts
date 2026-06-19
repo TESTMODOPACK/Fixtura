@@ -5,8 +5,7 @@ import {
   NestInterceptor,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { Observable, from } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
+import { Observable, from, lastValueFrom } from 'rxjs';
 import { DataSource } from 'typeorm';
 import { runInTransaction } from 'typeorm-transactional';
 
@@ -33,8 +32,17 @@ export class TenantContextInterceptor implements NestInterceptor {
         await this.dataSource.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [
           tenantId,
         ]);
-        return next.handle();
+        // Esperamos a que el handler COMPLETE dentro de la transacción para
+        // que TODAS sus queries usen la misma conexión con el contexto RLS
+        // seteado. Antes se devolvía `next.handle()` (un Observable) sin
+        // await: runInTransaction resolvía de inmediato y CERRABA la
+        // transacción, y el handler corría afuera. En una conexión sin el
+        // SET LOCAL, current_setting('app.current_tenant_id', true) es NULL
+        // (no ''), y la policy `tenant_id = NULL OR NULL = ''` evalúa NULL
+        // → excluye filas → conteos/listados en 0 de forma intermitente.
+        // defaultValue cubre handlers que completan sin emitir (p.ej. @Res()).
+        return lastValueFrom(next.handle(), { defaultValue: undefined });
       }),
-    ).pipe(switchMap((obs) => obs as Observable<unknown>));
+    );
   }
 }
