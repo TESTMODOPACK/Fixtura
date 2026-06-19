@@ -342,6 +342,8 @@ export class TorneosAdminService {
         duracionEntretiempoMinutos: input.duracionEntretiempoMinutos ?? 10,
         minJugadoresParaIniciar: input.minJugadoresParaIniciar ?? 7,
         amarillasParaSuspension: input.amarillasParaSuspension ?? 5,
+        paramedicosPorJornada: input.paramedicosPorJornada ?? 1,
+        otrosPorJornada: input.otrosPorJornada ?? 0,
       });
       try {
         return await this.repo.save(t);
@@ -542,6 +544,12 @@ export class TorneosAdminService {
       ...(input.amarillasParaSuspension !== undefined && {
         amarillasParaSuspension: input.amarillasParaSuspension,
       }),
+      ...(input.paramedicosPorJornada !== undefined && {
+        paramedicosPorJornada: input.paramedicosPorJornada,
+      }),
+      ...(input.otrosPorJornada !== undefined && {
+        otrosPorJornada: input.otrosPorJornada,
+      }),
     });
 
     // Si se desactivan los refuerzos, limpiar la fecha límite para
@@ -717,6 +725,8 @@ export class TorneosAdminService {
       duracionEntretiempoMinutos: t.duracionEntretiempoMinutos ?? 10,
       minJugadoresParaIniciar: t.minJugadoresParaIniciar ?? 7,
       amarillasParaSuspension: t.amarillasParaSuspension ?? 5,
+      paramedicosPorJornada: t.paramedicosPorJornada ?? 1,
+      otrosPorJornada: t.otrosPorJornada ?? 0,
       createdAt: t.createdAt.toISOString(),
     };
   }

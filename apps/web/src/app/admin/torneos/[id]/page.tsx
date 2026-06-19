@@ -201,6 +201,8 @@ export default function TorneoDetailPage({
           duracionEntretiempoMinutos={torneo.duracionEntretiempoMinutos}
           minJugadoresParaIniciar={torneo.minJugadoresParaIniciar}
           amarillasParaSuspension={torneo.amarillasParaSuspension}
+          paramedicosPorJornada={torneo.paramedicosPorJornada}
+          otrosPorJornada={torneo.otrosPorJornada}
         />
       )}
     </>
@@ -751,6 +753,8 @@ function ConfiguracionTab({
   duracionEntretiempoMinutos,
   minJugadoresParaIniciar,
   amarillasParaSuspension,
+  paramedicosPorJornada,
+  otrosPorJornada,
 }: {
   torneoId: string;
   estado: string;
@@ -761,6 +765,8 @@ function ConfiguracionTab({
   duracionEntretiempoMinutos: number;
   minJugadoresParaIniciar: number;
   amarillasParaSuspension: number;
+  paramedicosPorJornada: number;
+  otrosPorJornada: number;
 }): React.ReactElement {
   const mutation = useUpdateTorneo(torneoId);
   const deleteTorneo = useDeleteTorneo();
@@ -793,23 +799,31 @@ function ConfiguracionTab({
   const [amarillasSuspension, setAmarillasSuspension] = useState<number>(
     amarillasParaSuspension,
   );
+  const [paramedicos, setParamedicos] = useState<number>(paramedicosPorJornada);
+  const [otros, setOtros] = useState<number>(otrosPorJornada);
   useEffect(() => {
     setDuracionPeriodo(duracionPeriodoMinutos);
     setDuracionEntretiempo(duracionEntretiempoMinutos);
     setMinJugadores(minJugadoresParaIniciar);
     setAmarillasSuspension(amarillasParaSuspension);
+    setParamedicos(paramedicosPorJornada);
+    setOtros(otrosPorJornada);
   }, [
     duracionPeriodoMinutos,
     duracionEntretiempoMinutos,
     minJugadoresParaIniciar,
     amarillasParaSuspension,
+    paramedicosPorJornada,
+    otrosPorJornada,
   ]);
 
   const cambioDuracion =
     duracionPeriodo !== duracionPeriodoMinutos ||
     duracionEntretiempo !== duracionEntretiempoMinutos ||
     minJugadores !== minJugadoresParaIniciar ||
-    amarillasSuspension !== amarillasParaSuspension;
+    amarillasSuspension !== amarillasParaSuspension ||
+    paramedicos !== paramedicosPorJornada ||
+    otros !== otrosPorJornada;
 
   const guardarDuracion = (): void => {
     if (!cambioDuracion) return;
@@ -818,6 +832,8 @@ function ConfiguracionTab({
       duracionEntretiempoMinutos: duracionEntretiempo,
       minJugadoresParaIniciar: minJugadores,
       amarillasParaSuspension: amarillasSuspension,
+      paramedicosPorJornada: paramedicos,
+      otrosPorJornada: otros,
     });
   };
 
@@ -1062,6 +1078,32 @@ function ConfiguracionTab({
               onChange={(e) => setAmarillasSuspension(Number(e.target.value))}
             />
           </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-ink-mute font-semibold mb-1">
+              Paramédicos por jornada
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              className="input w-full"
+              value={paramedicos}
+              onChange={(e) => setParamedicos(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-ink-mute font-semibold mb-1">
+              Otros (utilería/seguridad) por jornada
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              className="input w-full"
+              value={otros}
+              onChange={(e) => setOtros(Number(e.target.value))}
+            />
+          </div>
         </div>
         <div className="mt-3">
           <Button
@@ -1076,9 +1118,12 @@ function ConfiguracionTab({
         </div>
         <p className="text-xs font-serif italic text-ink-mute mt-3">
           Default: 40 min / 10 min entretiempo · mínimo 7 jugadores por equipo
-          para iniciar · 5 amarillas para suspensión. La duración aplica solo a
-          partidos que todavía no arrancaron el match center. El umbral de
-          amarillas se evalúa al cerrar cada acta.
+          para iniciar · 5 amarillas para suspensión · 1 paramédico por jornada.
+          La duración aplica solo a partidos que todavía no arrancaron el match
+          center. El umbral de amarillas se evalúa al cerrar cada acta. El
+          paramédico y el personal de servicio los designa el «auto-asignar» de
+          la fecha: cubren el día completo y, si juegan varios torneos el mismo
+          día, la misma persona puede cubrir todos (se paga una vez).
         </p>
       </Card>
     </div>

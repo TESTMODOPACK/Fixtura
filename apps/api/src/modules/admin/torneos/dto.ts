@@ -146,6 +146,21 @@ export class CreateTorneoDto {
   @Min(1)
   @Max(30)
   minJugadoresParaIniciar?: number;
+
+  // Cobertura del recinto que el auto-asignar designa por jornada.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(20)
+  paramedicosPorJornada?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(20)
+  otrosPorJornada?: number;
 }
 
 export class UpdateTorneoDto {
@@ -266,4 +281,18 @@ export class UpdateTorneoDto {
   @Min(1)
   @Max(30)
   minJugadoresParaIniciar?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(20)
+  paramedicosPorJornada?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(20)
+  otrosPorJornada?: number;
 }

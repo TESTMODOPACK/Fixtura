@@ -12,11 +12,15 @@ import type {
   EstadoDesignacion,
 } from '@fixtura/types';
 
+import { AusenciaPersonal } from '../../competition/entities/ausencia-personal.entity';
 import { DesignacionRecinto } from '../../competition/entities/designacion-recinto.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
+import { Partido } from '../../competition/entities/partido.entity';
 import { Personal } from '../../competition/entities/personal.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import type { AsignarRecintoDto } from './dto';
+
+type RolRecinto = 'PARAMEDICO' | 'OTRO';
 
 /**
  * Servicio para designaciones de RECINTO: paramédicos y personal de
@@ -34,6 +38,9 @@ export class RecintoAdminService {
     private readonly personalRepo: Repository<Personal>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
+    @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
+    @InjectRepository(AusenciaPersonal)
+    private readonly ausenciaRepo: Repository<AusenciaPersonal>,
   ) {}
 
   async listPorFecha(
@@ -137,7 +144,166 @@ export class RecintoAdminService {
     await this.repo.remove(d);
   }
 
+  /**
+   * Auto-asigna la cobertura del recinto (paramédicos + "otros") de una
+   * fecha según la config del torneo (paramedicosPorJornada / otrosPorJornada).
+   *
+   * Es por JORNADA (día completo), no por partido. Si la misma persona ya
+   * cubre el recinto ese MISMO DÍA en otro torneo, se la prefiere (una sola
+   * persona cubre todos los torneos del día) y su pago se cuenta UNA vez
+   * (montoPago = 0 en las designaciones extra del día). No re-asigna lo ya
+   * cubierto ni a personal ausente ese día.
+   */
+  async autoAsignarRecinto(
+    torneoId: string,
+    fechaId: string,
+    tenantId: string,
+  ): Promise<{ creadas: number }> {
+    const torneo = await this.torneoRepo.findOne({ where: { id: torneoId, tenantId } });
+    if (!torneo) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);
+    const fecha = await this.fechaRepo.findOne({ where: { id: fechaId, tenantId } });
+    if (!fecha) throw new NotFoundException(`Fecha ${fechaId} no encontrada`);
+    if (fecha.torneoId !== torneoId) {
+      throw new BadRequestException('La fecha no pertenece al torneo indicado');
+    }
+
+    const objetivos: Array<{ rol: RolRecinto; cantidad: number }> = [
+      { rol: 'PARAMEDICO', cantidad: torneo.paramedicosPorJornada ?? 0 },
+      { rol: 'OTRO', cantidad: torneo.otrosPorJornada ?? 0 },
+    ];
+    if (objetivos.every((o) => o.cantidad <= 0)) return { creadas: 0 };
+
+    const dia = await this.diaDeLaJornada(fecha, tenantId);
+
+    const existentes = await this.repo.find({ where: { fechaId, tenantId } });
+    const activasFecha = existentes.filter((e) => e.estado !== 'RECHAZADA');
+
+    // Cobertura del MISMO DÍA en otras fechas/torneos (compartir + pago único).
+    const recintoDia = dia ? await this.recintoDelDia(tenantId, dia) : [];
+    const pagaEseDia = new Set(
+      recintoDia.filter((r) => (r.montoPago ?? 0) > 0).map((r) => r.personalId),
+    );
+    const cubrenPorRol = new Map<RolRecinto, Set<string>>();
+    for (const r of recintoDia) {
+      const set = cubrenPorRol.get(r.rolAsignado) ?? new Set<string>();
+      set.add(r.personalId);
+      cubrenPorRol.set(r.rolAsignado, set);
+    }
+
+    const personalActivo = await this.personalRepo.find({
+      where: { tenantId, activo: true },
+    });
+    const ausentes = dia
+      ? await this.personalAusenteEnDia(tenantId, dia)
+      : new Set<string>();
+
+    let creadas = 0;
+    for (const { rol, cantidad } of objetivos) {
+      if (cantidad <= 0) continue;
+      const yaEnFecha = new Set(
+        activasFecha.filter((e) => e.rolAsignado === rol).map((e) => e.personalId),
+      );
+      const faltan = cantidad - yaEnFecha.size;
+      if (faltan <= 0) continue;
+
+      const preferidos = cubrenPorRol.get(rol) ?? new Set<string>();
+      const candidatos = personalActivo
+        .filter((p) => p.roles?.includes(rol) || p.rol === rol)
+        .filter((p) => !yaEnFecha.has(p.id))
+        .filter((p) => !ausentes.has(p.id))
+        .sort((a, b) => {
+          // Preferir a quien ya cubre el recinto ese día con ese rol.
+          const pa = preferidos.has(a.id) ? 0 : 1;
+          const pb = preferidos.has(b.id) ? 0 : 1;
+          if (pa !== pb) return pa - pb;
+          return `${a.apellido} ${a.nombre}`.localeCompare(
+            `${b.apellido} ${b.nombre}`,
+            'es',
+          );
+        });
+
+      for (const cand of candidatos.slice(0, faltan)) {
+        const monto = pagaEseDia.has(cand.id) ? 0 : (cand.tarifaBase ?? null);
+        await this.repo.save(
+          this.repo.create({
+            tenantId,
+            fechaId,
+            personalId: cand.id,
+            rolAsignado: rol,
+            canchaNombre: null,
+            estado: 'PROPUESTA',
+            montoPago: monto,
+            notas: null,
+          }),
+        );
+        if ((monto ?? 0) > 0) pagaEseDia.add(cand.id);
+        creadas++;
+      }
+    }
+    return { creadas };
+  }
+
   // ─── Helpers ────────────────────────────────────────────────────────
+
+  /** Día calendario (YYYY-MM-DD) de la jornada: fecha_inicio o el día del primer partido. */
+  private async diaDeLaJornada(fecha: Fecha, tenantId: string): Promise<string | null> {
+    if (fecha.fechaInicio) return fecha.fechaInicio;
+    const row = await this.partidoRepo
+      .createQueryBuilder('p')
+      .select(`MIN((p.fecha_hora AT TIME ZONE 'America/Santiago')::date)`, 'dia')
+      .where('p.fecha_id = :fechaId', { fechaId: fecha.id })
+      .andWhere('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('p.fecha_hora IS NOT NULL')
+      .getRawOne<{ dia: string | null }>();
+    return row?.dia ?? null;
+  }
+
+  /** Designaciones de recinto (no rechazadas) de TODAS las fechas que caen ese día. */
+  private async recintoDelDia(
+    tenantId: string,
+    dia: string,
+  ): Promise<Array<{ personalId: string; rolAsignado: RolRecinto; montoPago: number | null }>> {
+    const fechaRows = await this.fechaRepo
+      .createQueryBuilder('f')
+      .leftJoin('partidos', 'p', 'p.fecha_id = f.id AND p.tenant_id = f.tenant_id')
+      .select('DISTINCT f.id', 'id')
+      .where('f.tenant_id = :tenantId', { tenantId })
+      .andWhere(
+        `(f.fecha_inicio = :dia OR (p.fecha_hora AT TIME ZONE 'America/Santiago')::date = :dia)`,
+        { dia },
+      )
+      .getRawMany<{ id: string }>();
+    const fechaIds = fechaRows.map((r) => r.id);
+    if (fechaIds.length === 0) return [];
+    const rows = await this.repo
+      .createQueryBuilder('d')
+      .select([
+        'd.personal_id AS "personalId"',
+        'd.rol_asignado AS "rolAsignado"',
+        'd.monto_pago AS "montoPago"',
+      ])
+      .where('d.tenant_id = :tenantId', { tenantId })
+      .andWhere('d.fecha_id IN (:...fechaIds)', { fechaIds })
+      .andWhere(`d.estado != 'RECHAZADA'`)
+      .getRawMany<{ personalId: string; rolAsignado: RolRecinto; montoPago: number | null }>();
+    return rows.map((r) => ({
+      personalId: r.personalId,
+      rolAsignado: r.rolAsignado,
+      montoPago: r.montoPago == null ? null : Number(r.montoPago),
+    }));
+  }
+
+  /** Personal con una ausencia que cubre ese día. */
+  private async personalAusenteEnDia(tenantId: string, dia: string): Promise<Set<string>> {
+    const rows = await this.ausenciaRepo
+      .createQueryBuilder('a')
+      .select('a.personal_id', 'personalId')
+      .where('a.tenant_id = :tenantId', { tenantId })
+      .andWhere('a.desde <= :dia', { dia })
+      .andWhere('a.hasta >= :dia', { dia })
+      .getRawMany<{ personalId: string }>();
+    return new Set(rows.map((r) => r.personalId));
+  }
   private async ensureTorneo(torneoId: string, tenantId: string): Promise<void> {
     const t = await this.torneoRepo.findOne({ where: { id: torneoId, tenantId } });
     if (!t) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);

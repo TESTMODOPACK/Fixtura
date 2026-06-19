@@ -153,6 +153,15 @@ export class Torneo {
   @Column({ name: 'amarillas_para_suspension', type: 'smallint', default: 5 })
   amarillasParaSuspension!: number;
 
+  // Cobertura del recinto que el auto-asignar designa por jornada (no por
+  // partido): paramédicos y "otros" (utilería/seguridad). Cubren el día
+  // completo y pueden compartirse entre torneos del mismo día.
+  @Column({ name: 'paramedicos_por_jornada', type: 'smallint', default: 1 })
+  paramedicosPorJornada!: number;
+
+  @Column({ name: 'otros_por_jornada', type: 'smallint', default: 0 })
+  otrosPorJornada!: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

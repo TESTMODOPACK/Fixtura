@@ -88,6 +88,9 @@ export const CreateTorneoSchema = z.object({
   minJugadoresParaIniciar: z.number().int().min(1).max(30).optional(),
   // Amarillas acumuladas en el torneo que generan una fecha de suspensión.
   amarillasParaSuspension: z.number().int().min(2).max(20).optional(),
+  // Cobertura del recinto que el auto-asignar designa por jornada.
+  paramedicosPorJornada: z.number().int().min(0).max(20).optional(),
+  otrosPorJornada: z.number().int().min(0).max(20).optional(),
 });
 export type CreateTorneoRequest = z.infer<typeof CreateTorneoSchema>;
 
@@ -130,6 +133,9 @@ export const TorneoAdminSchema = z.object({
   minJugadoresParaIniciar: z.number().int().min(1).max(30),
   // Amarillas acumuladas que generan una fecha de suspensión.
   amarillasParaSuspension: z.number().int().min(2).max(20),
+  // Cobertura del recinto por jornada (auto-asignar).
+  paramedicosPorJornada: z.number().int().min(0).max(20),
+  otrosPorJornada: z.number().int().min(0).max(20),
   createdAt: z.iso.datetime(),
 });
 export type TorneoAdmin = z.infer<typeof TorneoAdminSchema>;

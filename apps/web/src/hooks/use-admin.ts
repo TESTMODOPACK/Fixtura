@@ -852,6 +852,10 @@ export function useAutoAsignarDesignaciones(invalidate: { torneoId: string; fech
       qc.invalidateQueries({
         queryKey: ['admin', 'torneos', invalidate.torneoId, 'fechas', invalidate.fechaId, 'designaciones'],
       });
+      // El auto-asignar también cubre el recinto (paramédicos + otros).
+      qc.invalidateQueries({
+        queryKey: ['admin', 'torneos', invalidate.torneoId, 'fechas', invalidate.fechaId, 'recinto'],
+      });
     },
   });
 }

@@ -99,13 +99,23 @@ export class DesignacionesAdminController {
    * Por default cubre solo ARBITRO_PRINCIPAL y no sobreescribe.
    */
   @Post('torneos/:torneoId/fechas/:fechaId/designaciones/auto')
-  autoAsignar(
+  async autoAsignar(
     @CurrentUser() user: UserContext,
     @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
     @Param('fechaId', new ParseUUIDPipe()) fechaId: string,
     @Body() dto: AutoAsignarDto,
   ): Promise<AutoAsignarResult> {
-    return this.svc.autoAsignar(torneoId, fechaId, ensureTenant(user), dto);
+    const tenantId = ensureTenant(user);
+    const result = await this.svc.autoAsignar(torneoId, fechaId, tenantId, dto);
+    // Además de los árbitros por partido, cubrir el recinto (paramédicos +
+    // "otros") según la config del torneo. Best-effort: no rompe el auto de
+    // árbitros si falla.
+    try {
+      await this.recintoSvc.autoAsignarRecinto(torneoId, fechaId, tenantId);
+    } catch {
+      /* la cobertura del recinto se puede completar a mano si falla */
+    }
+    return result;
   }
 
   /**

@@ -479,6 +479,18 @@ async function main(): Promise<void> {
     `);
     log('torneos.duracion_periodo + duracion_entretiempo asegurados (Sprint 29A).');
 
+    // Cobertura del recinto por jornada (auto-asignar): cuántos paramédicos
+    // y "otros" (utilería/seguridad) designar automáticamente al recinto en
+    // cada jornada. Cubren el día completo; default 1 paramédico, 0 otros.
+    await client.query(`
+      ALTER TABLE torneos
+        ADD COLUMN IF NOT EXISTS paramedicos_por_jornada SMALLINT
+          NOT NULL DEFAULT 1 CHECK (paramedicos_por_jornada BETWEEN 0 AND 20),
+        ADD COLUMN IF NOT EXISTS otros_por_jornada SMALLINT
+          NOT NULL DEFAULT 0 CHECK (otros_por_jornada BETWEEN 0 AND 20)
+    `);
+    log('torneos.paramedicos_por_jornada + otros_por_jornada asegurados.');
+
     // Sprint 30 fix — backfill categorias_series desde la categoria_id
     // legacy. Torneos creados antes del Sprint 26D quedaron con
     // categoria_id poblado pero categorias_series = '[]', lo que hacía
