@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Post,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 
 import {
   ROLE,
@@ -89,6 +90,14 @@ export class PagosPublicController {
    * `token` (form-urlencoded) cuando el pago se resuelve. Confirmamos
    * consultando getStatus. Siempre respondemos 200: si devolviéramos un
    * error, Flow reintentaría en loop. Los problemas se loggean.
+   *
+   * M3 — Defensa del endpoint público: (1) el ThrottlerGuard global lo limita
+   * a 60 req/min por IP; (2) un token desconocido se descarta ANTES de llamar
+   * a Flow (no consume cuota getStatus) y se loggea; (3) la confirmación
+   * re-consulta el estado a Flow con las credenciales de la liga, así un token
+   * inventado no puede acreditar nada; (4) cada hit queda en el audit log.
+   * Pendiente (defensa en profundidad): verificar firma HMAC del callback —
+   * requiere registrar express.raw para este path (ver nota B8 en main.ts).
    */
   @Post('flow/confirmacion')
   @Audited({ action: 'pago.webhook.flow', entityType: 'Transaccion' })
@@ -115,6 +124,9 @@ export class PagosPublicController {
    * en estado final, devuelve el estado guardado sin volver a llamar.
    */
   @Post(':transaccionId/confirmar')
+  // M3 — endpoint público (retorno del navegador): se acota más que el default
+  // global para limitar el sondeo de UUIDs de transacción.
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Audited({ action: 'pago.confirmado', entityType: 'Transaccion', entityIdFrom: 'params.transaccionId' })
   confirmar(
     @Param('transaccionId', new ParseUUIDPipe()) transaccionId: string,
@@ -129,6 +141,7 @@ export class PagosPublicController {
    * tenantId. El "auth" es el UUID no enumerable de la transacción.
    */
   @Get(':transaccionId/estado')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   async estado(
     @Param('transaccionId', new ParseUUIDPipe()) transaccionId: string,
   ): Promise<ConfirmarPagoResponse> {

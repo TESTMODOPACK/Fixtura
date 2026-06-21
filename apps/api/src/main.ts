@@ -156,6 +156,13 @@ async function bootstrap(): Promise<void> {
   app.use('/webhooks/stripe', express.raw({ type: '*/*', limit: '1mb' }));
   app.use('/webhooks/mercadopago', express.raw({ type: '*/*', limit: '1mb' }));
   app.use('/webhooks/webpay', express.raw({ type: '*/*', limit: '1mb' }));
+  // B8 — El webhook REAL en producción es Flow, bajo
+  // /api/v1/public/pagos/flow/confirmacion (urlencoded, NO /webhooks/*). Hoy
+  // no verifica firma HMAC (la anti-falsificación es re-consultar getStatus a
+  // Flow), así que no necesita el body crudo. Si en el futuro se agrega
+  // verificación de firma sobre el cuerpo, hay que registrar express.raw para
+  // ESE path acá, ANTES del body parser global de abajo — si no, el parser
+  // altera los bytes y la firma falla.
 
   // Body parser global — uploads de avatares y escudos en base64 hasta 10MB.
   app.useBodyParser('json', { limit: '10mb' });
