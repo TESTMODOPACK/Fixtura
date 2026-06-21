@@ -260,7 +260,26 @@ export class PagosService {
    * está en estado final, devuelve el estado guardado sin volver a llamar
    * a la pasarela.
    */
-  private async confirmarTx(tx: Transaccion): Promise<ConfirmarPagoResponse> {
+  private async confirmarTx(txInput: Transaccion): Promise<ConfirmarPagoResponse> {
+    // M4 — Serializa los dos caminos de confirmación (webhook de Flow y retorno
+    // del navegador) que convergen acá. Sin lock, ambos leen estado no-final,
+    // acreditan el cobro y emiten boleta SII duplicada. Tomamos un lock de
+    // escritura sobre la fila (sin joins: Postgres rechaza FOR UPDATE sobre el
+    // lado nullable de un outer join) y re-leemos el estado ya commiteado por el
+    // otro camino para salir idempotente. Corre dentro de la @Transactional de
+    // los callers, así el lock se sostiene hasta el commit.
+    await this.txRepo.findOne({
+      where: { id: txInput.id },
+      lock: { mode: 'pessimistic_write' },
+    });
+    const tx = await this.txRepo.findOne({
+      where: { id: txInput.id },
+      relations: { cobro: true },
+    });
+    if (!tx) {
+      throw new NotFoundException(`Transacción ${txInput.id} no encontrada`);
+    }
+
     const estadosFinales = ['APROBADO', 'RECHAZADO', 'EXPIRADO', 'REVERSADO'];
     if (estadosFinales.includes(tx.estado)) {
       return this.toConfirmResponse(tx);

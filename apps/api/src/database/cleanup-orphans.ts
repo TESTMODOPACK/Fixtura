@@ -175,6 +175,7 @@ async function main(): Promise<void> {
 
     // Sprint 7B: tabla documentos_tributarios (boletas/facturas SII).
     await ensureDocumentosTributariosTable(client, log);
+    await ensureAuditLogsPolicy(client, log);
 
     // Sprint 7C: columnas de dunning en cobros.
     await ensureDunningCobros(client, log);
@@ -1783,6 +1784,27 @@ async function ensureDocumentosTributariosTable(
   await client.query(
     `CREATE INDEX IF NOT EXISTS idx_doctrib_folio ON documentos_tributarios(folio_sii) WHERE folio_sii IS NOT NULL`,
   );
+  // M4 — UNIQUE en transaccion_id: corta a nivel DB la emisión de boletas SII
+  // duplicadas si las dos confirmaciones (webhook Flow + retorno del navegador)
+  // ganaran la carrera. Pre-check: si ya hay duplicados, NO creamos el índice
+  // (rompería el arranque) y avisamos para dedupe manual.
+  const dupDoctrib = await client.query(
+    `SELECT 1 FROM documentos_tributarios
+       WHERE transaccion_id IS NOT NULL
+       GROUP BY transaccion_id HAVING COUNT(*) > 1 LIMIT 1`,
+  );
+  if (dupDoctrib.rowCount === 0) {
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_doctrib_transaccion
+         ON documentos_tributarios(transaccion_id) WHERE transaccion_id IS NOT NULL`,
+    );
+    // El índice único parcial cubre los mismos lookups que el no-único previo.
+    await client.query(`DROP INDEX IF EXISTS idx_doctrib_transaccion`);
+  } else {
+    log(
+      '[M4] documentos_tributarios tiene transaccion_id duplicados — NO se crea el UNIQUE. Dedupe manual requerido.',
+    );
+  }
   await ensureTrigger(client, 'documentos_tributarios');
   log('Documentos tributarios asegurada (idempotente).');
 }
@@ -2572,6 +2594,41 @@ async function ensureClubesTables(
     'clubes + club_categorias + jugadores + inscripciones_torneo + ' +
       'planilla_torneo + jugadores_vetados asegurados (Sprint 26A, ADR-0004).',
   );
+}
+
+/**
+ * B5 — Uniforma la policy RLS de audit_logs con WITH CHECK explícito.
+ *
+ * La migración inicial creó la policy solo con USING. En una policy FOR ALL,
+ * Postgres YA usa la expresión USING como WITH CHECK para INSERT/UPDATE, así
+ * que los inserts cross-tenant ya estaban rechazados. Esto solo lo hace
+ * explícito, para que coincida con el resto de las tablas (ensureRls) y no
+ * dependa de esa sutileza. Idempotente y sin cambio de comportamiento.
+ */
+async function ensureAuditLogsPolicy(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  const tabla = await client.query(`SELECT to_regclass('public.audit_logs') AS t`);
+  if (!tabla.rows[0]?.t) return; // aún no existe (migración inicial no corrió)
+  const pol = await client.query(
+    `SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='audit_logs' AND policyname='tenant_isolation'`,
+  );
+  if (pol.rowCount === 0) return; // la crea la migración inicial
+  await client.query(`
+    ALTER POLICY tenant_isolation ON audit_logs
+      USING (
+        tenant_id IS NULL
+        OR tenant_id::text = current_setting('app.current_tenant_id', true)
+        OR current_setting('app.current_tenant_id', true) = ''
+      )
+      WITH CHECK (
+        tenant_id IS NULL
+        OR tenant_id::text = current_setting('app.current_tenant_id', true)
+        OR current_setting('app.current_tenant_id', true) = ''
+      )
+  `);
+  log('audit_logs policy con WITH CHECK explícito (B5).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {
