@@ -35,6 +35,11 @@ export class JwtAuthGuard implements CanActivate {
     const token = authHeader.slice(7);
 
     try {
+      // B2 — Solo se verifica firma + expiración; NO se re-consulta la DB por
+      // isActive/rol vigente en cada request (sería un hit por request). Tras
+      // desactivar un usuario o cambiarle el rol, su access token sigue válido
+      // hasta expirar (≤15 min) — ventana aceptada por el TTL corto. El reset
+      // de password sí revoca los refresh tokens de inmediato.
       const payload = await this.jwtService.verifyAsync<UserContext>(token);
       const parsed = UserContextSchema.parse(payload);
       req.user = parsed;

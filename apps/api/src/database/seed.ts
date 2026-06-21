@@ -134,6 +134,12 @@ async function main(): Promise<void> {
   const slug = process.env.SEED_TENANT_SLUG ?? 'liga-demo';
   const nombre = process.env.SEED_TENANT_NAME ?? 'Liga Demo';
   const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? 'admin@fixtura.local').toLowerCase();
+  // B3 — en prod NO usar password embebido (está en el repo): exigir el env var.
+  if (process.env.NODE_ENV === 'production' && !process.env.SEED_ADMIN_PASSWORD) {
+    throw new Error(
+      'SEED_ADMIN_PASSWORD es obligatorio en producción (sin default embebido).',
+    );
+  }
   const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'Fixtura2026!';
 
   try {
@@ -173,7 +179,13 @@ async function main(): Promise<void> {
     // eslint-disable-next-line no-console
     console.log('════════════════════════════════════════════════════════════');
     // eslint-disable-next-line no-console
-    console.log(`  Login admin: ${adminEmail} / ${adminPassword}`);
+    console.log(
+      `  Login admin: ${adminEmail} / ${
+        process.env.NODE_ENV === 'production'
+          ? '(definida por SEED_ADMIN_PASSWORD)'
+          : adminPassword
+      }`,
+    );
     // eslint-disable-next-line no-console
     console.log('════════════════════════════════════════════════════════════');
   } catch (err) {

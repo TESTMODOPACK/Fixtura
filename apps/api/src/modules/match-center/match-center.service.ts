@@ -65,6 +65,13 @@ export class MatchCenterService {
   /**
    * Variante sin chequeo de tenant — para la vista pública. El partido
    * se identifica por id (UUID); la respuesta es read-only y mínima.
+   *
+   * B4 — Riesgo cross-tenant ACEPTADO y documentado: corre bajo RLS en bypass
+   * ('') y no filtra por tenant, así que un partidoId de OTRA liga devolvería su
+   * marcador. Es tolerable porque (a) el id es un UUID v4 no enumerable, (b) el
+   * dato es el marcador en vivo, pensado para ser público a los hinchas, y (c)
+   * no expone campos sensibles. Si se quisiera aislamiento estricto, habría que
+   * pasar el Host/slug y validar partido.tenantId contra el tenant del Host.
    */
   async snapshotPublico(partidoId: string): Promise<MatchCenterSnapshot> {
     const partido = await this.repo

@@ -37,6 +37,12 @@ export class RolesGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
+    // B1 — Sin @Roles, un endpoint autenticado (no @Public) deja pasar a
+    // CUALQUIER usuario logueado. Es intencional para endpoints "any-auth"
+    // (p. ej. /me). Riesgo latente: un controller de dominio que olvide @Roles
+    // queda abierto a HINCHA/JUGADOR. Flipear esto a default-DENY exige antes
+    // auditar y anotar explícitamente todos los endpoints any-auth para no
+    // romperlos — pendiente como tarea separada.
     if (!requiredRoles || requiredRoles.length === 0) return true;
 
     const req = context.switchToHttp().getRequest<AuthenticatedRequest>();

@@ -23,6 +23,12 @@ import AppDataSource from './datasource';
 
 async function main(): Promise<void> {
   const email = (process.env.DELEGADO_EMAIL ?? 'delegado@demo.cl').toLowerCase();
+  // B3 — en prod NO usar password embebido: exigir el env var explícito.
+  if (process.env.NODE_ENV === 'production' && !process.env.DELEGADO_PASSWORD) {
+    throw new Error(
+      'DELEGADO_PASSWORD es obligatorio en producción (sin default embebido).',
+    );
+  }
   const password = process.env.DELEGADO_PASSWORD ?? 'Delegado123';
   const clubIdEnv = process.env.CLUB_ID ?? null;
 
@@ -89,7 +95,11 @@ async function main(): Promise<void> {
         '✅ Delegado de prueba listo.',
         `   Club:     ${club.nombre} (${club.id})`,
         `   Email:    ${email}`,
-        `   Password: ${password}`,
+        `   Password: ${
+          process.env.NODE_ENV === 'production'
+            ? '(definida por DELEGADO_PASSWORD)'
+            : password
+        }`,
         '',
         '   Inicia sesión con ese email/clave y deberías aterrizar en /club.',
         '',
