@@ -51,6 +51,11 @@ COPY --from=builder /repo/apps/api/dist ./apps/api/dist
 COPY --from=builder /repo/node_modules ./node_modules
 COPY --from=builder /repo/apps/api/node_modules ./apps/api/node_modules
 
+# B9 — correr como usuario no-root (`node` ya existe en la imagen oficial). El
+# chown asegura que node sea dueño de /app para cualquier lectura/escritura.
+RUN chown -R node:node /app
+USER node
+
 WORKDIR /app/apps/api
 
 EXPOSE 3000

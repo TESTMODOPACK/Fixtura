@@ -48,6 +48,11 @@ COPY --from=builder /repo/apps/web/public ./apps/web/public
 COPY --from=builder /repo/node_modules ./node_modules
 COPY --from=builder /repo/apps/web/node_modules ./apps/web/node_modules
 
+# B9 — correr como usuario no-root. El chown da a node la propiedad de /app
+# (incluido .next, donde Next escribe cache en runtime).
+RUN chown -R node:node /app
+USER node
+
 WORKDIR /app/apps/web
 
 EXPOSE 3001
