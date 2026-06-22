@@ -98,6 +98,18 @@ export function ImportPlantelModal({
     if (!file) return;
     setFilename(file.name);
 
+    // A8 — xlsx@0.18.5 arrastra prototype-pollution/ReDoS sin parche en npm, y
+    // XLSX.read corre en el cliente sobre un archivo elegido por el admin.
+    // Acotamos la superficie validando extensión y tamaño ANTES de parsear.
+    if (!/\.(xlsx|xls)$/i.test(file.name)) {
+      setParseError('Formato no soportado. Subí un archivo .xlsx o .xls.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setParseError('El archivo supera el límite de 5 MB.');
+      return;
+    }
+
     try {
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: 'array' });

@@ -27,5 +27,17 @@
     "prettier": "^3.4.2",
     "turbo": "^2.3.3",
     "typescript": "^5.7.3"
+  },
+  "pnpm": {
+    "comment": "M8 — overrides de transitivas vulnerables con parche en el mismo major (selector acotado al rango vulnerable, no toca otros majors). next NO se puede acá: sus advisories piden 15.x (breaking). xlsx no tiene parche en npm (mitigado en el cliente, A8).",
+    "overrides": {
+      "@babel/core@<=7.29.0": ">=7.29.6",
+      "form-data@>=4.0.0 <4.0.6": ">=4.0.6",
+      "glob@>=10.2.0 <10.5.0": ">=10.5.0",
+      "js-yaml@<=4.1.1": ">=4.2.0",
+      "multer@<2.2.0": ">=2.2.0",
+      "postcss@<8.5.10": ">=8.5.10",
+      "ws@>=8.0.0 <8.21.0": ">=8.21.0"
+    }
   }
 }
