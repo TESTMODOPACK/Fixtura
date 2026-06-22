@@ -1,85 +1,67 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import type { AuthTokens } from '@fixtura/types';
-
 /**
- * Sprint 21 — RF-06: cuando el super admin entra a impersonar, guardamos
- * sus tokens originales en `originalTokens`. Al salir, los restauramos.
- * `impersonationTarget` tiene el email del usuario impersonado para el
- * banner visible siempre activo durante la sesión.
+ * A5 — El refresh token (7 días) ya NO vive en el store/sessionStorage: viaja
+ * en una cookie HttpOnly que el navegador maneja solo (inaccesible a JS/XSS).
+ * El store solo guarda el access token (vida corta, 15 min).
+ *
+ * Impersonación (Sprint 21): se intercambia SOLO el access token. El refresh
+ * del super admin sigue en su cookie HttpOnly, intacto — la impersonación usa
+ * un access token "solo" (sin refresh) emitido por el backend, así que dura lo
+ * que ese access (≤15 min) y al expirar/salir el refresh del super admin lo
+ * devuelve a su sesión (ver auth.controller / impersonation.service).
  */
 interface AuthState {
   accessToken: string | null;
-  refreshToken: string | null;
-  originalTokens: AuthTokens | null;
+  /** Access token del super admin, guardado mientras impersona. */
+  originalAccessToken: string | null;
   impersonationTarget: { userId: string; email: string } | null;
-  setTokens: (tokens: AuthTokens) => void;
+  setTokens: (tokens: { accessToken: string }) => void;
   clearTokens: () => void;
   startImpersonation: (
-    targetTokens: AuthTokens,
+    targetAccessToken: string,
     target: { userId: string; email: string },
   ) => void;
-  endImpersonation: () => AuthTokens | null;
+  endImpersonation: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       accessToken: null,
-      refreshToken: null,
-      originalTokens: null,
+      originalAccessToken: null,
       impersonationTarget: null,
-      setTokens: (tokens) =>
-        set({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }),
+      setTokens: (tokens) => set({ accessToken: tokens.accessToken }),
       clearTokens: () =>
         set({
           accessToken: null,
-          refreshToken: null,
-          originalTokens: null,
+          originalAccessToken: null,
           impersonationTarget: null,
         }),
-      startImpersonation: (targetTokens, target) => {
+      startImpersonation: (targetAccessToken, target) => {
         const state = get();
-        // Solo guardamos backup si NO había impersonación previa (anti
-        // anidamiento: super_admin → A → B perdería los tokens originales).
-        const original =
-          state.originalTokens ??
-          (state.accessToken && state.refreshToken
-            ? {
-                accessToken: state.accessToken,
-                refreshToken: state.refreshToken,
-                accessTokenExpiresIn: 0,
-              }
-            : null);
+        // Anti-anidamiento: si ya impersonaba, conserva el access original.
+        const original = state.originalAccessToken ?? state.accessToken;
         set({
-          accessToken: targetTokens.accessToken,
-          refreshToken: targetTokens.refreshToken,
-          originalTokens: original,
+          accessToken: targetAccessToken,
+          originalAccessToken: original,
           impersonationTarget: target,
         });
       },
       endImpersonation: () => {
         const state = get();
-        const restored = state.originalTokens;
-        if (!restored) {
-          set({ impersonationTarget: null });
-          return null;
-        }
         set({
-          accessToken: restored.accessToken,
-          refreshToken: restored.refreshToken,
-          originalTokens: null,
+          accessToken: state.originalAccessToken ?? state.accessToken,
+          originalAccessToken: null,
           impersonationTarget: null,
         });
-        return restored;
       },
     }),
     {
       name: 'fixtura-auth',
-      // sessionStorage: la sesión muere al cerrar la pestaña/navegador.
-      // Si el usuario vuelve a abrir el sitio, tiene que loggearse de nuevo.
-      // Más seguro que localStorage para una app con datos sensibles.
+      // sessionStorage: la sesión muere al cerrar la pestaña. El refresh real
+      // vive en una cookie HttpOnly, no acá.
       storage: createJSONStorage(() =>
         typeof window !== 'undefined' ? window.sessionStorage : (undefined as never),
       ),
