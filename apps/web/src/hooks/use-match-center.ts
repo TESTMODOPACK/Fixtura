@@ -54,7 +54,16 @@ export function useMatchCenter(partidoId: string): {
     const baseUrl = apiUrl.replace(/\/api\/?$/, '') || window.location.origin;
 
     const socket: Socket = io(`${baseUrl}/match-center`, {
-      transports: ['websocket', 'polling'],
+      // polling PRIMERO y luego upgrade a websocket. Si el proxy que termina el
+      // dominio no reenvía el upgrade WS, la conexión igual se establece por
+      // long-polling (que también entrega los snapshots del gateway cada 1s) en
+      // vez de tirar "websocket error". Con upgrade disponible, sube a WS solo.
+      transports: ['polling', 'websocket'],
+      // forceNew: cada montaje de la página crea su propio manager. Sin esto
+      // socket.io reusa el manager cacheado por URL; al volver del detalle
+      // (unmount→disconnect→remount) reusaría un manager ya desconectado y
+      // emitiría connect_error. Es la causa del error "al volver del detalle".
+      forceNew: true,
       reconnection: true,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
