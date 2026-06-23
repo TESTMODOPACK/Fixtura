@@ -407,10 +407,12 @@ export default function NuevoTorneoPage(): React.ReactElement {
             <div>
               <label className="label">Formato</label>
               <select className="input" {...form.register('tipoFormato')}>
-                <option value="ROUND_ROBIN">Round Robin (todos contra todos)</option>
+                <option value="ROUND_ROBIN">
+                  Round Robin (todos contra todos · playoffs opcional)
+                </option>
                 <option value="GROUPS">Fase de grupos</option>
                 <option value="PLAYOFFS">Playoffs (eliminación directa)</option>
-                <option value="MIXTO" disabled>Mixto (próximo)</option>
+                <option value="MIXTO" disabled>Grupos + playoffs (próximo)</option>
               </select>
             </div>
             {tipoFormato === 'GROUPS' && (
