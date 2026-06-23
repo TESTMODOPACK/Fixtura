@@ -1776,9 +1776,6 @@ async function ensureDocumentosTributariosTable(
     `CREATE INDEX IF NOT EXISTS idx_documentos_tributarios_tenant ON documentos_tributarios(tenant_id)`,
   );
   await client.query(
-    `CREATE INDEX IF NOT EXISTS idx_doctrib_transaccion ON documentos_tributarios(transaccion_id) WHERE transaccion_id IS NOT NULL`,
-  );
-  await client.query(
     `CREATE INDEX IF NOT EXISTS idx_doctrib_pendientes ON documentos_tributarios(estado, ultimo_intento_at) WHERE estado IN ('PENDIENTE_EMISION','RECHAZADO_SII')`,
   );
   await client.query(
@@ -1786,8 +1783,10 @@ async function ensureDocumentosTributariosTable(
   );
   // M4 — UNIQUE en transaccion_id: corta a nivel DB la emisión de boletas SII
   // duplicadas si las dos confirmaciones (webhook Flow + retorno del navegador)
-  // ganaran la carrera. Pre-check: si ya hay duplicados, NO creamos el índice
-  // (rompería el arranque) y avisamos para dedupe manual.
+  // ganaran la carrera. El índice ÚNICO parcial cubre también los lookups por
+  // transaccion_id. Si ya hay duplicados, NO se puede el UNIQUE (rompería el
+  // arranque): dejamos un no-único para los lookups + aviso de dedupe. El índice
+  // de lookup se crea UNA vez en la rama que corresponde (sin churn por arranque).
   const dupDoctrib = await client.query(
     `SELECT 1 FROM documentos_tributarios
        WHERE transaccion_id IS NOT NULL
@@ -1798,9 +1797,13 @@ async function ensureDocumentosTributariosTable(
       `CREATE UNIQUE INDEX IF NOT EXISTS uq_doctrib_transaccion
          ON documentos_tributarios(transaccion_id) WHERE transaccion_id IS NOT NULL`,
     );
-    // El índice único parcial cubre los mismos lookups que el no-único previo.
+    // Limpia el no-único de versiones previas (el UNIQUE ya sirve de lookup).
     await client.query(`DROP INDEX IF EXISTS idx_doctrib_transaccion`);
   } else {
+    // No se puede el UNIQUE con duplicados: no-único como fallback de lookup.
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_doctrib_transaccion ON documentos_tributarios(transaccion_id) WHERE transaccion_id IS NOT NULL`,
+    );
     log(
       '[M4] documentos_tributarios tiene transaccion_id duplicados — NO se crea el UNIQUE. Dedupe manual requerido.',
     );

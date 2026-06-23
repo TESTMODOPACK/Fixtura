@@ -32,8 +32,11 @@ export function SponsorBanner({
     staleTime: 5 * 60 * 1000,
   });
 
-  if (!data || data.length === 0) return null;
-  const sponsors = maxItems ? data.slice(0, maxItems) : data;
+  // Solo sponsors con imagen http(s) válida (descarta data legacy no validada);
+  // si no queda ninguno, no renderiza el wrapper (evita un banner vacío).
+  const visibles = (data ?? []).filter((s) => esUrlSegura(s.imagenUrl));
+  if (visibles.length === 0) return null;
+  const sponsors = maxItems ? visibles.slice(0, maxItems) : visibles;
 
   return (
     <div className={cn('flex flex-wrap items-center justify-center gap-4', className)}>
