@@ -4,8 +4,9 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { Propagation, runInTransaction } from 'typeorm-transactional';
 
 import type { MatchCenterSnapshot } from '@fixtura/types';
 
@@ -34,6 +35,7 @@ export class MatchCenterService {
   private readonly log = new Logger(MatchCenterService.name);
 
   constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(Partido) private readonly repo: Repository<Partido>,
     @InjectRepository(Designacion)
     private readonly designacionRepo: Repository<Designacion>,
@@ -84,6 +86,33 @@ export class MatchCenterService {
       .getOne();
     if (!partido) throw new NotFoundException(`Partido ${partidoId} no encontrado.`);
     return this.toSnapshot(partido);
+  }
+
+  /**
+   * Igual que snapshotPublico, pero estableciendo el contexto RLS de
+   * "sistema" (app.current_tenant_id = '') dentro de una transacción.
+   *
+   * Lo usa el GATEWAY WebSocket: el gateway NO pasa por el
+   * TenantContextInterceptor (no hay request HTTP), así que la conexión del
+   * pool no tiene seteado app.current_tenant_id. Con RLS habilitado en
+   * `partidos`, current_setting(...) es NULL → la policy excluye TODAS las
+   * filas y snapshotPublico tira "Partido no encontrado" de forma
+   * intermitente (según qué conexión del pool toque). El bypass de sistema
+   * es legítimo: el snapshot es público y cross-tenant por diseño (ver B4).
+   */
+  async snapshotPublicoSistema(partidoId: string): Promise<MatchCenterSnapshot> {
+    // REQUIRES_NEW: broadcast() se dispara como `void` DENTRO de la
+    // transacción del request admin (arrancar/pausar/…). Sin una tx propia,
+    // este set_config('') pisaría el tenant de esa transacción. Con una tx
+    // nueva queda aislado y el `true` (is_local) lo resetea al commit — no
+    // filtra el bypass a la conexión del pool.
+    return runInTransaction(
+      async () => {
+        await this.dataSource.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+        return this.snapshotPublico(partidoId);
+      },
+      { propagation: Propagation.REQUIRES_NEW },
+    );
   }
 
   async arrancar(

@@ -35,9 +35,15 @@ export function useMatchCenter(partidoId: string): {
 
     // Snapshot inicial HTTP — no espera al WS.
     let cancelado = false;
+    // Marca de cuándo llegó el último snapshot (WS o HTTP). Si el WS conecta
+    // pero deja de emitir (proxy que corta el upgrade), polleamos igual.
+    let ultimoSnapshot = Date.now();
     apiFetch<MatchCenterSnapshot>(`/public/match-center/${partidoId}`)
       .then((s) => {
-        if (!cancelado) setSnapshot(s);
+        if (!cancelado) {
+          setSnapshot(s);
+          ultimoSnapshot = Date.now();
+        }
       })
       .catch((err) => {
         if (!cancelado) setError(`Snapshot inicial: ${(err as Error).message}`);
@@ -63,6 +69,8 @@ export function useMatchCenter(partidoId: string): {
     socket.on('snapshot', (snap: MatchCenterSnapshot) => {
       if (snap.partidoId === partidoId) {
         setSnapshot(snap);
+        ultimoSnapshot = Date.now();
+        setError(null);
       }
     });
 
@@ -74,17 +82,27 @@ export function useMatchCenter(partidoId: string): {
       setConectado(false);
     });
 
-    socket.on('connect_error', (err) => {
-      setError(`WS: ${err.message}`);
+    // El error de conexión del WS NO es fatal: el polling HTTP de abajo cubre
+    // la actualización. No mostramos un banner de error rojo cuando el
+    // marcador igual llega por polling (el badge "Polling" ya comunica el
+    // estado). Solo marcamos desconectado.
+    socket.on('connect_error', () => {
       setConectado(false);
     });
 
-    // Fallback HTTP — cuando WS no esté conectado, refrescamos cada 5s.
+    // Fallback HTTP — refrescamos cada 5s si el WS no está conectado, o si
+    // está "conectado" pero hace > 6s que no emite un snapshot (proxy que
+    // corta el upgrade y deja el socket colgado). Así el cronómetro y el
+    // marcador resincronizan sí o sí.
     const interval = setInterval(() => {
-      if (socket.connected) return;
+      const snapshotViejo = Date.now() - ultimoSnapshot > 6000;
+      if (socket.connected && !snapshotViejo) return;
       apiFetch<MatchCenterSnapshot>(`/public/match-center/${partidoId}`)
         .then((s) => {
-          if (!cancelado) setSnapshot(s);
+          if (!cancelado) {
+            setSnapshot(s);
+            ultimoSnapshot = Date.now();
+          }
         })
         .catch(() => {
           // silencioso en polling — el error principal ya está visible

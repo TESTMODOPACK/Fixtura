@@ -99,9 +99,11 @@ export class MatchCenterGateway
     this.partidosActivos.add(partidoId);
     this.log.log(`[ws] socket ${client.id} suscripto a ${partidoId}`);
 
-    // Snapshot inmediato al subscriber.
+    // Snapshot inmediato al subscriber. Vía sistema: el gateway no pasa por
+    // el TenantContextInterceptor, así que necesita establecer el bypass RLS
+    // o la query devuelve 0 filas (= "Partido no encontrado") bajo RLS.
     try {
-      const snap = await this.svc.snapshotPublico(partidoId);
+      const snap = await this.svc.snapshotPublicoSistema(partidoId);
       client.emit('snapshot', snap);
     } catch (err) {
       client.emit('error', { message: (err as Error).message });
@@ -125,7 +127,7 @@ export class MatchCenterGateway
    */
   async broadcast(partidoId: string): Promise<void> {
     try {
-      const snap = await this.svc.snapshotPublico(partidoId);
+      const snap = await this.svc.snapshotPublicoSistema(partidoId);
       this.server.to(this.roomKey(partidoId)).emit('snapshot', snap);
     } catch (err) {
       this.log.warn(`[ws] broadcast failed para ${partidoId}: ${(err as Error).message}`);
@@ -148,7 +150,7 @@ export class MatchCenterGateway
     await Promise.all(
       ids.map(async (id) => {
         try {
-          const snap = await this.svc.snapshotPublico(id);
+          const snap = await this.svc.snapshotPublicoSistema(id);
           this.server.to(this.roomKey(id)).emit('snapshot', snap);
           // Si el partido ya finalizó el centro, podemos sacarlo del set.
           if (snap.estado === 'FINALIZADO_CENTRO' || snap.estado === 'IDLE') {

@@ -22,9 +22,9 @@ import { PageHead } from '@/components/ui/page-head';
 import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import {
   useAddIncidencia,
-  useJugadores,
   usePartido,
   useRemoveIncidencia,
+  useRosterActa,
 } from '@/hooks/use-admin';
 import {
   useArrancarCentro,
@@ -357,8 +357,22 @@ function IncidenciasPanel({
   const [jugadorId, setJugadorId] = useState<string>('');
   const [tipo, setTipo] = useState<TipoIncidencia>('GOL');
   const [minuto, setMinuto] = useState<string>('');
-  const jugadores = useJugadores(equipoSel);
   const addIncidencia = useAddIncidencia(partidoId);
+
+  // El selector de jugador debe ofrecer SOLO el roster del partido (la
+  // nómina del torneo de ese equipo), no la plantilla completa del club.
+  // Si ya se certificaron presentes, mostramos solo los presentes; si aún
+  // no, caemos a los habilitados (no sancionados/vetados) para no frenar la
+  // carga de incidencias en vivo.
+  const roster = useRosterActa(partidoId);
+  const ladoSel =
+    roster.data?.local.inscripcionId === equipoSel
+      ? roster.data?.local
+      : roster.data?.visita;
+  const yaCertificado = !!roster.data?.presentesCertificadosAt;
+  const jugadoresElegibles = (ladoSel?.jugadores ?? []).filter((j) =>
+    yaCertificado ? j.presente : j.habilitado,
+  );
 
   const registrar = async (): Promise<void> => {
     if (!jugadorId) {
@@ -420,14 +434,21 @@ function IncidenciasPanel({
             onChange={(e) => setJugadorId(e.target.value)}
           >
             <option value="">— elige jugador —</option>
-            {jugadores.data?.map((j) => (
-              <option key={j.id} value={j.id}>
+            {jugadoresElegibles.map((j) => (
+              <option key={j.jugadorId} value={j.jugadorId}>
                 {j.numeroCamiseta ? `#${j.numeroCamiseta} ` : ''}
                 {j.nombre} {j.apellido}
                 {j.capitan ? ' (C)' : ''}
               </option>
             ))}
           </select>
+          {!roster.isLoading && jugadoresElegibles.length === 0 && (
+            <p className="mt-1 text-[11px] font-serif italic text-ink-mute">
+              {yaCertificado
+                ? 'No hay jugadores presentes certificados en este equipo.'
+                : 'Sin jugadores habilitados en la nómina. Certifica los presentes en el detalle del partido.'}
+            </p>
+          )}
         </div>
         <div>
           <label className="label">Tipo</label>
