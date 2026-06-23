@@ -2758,7 +2758,14 @@ async function ensurePlayoffsTables(
     `CREATE INDEX IF NOT EXISTS idx_partidos_llave ON partidos(llave_id) WHERE llave_id IS NOT NULL`,
   );
 
-  log('Playoffs asegurado (P1: torneos.playoff_* + llaves_playoff + partidos.llave_id).');
+  // Mixto round robin → playoffs (M2): marca las fechas de la eliminatoria
+  // agregadas tras la fase regular.
+  await client.query(`
+    ALTER TABLE fechas
+      ADD COLUMN IF NOT EXISTS es_playoffs BOOLEAN NOT NULL DEFAULT false
+  `);
+
+  log('Playoffs asegurado (P1+M2: torneos.playoff_* + llaves_playoff + partidos.llave_id + fechas.es_playoffs).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

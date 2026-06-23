@@ -497,6 +497,10 @@ export class FixtureAdminService {
           fechaInicio: fechaInicioIso,
           fechaFin: FixtureAdminService.formatFechaLocal(fechaFin),
           estado: 'PROGRAMADA',
+          // PLAYOFFS puro: todas las fechas son de la eliminatoria → offset 0
+          // en sincronizar. En Mixto, la fase regular se genera por este mismo
+          // camino (esPlayoffs=false) y los playoffs se agregan aparte.
+          esPlayoffs: usaPlayoffs,
         }),
       );
       fechaIdByNumero.set(n, saved.id);

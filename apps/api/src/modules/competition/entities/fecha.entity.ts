@@ -106,6 +106,12 @@ export class Fecha {
   @JoinColumn({ name: 'reemplaza_fecha_id' })
   reemplazaFecha?: Fecha | null;
 
+  // Mixto (round robin → playoffs): true en las fechas de la eliminatoria,
+  // que se agregan después de la fase regular. Permite separarlas de las
+  // fechas del todos-contra-todos (offset de sincronización, limpieza).
+  @Column({ name: 'es_playoffs', type: 'boolean', default: false })
+  esPlayoffs!: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

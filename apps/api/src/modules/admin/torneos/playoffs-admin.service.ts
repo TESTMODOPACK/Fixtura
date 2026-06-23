@@ -8,12 +8,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
+import { calcularTablaPosiciones } from '@fixtura/domain';
 import type {
   BracketPlayoffResponse,
   GrupoInscripcionItem,
   LlavePlayoffAdmin,
   LlavePlayoffSlot,
 } from '@fixtura/types';
+
+/** Llave de ronda 1 en construcción: visitaId null = bye (el local avanza). */
+type ParRonda1 = { localId: string; visitaId: string | null };
 
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
@@ -138,8 +142,15 @@ export class PlayoffsAdminService {
   ): Promise<BracketPlayoffResponse> {
     const torneo = await this.ensureTorneo(torneoId, tenantId);
     this.assertFormatoPlayoffs(torneo);
-    await this.assertSinFixture(torneoId, tenantId, 're-sembrar el cuadro');
 
+    // Mixto "fase regular + playoffs": la siembra es por posición en la tabla
+    // y el fixture de la eliminatoria se agrega tras la fase regular.
+    if (this.esRoundRobinAPlayoffs(torneo)) {
+      return this.sembrarDesdeTabla(torneo, tenantId);
+    }
+
+    // PLAYOFFS puro: siembra aleatoria; el fixture se genera aparte (generar()).
+    await this.assertSinFixture(torneoId, tenantId, 're-sembrar el cuadro');
     const activas = await this.inscripcionesActivas(torneoId, tenantId);
     if (activas.length < 2) {
       throw new BadRequestException(
@@ -147,125 +158,132 @@ export class PlayoffsAdminService {
       );
     }
 
-    // Borrar el bracket previo.
-    await this.llaveRepo.delete({ torneoId, tenantId });
-
-    const n = activas.length;
-    const cuadro = this.nextPow2(n); // tamaño del cuadro (potencia de 2)
-    const byes = cuadro - n;
-    const rondaFinal = Math.log2(cuadro); // 2 equipos → 1, 4 → 2, 8 → 3…
-    const llavesRonda1 = cuadro / 2;
-
-    // Llaves de ronda 1 con reparto de byes espaciados.
     const orden = this.shuffle(activas);
+    const cuadro = this.nextPow2(orden.length);
+    const byes = cuadro - orden.length;
+    const llavesRonda1 = cuadro / 2;
+    // Reparto de byes espaciados para no cruzar dos byes en la ronda 1.
     const byeIdx = new Set<number>();
     for (let i = 0; i < byes; i++) {
       byeIdx.add(Math.floor((i * llavesRonda1) / byes));
     }
 
-    type Borrador = {
-      ronda: number;
-      orden: number;
-      nombre: string;
-      esTercerPuesto: boolean;
-      localId: string | null;
-      visitaId: string | null;
-      ganadorId: string | null;
-    };
-    const borradores: Borrador[] = [];
-
+    const ronda1: ParRonda1[] = [];
     let p = 0;
     for (let j = 0; j < llavesRonda1; j++) {
-      const nombre =
-        llavesRonda1 === 1
-          ? this.nombreRonda(1)
-          : `${this.nombreRonda(llavesRonda1)} ${j + 1}`;
       if (byeIdx.has(j)) {
-        const local = orden[p++]!;
-        borradores.push({
-          ronda: 1,
-          orden: j,
-          nombre,
-          esTercerPuesto: false,
-          localId: local.id,
-          visitaId: null,
-          ganadorId: local.id, // bye: avanza directo
-        });
+        ronda1.push({ localId: orden[p++]!.id, visitaId: null });
       } else {
-        const local = orden[p++]!;
-        const visita = orden[p++]!;
-        borradores.push({
-          ronda: 1,
-          orden: j,
-          nombre,
-          esTercerPuesto: false,
-          localId: local.id,
-          visitaId: visita.id,
-          ganadorId: null,
-        });
+        ronda1.push({ localId: orden[p++]!.id, visitaId: orden[p++]!.id });
       }
     }
 
-    // Rondas vacías 2..rondaFinal (se llenan con los ganadores en P4).
-    for (let r = 2; r <= rondaFinal; r++) {
-      const count = cuadro / 2 ** r;
-      for (let j = 0; j < count; j++) {
-        borradores.push({
-          ronda: r,
-          orden: j,
-          nombre:
-            count === 1 ? this.nombreRonda(1) : `${this.nombreRonda(count)} ${j + 1}`,
-          esTercerPuesto: false,
-          localId: null,
-          visitaId: null,
-          ganadorId: null,
-        });
-      }
-    }
-
-    // Partido por el 3er puesto: solo si hay semifinales (cuadro ≥ 4).
-    if (torneo.playoffTercerPuesto && rondaFinal >= 2) {
-      borradores.push({
-        ronda: rondaFinal,
-        orden: 1,
-        nombre: '3er puesto',
-        esTercerPuesto: true,
-        localId: null,
-        visitaId: null,
-        ganadorId: null,
-      });
-    }
-
-    // Propagar los byes a la ronda 2: el equipo con bye entra al slot que le
-    // corresponde por la topología (local si el orden es par, visita si impar).
-    const byRondaOrden = new Map<string, Borrador>();
-    for (const b of borradores) byRondaOrden.set(`${b.ronda}:${b.orden}`, b);
-    for (const b of borradores) {
-      if (b.ronda !== 1 || b.ganadorId === null) continue;
-      const destino = byRondaOrden.get(`2:${Math.floor(b.orden / 2)}`);
-      if (!destino) continue;
-      if (b.orden % 2 === 0) destino.localId = b.ganadorId;
-      else destino.visitaId = b.ganadorId;
-    }
-
-    await this.llaveRepo.save(
-      borradores.map((b) =>
-        this.llaveRepo.create({
-          tenantId,
-          torneoId,
-          ronda: b.ronda,
-          orden: b.orden,
-          nombre: b.nombre,
-          esTercerPuesto: b.esTercerPuesto,
-          inscripcionLocalId: b.localId,
-          inscripcionVisitaId: b.visitaId,
-          ganadorInscripcionId: b.ganadorId,
-        }),
-      ),
+    await this.llaveRepo.delete({ torneoId, tenantId });
+    await this.armarYGuardarBracket(
+      torneoId,
+      tenantId,
+      ronda1,
+      torneo.playoffTercerPuesto,
     );
+    this.logger.log(
+      `[playoffs] torneo=${torneoId} sembrado (aleatorio): ${orden.length} equipos, cuadro=${cuadro}, byes=${byes}`,
+    );
+    return this.getBracket(torneoId, tenantId);
+  }
+
+  /**
+   * Siembra el cuadro por posición en la tabla (Mixto round robin → playoffs)
+   * y genera el fixture de la eliminatoria agregándolo tras la fase regular.
+   * Requiere la fase regular completa (sin partidos pendientes) y que no haya
+   * un cuadro de playoffs ya generado (si lo hay, primero limpiar).
+   */
+  @Transactional()
+  private async sembrarDesdeTabla(
+    torneo: Torneo,
+    tenantId: string,
+  ): Promise<BracketPlayoffResponse> {
+    const torneoId = torneo.id;
+    const n = torneo.clasificanPlayoffs ?? 0;
+    if (n < 2) {
+      throw new BadRequestException(
+        'Configura cuántos equipos clasifican a los playoffs (mínimo 2).',
+      );
+    }
+
+    // Debe existir fixture de la fase regular y estar completo.
+    const fechasRegulares = await this.fechaRepo.count({
+      where: { torneoId, tenantId, esPlayoffs: false },
+    });
+    if (fechasRegulares === 0) {
+      throw new BadRequestException(
+        'Genera el fixture de la fase regular antes de armar los playoffs.',
+      );
+    }
+    const pendientes = await this.partidoRepo
+      .createQueryBuilder('p')
+      .innerJoin('p.fecha', 'f')
+      .where('f.torneo_id = :torneoId', { torneoId })
+      .andWhere('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('p.llave_id IS NULL')
+      .andWhere(`p.estado NOT IN ('FINALIZADO','WALKOVER')`)
+      .getCount();
+    if (pendientes > 0) {
+      throw new BadRequestException(
+        `La fase regular todavía tiene ${pendientes} partido(s) sin jugar. ` +
+          'Termínalos antes de armar los playoffs.',
+      );
+    }
+
+    // Si ya hay un cuadro con fixture, exigir limpiar primero (evita huérfanos).
+    const playoffFechas = await this.fechaRepo.count({
+      where: { torneoId, tenantId, esPlayoffs: true },
+    });
+    if (playoffFechas > 0) {
+      throw new BadRequestException(
+        'Ya hay un cuadro de playoffs generado. Bórralo (Limpiar) antes de re-sembrar.',
+      );
+    }
+
+    // Tabla de posiciones de la fase regular (solo partidos sin llave).
+    const orden = await this.ordenPorTabla(torneo, tenantId);
+    if (orden.length < n) {
+      throw new BadRequestException(
+        `Clasifican ${n} equipos pero la tabla tiene ${orden.length}. ` +
+          'Ajusta cuántos clasifican o revisa las inscripciones.',
+      );
+    }
+    const seeds = orden.slice(0, n); // seeds[0] = 1° de la tabla
+
+    // Siembra estándar: cuadro = potencia de 2 >= n; los byes van a los mejores.
+    const cuadro = this.nextPow2(n);
+    const llavesRonda1 = cuadro / 2;
+    const posiciones = this.ordenSiembra(cuadro); // seeds por posición de hoja
+    const equipoDeSeed = (s: number): string | null =>
+      s <= n ? seeds[s - 1]! : null; // s>n = bye
+
+    const ronda1: ParRonda1[] = [];
+    for (let j = 0; j < llavesRonda1; j++) {
+      const s1 = posiciones[2 * j]!;
+      const s2 = posiciones[2 * j + 1]!;
+      const e1 = equipoDeSeed(s1);
+      const e2 = equipoDeSeed(s2);
+      // Si uno es bye (null), el otro va de local y avanza directo.
+      if (e1 && e2) ronda1.push({ localId: e1, visitaId: e2 });
+      else if (e1) ronda1.push({ localId: e1, visitaId: null });
+      else ronda1.push({ localId: e2!, visitaId: null });
+    }
+
+    await this.llaveRepo.delete({ torneoId, tenantId });
+    await this.armarYGuardarBracket(
+      torneoId,
+      tenantId,
+      ronda1,
+      torneo.playoffTercerPuesto,
+    );
+    await this.generarFixturePlayoffs(torneo, tenantId);
 
     this.logger.log(
-      `[playoffs] torneo=${torneoId} sembrado: ${n} equipos, cuadro=${cuadro}, byes=${byes}`,
+      `[playoffs] torneo=${torneoId} sembrado (tabla): ${n} clasificados, cuadro=${cuadro}`,
     );
     return this.getBracket(torneoId, tenantId);
   }
@@ -275,9 +293,16 @@ export class PlayoffsAdminService {
     torneoId: string,
     tenantId: string,
   ): Promise<BracketPlayoffResponse> {
-    await this.ensureTorneo(torneoId, tenantId);
-    await this.assertSinFixture(torneoId, tenantId, 'borrar el cuadro');
-    await this.llaveRepo.delete({ torneoId, tenantId });
+    const torneo = await this.ensureTorneo(torneoId, tenantId);
+    if (this.esRoundRobinAPlayoffs(torneo)) {
+      // Mixto: borrar solo las fechas de playoffs (cascade → sus partidos) y
+      // las llaves; la fase regular queda intacta.
+      await this.fechaRepo.delete({ torneoId, tenantId, esPlayoffs: true });
+      await this.llaveRepo.delete({ torneoId, tenantId });
+    } else {
+      await this.assertSinFixture(torneoId, tenantId, 'borrar el cuadro');
+      await this.llaveRepo.delete({ torneoId, tenantId });
+    }
     return this.getBracket(torneoId, tenantId);
   }
 
@@ -316,6 +341,14 @@ export class PlayoffsAdminService {
     const fechaIdByNumero = new Map(fechas.map((f) => [f.numero, f.id]));
     const idaVuelta = torneo.playoffIdaVuelta ?? false;
     const rondaFinal = Math.max(...llaves.map((l) => l.ronda));
+    // Offset de fechas: en Mixto los playoffs van detrás de la fase regular.
+    // Las fechas de la eliminatoria tienen numero = offset + fechasDeRonda(R),
+    // donde offset = MAYOR número de fecha regular (coincide con cómo las creó
+    // generarFixturePlayoffs). En PLAYOFFS puro no hay fechas regulares → 0.
+    const numerosRegulares = fechas
+      .filter((f) => !f.esPlayoffs)
+      .map((f) => f.numero);
+    const offset = numerosRegulares.length ? Math.max(...numerosRegulares) : 0;
 
     // Partidos del torneo con llave, agrupados por llave.
     const partidos = await this.partidoRepo.find({
@@ -396,7 +429,7 @@ export class PlayoffsAdminService {
     for (const l of llaves) {
       if (!l.inscripcionLocalId || !l.inscripcionVisitaId) continue;
       if ((porLlave.get(l.id) ?? []).length > 0) continue;
-      await this.crearPartidosLlave(l, tenantId, idaVuelta, fechaIdByNumero);
+      await this.crearPartidosLlave(l, tenantId, idaVuelta, fechaIdByNumero, offset);
     }
 
     this.logger.log(`[playoffs] torneo=${torneoId} sincronizado`);
@@ -461,11 +494,83 @@ export class PlayoffsAdminService {
   }
 
   private assertFormatoPlayoffs(torneo: Torneo): void {
-    if (torneo.tipoFormato !== 'PLAYOFFS') {
+    const ok =
+      torneo.tipoFormato === 'PLAYOFFS' || this.esRoundRobinAPlayoffs(torneo);
+    if (!ok) {
       throw new BadRequestException(
-        'El torneo no tiene formato de playoffs (eliminación directa).',
+        'El torneo no tiene fase de playoffs (eliminación directa).',
       );
     }
+  }
+
+  /** True si es un torneo de fase regular (round robin) que clasifica a playoffs. */
+  private esRoundRobinAPlayoffs(torneo: Torneo): boolean {
+    return torneo.tipoFormato === 'ROUND_ROBIN' && !!torneo.roundRobinAPlayoffs;
+  }
+
+  /**
+   * Orden de la tabla de la fase regular (solo partidos sin llave): devuelve
+   * los inscripcionIds de mejor a peor posición. Mismo cálculo que la tabla
+   * admin (calcularTablaPosiciones + tiebreakers del torneo).
+   */
+  private async ordenPorTabla(torneo: Torneo, tenantId: string): Promise<string[]> {
+    const torneoId = torneo.id;
+    const inscripciones = await this.inscRepo.find({
+      where: { torneoId, tenantId },
+      relations: { club: true },
+    });
+    const equipos = inscripciones
+      .filter((i) => i.estado !== 'RETIRADO')
+      .map((i) => ({
+        id: i.id,
+        nombre: i.club?.nombre ?? '',
+        slug: i.club?.slug ?? '',
+        escudoUrl: i.club?.escudoUrl ?? null,
+      }));
+    const partidosRaw = await this.partidoRepo
+      .createQueryBuilder('p')
+      .innerJoin('p.fecha', 'f')
+      .where('f.torneo_id = :torneoId', { torneoId })
+      .andWhere('p.tenant_id = :tenantId', { tenantId })
+      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .andWhere('p.llave_id IS NULL')
+      .getMany();
+    const partidos = partidosRaw.map((p) => ({
+      equipoLocalId: p.inscripcionLocalId ?? '',
+      equipoVisitaId: p.inscripcionVisitaId ?? '',
+      golesLocal: p.golesLocal,
+      golesVisita: p.golesVisita,
+    }));
+    const tiebreakers =
+      Array.isArray(torneo.tablaTiebreakers) && torneo.tablaTiebreakers.length > 0
+        ? torneo.tablaTiebreakers
+        : ['pts', 'dg', 'gf', 'nombre'];
+    const filas = calcularTablaPosiciones(equipos, partidos, {
+      puntosVictoria: torneo.puntosVictoria,
+      puntosEmpate: torneo.puntosEmpate,
+      puntosDerrota: torneo.puntosDerrota,
+      tiebreakers,
+    });
+    return filas.map((f) => f.equipoId);
+  }
+
+  /**
+   * Orden de siembra estándar para un cuadro de tamaño `b` (potencia de 2):
+   * la posición de cada hoja en el orden tal que los seeds 1 y 2 se cruzan en
+   * la final (1 vs último, y los punteros separados en mitades opuestas).
+   */
+  private ordenSiembra(b: number): number[] {
+    let pls = [1, 2];
+    while (pls.length < b) {
+      const suma = pls.length * 2 + 1;
+      const next: number[] = [];
+      for (const x of pls) {
+        next.push(x);
+        next.push(suma - x);
+      }
+      pls = next;
+    }
+    return pls;
   }
 
   private async assertSinFixture(
@@ -535,15 +640,20 @@ export class PlayoffsAdminService {
     return { ida: 2 * ronda - 1, vuelta: 2 * ronda };
   }
 
-  /** Crea el/los partido(s) de una llave ya completa en la(s) fecha(s) que le tocan. */
+  /**
+   * Crea el/los partido(s) de una llave ya completa en la(s) fecha(s) que le
+   * tocan. `offset` desplaza el número de fecha cuando los playoffs van detrás
+   * de una fase regular (Mixto): la ronda R cae en offset + fechasDeRonda(R).
+   */
   private async crearPartidosLlave(
     llave: LlavePlayoff,
     tenantId: string,
     idaVuelta: boolean,
     fechaIdByNumero: Map<number, string>,
+    offset = 0,
   ): Promise<void> {
     const { ida, vuelta } = this.fechasDeRonda(llave.ronda, idaVuelta);
-    const fechaIdIda = fechaIdByNumero.get(ida);
+    const fechaIdIda = fechaIdByNumero.get(offset + ida);
     if (fechaIdIda) {
       await this.partidoRepo.save(
         this.partidoRepo.create({
@@ -557,7 +667,7 @@ export class PlayoffsAdminService {
       );
     }
     if (idaVuelta && vuelta) {
-      const fechaIdVuelta = fechaIdByNumero.get(vuelta);
+      const fechaIdVuelta = fechaIdByNumero.get(offset + vuelta);
       if (fechaIdVuelta) {
         await this.partidoRepo.save(
           this.partidoRepo.create({
@@ -570,6 +680,170 @@ export class PlayoffsAdminService {
           }),
         );
       }
+    }
+  }
+
+  /**
+   * Construye todas las rondas del cuadro a partir de las llaves de ronda 1
+   * (cada par {localId, visitaId|null}; visitaId null = bye) y las guarda:
+   * rondas vacías 2..final, 3er puesto si corresponde, y propaga los byes a la
+   * ronda 2. El llamador ya borró el bracket previo.
+   */
+  private async armarYGuardarBracket(
+    torneoId: string,
+    tenantId: string,
+    ronda1: ParRonda1[],
+    tercerPuesto: boolean,
+  ): Promise<void> {
+    const llavesRonda1 = ronda1.length;
+    const cuadro = llavesRonda1 * 2;
+    const rondaFinal = Math.log2(cuadro);
+
+    type Borrador = {
+      ronda: number;
+      orden: number;
+      nombre: string;
+      esTercerPuesto: boolean;
+      localId: string | null;
+      visitaId: string | null;
+      ganadorId: string | null;
+    };
+    const borradores: Borrador[] = [];
+
+    ronda1.forEach((par, j) => {
+      const nombre =
+        llavesRonda1 === 1
+          ? this.nombreRonda(1)
+          : `${this.nombreRonda(llavesRonda1)} ${j + 1}`;
+      borradores.push({
+        ronda: 1,
+        orden: j,
+        nombre,
+        esTercerPuesto: false,
+        localId: par.localId,
+        visitaId: par.visitaId,
+        ganadorId: par.visitaId === null ? par.localId : null, // bye avanza
+      });
+    });
+
+    for (let r = 2; r <= rondaFinal; r++) {
+      const count = cuadro / 2 ** r;
+      for (let j = 0; j < count; j++) {
+        borradores.push({
+          ronda: r,
+          orden: j,
+          nombre:
+            count === 1 ? this.nombreRonda(1) : `${this.nombreRonda(count)} ${j + 1}`,
+          esTercerPuesto: false,
+          localId: null,
+          visitaId: null,
+          ganadorId: null,
+        });
+      }
+    }
+
+    if (tercerPuesto && rondaFinal >= 2) {
+      borradores.push({
+        ronda: rondaFinal,
+        orden: 1,
+        nombre: '3er puesto',
+        esTercerPuesto: true,
+        localId: null,
+        visitaId: null,
+        ganadorId: null,
+      });
+    }
+
+    // Propagar byes a la ronda 2 (local si el orden es par, visita si impar).
+    const byRondaOrden = new Map<string, Borrador>();
+    for (const b of borradores) byRondaOrden.set(`${b.ronda}:${b.orden}`, b);
+    for (const b of borradores) {
+      if (b.ronda !== 1 || b.ganadorId === null) continue;
+      const destino = byRondaOrden.get(`2:${Math.floor(b.orden / 2)}`);
+      if (!destino) continue;
+      if (b.orden % 2 === 0) destino.localId = b.ganadorId;
+      else destino.visitaId = b.ganadorId;
+    }
+
+    await this.llaveRepo.save(
+      borradores.map((b) =>
+        this.llaveRepo.create({
+          tenantId,
+          torneoId,
+          ronda: b.ronda,
+          orden: b.orden,
+          nombre: b.nombre,
+          esTercerPuesto: b.esTercerPuesto,
+          inscripcionLocalId: b.localId,
+          inscripcionVisitaId: b.visitaId,
+          ganadorInscripcionId: b.ganadorId,
+        }),
+      ),
+    );
+  }
+
+  /**
+   * Mixto — crea las fechas de la eliminatoria (es_playoffs=true) detrás de la
+   * fase regular y los partidos de la ronda 1 (y las llaves ya completas por
+   * bye). Las fechas se programan una semana después de la última fecha regular.
+   */
+  private async generarFixturePlayoffs(
+    torneo: Torneo,
+    tenantId: string,
+  ): Promise<void> {
+    const torneoId = torneo.id;
+    const idaVuelta = torneo.playoffIdaVuelta ?? false;
+    const llaves = await this.llaveRepo.find({
+      where: { torneoId, tenantId },
+      order: { ronda: 'ASC', orden: 'ASC' },
+    });
+    const rondaFinal = Math.max(...llaves.map((l) => l.ronda));
+    const slots = rondaFinal * (idaVuelta ? 2 : 1);
+
+    // Las fechas de la eliminatoria van después del MAYOR número de fecha
+    // regular (offset). Usar el máximo (no el conteo) evita colisiones de
+    // numero si hubiera huecos. Fecha calendario: última regular + 7 días.
+    const ultimaRegular = await this.fechaRepo.findOne({
+      where: { torneoId, tenantId, esPlayoffs: false },
+      order: { numero: 'DESC' },
+    });
+    const offset = ultimaRegular?.numero ?? 0;
+    const base = ultimaRegular?.fechaInicio
+      ? new Date(`${ultimaRegular.fechaInicio}T00:00:00`)
+      : new Date('2026-01-01T00:00:00');
+
+    const fechaIdByNumero = new Map<number, string>();
+    for (let s = 1; s <= slots; s++) {
+      const numero = offset + s;
+      const dia = new Date(base);
+      dia.setDate(base.getDate() + s * 7);
+      const fin = new Date(dia);
+      fin.setDate(dia.getDate() + 1);
+      const fmt = (d: Date): string => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${dd}`;
+      };
+      const saved = await this.fechaRepo.save(
+        this.fechaRepo.create({
+          tenantId,
+          torneoId,
+          numero,
+          etiqueta: `Playoffs · fecha ${s}`,
+          fechaInicio: fmt(dia),
+          fechaFin: fmt(fin),
+          estado: 'PROGRAMADA',
+          esPlayoffs: true,
+        }),
+      );
+      fechaIdByNumero.set(numero, saved.id);
+    }
+
+    // Partidos de las llaves ya completas (ronda 1 + dobles byes en ronda 2).
+    for (const l of llaves) {
+      if (!l.inscripcionLocalId || !l.inscripcionVisitaId) continue;
+      await this.crearPartidosLlave(l, tenantId, idaVuelta, fechaIdByNumero, offset);
     }
   }
 
