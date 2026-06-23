@@ -384,6 +384,9 @@ export class PublicService {
       .innerJoin('p.fecha', 'f')
       .where('f.torneo_id = :torneoId', { torneoId: torneo.id })
       .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      // La tabla es de la fase regular: los partidos de playoffs (con llave)
+      // no alteran las posiciones.
+      .andWhere('p.llave_id IS NULL')
       .getMany();
     const partidos = partidosRaw.map((p) => ({
       equipoLocalId: p.inscripcionLocalId ?? '',

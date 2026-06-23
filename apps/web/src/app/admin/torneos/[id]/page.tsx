@@ -231,6 +231,7 @@ export default function TorneoDetailPage({
           esRoundRobinPlayoffs={
             torneo.tipoFormato === 'ROUND_ROBIN' && torneo.roundRobinAPlayoffs
           }
+          clasificanPlayoffs={torneo.clasificanPlayoffs}
         />
       )}
       {tab === 'fixture' && (
@@ -1051,11 +1052,13 @@ function PlayoffsTab({
   estado,
   fechasCount,
   esRoundRobinPlayoffs,
+  clasificanPlayoffs,
 }: {
   torneoId: string;
   estado: string;
   fechasCount: number;
   esRoundRobinPlayoffs: boolean;
+  clasificanPlayoffs: number | null;
 }): React.ReactElement {
   const { data, isLoading, error } = useBracketPlayoffs(torneoId);
   const sortear = useSortearPlayoffs(torneoId);
@@ -1188,7 +1191,7 @@ function PlayoffsTab({
           <Swords size={36} className="mx-auto text-line mb-3" />
           <p className="font-serif italic text-ink-mute">
             {esRoundRobinPlayoffs
-              ? 'Cuando termine la fase regular, toca “Sembrar desde la tabla” para armar el cuadro con los mejores de la tabla y generar el fixture de la eliminatoria.'
+              ? `Cuando termine la fase regular, toca “Sembrar desde la tabla” para armar el cuadro con ${clasificanPlayoffs ? `los mejores ${clasificanPlayoffs}` : 'los mejores'} de la tabla y generar el fixture de la eliminatoria.`
               : 'Todavía no sembraste el cuadro. Inscribe los equipos y toca “Sembrar cuadro” para sortear los cruces.'}
           </p>
           {data.participantes.length > 0 && (

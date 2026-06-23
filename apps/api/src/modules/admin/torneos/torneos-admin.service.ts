@@ -209,6 +209,9 @@ export class TorneosAdminService {
       .where('f.torneo_id = :id', { id })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
       .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      // La tabla refleja la fase regular: los partidos de playoffs (con llave)
+      // no suman a las posiciones (en Mixto la eliminatoria no altera la tabla).
+      .andWhere('p.llave_id IS NULL')
       .getMany();
     const partidos = partidosRaw.map((p) => ({
       equipoLocalId: p.inscripcionLocalId ?? '',
