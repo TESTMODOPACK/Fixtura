@@ -18,6 +18,7 @@ import type {
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { LlavePlayoff } from '../../competition/entities/llave-playoff.entity';
+import { Partido } from '../../competition/entities/partido.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 
 /**
@@ -50,6 +51,7 @@ export class PlayoffsAdminService {
     @InjectRepository(InscripcionTorneo)
     private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
+    @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
   ) {}
 
   async getBracket(
@@ -279,6 +281,159 @@ export class PlayoffsAdminService {
     return this.getBracket(torneoId, tenantId);
   }
 
+  /**
+   * Avanza los ganadores por el cuadro: lee los partidos finalizados, resuelve
+   * el ganador de cada llave (único: más goles; ida/vuelta: agregado de los 2
+   * partidos; empate → indeciso, queda al override manual), propaga el ganador
+   * al slot de la ronda siguiente, resuelve el 3er puesto con los perdedores de
+   * las semifinales y crea los partidos de las llaves que recién se completaron.
+   *
+   * Idempotente: se puede llamar tantas veces como se quiera (p. ej. después de
+   * cerrar cada acta). No pisa un ganador definido manualmente si los partidos
+   * todavía no deciden la llave.
+   */
+  @Transactional()
+  async sincronizar(
+    torneoId: string,
+    tenantId: string,
+  ): Promise<BracketPlayoffResponse> {
+    const torneo = await this.ensureTorneo(torneoId, tenantId);
+    this.assertFormatoPlayoffs(torneo);
+
+    const llaves = await this.llaveRepo.find({
+      where: { torneoId, tenantId },
+      order: { ronda: 'ASC', orden: 'ASC' },
+    });
+    if (llaves.length === 0) {
+      throw new BadRequestException('Todavía no hay cuadro sembrado.');
+    }
+    const fechas = await this.fechaRepo.find({ where: { torneoId, tenantId } });
+    if (fechas.length === 0) {
+      throw new BadRequestException(
+        'Genera el fixture de playoffs antes de avanzar ganadores.',
+      );
+    }
+    const fechaIdByNumero = new Map(fechas.map((f) => [f.numero, f.id]));
+    const idaVuelta = torneo.playoffIdaVuelta ?? false;
+    const rondaFinal = Math.max(...llaves.map((l) => l.ronda));
+
+    // Partidos del torneo con llave, agrupados por llave.
+    const partidos = await this.partidoRepo.find({
+      where: { fechaId: In(fechas.map((f) => f.id)), tenantId },
+    });
+    const porLlave = new Map<string, Partido[]>();
+    for (const p of partidos) {
+      if (!p.llaveId) continue;
+      const arr = porLlave.get(p.llaveId) ?? [];
+      arr.push(p);
+      porLlave.set(p.llaveId, arr);
+    }
+
+    const llaveByRO = new Map<string, LlavePlayoff>();
+    for (const l of llaves) {
+      if (!l.esTercerPuesto) llaveByRO.set(`${l.ronda}:${l.orden}`, l);
+    }
+
+    // Calcular ganadores y propagar, ronda por ronda (forward).
+    for (let r = 1; r <= rondaFinal; r++) {
+      const delaRonda = llaves
+        .filter((l) => l.ronda === r && !l.esTercerPuesto)
+        .sort((a, b) => a.orden - b.orden);
+      for (const l of delaRonda) {
+        const auto = this.calcularGanadorLlave(l, porLlave.get(l.id) ?? [], idaVuelta);
+        const ganador = auto ?? l.ganadorInscripcionId;
+        if (ganador !== l.ganadorInscripcionId) {
+          l.ganadorInscripcionId = ganador;
+          await this.llaveRepo.save(l);
+        }
+        if (ganador && r < rondaFinal) {
+          const dest = llaveByRO.get(`${r + 1}:${Math.floor(l.orden / 2)}`);
+          if (dest) {
+            if (l.orden % 2 === 0) {
+              if (dest.inscripcionLocalId !== ganador) {
+                dest.inscripcionLocalId = ganador;
+                await this.llaveRepo.save(dest);
+              }
+            } else if (dest.inscripcionVisitaId !== ganador) {
+              dest.inscripcionVisitaId = ganador;
+              await this.llaveRepo.save(dest);
+            }
+          }
+        }
+      }
+    }
+
+    // 3er puesto: perdedores de las dos semifinales (ronda final - 1).
+    const tercer = llaves.find((l) => l.esTercerPuesto) ?? null;
+    if (tercer && rondaFinal >= 2) {
+      const semis = llaves
+        .filter((l) => l.ronda === rondaFinal - 1 && !l.esTercerPuesto)
+        .sort((a, b) => a.orden - b.orden);
+      const perdedor = (l: LlavePlayoff): string | null => {
+        if (!l.ganadorInscripcionId || !l.inscripcionLocalId || !l.inscripcionVisitaId) {
+          return null;
+        }
+        return l.ganadorInscripcionId === l.inscripcionLocalId
+          ? l.inscripcionVisitaId
+          : l.inscripcionLocalId;
+      };
+      const p0 = semis[0] ? perdedor(semis[0]) : null;
+      const p1 = semis[1] ? perdedor(semis[1]) : null;
+      let cambio = false;
+      if (p0 && tercer.inscripcionLocalId !== p0) {
+        tercer.inscripcionLocalId = p0;
+        cambio = true;
+      }
+      if (p1 && tercer.inscripcionVisitaId !== p1) {
+        tercer.inscripcionVisitaId = p1;
+        cambio = true;
+      }
+      if (cambio) await this.llaveRepo.save(tercer);
+    }
+
+    // Crear partidos de las llaves que ya tienen ambos equipos y aún no tienen
+    // partido (las rondas siguientes a la 1, y el 3er puesto).
+    for (const l of llaves) {
+      if (!l.inscripcionLocalId || !l.inscripcionVisitaId) continue;
+      if ((porLlave.get(l.id) ?? []).length > 0) continue;
+      await this.crearPartidosLlave(l, tenantId, idaVuelta, fechaIdByNumero);
+    }
+
+    this.logger.log(`[playoffs] torneo=${torneoId} sincronizado`);
+    return this.getBracket(torneoId, tenantId);
+  }
+
+  /**
+   * Define manualmente el ganador de una llave (para resolver empates: penales,
+   * gol de visita, etc., que el cálculo automático deja indecisos) y vuelve a
+   * sincronizar para propagarlo.
+   */
+  @Transactional()
+  async definirGanador(
+    torneoId: string,
+    tenantId: string,
+    llaveId: string,
+    ganadorInscripcionId: string,
+  ): Promise<BracketPlayoffResponse> {
+    const torneo = await this.ensureTorneo(torneoId, tenantId);
+    this.assertFormatoPlayoffs(torneo);
+    const llave = await this.llaveRepo.findOne({
+      where: { id: llaveId, torneoId, tenantId },
+    });
+    if (!llave) throw new NotFoundException('La llave no existe en este torneo.');
+    if (
+      ganadorInscripcionId !== llave.inscripcionLocalId &&
+      ganadorInscripcionId !== llave.inscripcionVisitaId
+    ) {
+      throw new BadRequestException(
+        'El ganador debe ser uno de los dos equipos del cruce.',
+      );
+    }
+    llave.ganadorInscripcionId = ganadorInscripcionId;
+    await this.llaveRepo.save(llave);
+    return this.sincronizar(torneoId, tenantId);
+  }
+
   // ── Helpers ────────────────────────────────────────────────────────
   private async ensureTorneo(torneoId: string, tenantId: string): Promise<Torneo> {
     const t = await this.torneoRepo.findOne({ where: { id: torneoId, tenantId } });
@@ -323,6 +478,98 @@ export class PlayoffsAdminService {
       throw new BadRequestException(
         `El torneo ya tiene fixture generado. Borra el fixture antes de ${accion}.`,
       );
+    }
+  }
+
+  /**
+   * Ganador de una llave a partir de sus partidos finalizados. Único: el de
+   * más goles (empate → null = indeciso). Ida/vuelta: agregado de los 2
+   * partidos (empate global → null). Devuelve null si todavía no se decide.
+   */
+  private calcularGanadorLlave(
+    llave: LlavePlayoff,
+    partidos: Partido[],
+    idaVuelta: boolean,
+  ): string | null {
+    if (!llave.inscripcionLocalId || !llave.inscripcionVisitaId) return null;
+    const jugados = partidos.filter(
+      (p) => p.estado === 'FINALIZADO' || p.estado === 'WALKOVER',
+    );
+
+    if (!idaVuelta) {
+      const p = jugados[0];
+      if (!p || p.golesLocal === null || p.golesVisita === null) return null;
+      if (p.golesLocal > p.golesVisita) return p.inscripcionLocalId;
+      if (p.golesVisita > p.golesLocal) return p.inscripcionVisitaId;
+      return null; // empate → manual
+    }
+
+    if (jugados.length < 2) return null;
+    let golLocal = 0;
+    let golVisita = 0;
+    for (const p of jugados) {
+      if (p.golesLocal === null || p.golesVisita === null) return null;
+      // Sumar al marcador agregado de la llave según quién jugó de local.
+      if (p.inscripcionLocalId === llave.inscripcionLocalId) {
+        golLocal += p.golesLocal;
+        golVisita += p.golesVisita;
+      } else {
+        golLocal += p.golesVisita;
+        golVisita += p.golesLocal;
+      }
+    }
+    if (golLocal > golVisita) return llave.inscripcionLocalId;
+    if (golVisita > golLocal) return llave.inscripcionVisitaId;
+    return null; // empate global → manual (penales / gol de visita)
+  }
+
+  /**
+   * Fase Playoffs — número(s) de fecha que ocupa una ronda. Partido único: la
+   * ronda R cae en la fecha R. Ida/vuelta: ida en 2R-1, vuelta en 2R.
+   */
+  private fechasDeRonda(
+    ronda: number,
+    idaVuelta: boolean,
+  ): { ida: number; vuelta: number | null } {
+    if (!idaVuelta) return { ida: ronda, vuelta: null };
+    return { ida: 2 * ronda - 1, vuelta: 2 * ronda };
+  }
+
+  /** Crea el/los partido(s) de una llave ya completa en la(s) fecha(s) que le tocan. */
+  private async crearPartidosLlave(
+    llave: LlavePlayoff,
+    tenantId: string,
+    idaVuelta: boolean,
+    fechaIdByNumero: Map<number, string>,
+  ): Promise<void> {
+    const { ida, vuelta } = this.fechasDeRonda(llave.ronda, idaVuelta);
+    const fechaIdIda = fechaIdByNumero.get(ida);
+    if (fechaIdIda) {
+      await this.partidoRepo.save(
+        this.partidoRepo.create({
+          tenantId,
+          fechaId: fechaIdIda,
+          inscripcionLocalId: llave.inscripcionLocalId,
+          inscripcionVisitaId: llave.inscripcionVisitaId,
+          llaveId: llave.id,
+          estado: 'PROGRAMADO',
+        }),
+      );
+    }
+    if (idaVuelta && vuelta) {
+      const fechaIdVuelta = fechaIdByNumero.get(vuelta);
+      if (fechaIdVuelta) {
+        await this.partidoRepo.save(
+          this.partidoRepo.create({
+            tenantId,
+            fechaId: fechaIdVuelta,
+            inscripcionLocalId: llave.inscripcionVisitaId,
+            inscripcionVisitaId: llave.inscripcionLocalId,
+            llaveId: llave.id,
+            estado: 'PROGRAMADO',
+          }),
+        );
+      }
     }
   }
 

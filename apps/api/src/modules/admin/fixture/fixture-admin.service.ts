@@ -22,17 +22,21 @@ import { GrupoInscripcion } from '../../competition/entities/grupo-inscripcion.e
 import { GrupoTorneo } from '../../competition/entities/grupo-torneo.entity';
 import { HorarioTorneo } from '../../competition/entities/horario-torneo.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
+import { LlavePlayoff } from '../../competition/entities/llave-playoff.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { DiasNoJugablesService } from '../dias-no-jugables/dias-no-jugables.service';
 
-/** Partido del fixture en memoria, opcionalmente etiquetado con su grupo. */
+/** Partido del fixture en memoria, opcionalmente etiquetado con su grupo/llave. */
 interface PartidoArmado {
   fechaNumero: number;
   equipoLocalId: string;
   equipoVisitaId: string;
   esLibre?: boolean;
   grupoId?: string | null;
+  // Fase Playoffs — llave (cruce) a la que pertenece el partido. En ida/vuelta,
+  // 2 partidos comparten la misma llave.
+  llaveId?: string | null;
 }
 
 interface FixtureArmado {
@@ -41,6 +45,18 @@ interface FixtureArmado {
   // Equipo libre por fecha (bye). Solo lo provee el round-robin global; en
   // grupos cada grupo maneja sus propios byes y no se enumeran acá.
   libresPorFecha?: Record<number, string | null>;
+}
+
+/**
+ * Fase Playoffs — número(s) de fecha que ocupa una ronda. Partido único: la
+ * ronda R cae en la fecha R. Ida/vuelta: ida en 2R-1, vuelta en 2R.
+ */
+function fechasDeRonda(
+  ronda: number,
+  idaVuelta: boolean,
+): { ida: number; vuelta: number | null } {
+  if (!idaVuelta) return { ida: ronda, vuelta: null };
+  return { ida: 2 * ronda - 1, vuelta: 2 * ronda };
 }
 
 @Injectable()
@@ -58,6 +74,8 @@ export class FixtureAdminService {
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
     @InjectRepository(InscripcionTorneo)
     private readonly inscRepo: Repository<InscripcionTorneo>,
+    @InjectRepository(LlavePlayoff)
+    private readonly llaveRepo: Repository<LlavePlayoff>,
     @InjectRepository(GrupoTorneo)
     private readonly grupoRepo: Repository<GrupoTorneo>,
     @InjectRepository(GrupoInscripcion)
@@ -151,6 +169,58 @@ export class FixtureAdminService {
     }
 
     return { fechas: fechasTotal, partidos };
+  }
+
+  /**
+   * Fase Playoffs (P4) — el cuadro ya está sembrado (llaves_playoff). Pre-crea
+   * una fecha por ronda (dos por ronda si es ida/vuelta) y genera los partidos
+   * SOLO de las llaves que ya tienen ambos equipos definidos: la ronda 1 y las
+   * llaves de ronda 2 que quedaron completas por dos byes. Las rondas
+   * siguientes quedan con su fecha creada pero sin partidos; `sincronizar`
+   * (PlayoffsAdminService) los crea cuando el cruce previo define un ganador.
+   *
+   * Mapeo ronda→fecha: partido único → fecha = ronda; ida/vuelta → ida en la
+   * fecha 2R-1 y vuelta en la 2R (con local/visita invertidos).
+   */
+  private async construirFixturePlayoffs(
+    torneoId: string,
+    tenantId: string,
+    torneo: Torneo,
+  ): Promise<FixtureArmado> {
+    const llaves = await this.llaveRepo.find({
+      where: { torneoId, tenantId },
+      order: { ronda: 'ASC', orden: 'ASC' },
+    });
+    if (llaves.length === 0) {
+      throw new BadRequestException(
+        'Siembra el cuadro de playoffs antes de generar el fixture (todavía no hay llaves).',
+      );
+    }
+
+    const idaVuelta = torneo.playoffIdaVuelta ?? false;
+    const rondaFinal = Math.max(...llaves.map((l) => l.ronda));
+    const partidos: PartidoArmado[] = [];
+
+    for (const l of llaves) {
+      if (!l.inscripcionLocalId || !l.inscripcionVisitaId) continue; // por definir
+      const { ida, vuelta } = fechasDeRonda(l.ronda, idaVuelta);
+      partidos.push({
+        fechaNumero: ida,
+        equipoLocalId: l.inscripcionLocalId,
+        equipoVisitaId: l.inscripcionVisitaId,
+        llaveId: l.id,
+      });
+      if (idaVuelta && vuelta) {
+        partidos.push({
+          fechaNumero: vuelta,
+          equipoLocalId: l.inscripcionVisitaId,
+          equipoVisitaId: l.inscripcionLocalId,
+          llaveId: l.id,
+        });
+      }
+    }
+
+    return { fechas: rondaFinal * (idaVuelta ? 2 : 1), partidos };
   }
 
   /**
@@ -249,9 +319,12 @@ export class FixtureAdminService {
     // Si no, round-robin global clásico (Berger + constraints).
     const usaGrupos =
       torneo.tipoFormato === 'GROUPS' || torneo.tipoFormato === 'MIXTO';
+    const usaPlayoffs = torneo.tipoFormato === 'PLAYOFFS';
     let fixture: FixtureArmado;
     if (usaGrupos) {
       fixture = await this.construirFixturePorGrupos(torneoId, tenantId, torneo);
+    } else if (usaPlayoffs) {
+      fixture = await this.construirFixturePlayoffs(torneoId, tenantId, torneo);
     } else {
       const fixtureBruto = generarFixtureBerger(
         equipos.map((e) => ({ id: e.id, nombre: e.nombre })),
@@ -532,6 +605,8 @@ export class FixtureAdminService {
           inscripcionVisitaId: p.equipoVisitaId,
           // Fase Grupos — null en round-robin/playoffs; el grupo en GROUPS/MIXTO.
           grupoId: p.grupoId ?? null,
+          // Fase Playoffs — llave (cruce) del partido; null en los demás formatos.
+          llaveId: p.llaveId ?? null,
           canchaNombre,
           canchaId,
           fechaHora,

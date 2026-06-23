@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Delete,
   Get,
@@ -18,6 +19,7 @@ import {
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { Audited } from '../../audit';
+import { DefinirGanadorLlaveDto } from './dto';
 import { PlayoffsAdminService } from './playoffs-admin.service';
 
 function ensureTenant(user: UserContext): string {
@@ -65,5 +67,40 @@ export class PlayoffsAdminController {
     @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
   ): Promise<BracketPlayoffResponse> {
     return this.svc.limpiar(torneoId, ensureTenant(user));
+  }
+
+  @Post('sincronizar')
+  @HttpCode(200)
+  @Audited({
+    action: 'torneo.playoffs_sincronizados',
+    entityType: 'Torneo',
+    entityIdFrom: 'params.torneoId',
+  })
+  sincronizar(
+    @CurrentUser() user: UserContext,
+    @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
+  ): Promise<BracketPlayoffResponse> {
+    return this.svc.sincronizar(torneoId, ensureTenant(user));
+  }
+
+  @Post('llaves/:llaveId/ganador')
+  @HttpCode(200)
+  @Audited({
+    action: 'torneo.playoff_ganador_definido',
+    entityType: 'LlavePlayoff',
+    entityIdFrom: 'params.llaveId',
+  })
+  definirGanador(
+    @CurrentUser() user: UserContext,
+    @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Param('llaveId', new ParseUUIDPipe()) llaveId: string,
+    @Body() dto: DefinirGanadorLlaveDto,
+  ): Promise<BracketPlayoffResponse> {
+    return this.svc.definirGanador(
+      torneoId,
+      ensureTenant(user),
+      llaveId,
+      dto.ganadorInscripcionId,
+    );
   }
 }

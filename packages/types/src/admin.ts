@@ -244,6 +244,12 @@ export const BracketPlayoffResponseSchema = z.object({
 });
 export type BracketPlayoffResponse = z.infer<typeof BracketPlayoffResponseSchema>;
 
+// Override manual del ganador de una llave (resuelve empates: penales, etc.).
+export const DefinirGanadorLlaveSchema = z.object({
+  ganadorInscripcionId: z.uuid(),
+});
+export type DefinirGanadorLlaveRequest = z.infer<typeof DefinirGanadorLlaveSchema>;
+
 // ─── Tabla de posiciones (admin) ─────────────────────────────────────
 // Reutiliza FilaTabla del portal público — misma forma de fila. El admin
 // la ve para cualquier torneo (incluido DRAFT, donde sale en ceros).

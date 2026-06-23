@@ -208,6 +208,11 @@ export class MoverInscripcionGrupoDto {
   grupoId!: string;
 }
 
+export class DefinirGanadorLlaveDto {
+  @IsUUID()
+  ganadorInscripcionId!: string;
+}
+
 export class UpdateTorneoDto {
   @IsOptional()
   @IsString()
