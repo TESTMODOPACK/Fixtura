@@ -181,6 +181,23 @@ export const MoverInscripcionGrupoSchema = z.object({
 });
 export type MoverInscripcionGrupoRequest = z.infer<typeof MoverInscripcionGrupoSchema>;
 
+// Tabla de posiciones de un grupo (mismo cálculo que la tabla global, pero
+// solo con los equipos y partidos de ese grupo).
+export const TablaGrupoAdminSchema = z.object({
+  grupoId: z.uuid(),
+  numero: z.number().int(),
+  nombre: z.string(),
+  filas: z.array(FilaTablaSchema),
+});
+export type TablaGrupoAdmin = z.infer<typeof TablaGrupoAdminSchema>;
+
+export const TablasPorGrupoAdminSchema = z.object({
+  grupos: z.array(TablaGrupoAdminSchema),
+  tiebreakers: z.array(z.string()),
+  hayResultados: z.boolean(),
+});
+export type TablasPorGrupoAdmin = z.infer<typeof TablasPorGrupoAdminSchema>;
+
 // ─── Tabla de posiciones (admin) ─────────────────────────────────────
 // Reutiliza FilaTabla del portal público — misma forma de fila. El admin
 // la ve para cualquier torneo (incluido DRAFT, donde sale en ceros).

@@ -10,7 +10,12 @@ import {
   Post,
 } from '@nestjs/common';
 
-import { ROLE, type GruposTorneoResponse, type UserContext } from '@fixtura/types';
+import {
+  ROLE,
+  type GruposTorneoResponse,
+  type TablasPorGrupoAdmin,
+  type UserContext,
+} from '@fixtura/types';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -36,6 +41,14 @@ export class GruposAdminController {
     @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
   ): Promise<GruposTorneoResponse> {
     return this.svc.getGrupos(torneoId, ensureTenant(user));
+  }
+
+  @Get('tabla')
+  tabla(
+    @CurrentUser() user: UserContext,
+    @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
+  ): Promise<TablasPorGrupoAdmin> {
+    return this.svc.getTablasPorGrupo(torneoId, ensureTenant(user));
   }
 
   @Post('sortear')

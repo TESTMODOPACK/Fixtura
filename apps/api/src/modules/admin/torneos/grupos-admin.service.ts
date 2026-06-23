@@ -8,12 +8,18 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
-import type { GrupoInscripcionItem, GruposTorneoResponse } from '@fixtura/types';
+import { calcularTablaPosiciones } from '@fixtura/domain';
+import type {
+  GrupoInscripcionItem,
+  GruposTorneoResponse,
+  TablasPorGrupoAdmin,
+} from '@fixtura/types';
 
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { GrupoInscripcion } from '../../competition/entities/grupo-inscripcion.entity';
 import { GrupoTorneo } from '../../competition/entities/grupo-torneo.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
+import { Partido } from '../../competition/entities/partido.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 
 const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -43,6 +49,7 @@ export class GruposAdminService {
     @InjectRepository(InscripcionTorneo)
     private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
+    @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
   ) {}
 
   async getGrupos(torneoId: string, tenantId: string): Promise<GruposTorneoResponse> {
@@ -84,6 +91,93 @@ export class GruposAdminService {
         .map((i) => this.item(i))
         .sort(porNombre),
     };
+  }
+
+  /**
+   * Tabla de posiciones por grupo: mismo cálculo que la tabla global del
+   * torneo (calcularTablaPosiciones) pero acotado a los equipos y partidos
+   * (FINALIZADO/WALKOVER) de cada grupo.
+   */
+  async getTablasPorGrupo(
+    torneoId: string,
+    tenantId: string,
+  ): Promise<TablasPorGrupoAdmin> {
+    const torneo = await this.ensureTorneo(torneoId, tenantId);
+    const grupos = await this.grupoRepo.find({
+      where: { torneoId, tenantId },
+      order: { numero: 'ASC' },
+    });
+    const asignaciones = await this.grupoInscRepo.find({
+      where: { torneoId, tenantId },
+    });
+    const inscripciones = await this.inscRepo.find({
+      where: { torneoId, tenantId },
+      relations: { club: true },
+    });
+    const inscMap = new Map(inscripciones.map((i) => [i.id, i]));
+
+    const idsPorGrupo = new Map<string, string[]>();
+    for (const a of asignaciones) {
+      const arr = idsPorGrupo.get(a.grupoId) ?? [];
+      arr.push(a.inscripcionId);
+      idsPorGrupo.set(a.grupoId, arr);
+    }
+
+    // Solo partidos jugados (mismo criterio que la tabla global) y con grupo.
+    const partidosRaw = await this.partidoRepo
+      .createQueryBuilder('p')
+      .innerJoin('p.fecha', 'f')
+      .where('f.torneo_id = :torneoId', { torneoId })
+      .andWhere('p.tenant_id = :tenantId', { tenantId })
+      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .andWhere('p.grupo_id IS NOT NULL')
+      .getMany();
+    const partidosPorGrupo = new Map<string, Partido[]>();
+    for (const p of partidosRaw) {
+      if (!p.grupoId) continue;
+      const arr = partidosPorGrupo.get(p.grupoId) ?? [];
+      arr.push(p);
+      partidosPorGrupo.set(p.grupoId, arr);
+    }
+
+    const tiebreakers =
+      Array.isArray(torneo.tablaTiebreakers) && torneo.tablaTiebreakers.length > 0
+        ? torneo.tablaTiebreakers
+        : ['pts', 'dg', 'gf', 'nombre'];
+    const config = {
+      puntosVictoria: torneo.puntosVictoria,
+      puntosEmpate: torneo.puntosEmpate,
+      puntosDerrota: torneo.puntosDerrota,
+      tiebreakers,
+    };
+
+    let hayResultados = false;
+    const gruposTabla = grupos.map((g) => {
+      const equipos = (idsPorGrupo.get(g.id) ?? [])
+        .map((id) => inscMap.get(id))
+        .filter((i): i is InscripcionTorneo => !!i && i.estado !== 'RETIRADO')
+        .map((i) => ({
+          id: i.id,
+          nombre: i.club?.nombre ?? '',
+          slug: i.club?.slug ?? '',
+          escudoUrl: i.club?.escudoUrl ?? null,
+        }));
+      const partidos = (partidosPorGrupo.get(g.id) ?? []).map((p) => ({
+        equipoLocalId: p.inscripcionLocalId ?? '',
+        equipoVisitaId: p.inscripcionVisitaId ?? '',
+        golesLocal: p.golesLocal,
+        golesVisita: p.golesVisita,
+      }));
+      if (partidos.length > 0) hayResultados = true;
+      return {
+        grupoId: g.id,
+        numero: g.numero,
+        nombre: g.nombre,
+        filas: calcularTablaPosiciones(equipos, partidos, config),
+      };
+    });
+
+    return { grupos: gruposTabla, tiebreakers, hayResultados };
   }
 
   @Transactional()
