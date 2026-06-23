@@ -27,6 +27,7 @@ import {
   useRosterActa,
 } from '@/hooks/use-admin';
 import {
+  useAjustarTiempoAgregado,
   useArrancarCentro,
   useFinalizarCentro,
   useMatchCenter,
@@ -40,6 +41,15 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { toastError } from '@/lib/toast';
+
+/** Etiqueta humana del período del partido. */
+function etiquetaPeriodo(periodo: number): string {
+  if (periodo === 1) return '1er tiempo';
+  if (periodo === 2) return '2º tiempo';
+  if (periodo === 3) return '3er tiempo';
+  if (periodo >= 4) return `Período ${periodo}`;
+  return '—';
+}
 
 export default function CentroPage({
   params,
@@ -57,6 +67,7 @@ export default function CentroPage({
   const quitarGol = useQuitarGolCentro(partidoId);
   const siguientePeriodo = useSiguientePeriodoCentro(partidoId);
   const finalizar = useFinalizarCentro(partidoId);
+  const agregado = useAjustarTiempoAgregado(partidoId);
 
   // Cronómetro que corre en el cliente (sembrado del servidor). Avanza
   // fluido aunque el WS venga irregular y no salta al tocar el marcador.
@@ -130,20 +141,63 @@ export default function CentroPage({
                 disabled={sumarGol.isPending || quitarGol.isPending || !enJuego}
               />
               <div className="text-center">
-                <div className="font-mono text-6xl md:text-7xl text-ink font-bold tabular-nums">
+                <div
+                  className={cn(
+                    'font-mono text-6xl md:text-7xl font-bold tabular-nums',
+                    snapshot.vencido ? 'text-danger' : 'text-ink',
+                  )}
+                >
                   {cronometro}
                 </div>
                 <div className="mt-2 text-xs uppercase tracking-[0.18em] font-semibold text-ink-mute">
-                  Período {snapshot.periodo || '—'} de {snapshot.minutosPorPeriodo} min
+                  {etiquetaPeriodo(snapshot.periodo)} · {snapshot.minutosPorPeriodo}
+                  {snapshot.minutosAgregados > 0 ? ` +${snapshot.minutosAgregados}` : ''} min
                   {snapshot.minutosEntretiempo > 0 && (
                     <span className="ml-2 text-ink-mute/70">
                       · descanso {snapshot.minutosEntretiempo}&nbsp;min
                     </span>
                   )}
                 </div>
-                <div className="mt-1 text-[10px] uppercase tracking-wider font-semibold inline-block px-2 py-0.5 rounded bg-paper-dark text-ink-mute">
+                {enJuego && (
+                  <div className="mt-2 flex items-center justify-center gap-2">
+                    <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-mute">
+                      Tiempo agregado
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        agregado.mutate(Math.max(0, snapshot.minutosAgregados - 1))
+                      }
+                      disabled={agregado.isPending || snapshot.minutosAgregados <= 0}
+                      className="h-6 w-6 flex items-center justify-center rounded border border-line text-ink-mute text-base leading-none disabled:opacity-30 hover:bg-paper-dark"
+                      aria-label="Quitar un minuto de tiempo agregado"
+                    >
+                      −
+                    </button>
+                    <span className="font-mono text-sm w-9 text-center tabular-nums">
+                      {snapshot.minutosAgregados}&apos;
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        agregado.mutate(Math.min(30, snapshot.minutosAgregados + 1))
+                      }
+                      disabled={agregado.isPending || snapshot.minutosAgregados >= 30}
+                      className="h-6 w-6 flex items-center justify-center rounded border border-line text-ink-mute text-base leading-none disabled:opacity-30 hover:bg-paper-dark"
+                      aria-label="Agregar un minuto"
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+                <div className="mt-2 text-[10px] uppercase tracking-wider font-semibold inline-block px-2 py-0.5 rounded bg-paper-dark text-ink-mute">
                   {snapshot.estado.replace('_', ' ')}
                 </div>
+                {snapshot.vencido && enJuego && (
+                  <div className="mt-2 text-[11px] font-serif italic text-danger">
+                    Tiempo cumplido — pasa al siguiente período o finaliza.
+                  </div>
+                )}
               </div>
               <EquipoColumn
                 nombre={snapshot.equipoVisitaNombre}

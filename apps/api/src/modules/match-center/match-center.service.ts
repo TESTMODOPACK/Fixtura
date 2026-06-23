@@ -142,6 +142,7 @@ export class MatchCenterService {
 
       partido.centroPeriodo = 1;
       partido.centroSegundosAcumulados = 0;
+      partido.centroMinutosAgregados = 0;
 
       // Marcador en vivo arranca en 0-0 (no null). Sin esto, el equipo que
       // no convirtió queda con goles=null y la vista detalle muestra "—" en
@@ -347,8 +348,67 @@ export class MatchCenterService {
     }
     partido.centroPeriodo = partido.centroPeriodo + 1;
     partido.centroSegundosAcumulados = 0;
+    // Nuevo período → el tiempo agregado vuelve a 0.
+    partido.centroMinutosAgregados = 0;
     await this.repo.save(partido);
     return this.toSnapshot(partido);
+  }
+
+  /**
+   * Ajusta el tiempo agregado (en minutos) del período actual. Lo ingresa el
+   * cronista en vivo; extiende el objetivo del período antes de auto-pausar.
+   */
+  async ajustarTiempoAgregado(
+    partidoId: string,
+    tenantId: string,
+    minutos: number,
+  ): Promise<MatchCenterSnapshot> {
+    if (!Number.isFinite(minutos) || minutos < 0 || minutos > 30) {
+      throw new BadRequestException(
+        'El tiempo agregado debe estar entre 0 y 30 minutos.',
+      );
+    }
+    const partido = await this.ensure(partidoId, tenantId);
+    if (partido.centroEstado !== 'EN_VIVO' && partido.centroEstado !== 'PAUSADO') {
+      throw new BadRequestException(
+        'Solo se puede ajustar el tiempo agregado con el partido en juego.',
+      );
+    }
+    partido.centroMinutosAgregados = Math.trunc(minutos);
+    await this.repo.save(partido);
+    return this.toSnapshot(partido);
+  }
+
+  /**
+   * Llamado por el tick del gateway. Si el partido está EN_VIVO y el período
+   * ya cumplió su objetivo (duración + tiempo agregado), lo auto-pausa
+   * ("medio tiempo"): persiste PAUSADO con el cronómetro fijado en el límite.
+   * El cronista pasa al siguiente período (reinicia en 0) o finaliza.
+   *
+   * Corre en contexto de sistema (bypass RLS) en su propia transacción —
+   * igual que snapshotPublicoSistema; el gateway no tiene tenant.
+   */
+  async verificarYAutoPausar(partidoId: string): Promise<boolean> {
+    return runInTransaction(
+      async () => {
+        await this.dataSource.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+        const partido = await this.repo.findOne({ where: { id: partidoId } });
+        if (!partido || partido.centroEstado !== 'EN_VIVO') return false;
+        if (this.calcularTranscurrido(partido) < this.objetivoSegundos(partido)) {
+          return false;
+        }
+        partido.centroSegundosAcumulados = this.objetivoSegundos(partido);
+        partido.centroEstado = 'PAUSADO';
+        partido.centroPausadoAt = new Date();
+        partido.centroArrancadoAt = null;
+        await this.repo.save(partido);
+        this.log.log(
+          `[match-center] partido=${partidoId} auto-pausado: fin del período ${partido.centroPeriodo}`,
+        );
+        return true;
+      },
+      { propagation: Propagation.REQUIRES_NEW },
+    );
   }
 
   async finalizarCentro(
@@ -491,25 +551,38 @@ export class MatchCenterService {
     return partido;
   }
 
+  /** Objetivo de segundos del período actual: (duración + agregado)·60. */
+  private objetivoSegundos(partido: Partido): number {
+    return (
+      (partido.centroMinutosPorPeriodo + (partido.centroMinutosAgregados ?? 0)) * 60
+    );
+  }
+
   private calcularTranscurrido(partido: Partido): number {
+    const objetivo = this.objetivoSegundos(partido);
     if (partido.centroEstado !== 'EN_VIVO' || !partido.centroArrancadoAt) {
-      return partido.centroSegundosAcumulados;
+      return Math.min(objetivo, partido.centroSegundosAcumulados);
     }
     const delta = Math.max(
       0,
       Math.floor((Date.now() - partido.centroArrancadoAt.getTime()) / 1000),
     );
-    return partido.centroSegundosAcumulados + delta;
+    // Cap en el objetivo: el reloj nunca pasa el límite del período. El tick
+    // del gateway auto-pausa al llegar (ver verificarYAutoPausar).
+    return Math.min(objetivo, partido.centroSegundosAcumulados + delta);
   }
 
   private toSnapshot(partido: Partido): MatchCenterSnapshot {
+    const transcurrido = this.calcularTranscurrido(partido);
     return {
       partidoId: partido.id,
       estado: partido.centroEstado,
       periodo: partido.centroPeriodo,
       minutosPorPeriodo: partido.centroMinutosPorPeriodo,
       minutosEntretiempo: partido.centroMinutosEntretiempo ?? 10,
-      segundosTranscurridos: this.calcularTranscurrido(partido),
+      minutosAgregados: partido.centroMinutosAgregados ?? 0,
+      segundosTranscurridos: transcurrido,
+      vencido: transcurrido >= this.objetivoSegundos(partido),
       golesLocal: partido.golesLocal ?? 0,
       golesVisita: partido.golesVisita ?? 0,
       equipoLocalNombre: partido.inscripcionLocal?.club?.nombre ?? '?',

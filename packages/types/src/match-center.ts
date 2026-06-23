@@ -29,7 +29,11 @@ export const MatchCenterSnapshotSchema = z.object({
   minutosPorPeriodo: z.number().int().min(1).max(120),
   // Sprint 29A — descanso entre períodos (config del torneo).
   minutosEntretiempo: z.number().int().min(0).max(60),
+  // Tiempo agregado del período actual (lo ingresa el cronista en vivo).
+  minutosAgregados: z.number().int().min(0).max(30),
   segundosTranscurridos: z.number().int().min(0),
+  // El período llegó (o superó) su objetivo: (minutosPorPeriodo + agregados)·60.
+  vencido: z.boolean(),
   golesLocal: z.number().int().min(0),
   golesVisita: z.number().int().min(0),
   equipoLocalNombre: z.string(),
@@ -50,3 +54,11 @@ export const SumarGolRequestSchema = z.object({
   equipo: z.enum(['LOCAL', 'VISITA']),
 });
 export type SumarGolRequest = z.infer<typeof SumarGolRequestSchema>;
+
+export const AjustarTiempoAgregadoSchema = z.object({
+  // Total de minutos agregados del período actual (no es delta).
+  minutos: z.number().int().min(0).max(30),
+});
+export type AjustarTiempoAgregadoRequest = z.infer<
+  typeof AjustarTiempoAgregadoSchema
+>;

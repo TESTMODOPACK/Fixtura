@@ -663,9 +663,10 @@ async function main(): Promise<void> {
         ADD COLUMN IF NOT EXISTS centro_segundos_acumulados INT NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS centro_periodo SMALLINT NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS centro_minutos_por_periodo SMALLINT NOT NULL DEFAULT 40,
-        ADD COLUMN IF NOT EXISTS centro_minutos_entretiempo SMALLINT NOT NULL DEFAULT 10
+        ADD COLUMN IF NOT EXISTS centro_minutos_entretiempo SMALLINT NOT NULL DEFAULT 10,
+        ADD COLUMN IF NOT EXISTS centro_minutos_agregados SMALLINT NOT NULL DEFAULT 0
     `);
-    log('partidos.centro_* asegurado (Sprint 18, RF-17 / Sprint 29A entretiempo).');
+    log('partidos.centro_* asegurado (Sprint 18, RF-17 / 29A entretiempo / tiempo agregado).');
 
     // AUDIT-3: jugadores_inscritos.torneo_id + UNIQUE (rut, torneo).
     await ensureJugadoresUniqueRutTorneo(client, log);

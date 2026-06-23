@@ -150,6 +150,9 @@ export class MatchCenterGateway
     await Promise.all(
       ids.map(async (id) => {
         try {
+          // Auto-pausa el partido si el período ya cumplió su tiempo objetivo
+          // (duración + agregado). Es la autoridad server-side del cronómetro.
+          await this.svc.verificarYAutoPausar(id);
           const snap = await this.svc.snapshotPublicoSistema(id);
           this.server.to(this.roomKey(id)).emit('snapshot', snap);
           // Si el partido ya finalizó el centro, podemos sacarlo del set.

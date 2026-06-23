@@ -171,9 +171,19 @@ export function useSegundosCronometro(
     return () => clearInterval(id);
   }, [estado]);
 
+  // Objetivo del período (duración + agregado). Capamos el reloj acá también
+  // para que entre snapshots no muestre más que el límite (el server además
+  // auto-pausa al llegar).
+  const objetivo =
+    snapshot != null
+      ? (snapshot.minutosPorPeriodo + snapshot.minutosAgregados) * 60
+      : Number.POSITIVE_INFINITY;
   const b = base.current;
-  if (!b.enVivo) return b.segundos;
-  return b.segundos + Math.max(0, Math.floor((Date.now() - b.desde) / 1000));
+  if (!b.enVivo) return Math.min(objetivo, b.segundos);
+  return Math.min(
+    objetivo,
+    b.segundos + Math.max(0, Math.floor((Date.now() - b.desde) / 1000)),
+  );
 }
 
 /**
@@ -265,6 +275,17 @@ export function useFinalizarCentro(partidoId: string) {
       apiFetch<MatchCenterSnapshot>(
         `/admin/match-center/${partidoId}/finalizar`,
         { method: 'POST' },
+      ),
+  });
+}
+
+export function useAjustarTiempoAgregado(partidoId: string) {
+  return useMutation({
+    // minutos = total de agregado del período actual (no delta).
+    mutationFn: (minutos: number) =>
+      apiFetch<MatchCenterSnapshot>(
+        `/admin/match-center/${partidoId}/tiempo-agregado`,
+        { method: 'POST', body: { minutos } },
       ),
   });
 }

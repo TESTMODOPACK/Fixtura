@@ -11,6 +11,7 @@ import {
 
 import {
   ROLE,
+  type AjustarTiempoAgregadoRequest,
   type MatchCenterSnapshot,
   type StartMatchCenterRequest,
   type SumarGolRequest,
@@ -133,6 +134,22 @@ export class MatchCenterAdminController {
     @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
   ): Promise<MatchCenterSnapshot> {
     const snap = await this.svc.siguientePeriodo(partidoId, ensureTenant(user));
+    void this.gateway.broadcast(partidoId);
+    return snap;
+  }
+
+  @Post('tiempo-agregado')
+  @HttpCode(200)
+  async tiempoAgregado(
+    @CurrentUser() user: UserContext,
+    @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
+    @Body() dto: AjustarTiempoAgregadoRequest,
+  ): Promise<MatchCenterSnapshot> {
+    const snap = await this.svc.ajustarTiempoAgregado(
+      partidoId,
+      ensureTenant(user),
+      Number(dto.minutos),
+    );
     void this.gateway.broadcast(partidoId);
     return snap;
   }

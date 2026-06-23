@@ -178,6 +178,12 @@ export class Partido {
   @Column({ name: 'centro_minutos_entretiempo', type: 'smallint', default: 10 })
   centroMinutosEntretiempo!: number;
 
+  // Tiempo agregado del período actual (lo ingresa el cronista en vivo).
+  // Extiende el objetivo del período: (minutosPorPeriodo + agregados)·60.
+  // Se reinicia a 0 al pasar al siguiente período.
+  @Column({ name: 'centro_minutos_agregados', type: 'smallint', default: 0 })
+  centroMinutosAgregados!: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
