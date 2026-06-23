@@ -49,6 +49,26 @@ export class CreateTorneoDto {
   @IsIn([1, 2])
   ruedas?: 1 | 2 = 1;
 
+  // Fase Grupos (GROUPS/MIXTO). Reglas cross-field (obligatoriedad según
+  // formato) las valida el service; aquí solo cotas.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2)
+  @Max(32)
+  cantidadGrupos?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(16)
+  clasificanPorGrupo?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  gruposAPlayoffs?: boolean;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -191,6 +211,25 @@ export class UpdateTorneoDto {
   @Type(() => Number)
   @IsIn([1, 2])
   ruedas?: 1 | 2;
+
+  // Fase Grupos (GROUPS/MIXTO).
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2)
+  @Max(32)
+  cantidadGrupos?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(16)
+  clasificanPorGrupo?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  gruposAPlayoffs?: boolean;
 
   @IsOptional()
   @Type(() => Number)

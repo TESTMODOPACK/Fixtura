@@ -283,6 +283,15 @@ export class TorneosAdminService {
     // Sprint 42 — Determinar si vamos a split en N torneos.
     const splitEnMultiples = categoriasSeries.length >= 2;
 
+    // Fase Grupos — normalizar/validar una vez; cada torneo (split o único)
+    // hereda la misma config de grupos.
+    const cfgGrupos = this.normalizarConfigGrupos({
+      tipoFormato: input.tipoFormato ?? 'ROUND_ROBIN',
+      cantidadGrupos: input.cantidadGrupos,
+      clasificanPorGrupo: input.clasificanPorGrupo,
+      gruposAPlayoffs: input.gruposAPlayoffs,
+    });
+
     // Cargar categorías (con series) para resolver nombres y slugs de
     // los sufijos cuando hagamos split.
     let categoriasMap = new Map<string, CategoriaJugadores>();
@@ -325,6 +334,7 @@ export class TorneosAdminService {
         slug,
         tipoFormato: input.tipoFormato,
         ruedas: input.ruedas,
+        ...cfgGrupos,
         puntosVictoria: input.puntosVictoria,
         puntosEmpate: input.puntosEmpate,
         puntosDerrota: input.puntosDerrota,
@@ -504,11 +514,28 @@ export class TorneosAdminService {
       categoriasSeriesValidadas = [];
     }
 
+    // Fase Grupos — recalcular solo si el patch toca el formato o la config.
+    const tocaGrupos =
+      input.tipoFormato !== undefined ||
+      input.cantidadGrupos !== undefined ||
+      input.clasificanPorGrupo !== undefined ||
+      input.gruposAPlayoffs !== undefined;
+    const cfgGrupos = tocaGrupos
+      ? this.normalizarConfigGrupos({
+          tipoFormato: input.tipoFormato ?? existing.tipoFormato,
+          cantidadGrupos: input.cantidadGrupos ?? existing.cantidadGrupos,
+          clasificanPorGrupo:
+            input.clasificanPorGrupo ?? existing.clasificanPorGrupo,
+          gruposAPlayoffs: input.gruposAPlayoffs ?? existing.gruposAPlayoffs,
+        })
+      : null;
+
     Object.assign(existing, {
       ...(input.nombre !== undefined && { nombre: input.nombre }),
       ...(input.slug !== undefined && { slug: input.slug }),
       ...(input.tipoFormato !== undefined && { tipoFormato: input.tipoFormato }),
       ...(input.ruedas !== undefined && { ruedas: input.ruedas }),
+      ...(cfgGrupos !== null && cfgGrupos),
       ...(input.puntosVictoria !== undefined && { puntosVictoria: input.puntosVictoria }),
       ...(input.puntosEmpate !== undefined && { puntosEmpate: input.puntosEmpate }),
       ...(input.puntosDerrota !== undefined && { puntosDerrota: input.puntosDerrota }),
@@ -701,6 +728,9 @@ export class TorneosAdminService {
       slug: t.slug,
       tipoFormato: t.tipoFormato,
       ruedas: t.ruedas,
+      cantidadGrupos: t.cantidadGrupos ?? null,
+      clasificanPorGrupo: t.clasificanPorGrupo ?? null,
+      gruposAPlayoffs: t.gruposAPlayoffs ?? false,
       puntosVictoria: t.puntosVictoria,
       puntosEmpate: t.puntosEmpate,
       puntosDerrota: t.puntosDerrota,
@@ -728,6 +758,48 @@ export class TorneosAdminService {
       paramedicosPorJornada: t.paramedicosPorJornada ?? 1,
       otrosPorJornada: t.otrosPorJornada ?? 0,
       createdAt: t.createdAt.toISOString(),
+    };
+  }
+
+  /**
+   * Normaliza y valida la config de la fase de grupos según el formato.
+   * - GROUPS/MIXTO: cantidadGrupos obligatorio (>=2). Si los grupos van a
+   *   playoffs, clasificanPorGrupo obligatorio (>=1).
+   * - Otros formatos: limpia los 3 campos (null/false) — no aplican.
+   */
+  private normalizarConfigGrupos(input: {
+    tipoFormato: string | undefined;
+    cantidadGrupos?: number | null;
+    clasificanPorGrupo?: number | null;
+    gruposAPlayoffs?: boolean | null;
+  }): {
+    cantidadGrupos: number | null;
+    clasificanPorGrupo: number | null;
+    gruposAPlayoffs: boolean;
+  } {
+    const usaGrupos =
+      input.tipoFormato === 'GROUPS' || input.tipoFormato === 'MIXTO';
+    if (!usaGrupos) {
+      return { cantidadGrupos: null, clasificanPorGrupo: null, gruposAPlayoffs: false };
+    }
+    const cantidad = input.cantidadGrupos ?? null;
+    if (cantidad === null || cantidad < 2) {
+      throw new BadRequestException('Para el formato por grupos indica al menos 2 grupos.');
+    }
+    const aPlayoffs = input.gruposAPlayoffs ?? false;
+    let clasifican: number | null = null;
+    if (aPlayoffs) {
+      clasifican = input.clasificanPorGrupo ?? null;
+      if (clasifican === null || clasifican < 1) {
+        throw new BadRequestException(
+          'Indica cuántos equipos clasifican por grupo a la fase final.',
+        );
+      }
+    }
+    return {
+      cantidadGrupos: cantidad,
+      clasificanPorGrupo: clasifican,
+      gruposAPlayoffs: aPlayoffs,
     };
   }
 }

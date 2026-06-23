@@ -66,6 +66,11 @@ export const CreateTorneoSchema = z.object({
     .regex(/^[a-z0-9-]+$/, 'Solo minúsculas, números y guiones'),
   tipoFormato: TipoFormatoSchema.default('ROUND_ROBIN'),
   ruedas: z.union([z.literal(1), z.literal(2)]).default(1),
+  // Fase Grupos (formato GROUPS/MIXTO). La validación cross-field (cuáles son
+  // obligatorios según el formato) la hace el backend; acá solo cotas.
+  cantidadGrupos: z.number().int().min(2).max(32).nullable().optional(),
+  clasificanPorGrupo: z.number().int().min(1).max(16).nullable().optional(),
+  gruposAPlayoffs: z.boolean().optional(),
   puntosVictoria: z.number().int().min(0).max(10).default(3),
   puntosEmpate: z.number().int().min(0).max(10).default(1),
   puntosDerrota: z.number().int().min(0).max(10).default(0),
@@ -107,6 +112,10 @@ export const TorneoAdminSchema = z.object({
   slug: z.string(),
   tipoFormato: TipoFormatoSchema,
   ruedas: z.union([z.literal(1), z.literal(2)]),
+  // Fase Grupos — null para ROUND_ROBIN/PLAYOFFS.
+  cantidadGrupos: z.number().int().nullable(),
+  clasificanPorGrupo: z.number().int().nullable(),
+  gruposAPlayoffs: z.boolean(),
   puntosVictoria: z.number().int(),
   puntosEmpate: z.number().int(),
   puntosDerrota: z.number().int(),

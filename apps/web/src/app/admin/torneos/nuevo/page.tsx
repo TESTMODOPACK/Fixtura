@@ -60,6 +60,8 @@ const TORNEO_FIELD_LABEL: Record<string, string> = {
   duracionEntretiempoMinutos: 'Minutos de entretiempo',
   minJugadoresParaIniciar: 'Mínimo de jugadores para iniciar',
   amarillasParaSuspension: 'Amarillas para suspensión',
+  cantidadGrupos: 'Cantidad de grupos',
+  clasificanPorGrupo: 'Clasifican por grupo',
 };
 
 const TorneoFormSchema = z.object({
@@ -89,6 +91,15 @@ const TorneoFormSchema = z.object({
   minJugadoresParaIniciar: z.coerce.number().int().min(1).max(30),
   // Amarillas acumuladas que generan una fecha de suspensión.
   amarillasParaSuspension: z.coerce.number().int().min(2).max(20),
+  // Fase Grupos — solo se usan cuando tipoFormato = GROUPS. Vacío permitido
+  // (se limpia al submit); el backend valida la obligatoriedad por formato.
+  cantidadGrupos: z
+    .union([z.coerce.number().int().min(2).max(32), z.literal('')])
+    .optional(),
+  clasificanPorGrupo: z
+    .union([z.coerce.number().int().min(1).max(16), z.literal('')])
+    .optional(),
+  gruposAPlayoffs: z.boolean(),
 });
 type TorneoForm = z.infer<typeof TorneoFormSchema>;
 
@@ -128,6 +139,9 @@ export default function NuevoTorneoPage(): React.ReactElement {
       duracionEntretiempoMinutos: 10,
       minJugadoresParaIniciar: 7,
       amarillasParaSuspension: 5,
+      cantidadGrupos: '' as unknown as number,
+      clasificanPorGrupo: '' as unknown as number,
+      gruposAPlayoffs: false,
     },
     mode: 'onChange',
   });
@@ -157,6 +171,8 @@ export default function NuevoTorneoPage(): React.ReactElement {
   }, [temporadas, form]);
 
   const refuerzosHabilitados = form.watch('refuerzosHabilitados');
+  const tipoFormato = form.watch('tipoFormato');
+  const gruposAPlayoffs = form.watch('gruposAPlayoffs');
 
   const ensureTemporadaActual = async (): Promise<string> => {
     if (temporadas && temporadas.length > 0) return temporadas[0]!.id;
@@ -190,12 +206,28 @@ export default function NuevoTorneoPage(): React.ReactElement {
           ? vals.fechaLimiteRefuerzosNumero
           : null;
 
+      // Fase Grupos — solo mandar config si el formato es GROUPS; el backend
+      // la normaliza/valida igual.
+      const esGrupos = vals.tipoFormato === 'GROUPS';
+      const cantidadGrupos =
+        esGrupos && typeof vals.cantidadGrupos === 'number'
+          ? vals.cantidadGrupos
+          : null;
+      const gruposAPlayoffs = esGrupos ? vals.gruposAPlayoffs : false;
+      const clasificanPorGrupo =
+        esGrupos && gruposAPlayoffs && typeof vals.clasificanPorGrupo === 'number'
+          ? vals.clasificanPorGrupo
+          : null;
+
       const torneo = await createTorneo.mutateAsync({
       temporadaId,
       nombre: vals.nombre,
       slug: vals.slug,
       tipoFormato: vals.tipoFormato,
       ruedas: vals.ruedas,
+      cantidadGrupos,
+      clasificanPorGrupo,
+      gruposAPlayoffs,
       puntosVictoria: vals.puntosVictoria,
       puntosEmpate: vals.puntosEmpate,
       puntosDerrota: vals.puntosDerrota,
@@ -337,11 +369,52 @@ export default function NuevoTorneoPage(): React.ReactElement {
               <label className="label">Formato</label>
               <select className="input" {...form.register('tipoFormato')}>
                 <option value="ROUND_ROBIN">Round Robin (todos contra todos)</option>
+                <option value="GROUPS">Fase de grupos</option>
                 <option value="PLAYOFFS" disabled>Playoffs (próximo)</option>
-                <option value="GROUPS" disabled>Grupos (próximo)</option>
                 <option value="MIXTO" disabled>Mixto (próximo)</option>
               </select>
             </div>
+            {tipoFormato === 'GROUPS' && (
+              <div className="rounded-card border border-line bg-paper-dark/40 p-3 space-y-3">
+                <Input
+                  label="Cantidad de grupos"
+                  type="number"
+                  min={2}
+                  max={32}
+                  placeholder="Ej: 4"
+                  {...form.register('cantidadGrupos')}
+                  error={
+                    form.formState.errors.cantidadGrupos?.message as
+                      | string
+                      | undefined
+                  }
+                />
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" {...form.register('gruposAPlayoffs')} />
+                  Los grupos clasifican a una fase final (playoffs)
+                </label>
+                {gruposAPlayoffs && (
+                  <Input
+                    label="Equipos que clasifican por grupo"
+                    type="number"
+                    min={1}
+                    max={16}
+                    placeholder="Ej: 2"
+                    {...form.register('clasificanPorGrupo')}
+                    error={
+                      form.formState.errors.clasificanPorGrupo?.message as
+                        | string
+                        | undefined
+                    }
+                  />
+                )}
+                <p className="text-xs font-serif italic text-ink-mute">
+                  Los equipos se reparten en los grupos por sorteo y juegan todos
+                  contra todos dentro de su grupo. El sorteo y el fixture por
+                  grupos se arman en el detalle del torneo.
+                </p>
+              </div>
+            )}
             <div>
               <label className="label">Ruedas</label>
               <select
