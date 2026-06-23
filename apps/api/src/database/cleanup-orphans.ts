@@ -409,6 +409,7 @@ async function main(): Promise<void> {
     // Mientras dure la coexistencia (hasta sprint 26G), las tablas viejas
     // `equipos` y `jugadores_inscritos` siguen existiendo.
     await ensureClubesTables(client, log);
+    await ensureGruposTorneo(client, log);
 
     // Sprint 32 — directiva por categoría. Un club que participa en
     // varias categorías puede tener distinta directiva en cada una
@@ -2632,6 +2633,75 @@ async function ensureAuditLogsPolicy(
       )
   `);
   log('audit_logs policy con WITH CHECK explícito (B5).');
+}
+
+/**
+ * Fase 1 (Grupos) — config de grupos en torneos + tablas grupos_torneo y
+ * grupo_inscripcion + partidos.grupo_id. Aditivo e idempotente. Corre después
+ * de ensureClubesTables (que crea inscripciones_torneo).
+ */
+async function ensureGruposTorneo(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    ALTER TABLE torneos
+      ADD COLUMN IF NOT EXISTS cantidad_grupos       SMALLINT,
+      ADD COLUMN IF NOT EXISTS clasifican_por_grupo  SMALLINT,
+      ADD COLUMN IF NOT EXISTS grupos_a_playoffs     BOOLEAN NOT NULL DEFAULT false
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS grupos_torneo (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      torneo_id   UUID NOT NULL REFERENCES torneos(id) ON DELETE CASCADE,
+      numero      SMALLINT NOT NULL,
+      nombre      VARCHAR(50) NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (torneo_id, numero)
+    )
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_grupos_torneo_tenant ON grupos_torneo(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_grupos_torneo_torneo ON grupos_torneo(torneo_id)`,
+  );
+  await ensureRls(client, 'grupos_torneo');
+  await ensureTrigger(client, 'grupos_torneo');
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS grupo_inscripcion (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      torneo_id       UUID NOT NULL REFERENCES torneos(id) ON DELETE CASCADE,
+      grupo_id        UUID NOT NULL REFERENCES grupos_torneo(id) ON DELETE CASCADE,
+      inscripcion_id  UUID NOT NULL REFERENCES inscripciones_torneo(id) ON DELETE CASCADE,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (torneo_id, inscripcion_id)
+    )
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_grupo_inscripcion_tenant ON grupo_inscripcion(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_grupo_inscripcion_grupo ON grupo_inscripcion(grupo_id)`,
+  );
+  await ensureRls(client, 'grupo_inscripcion');
+
+  await client.query(`
+    ALTER TABLE partidos
+      ADD COLUMN IF NOT EXISTS grupo_id UUID REFERENCES grupos_torneo(id) ON DELETE SET NULL
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_partidos_grupo ON partidos(grupo_id) WHERE grupo_id IS NOT NULL`,
+  );
+
+  log(
+    'Grupos de torneo asegurados (G1: grupos_torneo + grupo_inscripcion + partidos.grupo_id).',
+  );
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

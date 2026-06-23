@@ -52,6 +52,21 @@ export class Torneo {
   @Column({ type: 'smallint', default: 1 })
   ruedas!: 1 | 2;
 
+  // Fase Grupos (formato GROUPS/MIXTO) — cantidad de grupos de la fase de
+  // grupos. null para ROUND_ROBIN/PLAYOFFS.
+  @Column({ name: 'cantidad_grupos', type: 'smallint', nullable: true })
+  cantidadGrupos!: number | null;
+
+  // Cuántos equipos de cada grupo clasifican a la fase final (si la fase de
+  // grupos va a playoffs). null = no aplica.
+  @Column({ name: 'clasifican_por_grupo', type: 'smallint', nullable: true })
+  clasificanPorGrupo!: number | null;
+
+  // Si la fase de grupos clasifica a una eliminatoria (playoffs). false = el
+  // torneo termina en la fase de grupos.
+  @Column({ name: 'grupos_a_playoffs', type: 'boolean', default: false })
+  gruposAPlayoffs!: boolean;
+
   @Column({ name: 'puntos_victoria', type: 'smallint', default: 3 })
   puntosVictoria!: number;
 

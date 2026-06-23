@@ -89,6 +89,11 @@ export class Partido {
   @JoinColumn({ name: 'inscripcion_visita_id' })
   inscripcionVisita?: InscripcionTorneo | null;
 
+  // Fase Grupos — grupo al que pertenece el partido (formato GROUPS/MIXTO).
+  // null para round-robin y para partidos de playoffs.
+  @Column({ name: 'grupo_id', type: 'uuid', nullable: true })
+  grupoId!: string | null;
+
   @Column({ name: 'cancha_id', type: 'uuid', nullable: true })
   canchaId!: string | null;
 
