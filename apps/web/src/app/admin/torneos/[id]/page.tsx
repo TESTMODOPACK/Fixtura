@@ -917,7 +917,7 @@ function GruposTab({
         <Card padding="roomy" className="text-center">
           <Trophy size={36} className="mx-auto text-line mb-3" />
           <p className="font-serif italic text-ink-mute">
-            Todavía no sorteaste los grupos. Inscribe los equipos y tocá
+            Todavía no sorteaste los grupos. Inscribe los equipos y toca
             “Sortear grupos”.
           </p>
         </Card>

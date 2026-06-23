@@ -320,7 +320,7 @@ export class GruposAdminService {
     const fechas = await this.fechaRepo.count({ where: { torneoId, tenantId } });
     if (fechas > 0) {
       throw new BadRequestException(
-        `El torneo ya tiene fixture generado. Borrá el fixture antes de ${accion}.`,
+        `El torneo ya tiene fixture generado. Borra el fixture antes de ${accion}.`,
       );
     }
   }
