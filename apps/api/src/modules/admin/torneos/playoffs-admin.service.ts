@@ -158,35 +158,19 @@ export class PlayoffsAdminService {
       );
     }
 
-    const orden = this.shuffle(activas);
-    const cuadro = this.nextPow2(orden.length);
-    const byes = cuadro - orden.length;
-    const llavesRonda1 = cuadro / 2;
-    // Reparto de byes espaciados para no cruzar dos byes en la ronda 1.
-    const byeIdx = new Set<number>();
-    for (let i = 0; i < byes; i++) {
-      byeIdx.add(Math.floor((i * llavesRonda1) / byes));
-    }
-
-    const ronda1: ParRonda1[] = [];
-    let p = 0;
-    for (let j = 0; j < llavesRonda1; j++) {
-      if (byeIdx.has(j)) {
-        ronda1.push({ localId: orden[p++]!.id, visitaId: null });
-      } else {
-        ronda1.push({ localId: orden[p++]!.id, visitaId: orden[p++]!.id });
-      }
-    }
-
+    // Orden aleatorio de seeds; el cuadro se arma con el orden estándar de
+    // siembra (mismo helper que la siembra por tabla) para repartir los byes
+    // entre las mejores posiciones y no amontonarlos.
+    const seeds = this.shuffle(activas).map((i) => i.id);
     await this.llaveRepo.delete({ torneoId, tenantId });
     await this.armarYGuardarBracket(
       torneoId,
       tenantId,
-      ronda1,
+      this.construirRonda1DesdeSeeds(seeds),
       torneo.playoffTercerPuesto,
     );
     this.logger.log(
-      `[playoffs] torneo=${torneoId} sembrado (aleatorio): ${orden.length} equipos, cuadro=${cuadro}, byes=${byes}`,
+      `[playoffs] torneo=${torneoId} sembrado (aleatorio): ${seeds.length} equipos`,
     );
     return this.getBracket(torneoId, tenantId);
   }
@@ -254,38 +238,43 @@ export class PlayoffsAdminService {
     }
     const seeds = orden.slice(0, n); // seeds[0] = 1° de la tabla
 
-    // Siembra estándar: cuadro = potencia de 2 >= n; los byes van a los mejores.
-    const cuadro = this.nextPow2(n);
-    const llavesRonda1 = cuadro / 2;
-    const posiciones = this.ordenSiembra(cuadro); // seeds por posición de hoja
-    const equipoDeSeed = (s: number): string | null =>
-      s <= n ? seeds[s - 1]! : null; // s>n = bye
-
-    const ronda1: ParRonda1[] = [];
-    for (let j = 0; j < llavesRonda1; j++) {
-      const s1 = posiciones[2 * j]!;
-      const s2 = posiciones[2 * j + 1]!;
-      const e1 = equipoDeSeed(s1);
-      const e2 = equipoDeSeed(s2);
-      // Si uno es bye (null), el otro va de local y avanza directo.
-      if (e1 && e2) ronda1.push({ localId: e1, visitaId: e2 });
-      else if (e1) ronda1.push({ localId: e1, visitaId: null });
-      else ronda1.push({ localId: e2!, visitaId: null });
-    }
-
+    // Siembra estándar por posición de tabla (1° vs último, byes a los mejores).
     await this.llaveRepo.delete({ torneoId, tenantId });
     await this.armarYGuardarBracket(
       torneoId,
       tenantId,
-      ronda1,
+      this.construirRonda1DesdeSeeds(seeds),
       torneo.playoffTercerPuesto,
     );
     await this.generarFixturePlayoffs(torneo, tenantId);
 
     this.logger.log(
-      `[playoffs] torneo=${torneoId} sembrado (tabla): ${n} clasificados, cuadro=${cuadro}`,
+      `[playoffs] torneo=${torneoId} sembrado (tabla): ${n} clasificados`,
     );
     return this.getBracket(torneoId, tenantId);
+  }
+
+  /**
+   * Construye las llaves de ronda 1 a partir de una lista ordenada de seeds
+   * (seeds[0] = mejor). Usa el orden estándar de siembra: los seeds que no
+   * existen (posición > n) son byes y el equipo enfrentado avanza directo.
+   */
+  private construirRonda1DesdeSeeds(seeds: string[]): ParRonda1[] {
+    const n = seeds.length;
+    const cuadro = this.nextPow2(n);
+    const llavesRonda1 = cuadro / 2;
+    const posiciones = this.ordenSiembra(cuadro);
+    const equipoDeSeed = (s: number): string | null => (s <= n ? seeds[s - 1]! : null);
+
+    const ronda1: ParRonda1[] = [];
+    for (let j = 0; j < llavesRonda1; j++) {
+      const e1 = equipoDeSeed(posiciones[2 * j]!);
+      const e2 = equipoDeSeed(posiciones[2 * j + 1]!);
+      if (e1 && e2) ronda1.push({ localId: e1, visitaId: e2 });
+      else if (e1) ronda1.push({ localId: e1, visitaId: null });
+      else ronda1.push({ localId: e2!, visitaId: null });
+    }
+    return ronda1;
   }
 
   @Transactional()
@@ -338,7 +327,16 @@ export class PlayoffsAdminService {
         'Genera el fixture de playoffs antes de avanzar ganadores.',
       );
     }
-    const fechaIdByNumero = new Map(fechas.map((f) => [f.numero, f.id]));
+    // Mapa numero→fechaId para ubicar los partidos de cada ronda. Excluir las
+    // fechas SUSPENDIDAS: si una fecha se reprogramó, conviven la ORIGINAL
+    // (SUSPENDIDA) y la REPROGRAMADA con el mismo numero — los partidos nuevos
+    // deben ir a la activa, no a la suspendida (y evita el resultado no
+    // determinista de quedarse con la última fila sin ORDER BY).
+    const fechaIdByNumero = new Map(
+      fechas
+        .filter((f) => f.estado !== 'SUSPENDIDA')
+        .map((f) => [f.numero, f.id] as const),
+    );
     const idaVuelta = torneo.playoffIdaVuelta ?? false;
     const rondaFinal = Math.max(...llaves.map((l) => l.ronda));
     // Offset de fechas: en Mixto los playoffs van detrás de la fase regular.
@@ -609,7 +607,9 @@ export class PlayoffsAdminService {
       return null; // empate → manual
     }
 
-    if (jugados.length < 2) return null;
+    // Ida/vuelta: exactamente 2 partidos jugados. Más de 2 = anomalía (no
+    // sumamos de más: queda indeciso para que el admin resuelva a mano).
+    if (jugados.length !== 2) return null;
     let golLocal = 0;
     let golVisita = 0;
     for (const p of jugados) {

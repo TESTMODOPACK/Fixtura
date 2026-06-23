@@ -334,6 +334,9 @@ export class FechasAdminService {
       estado: 'PROGRAMADA',
       tipoReprogramacion: 'REPROGRAMADA',
       reemplazaFechaId: fechaSuspendida.id,
+      // Heredar la fase: si la fecha suspendida era de playoffs, la reprogramada
+      // también lo es (si no, rompería el offset del Mixto y la limpieza del cuadro).
+      esPlayoffs: fechaSuspendida.esPlayoffs,
     });
     const saved = await this.fechaRepo.save(nueva);
 
@@ -411,6 +414,9 @@ export class FechasAdminService {
       estado: 'PROGRAMADA',
       tipoReprogramacion: 'REPROGRAMADA',
       reemplazaFechaId: fechaSuspendida.id,
+      // Heredar la fase: si la fecha suspendida era de playoffs, la reprogramada
+      // también lo es (si no, rompería el offset del Mixto y la limpieza del cuadro).
+      esPlayoffs: fechaSuspendida.esPlayoffs,
     });
     const saved = await this.fechaRepo.save(nueva);
 
@@ -528,6 +534,11 @@ export class FechasAdminService {
         inscripcionVisitaId: p.inscripcionVisitaId,
         equipoLocalId: p.equipoLocalId,
         equipoVisitaId: p.equipoVisitaId,
+        // El clon conserva el vínculo a su fase: grupo (GROUPS/MIXTO) y llave
+        // (playoffs). Sin esto, un partido de playoffs reprogramado perdería su
+        // llave y el cuadro nunca lo computaría; un partido de grupo, su grupo.
+        grupoId: p.grupoId,
+        llaveId: p.llaveId,
         canchaId: p.canchaId,
         canchaNombre: p.canchaNombre,
         fechaHora,

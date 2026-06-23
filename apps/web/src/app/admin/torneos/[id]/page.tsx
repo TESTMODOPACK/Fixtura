@@ -1072,7 +1072,11 @@ function PlayoffsTab({
   // genera el fixture; el backend valida que la fase regular esté completa.
   const hayFixture = fechasCount > 0;
   const bloqueado = estado !== 'DRAFT' || fechasCount > 0;
-  const mostrarSembrar = esRoundRobinPlayoffs ? !data?.sembrado : !bloqueado;
+  // En Mixto solo se siembra una vez generado el fixture de la fase regular
+  // (el backend además exige que esté completa).
+  const mostrarSembrar = esRoundRobinPlayoffs
+    ? !data?.sembrado && hayFixture
+    : !bloqueado;
   const mostrarLimpiar =
     !!data?.sembrado && (esRoundRobinPlayoffs || !bloqueado);
   const mostrarSincronizar = !!data?.sembrado && hayFixture;
