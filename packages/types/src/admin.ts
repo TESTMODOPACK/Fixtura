@@ -206,6 +206,44 @@ export const TablasPorGrupoAdminSchema = z.object({
 });
 export type TablasPorGrupoAdmin = z.infer<typeof TablasPorGrupoAdminSchema>;
 
+// ─── Fase de playoffs / bracket (admin) ──────────────────────────────
+// Un slot de una llave: el equipo, o null cuando está "por definir" (bye o
+// ganador de una llave previa que todavía no se jugó). Reutiliza la forma de
+// GrupoInscripcionItem (inscripcionId + clubNombre + serieSlug).
+export const LlavePlayoffSlotSchema = GrupoInscripcionItemSchema.nullable();
+export type LlavePlayoffSlot = z.infer<typeof LlavePlayoffSlotSchema>;
+
+export const LlavePlayoffAdminSchema = z.object({
+  id: z.uuid(),
+  ronda: z.number().int(),
+  orden: z.number().int(),
+  nombre: z.string(),
+  esTercerPuesto: z.boolean(),
+  local: LlavePlayoffSlotSchema,
+  visita: LlavePlayoffSlotSchema,
+  ganadorInscripcionId: z.uuid().nullable(),
+});
+export type LlavePlayoffAdmin = z.infer<typeof LlavePlayoffAdminSchema>;
+
+export const RondaPlayoffAdminSchema = z.object({
+  ronda: z.number().int(),
+  nombre: z.string(),
+  esRondaFinal: z.boolean(),
+  llaves: z.array(LlavePlayoffAdminSchema),
+});
+export type RondaPlayoffAdmin = z.infer<typeof RondaPlayoffAdminSchema>;
+
+export const BracketPlayoffResponseSchema = z.object({
+  sembrado: z.boolean(),
+  idaVuelta: z.boolean(),
+  tercerPuesto: z.boolean(),
+  cantidadEquipos: z.number().int(),
+  rondas: z.array(RondaPlayoffAdminSchema),
+  // Inscripciones activas (para mostrar el listado antes de sembrar y el conteo).
+  participantes: z.array(GrupoInscripcionItemSchema),
+});
+export type BracketPlayoffResponse = z.infer<typeof BracketPlayoffResponseSchema>;
+
 // ─── Tabla de posiciones (admin) ─────────────────────────────────────
 // Reutiliza FilaTabla del portal público — misma forma de fila. El admin
 // la ve para cualquier torneo (incluido DRAFT, donde sale en ceros).
