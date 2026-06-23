@@ -149,6 +149,38 @@ export const TorneoAdminSchema = z.object({
 });
 export type TorneoAdmin = z.infer<typeof TorneoAdminSchema>;
 
+// ─── Fase de grupos (admin) ──────────────────────────────────────────
+export const GrupoInscripcionItemSchema = z.object({
+  inscripcionId: z.uuid(),
+  clubNombre: z.string(),
+  serieSlug: z.string().nullable(),
+});
+export type GrupoInscripcionItem = z.infer<typeof GrupoInscripcionItemSchema>;
+
+export const GrupoTorneoAdminSchema = z.object({
+  id: z.uuid(),
+  numero: z.number().int(),
+  nombre: z.string(),
+  inscripciones: z.array(GrupoInscripcionItemSchema),
+});
+export type GrupoTorneoAdmin = z.infer<typeof GrupoTorneoAdminSchema>;
+
+export const GruposTorneoResponseSchema = z.object({
+  sorteado: z.boolean(),
+  cantidadGrupos: z.number().int().nullable(),
+  grupos: z.array(GrupoTorneoAdminSchema),
+  // Inscripciones activas que todavía no están en ningún grupo (ej. un
+  // equipo inscrito después del sorteo).
+  sinAsignar: z.array(GrupoInscripcionItemSchema),
+});
+export type GruposTorneoResponse = z.infer<typeof GruposTorneoResponseSchema>;
+
+export const MoverInscripcionGrupoSchema = z.object({
+  inscripcionId: z.uuid(),
+  grupoId: z.uuid(),
+});
+export type MoverInscripcionGrupoRequest = z.infer<typeof MoverInscripcionGrupoSchema>;
+
 // ─── Tabla de posiciones (admin) ─────────────────────────────────────
 // Reutiliza FilaTabla del portal público — misma forma de fila. El admin
 // la ve para cualquier torneo (incluido DRAFT, donde sale en ceros).

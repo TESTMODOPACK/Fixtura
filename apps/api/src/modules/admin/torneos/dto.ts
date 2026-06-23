@@ -191,6 +191,14 @@ export class CreateTorneoDto {
   otrosPorJornada?: number;
 }
 
+export class MoverInscripcionGrupoDto {
+  @IsUUID()
+  inscripcionId!: string;
+
+  @IsUUID()
+  grupoId!: string;
+}
+
 export class UpdateTorneoDto {
   @IsOptional()
   @IsString()

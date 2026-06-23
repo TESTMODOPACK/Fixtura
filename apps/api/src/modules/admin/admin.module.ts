@@ -78,6 +78,8 @@ import { TemporadasAdminController } from './temporadas/temporadas-admin.control
 import { TemporadasAdminService } from './temporadas/temporadas-admin.service';
 import { TorneosAdminController } from './torneos/torneos-admin.controller';
 import { TorneosAdminService } from './torneos/torneos-admin.service';
+import { GruposAdminController } from './torneos/grupos-admin.controller';
+import { GruposAdminService } from './torneos/grupos-admin.service';
 import { TribunalAdminController } from './tribunal/tribunal-admin.controller';
 import { TribunalAdminService } from './tribunal/tribunal-admin.service';
 import { VetadosAdminController } from './vetados/vetados-admin.controller';
@@ -118,6 +120,7 @@ import { DelegadoPortalService } from './delegado/delegado-portal.service';
   controllers: [
     TemporadasAdminController,
     TorneosAdminController,
+    GruposAdminController,
     EquiposAdminController,
     EquiposItemController,
     JugadoresAdminController,
@@ -155,6 +158,7 @@ import { DelegadoPortalService } from './delegado/delegado-portal.service';
   providers: [
     TemporadasAdminService,
     TorneosAdminService,
+    GruposAdminService,
     EquiposAdminService,
     JugadoresAdminService,
     JugadoresGlobalService,
