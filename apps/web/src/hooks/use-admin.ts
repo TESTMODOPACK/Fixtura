@@ -39,6 +39,8 @@ import type {
   TablasPorGrupoAdmin,
   GruposTorneoResponse,
   MoverInscripcionGrupoRequest,
+  BracketPlayoffResponse,
+  DefinirGanadorLlaveRequest,
   Temporada,
   TorneoAdmin,
   UpdatePartidoRequest,
@@ -147,6 +149,71 @@ export function useLimpiarGrupos(torneoId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'grupos'] });
+    },
+  });
+}
+
+// ─── Fase de playoffs / bracket (P5) ─────────────────────────────────
+export function useBracketPlayoffs(torneoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'playoffs'],
+    queryFn: () =>
+      apiFetch<BracketPlayoffResponse>(`/admin/torneos/${torneoId}/playoffs`),
+    enabled: !!torneoId,
+  });
+}
+
+export function useSortearPlayoffs(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<BracketPlayoffResponse>(`/admin/torneos/${torneoId}/playoffs/sortear`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
+    },
+  });
+}
+
+export function useLimpiarPlayoffs(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<BracketPlayoffResponse>(`/admin/torneos/${torneoId}/playoffs`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
+    },
+  });
+}
+
+export function useSincronizarPlayoffs(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<BracketPlayoffResponse>(
+        `/admin/torneos/${torneoId}/playoffs/sincronizar`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      // Crea/avanza partidos → refrescar también fixture y tabla.
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
+    },
+  });
+}
+
+export function useDefinirGanadorLlave(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { llaveId: string } & DefinirGanadorLlaveRequest) =>
+      apiFetch<BracketPlayoffResponse>(
+        `/admin/torneos/${torneoId}/playoffs/llaves/${input.llaveId}/ganador`,
+        { method: 'POST', body: { ganadorInscripcionId: input.ganadorInscripcionId } },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
     },
   });
 }

@@ -12,6 +12,7 @@ import {
   RefreshCw,
   RotateCcw,
   Shuffle,
+  Swords,
   Trash2,
   Trophy,
   Users,
@@ -22,8 +23,10 @@ import { useEffect, useState } from 'react';
 
 import {
   MotivoSuspensionEquipoLabel,
+  type BracketPlayoffResponse,
   type CategoriaJugadores,
   type GruposTorneoResponse,
+  type RondaPlayoffAdmin,
   type TablaGrupoAdmin,
   type TorneoAdmin,
 } from '@fixtura/types';
@@ -33,16 +36,21 @@ import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import { ApiError } from '@/lib/api';
 import {
+  useBracketPlayoffs,
   useCategorias,
+  useDefinirGanadorLlave,
   useDeleteEquipo,
   useDeleteTorneo,
   useEquipos,
   useGruposTorneo,
   useLimpiarGrupos,
+  useLimpiarPlayoffs,
   useMoverInscripcionGrupo,
   useReactivarEquipo,
   useResyncPlanteles,
+  useSincronizarPlayoffs,
   useSortearGrupos,
+  useSortearPlayoffs,
   useTablaAdmin,
   useTablasPorGrupo,
   useTorneo,
@@ -55,7 +63,13 @@ import { GenerarFixtureForm } from './_generar-fixture-form';
 import { NuevoEquipoForm } from './_nuevo-equipo-form';
 import { SuspenderEquipoModal } from './_suspender-equipo-modal';
 
-type Tab = 'equipos' | 'grupos' | 'fixture' | 'posiciones' | 'configuracion';
+type Tab =
+  | 'equipos'
+  | 'grupos'
+  | 'playoffs'
+  | 'fixture'
+  | 'posiciones'
+  | 'configuracion';
 
 export default function TorneoDetailPage({
   params,
@@ -124,6 +138,11 @@ export default function TorneoDetailPage({
           {(torneo.tipoFormato === 'GROUPS' || torneo.tipoFormato === 'MIXTO') && (
             <TabButton active={tab === 'grupos'} onClick={() => setTab('grupos')}>
               Grupos
+            </TabButton>
+          )}
+          {(torneo.tipoFormato === 'PLAYOFFS' || torneo.tipoFormato === 'MIXTO') && (
+            <TabButton active={tab === 'playoffs'} onClick={() => setTab('playoffs')}>
+              Playoffs
             </TabButton>
           )}
           {/* Si el torneo ya tiene fixture generado, el tab navega DIRECTO
@@ -197,6 +216,13 @@ export default function TorneoDetailPage({
       )}
       {tab === 'grupos' && (
         <GruposTab
+          torneoId={id}
+          estado={torneo.estado}
+          fechasCount={torneo.fechasCount}
+        />
+      )}
+      {tab === 'playoffs' && (
+        <PlayoffsTab
           torneoId={id}
           estado={torneo.estado}
           fechasCount={torneo.fechasCount}
@@ -1010,6 +1036,270 @@ function GrupoCard({
             )}
           </div>
         ))}
+      </div>
+    </Card>
+  );
+}
+
+function PlayoffsTab({
+  torneoId,
+  estado,
+  fechasCount,
+}: {
+  torneoId: string;
+  estado: string;
+  fechasCount: number;
+}): React.ReactElement {
+  const { data, isLoading, error } = useBracketPlayoffs(torneoId);
+  const sortear = useSortearPlayoffs(torneoId);
+  const limpiar = useLimpiarPlayoffs(torneoId);
+  const sincronizar = useSincronizarPlayoffs(torneoId);
+  const definirGanador = useDefinirGanadorLlave(torneoId);
+  const apiError = error as ApiError | undefined;
+
+  // El backend solo permite sembrar/limpiar sin fixture generado.
+  const bloqueado = estado !== 'DRAFT' || fechasCount > 0;
+  const hayFixture = fechasCount > 0;
+
+  const onSortear = (): void => {
+    if (
+      data?.sembrado &&
+      !window.confirm(
+        '¿Re-sembrar el cuadro? Se sortean de nuevo todos los cruces al azar.',
+      )
+    ) {
+      return;
+    }
+    sortear.mutate(undefined, {
+      onSuccess: () => toastSuccess('Cuadro sembrado.'),
+      onError: (e) => toastError(e),
+    });
+  };
+
+  const onLimpiar = (): void => {
+    if (!window.confirm('¿Borrar el cuadro de playoffs?')) return;
+    limpiar.mutate(undefined, {
+      onSuccess: () => toastSuccess('Cuadro borrado.'),
+      onError: (e) => toastError(e),
+    });
+  };
+
+  const onSincronizar = (): void => {
+    sincronizar.mutate(undefined, {
+      onSuccess: () => toastSuccess('Ganadores avanzados.'),
+      onError: (e) => toastError(e),
+    });
+  };
+
+  const onDefinir = (llaveId: string, ganadorInscripcionId: string): void => {
+    definirGanador.mutate(
+      { llaveId, ganadorInscripcionId },
+      {
+        onSuccess: () => toastSuccess('Ganador definido.'),
+        onError: (e) => toastError(e),
+      },
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <Card padding="roomy" className="text-center">
+        <p className="font-serif italic text-ink-mute">Cargando cuadro…</p>
+      </Card>
+    );
+  }
+  if (apiError) {
+    return (
+      <Card padding="roomy" className="border-danger/40 bg-danger/5">
+        <p className="text-sm text-danger">{apiError.message}</p>
+      </Card>
+    );
+  }
+  if (!data) return <></>;
+
+  return (
+    <div className="space-y-5">
+      <Card
+        padding="comfortable"
+        className="flex items-center justify-between gap-3 flex-wrap"
+      >
+        <div>
+          <CardLabel>Fase de playoffs</CardLabel>
+          <p className="text-sm text-ink-mute mt-1">
+            {data.cantidadEquipos} equipos ·{' '}
+            {data.idaVuelta ? 'cruces de ida y vuelta' : 'cruce a partido único'}
+            {data.tercerPuesto && ' · con 3er puesto'}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {!bloqueado && (
+            <>
+              <Button
+                variant="accent"
+                onClick={onSortear}
+                loading={sortear.isPending}
+                disabled={limpiar.isPending}
+              >
+                <Shuffle size={14} /> {data.sembrado ? 'Re-sembrar' : 'Sembrar cuadro'}
+              </Button>
+              {data.sembrado && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onLimpiar}
+                  loading={limpiar.isPending}
+                >
+                  <Trash2 size={14} /> Limpiar
+                </Button>
+              )}
+            </>
+          )}
+          {data.sembrado && hayFixture && (
+            <Button
+              variant="default"
+              onClick={onSincronizar}
+              loading={sincronizar.isPending}
+              title="Lee los resultados y avanza los ganadores a la ronda siguiente"
+            >
+              <RefreshCw size={14} /> Avanzar ganadores
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      {!data.sembrado ? (
+        <Card padding="roomy" className="text-center">
+          <Swords size={36} className="mx-auto text-line mb-3" />
+          <p className="font-serif italic text-ink-mute">
+            Todavía no sembraste el cuadro. Inscribe los equipos y toca “Sembrar
+            cuadro” para sortear los cruces.
+          </p>
+          {data.participantes.length > 0 && (
+            <p className="text-xs text-ink-mute mt-3">
+              {data.participantes.length} equipos listos:{' '}
+              {data.participantes.map((p) => p.clubNombre).join(', ')}
+            </p>
+          )}
+        </Card>
+      ) : (
+        <>
+          {!hayFixture && (
+            <Card padding="comfortable" className="border-accent/30 bg-accent/10">
+              <p className="text-sm text-ink">
+                El cuadro está sembrado. Genera el fixture (tab Fixture) para crear
+                los partidos de la primera ronda. A medida que se cierren las
+                actas, toca “Avanzar ganadores” para llenar las rondas siguientes.
+              </p>
+            </Card>
+          )}
+          <div className="flex gap-4 overflow-x-auto pb-2">
+            {data.rondas.map((ronda) => (
+              <BracketRonda
+                key={ronda.ronda}
+                ronda={ronda}
+                onDefinir={onDefinir}
+                definiendo={definirGanador.isPending}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BracketRonda({
+  ronda,
+  onDefinir,
+  definiendo,
+}: {
+  ronda: RondaPlayoffAdmin;
+  onDefinir: (llaveId: string, ganadorInscripcionId: string) => void;
+  definiendo: boolean;
+}): React.ReactElement {
+  return (
+    <div className="shrink-0 w-64 space-y-3">
+      <div className="text-center">
+        <CardLabel tone="mute">{ronda.nombre}</CardLabel>
+      </div>
+      <div className="space-y-3">
+        {ronda.llaves.map((llave) => (
+          <BracketLlaveCard
+            key={llave.id}
+            llave={llave}
+            onDefinir={onDefinir}
+            definiendo={definiendo}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BracketLlaveCard({
+  llave,
+  onDefinir,
+  definiendo,
+}: {
+  llave: RondaPlayoffAdmin['llaves'][number];
+  onDefinir: (llaveId: string, ganadorInscripcionId: string) => void;
+  definiendo: boolean;
+}): React.ReactElement {
+  const ambosDefinidos = !!llave.local && !!llave.visita;
+  const slot = (
+    equipo: RondaPlayoffAdmin['llaves'][number]['local'],
+  ): React.ReactElement => {
+    if (!equipo) {
+      return (
+        <div className="px-3 py-2 text-sm font-serif italic text-ink-mute">
+          Por definir
+        </div>
+      );
+    }
+    const esGanador = llave.ganadorInscripcionId === equipo.inscripcionId;
+    return (
+      <button
+        type="button"
+        // Clicable solo cuando ambos equipos están definidos: define/override
+        // el ganador (para empates que el cálculo automático deja indecisos).
+        disabled={!ambosDefinidos || definiendo}
+        onClick={() => onDefinir(llave.id, equipo.inscripcionId)}
+        className={cn(
+          'w-full px-3 py-2 flex items-center justify-between gap-2 text-left transition-colors',
+          ambosDefinidos && !esGanador && 'hover:bg-paper-dark cursor-pointer',
+          esGanador ? 'bg-green-lime/20' : '',
+        )}
+        title={ambosDefinidos ? 'Marcar como ganador del cruce' : undefined}
+      >
+        <span
+          className={cn(
+            'text-sm truncate',
+            esGanador ? 'font-bold text-green-deep' : 'font-medium',
+          )}
+        >
+          {equipo.clubNombre}
+        </span>
+        {esGanador && <Check size={14} className="text-green-bright shrink-0" />}
+      </button>
+    );
+  };
+
+  return (
+    <Card
+      padding="none"
+      className={cn(
+        'overflow-hidden',
+        llave.esTercerPuesto && 'border-dashed',
+      )}
+    >
+      <div className="px-3 py-1.5 bg-paper-dark border-b border-line">
+        <span className="text-[10px] uppercase tracking-[0.16em] text-ink-mute font-semibold">
+          {llave.nombre}
+        </span>
+      </div>
+      <div className="divide-y divide-line">
+        {slot(llave.local)}
+        {slot(llave.visita)}
       </div>
     </Card>
   );
