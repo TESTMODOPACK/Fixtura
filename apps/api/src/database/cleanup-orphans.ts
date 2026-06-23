@@ -410,6 +410,7 @@ async function main(): Promise<void> {
     // `equipos` y `jugadores_inscritos` siguen existiendo.
     await ensureClubesTables(client, log);
     await ensureGruposTorneo(client, log);
+    await ensurePlayoffsTables(client, log);
 
     // Sprint 32 — directiva por categoría. Un club que participa en
     // varias categorías puede tener distinta directiva en cada una
@@ -2703,6 +2704,59 @@ async function ensureGruposTorneo(
   log(
     'Grupos de torneo asegurados (G1: grupos_torneo + grupo_inscripcion + partidos.grupo_id).',
   );
+}
+
+/**
+ * Fase Playoffs (P1) — config de playoffs en torneos + tabla llaves_playoff
+ * + partidos.llave_id. Aditivo e idempotente. Corre después de ensureClubesTables
+ * (FK a inscripciones_torneo). Topología del bracket: la llave (ronda R, orden O)
+ * alimenta la llave (ronda R+1, orden floor(O/2)); no necesita FK explícita.
+ */
+async function ensurePlayoffsTables(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    ALTER TABLE torneos
+      ADD COLUMN IF NOT EXISTS playoff_ida_vuelta    BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS playoff_tercer_puesto BOOLEAN NOT NULL DEFAULT false
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS llaves_playoff (
+      id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id               UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      torneo_id               UUID NOT NULL REFERENCES torneos(id) ON DELETE CASCADE,
+      ronda                   SMALLINT NOT NULL,
+      orden                   SMALLINT NOT NULL,
+      nombre                  VARCHAR(50) NOT NULL,
+      inscripcion_local_id    UUID REFERENCES inscripciones_torneo(id) ON DELETE SET NULL,
+      inscripcion_visita_id   UUID REFERENCES inscripciones_torneo(id) ON DELETE SET NULL,
+      ganador_inscripcion_id  UUID REFERENCES inscripciones_torneo(id) ON DELETE SET NULL,
+      es_tercer_puesto        BOOLEAN NOT NULL DEFAULT false,
+      created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (torneo_id, ronda, orden)
+    )
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_llaves_playoff_tenant ON llaves_playoff(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_llaves_playoff_torneo ON llaves_playoff(torneo_id)`,
+  );
+  await ensureRls(client, 'llaves_playoff');
+  await ensureTrigger(client, 'llaves_playoff');
+
+  await client.query(`
+    ALTER TABLE partidos
+      ADD COLUMN IF NOT EXISTS llave_id UUID REFERENCES llaves_playoff(id) ON DELETE SET NULL
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_partidos_llave ON partidos(llave_id) WHERE llave_id IS NOT NULL`,
+  );
+
+  log('Playoffs asegurado (P1: torneos.playoff_* + llaves_playoff + partidos.llave_id).');
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

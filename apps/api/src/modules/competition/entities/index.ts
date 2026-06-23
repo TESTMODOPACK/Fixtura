@@ -43,6 +43,7 @@ export { InscripcionTorneo } from './inscripcion-torneo.entity';
 export type { EstadoInscripcion } from './inscripcion-torneo.entity';
 export { GrupoTorneo } from './grupo-torneo.entity';
 export { GrupoInscripcion } from './grupo-inscripcion.entity';
+export { LlavePlayoff } from './llave-playoff.entity';
 export { PlanillaTorneo } from './planilla-torneo.entity';
 export { Partido } from './partido.entity';
 export type { EstadoPartido } from './partido.entity';

@@ -67,6 +67,14 @@ export class Torneo {
   @Column({ name: 'grupos_a_playoffs', type: 'boolean', default: false })
   gruposAPlayoffs!: boolean;
 
+  // Fase Playoffs (formato PLAYOFFS/MIXTO) — config del bracket. ida_vuelta:
+  // cada cruce es a doble partido; tercer_puesto: se juega el 3er puesto.
+  @Column({ name: 'playoff_ida_vuelta', type: 'boolean', default: false })
+  playoffIdaVuelta!: boolean;
+
+  @Column({ name: 'playoff_tercer_puesto', type: 'boolean', default: false })
+  playoffTercerPuesto!: boolean;
+
   @Column({ name: 'puntos_victoria', type: 'smallint', default: 3 })
   puntosVictoria!: number;
 

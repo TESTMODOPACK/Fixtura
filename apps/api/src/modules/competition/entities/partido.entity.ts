@@ -94,6 +94,12 @@ export class Partido {
   @Column({ name: 'grupo_id', type: 'uuid', nullable: true })
   grupoId!: string | null;
 
+  // Fase Playoffs — llave (cruce) a la que pertenece el partido (formato
+  // PLAYOFFS/MIXTO). null para round-robin y grupos. En ida/vuelta, 2 partidos
+  // comparten la misma llave.
+  @Column({ name: 'llave_id', type: 'uuid', nullable: true })
+  llaveId!: string | null;
+
   @Column({ name: 'cancha_id', type: 'uuid', nullable: true })
   canchaId!: string | null;
 
