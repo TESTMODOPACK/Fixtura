@@ -100,6 +100,10 @@ const TorneoFormSchema = z.object({
     .union([z.coerce.number().int().min(1).max(16), z.literal('')])
     .optional(),
   gruposAPlayoffs: z.boolean(),
+  // Fase Playoffs — solo se usan cuando tipoFormato = PLAYOFFS. El backend
+  // las limpia para otros formatos.
+  playoffIdaVuelta: z.boolean(),
+  playoffTercerPuesto: z.boolean(),
 });
 type TorneoForm = z.infer<typeof TorneoFormSchema>;
 
@@ -142,6 +146,8 @@ export default function NuevoTorneoPage(): React.ReactElement {
       cantidadGrupos: '' as unknown as number,
       clasificanPorGrupo: '' as unknown as number,
       gruposAPlayoffs: false,
+      playoffIdaVuelta: false,
+      playoffTercerPuesto: false,
     },
     mode: 'onChange',
   });
@@ -173,6 +179,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
   const refuerzosHabilitados = form.watch('refuerzosHabilitados');
   const tipoFormato = form.watch('tipoFormato');
   const gruposAPlayoffs = form.watch('gruposAPlayoffs');
+  const esPlayoffs = tipoFormato === 'PLAYOFFS';
 
   const ensureTemporadaActual = async (): Promise<string> => {
     if (temporadas && temporadas.length > 0) return temporadas[0]!.id;
@@ -219,6 +226,11 @@ export default function NuevoTorneoPage(): React.ReactElement {
           ? vals.clasificanPorGrupo
           : null;
 
+      // Fase Playoffs — solo mandar banderas si el formato es PLAYOFFS.
+      const esPlayoffs = vals.tipoFormato === 'PLAYOFFS';
+      const playoffIdaVuelta = esPlayoffs ? vals.playoffIdaVuelta : false;
+      const playoffTercerPuesto = esPlayoffs ? vals.playoffTercerPuesto : false;
+
       const torneo = await createTorneo.mutateAsync({
       temporadaId,
       nombre: vals.nombre,
@@ -228,6 +240,8 @@ export default function NuevoTorneoPage(): React.ReactElement {
       cantidadGrupos,
       clasificanPorGrupo,
       gruposAPlayoffs,
+      playoffIdaVuelta,
+      playoffTercerPuesto,
       puntosVictoria: vals.puntosVictoria,
       puntosEmpate: vals.puntosEmpate,
       puntosDerrota: vals.puntosDerrota,
@@ -370,7 +384,7 @@ export default function NuevoTorneoPage(): React.ReactElement {
               <select className="input" {...form.register('tipoFormato')}>
                 <option value="ROUND_ROBIN">Round Robin (todos contra todos)</option>
                 <option value="GROUPS">Fase de grupos</option>
-                <option value="PLAYOFFS" disabled>Playoffs (próximo)</option>
+                <option value="PLAYOFFS">Playoffs (eliminación directa)</option>
                 <option value="MIXTO" disabled>Mixto (próximo)</option>
               </select>
             </div>
@@ -415,16 +429,34 @@ export default function NuevoTorneoPage(): React.ReactElement {
                 </p>
               </div>
             )}
-            <div>
-              <label className="label">Ruedas</label>
-              <select
-                className="input"
-                {...form.register('ruedas', { valueAsNumber: true })}
-              >
-                <option value={1}>1 — solo ida</option>
-                <option value={2}>2 — ida y vuelta</option>
-              </select>
-            </div>
+            {esPlayoffs && (
+              <div className="rounded-card border border-line bg-paper-dark/40 p-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" {...form.register('playoffIdaVuelta')} />
+                  Cada cruce se juega a ida y vuelta (doble partido)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" {...form.register('playoffTercerPuesto')} />
+                  Se juega el partido por el tercer puesto
+                </label>
+                <p className="text-xs font-serif italic text-ink-mute">
+                  Los equipos se siembran en el cuadro por sorteo. El sorteo y el
+                  fixture de la eliminatoria se arman en el detalle del torneo.
+                </p>
+              </div>
+            )}
+            {!esPlayoffs && (
+              <div>
+                <label className="label">Ruedas</label>
+                <select
+                  className="input"
+                  {...form.register('ruedas', { valueAsNumber: true })}
+                >
+                  <option value={1}>1 — solo ida</option>
+                  <option value={2}>2 — ida y vuelta</option>
+                </select>
+              </div>
+            )}
           </div>
         </Card>
 

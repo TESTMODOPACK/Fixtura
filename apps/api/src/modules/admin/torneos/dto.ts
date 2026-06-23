@@ -69,6 +69,15 @@ export class CreateTorneoDto {
   @IsBoolean()
   gruposAPlayoffs?: boolean;
 
+  // Fase Playoffs (PLAYOFFS/MIXTO). Reglas cross-field las valida el service.
+  @IsOptional()
+  @IsBoolean()
+  playoffIdaVuelta?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  playoffTercerPuesto?: boolean;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -238,6 +247,14 @@ export class UpdateTorneoDto {
   @IsOptional()
   @IsBoolean()
   gruposAPlayoffs?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  playoffIdaVuelta?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  playoffTercerPuesto?: boolean;
 
   @IsOptional()
   @Type(() => Number)

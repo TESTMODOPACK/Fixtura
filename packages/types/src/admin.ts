@@ -71,6 +71,11 @@ export const CreateTorneoSchema = z.object({
   cantidadGrupos: z.number().int().min(2).max(32).nullable().optional(),
   clasificanPorGrupo: z.number().int().min(1).max(16).nullable().optional(),
   gruposAPlayoffs: z.boolean().optional(),
+  // Fase Playoffs (formato PLAYOFFS/MIXTO). ida_vuelta: cada cruce a doble
+  // partido; tercer_puesto: se juega el 3er puesto entre los perdedores de
+  // semis. Configurables por el admin.
+  playoffIdaVuelta: z.boolean().optional(),
+  playoffTercerPuesto: z.boolean().optional(),
   puntosVictoria: z.number().int().min(0).max(10).default(3),
   puntosEmpate: z.number().int().min(0).max(10).default(1),
   puntosDerrota: z.number().int().min(0).max(10).default(0),
@@ -116,6 +121,9 @@ export const TorneoAdminSchema = z.object({
   cantidadGrupos: z.number().int().nullable(),
   clasificanPorGrupo: z.number().int().nullable(),
   gruposAPlayoffs: z.boolean(),
+  // Fase Playoffs — config del bracket.
+  playoffIdaVuelta: z.boolean(),
+  playoffTercerPuesto: z.boolean(),
   puntosVictoria: z.number().int(),
   puntosEmpate: z.number().int(),
   puntosDerrota: z.number().int(),

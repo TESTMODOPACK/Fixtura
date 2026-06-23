@@ -291,6 +291,11 @@ export class TorneosAdminService {
       clasificanPorGrupo: input.clasificanPorGrupo,
       gruposAPlayoffs: input.gruposAPlayoffs,
     });
+    const cfgPlayoffs = this.normalizarConfigPlayoffs({
+      tipoFormato: input.tipoFormato ?? 'ROUND_ROBIN',
+      playoffIdaVuelta: input.playoffIdaVuelta,
+      playoffTercerPuesto: input.playoffTercerPuesto,
+    });
 
     // Cargar categorías (con series) para resolver nombres y slugs de
     // los sufijos cuando hagamos split.
@@ -335,6 +340,7 @@ export class TorneosAdminService {
         tipoFormato: input.tipoFormato,
         ruedas: input.ruedas,
         ...cfgGrupos,
+        ...cfgPlayoffs,
         puntosVictoria: input.puntosVictoria,
         puntosEmpate: input.puntosEmpate,
         puntosDerrota: input.puntosDerrota,
@@ -530,12 +536,27 @@ export class TorneosAdminService {
         })
       : null;
 
+    // Fase Playoffs — recalcular si el patch toca el formato o las banderas.
+    const tocaPlayoffs =
+      input.tipoFormato !== undefined ||
+      input.playoffIdaVuelta !== undefined ||
+      input.playoffTercerPuesto !== undefined;
+    const cfgPlayoffs = tocaPlayoffs
+      ? this.normalizarConfigPlayoffs({
+          tipoFormato: input.tipoFormato ?? existing.tipoFormato,
+          playoffIdaVuelta: input.playoffIdaVuelta ?? existing.playoffIdaVuelta,
+          playoffTercerPuesto:
+            input.playoffTercerPuesto ?? existing.playoffTercerPuesto,
+        })
+      : null;
+
     Object.assign(existing, {
       ...(input.nombre !== undefined && { nombre: input.nombre }),
       ...(input.slug !== undefined && { slug: input.slug }),
       ...(input.tipoFormato !== undefined && { tipoFormato: input.tipoFormato }),
       ...(input.ruedas !== undefined && { ruedas: input.ruedas }),
       ...(cfgGrupos !== null && cfgGrupos),
+      ...(cfgPlayoffs !== null && cfgPlayoffs),
       ...(input.puntosVictoria !== undefined && { puntosVictoria: input.puntosVictoria }),
       ...(input.puntosEmpate !== undefined && { puntosEmpate: input.puntosEmpate }),
       ...(input.puntosDerrota !== undefined && { puntosDerrota: input.puntosDerrota }),
@@ -731,6 +752,8 @@ export class TorneosAdminService {
       cantidadGrupos: t.cantidadGrupos ?? null,
       clasificanPorGrupo: t.clasificanPorGrupo ?? null,
       gruposAPlayoffs: t.gruposAPlayoffs ?? false,
+      playoffIdaVuelta: t.playoffIdaVuelta ?? false,
+      playoffTercerPuesto: t.playoffTercerPuesto ?? false,
       puntosVictoria: t.puntosVictoria,
       puntosEmpate: t.puntosEmpate,
       puntosDerrota: t.puntosDerrota,
@@ -800,6 +823,30 @@ export class TorneosAdminService {
       cantidadGrupos: cantidad,
       clasificanPorGrupo: clasifican,
       gruposAPlayoffs: aPlayoffs,
+    };
+  }
+
+  /**
+   * Normaliza la config del bracket de playoffs según el formato.
+   * - PLAYOFFS/MIXTO: respeta las banderas del admin (ida/vuelta, 3er puesto).
+   * - Otros formatos: ambas en false — no aplican.
+   */
+  private normalizarConfigPlayoffs(input: {
+    tipoFormato: string | undefined;
+    playoffIdaVuelta?: boolean | null;
+    playoffTercerPuesto?: boolean | null;
+  }): {
+    playoffIdaVuelta: boolean;
+    playoffTercerPuesto: boolean;
+  } {
+    const usaPlayoffs =
+      input.tipoFormato === 'PLAYOFFS' || input.tipoFormato === 'MIXTO';
+    if (!usaPlayoffs) {
+      return { playoffIdaVuelta: false, playoffTercerPuesto: false };
+    }
+    return {
+      playoffIdaVuelta: input.playoffIdaVuelta ?? false,
+      playoffTercerPuesto: input.playoffTercerPuesto ?? false,
     };
   }
 }
