@@ -62,6 +62,7 @@ const TORNEO_FIELD_LABEL: Record<string, string> = {
   amarillasParaSuspension: 'Amarillas para suspensión',
   cantidadGrupos: 'Cantidad de grupos',
   clasificanPorGrupo: 'Clasifican por grupo',
+  clasificanPlayoffs: 'Clasifican a playoffs',
 };
 
 const TorneoFormSchema = z.object({
@@ -104,6 +105,11 @@ const TorneoFormSchema = z.object({
   // las limpia para otros formatos.
   playoffIdaVuelta: z.boolean(),
   playoffTercerPuesto: z.boolean(),
+  // Mixto fase regular + playoffs (ROUND_ROBIN).
+  roundRobinAPlayoffs: z.boolean(),
+  clasificanPlayoffs: z
+    .union([z.coerce.number().int().min(2).max(64), z.literal('')])
+    .optional(),
 });
 type TorneoForm = z.infer<typeof TorneoFormSchema>;
 
@@ -148,6 +154,8 @@ export default function NuevoTorneoPage(): React.ReactElement {
       gruposAPlayoffs: false,
       playoffIdaVuelta: false,
       playoffTercerPuesto: false,
+      roundRobinAPlayoffs: false,
+      clasificanPlayoffs: '' as unknown as number,
     },
     mode: 'onChange',
   });
@@ -180,6 +188,11 @@ export default function NuevoTorneoPage(): React.ReactElement {
   const tipoFormato = form.watch('tipoFormato');
   const gruposAPlayoffs = form.watch('gruposAPlayoffs');
   const esPlayoffs = tipoFormato === 'PLAYOFFS';
+  const esRoundRobin = tipoFormato === 'ROUND_ROBIN';
+  const roundRobinAPlayoffs = form.watch('roundRobinAPlayoffs');
+  // El bloque de config del bracket (ida/vuelta + 3er puesto) aplica tanto a
+  // PLAYOFFS puro como a round robin + playoffs.
+  const muestraConfigBracket = esPlayoffs || (esRoundRobin && roundRobinAPlayoffs);
 
   const ensureTemporadaActual = async (): Promise<string> => {
     if (temporadas && temporadas.length > 0) return temporadas[0]!.id;
@@ -226,10 +239,20 @@ export default function NuevoTorneoPage(): React.ReactElement {
           ? vals.clasificanPorGrupo
           : null;
 
-      // Fase Playoffs — solo mandar banderas si el formato es PLAYOFFS.
+      // Mixto fase regular + playoffs — solo si el formato es ROUND_ROBIN.
+      const esRoundRobin = vals.tipoFormato === 'ROUND_ROBIN';
+      const roundRobinAPlayoffs = esRoundRobin ? vals.roundRobinAPlayoffs : false;
+      const clasificanPlayoffs =
+        roundRobinAPlayoffs && typeof vals.clasificanPlayoffs === 'number'
+          ? vals.clasificanPlayoffs
+          : null;
+
+      // Fase Playoffs (bracket) — banderas válidas para PLAYOFFS puro o para
+      // round robin + playoffs.
       const esPlayoffs = vals.tipoFormato === 'PLAYOFFS';
-      const playoffIdaVuelta = esPlayoffs ? vals.playoffIdaVuelta : false;
-      const playoffTercerPuesto = esPlayoffs ? vals.playoffTercerPuesto : false;
+      const tieneBracket = esPlayoffs || roundRobinAPlayoffs;
+      const playoffIdaVuelta = tieneBracket ? vals.playoffIdaVuelta : false;
+      const playoffTercerPuesto = tieneBracket ? vals.playoffTercerPuesto : false;
 
       const torneo = await createTorneo.mutateAsync({
       temporadaId,
@@ -242,6 +265,8 @@ export default function NuevoTorneoPage(): React.ReactElement {
       gruposAPlayoffs,
       playoffIdaVuelta,
       playoffTercerPuesto,
+      roundRobinAPlayoffs,
+      clasificanPlayoffs,
       puntosVictoria: vals.puntosVictoria,
       puntosEmpate: vals.puntosEmpate,
       puntosDerrota: vals.puntosDerrota,
@@ -429,7 +454,31 @@ export default function NuevoTorneoPage(): React.ReactElement {
                 </p>
               </div>
             )}
-            {esPlayoffs && (
+            {esRoundRobin && (
+              <div className="rounded-card border border-line bg-paper-dark/40 p-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" {...form.register('roundRobinAPlayoffs')} />
+                  Al terminar la fase regular, los mejores de la tabla pasan a
+                  playoffs
+                </label>
+                {roundRobinAPlayoffs && (
+                  <Input
+                    label="Equipos que clasifican a playoffs"
+                    type="number"
+                    min={2}
+                    max={64}
+                    placeholder="Ej: 8"
+                    {...form.register('clasificanPlayoffs')}
+                    error={
+                      form.formState.errors.clasificanPlayoffs?.message as
+                        | string
+                        | undefined
+                    }
+                  />
+                )}
+              </div>
+            )}
+            {muestraConfigBracket && (
               <div className="rounded-card border border-line bg-paper-dark/40 p-3 space-y-3">
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" {...form.register('playoffIdaVuelta')} />
@@ -440,8 +489,11 @@ export default function NuevoTorneoPage(): React.ReactElement {
                   Se juega el partido por el tercer puesto
                 </label>
                 <p className="text-xs font-serif italic text-ink-mute">
-                  Los equipos se siembran en el cuadro por sorteo. El sorteo y el
-                  fixture de la eliminatoria se arman en el detalle del torneo.
+                  {esPlayoffs
+                    ? 'Los equipos se siembran en el cuadro por sorteo.'
+                    : 'El cuadro se siembra por posición en la tabla (1° vs último clasificado).'}{' '}
+                  El sorteo y el fixture de la eliminatoria se arman en el detalle
+                  del torneo.
                 </p>
               </div>
             )}

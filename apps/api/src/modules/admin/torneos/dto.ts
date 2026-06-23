@@ -78,6 +78,18 @@ export class CreateTorneoDto {
   @IsBoolean()
   playoffTercerPuesto?: boolean;
 
+  // Mixto fase regular + playoffs (ROUND_ROBIN).
+  @IsOptional()
+  @IsBoolean()
+  roundRobinAPlayoffs?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2)
+  @Max(64)
+  clasificanPlayoffs?: number | null;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -260,6 +272,17 @@ export class UpdateTorneoDto {
   @IsOptional()
   @IsBoolean()
   playoffTercerPuesto?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  roundRobinAPlayoffs?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2)
+  @Max(64)
+  clasificanPlayoffs?: number | null;
 
   @IsOptional()
   @Type(() => Number)

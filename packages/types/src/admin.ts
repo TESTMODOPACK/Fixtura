@@ -76,6 +76,10 @@ export const CreateTorneoSchema = z.object({
   // semis. Configurables por el admin.
   playoffIdaVuelta: z.boolean().optional(),
   playoffTercerPuesto: z.boolean().optional(),
+  // Mixto "fase regular + playoffs" (formato ROUND_ROBIN): los mejores N de la
+  // tabla pasan a una eliminatoria sembrada por posición.
+  roundRobinAPlayoffs: z.boolean().optional(),
+  clasificanPlayoffs: z.number().int().min(2).max(64).nullable().optional(),
   puntosVictoria: z.number().int().min(0).max(10).default(3),
   puntosEmpate: z.number().int().min(0).max(10).default(1),
   puntosDerrota: z.number().int().min(0).max(10).default(0),
@@ -124,6 +128,9 @@ export const TorneoAdminSchema = z.object({
   // Fase Playoffs — config del bracket.
   playoffIdaVuelta: z.boolean(),
   playoffTercerPuesto: z.boolean(),
+  // Mixto fase regular + playoffs (ROUND_ROBIN).
+  roundRobinAPlayoffs: z.boolean(),
+  clasificanPlayoffs: z.number().int().nullable(),
   puntosVictoria: z.number().int(),
   puntosEmpate: z.number().int(),
   puntosDerrota: z.number().int(),

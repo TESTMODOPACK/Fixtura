@@ -2718,8 +2718,10 @@ async function ensurePlayoffsTables(
 ): Promise<void> {
   await client.query(`
     ALTER TABLE torneos
-      ADD COLUMN IF NOT EXISTS playoff_ida_vuelta    BOOLEAN NOT NULL DEFAULT false,
-      ADD COLUMN IF NOT EXISTS playoff_tercer_puesto BOOLEAN NOT NULL DEFAULT false
+      ADD COLUMN IF NOT EXISTS playoff_ida_vuelta     BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS playoff_tercer_puesto  BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS round_robin_a_playoffs BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS clasifican_playoffs    SMALLINT
   `);
 
   await client.query(`

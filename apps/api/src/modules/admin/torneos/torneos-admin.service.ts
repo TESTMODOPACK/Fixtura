@@ -295,6 +295,8 @@ export class TorneosAdminService {
       tipoFormato: input.tipoFormato ?? 'ROUND_ROBIN',
       playoffIdaVuelta: input.playoffIdaVuelta,
       playoffTercerPuesto: input.playoffTercerPuesto,
+      roundRobinAPlayoffs: input.roundRobinAPlayoffs,
+      clasificanPlayoffs: input.clasificanPlayoffs,
     });
 
     // Cargar categorías (con series) para resolver nombres y slugs de
@@ -540,13 +542,19 @@ export class TorneosAdminService {
     const tocaPlayoffs =
       input.tipoFormato !== undefined ||
       input.playoffIdaVuelta !== undefined ||
-      input.playoffTercerPuesto !== undefined;
+      input.playoffTercerPuesto !== undefined ||
+      input.roundRobinAPlayoffs !== undefined ||
+      input.clasificanPlayoffs !== undefined;
     const cfgPlayoffs = tocaPlayoffs
       ? this.normalizarConfigPlayoffs({
           tipoFormato: input.tipoFormato ?? existing.tipoFormato,
           playoffIdaVuelta: input.playoffIdaVuelta ?? existing.playoffIdaVuelta,
           playoffTercerPuesto:
             input.playoffTercerPuesto ?? existing.playoffTercerPuesto,
+          roundRobinAPlayoffs:
+            input.roundRobinAPlayoffs ?? existing.roundRobinAPlayoffs,
+          clasificanPlayoffs:
+            input.clasificanPlayoffs ?? existing.clasificanPlayoffs,
         })
       : null;
 
@@ -754,6 +762,8 @@ export class TorneosAdminService {
       gruposAPlayoffs: t.gruposAPlayoffs ?? false,
       playoffIdaVuelta: t.playoffIdaVuelta ?? false,
       playoffTercerPuesto: t.playoffTercerPuesto ?? false,
+      roundRobinAPlayoffs: t.roundRobinAPlayoffs ?? false,
+      clasificanPlayoffs: t.clasificanPlayoffs ?? null,
       puntosVictoria: t.puntosVictoria,
       puntosEmpate: t.puntosEmpate,
       puntosDerrota: t.puntosDerrota,
@@ -829,24 +839,50 @@ export class TorneosAdminService {
   /**
    * Normaliza la config del bracket de playoffs según el formato.
    * - PLAYOFFS/MIXTO: respeta las banderas del admin (ida/vuelta, 3er puesto).
-   * - Otros formatos: ambas en false — no aplican.
+   * - ROUND_ROBIN con roundRobinAPlayoffs: fase regular + playoffs; clasifican
+   *   los mejores N (>=2) de la tabla; respeta también ida/vuelta y 3er puesto.
+   * - Otros casos: todo en false/null — no aplican.
    */
   private normalizarConfigPlayoffs(input: {
     tipoFormato: string | undefined;
     playoffIdaVuelta?: boolean | null;
     playoffTercerPuesto?: boolean | null;
+    roundRobinAPlayoffs?: boolean | null;
+    clasificanPlayoffs?: number | null;
   }): {
     playoffIdaVuelta: boolean;
     playoffTercerPuesto: boolean;
+    roundRobinAPlayoffs: boolean;
+    clasificanPlayoffs: number | null;
   } {
-    const usaPlayoffs =
-      input.tipoFormato === 'PLAYOFFS' || input.tipoFormato === 'MIXTO';
-    if (!usaPlayoffs) {
-      return { playoffIdaVuelta: false, playoffTercerPuesto: false };
+    const esRoundRobin = input.tipoFormato === 'ROUND_ROBIN';
+    const rrAPlayoffs = esRoundRobin ? (input.roundRobinAPlayoffs ?? false) : false;
+    const tienePlayoffs =
+      input.tipoFormato === 'PLAYOFFS' ||
+      input.tipoFormato === 'MIXTO' ||
+      rrAPlayoffs;
+    if (!tienePlayoffs) {
+      return {
+        playoffIdaVuelta: false,
+        playoffTercerPuesto: false,
+        roundRobinAPlayoffs: false,
+        clasificanPlayoffs: null,
+      };
+    }
+    let clasifican: number | null = null;
+    if (rrAPlayoffs) {
+      clasifican = input.clasificanPlayoffs ?? null;
+      if (clasifican === null || clasifican < 2) {
+        throw new BadRequestException(
+          'Indica cuántos equipos clasifican a los playoffs (mínimo 2).',
+        );
+      }
     }
     return {
       playoffIdaVuelta: input.playoffIdaVuelta ?? false,
       playoffTercerPuesto: input.playoffTercerPuesto ?? false,
+      roundRobinAPlayoffs: rrAPlayoffs,
+      clasificanPlayoffs: clasifican,
     };
   }
 }

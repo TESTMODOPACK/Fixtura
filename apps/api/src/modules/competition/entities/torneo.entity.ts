@@ -75,6 +75,16 @@ export class Torneo {
   @Column({ name: 'playoff_tercer_puesto', type: 'boolean', default: false })
   playoffTercerPuesto!: boolean;
 
+  // Mixto "fase regular + playoffs" (formato ROUND_ROBIN): si está activo, al
+  // terminar el todos-contra-todos los mejores `clasifican_playoffs` de la
+  // tabla pasan a una eliminatoria (sembrada por posición). false = el torneo
+  // termina en la fase regular.
+  @Column({ name: 'round_robin_a_playoffs', type: 'boolean', default: false })
+  roundRobinAPlayoffs!: boolean;
+
+  @Column({ name: 'clasifican_playoffs', type: 'smallint', nullable: true })
+  clasificanPlayoffs!: number | null;
+
   @Column({ name: 'puntos_victoria', type: 'smallint', default: 3 })
   puntosVictoria!: number;
 
