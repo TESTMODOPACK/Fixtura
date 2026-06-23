@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
 import type {
@@ -18,11 +18,30 @@ import { aplicarConstraintsFixture, generarFixtureBerger } from '@fixtura/domain
 
 import { Cancha } from '../../competition/entities/cancha.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
+import { GrupoInscripcion } from '../../competition/entities/grupo-inscripcion.entity';
+import { GrupoTorneo } from '../../competition/entities/grupo-torneo.entity';
 import { HorarioTorneo } from '../../competition/entities/horario-torneo.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { DiasNoJugablesService } from '../dias-no-jugables/dias-no-jugables.service';
+
+/** Partido del fixture en memoria, opcionalmente etiquetado con su grupo. */
+interface PartidoArmado {
+  fechaNumero: number;
+  equipoLocalId: string;
+  equipoVisitaId: string;
+  esLibre?: boolean;
+  grupoId?: string | null;
+}
+
+interface FixtureArmado {
+  fechas: number;
+  partidos: PartidoArmado[];
+  // Equipo libre por fecha (bye). Solo lo provee el round-robin global; en
+  // grupos cada grupo maneja sus propios byes y no se enumeran acá.
+  libresPorFecha?: Record<number, string | null>;
+}
 
 @Injectable()
 export class FixtureAdminService {
@@ -39,6 +58,10 @@ export class FixtureAdminService {
     @InjectRepository(Torneo) private readonly torneoRepo: Repository<Torneo>,
     @InjectRepository(InscripcionTorneo)
     private readonly inscRepo: Repository<InscripcionTorneo>,
+    @InjectRepository(GrupoTorneo)
+    private readonly grupoRepo: Repository<GrupoTorneo>,
+    @InjectRepository(GrupoInscripcion)
+    private readonly grupoInscRepo: Repository<GrupoInscripcion>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
     @InjectRepository(HorarioTorneo)
@@ -47,6 +70,88 @@ export class FixtureAdminService {
     private readonly canchaRepo: Repository<Cancha>,
     private readonly diasNoJugables: DiasNoJugablesService,
   ) {}
+
+  /**
+   * Fase Grupos — arma el fixture corriendo un round-robin (Berger +
+   * constraints) por cada grupo y alineando las rondas en jornadas
+   * sincronizadas: la ronda R de cada grupo cae en la Fecha R, y el total de
+   * fechas lo marca el grupo más grande. Cada partido queda etiquetado con su
+   * grupoId. Valida que los grupos estén sorteados y que no quede ningún
+   * equipo activo sin grupo (defensa contra inscripciones post-sorteo).
+   */
+  private async construirFixturePorGrupos(
+    torneoId: string,
+    tenantId: string,
+    torneo: Torneo,
+  ): Promise<FixtureArmado> {
+    const grupos = await this.grupoRepo.find({
+      where: { torneoId, tenantId },
+      order: { numero: 'ASC' },
+    });
+    if (grupos.length === 0) {
+      throw new BadRequestException(
+        'Sortea los grupos antes de generar el fixture (todavía no hay grupos).',
+      );
+    }
+
+    const elegibles = await this.inscRepo.find({
+      where: { torneoId, tenantId, estado: In(['INSCRITO', 'ACTIVO']) },
+      relations: { club: true },
+    });
+    const nombrePorId = new Map(
+      elegibles.map((i) => [i.id, i.club?.nombre ?? i.id] as const),
+    );
+
+    const asignaciones = await this.grupoInscRepo.find({
+      where: { torneoId, tenantId },
+    });
+    const idsPorGrupo = new Map<string, string[]>();
+    const asignadas = new Set<string>();
+    for (const a of asignaciones) {
+      if (!nombrePorId.has(a.inscripcionId)) continue; // ignora no-elegibles
+      asignadas.add(a.inscripcionId);
+      const arr = idsPorGrupo.get(a.grupoId) ?? [];
+      arr.push(a.inscripcionId);
+      idsPorGrupo.set(a.grupoId, arr);
+    }
+
+    const sinAsignar = elegibles.filter((i) => !asignadas.has(i.id));
+    if (sinAsignar.length > 0) {
+      throw new BadRequestException(
+        `Hay ${sinAsignar.length} equipo(s) sin grupo asignado. Re-sortea los ` +
+          'grupos (o asignalos a mano) antes de generar el fixture.',
+      );
+    }
+
+    const partidos: PartidoArmado[] = [];
+    let fechasTotal = 0;
+    for (const g of grupos) {
+      const ids = idsPorGrupo.get(g.id) ?? [];
+      if (ids.length < 2) {
+        throw new BadRequestException(
+          `El ${g.nombre} tiene ${ids.length} equipo(s); cada grupo necesita al menos 2.`,
+        );
+      }
+      const equiposG = ids.map((id) => ({ id, nombre: nombrePorId.get(id) ?? id }));
+      const bruto = generarFixtureBerger(equiposG, { ruedas: torneo.ruedas });
+      const ajustado = aplicarConstraintsFixture({
+        fixture: bruto,
+        equipos: equiposG,
+        maxLocalesSeguidos: 2,
+      });
+      for (const p of ajustado.fixture.partidos) {
+        partidos.push({
+          fechaNumero: p.fechaNumero,
+          equipoLocalId: p.equipoLocalId,
+          equipoVisitaId: p.equipoVisitaId,
+          grupoId: g.id,
+        });
+      }
+      fechasTotal = Math.max(fechasTotal, ajustado.fixture.fechas);
+    }
+
+    return { fechas: fechasTotal, partidos };
+  }
 
   /**
    * Sprint 44 fix — Parsear 'YYYY-MM-DD' como medianoche en hora LOCAL.
@@ -138,30 +243,35 @@ export class FixtureAdminService {
       throw new BadRequestException(`Se requieren al menos 2 equipos. Hay ${equipos.length}.`);
     }
 
-    // Generar con Berger
-    const fixtureBruto = generarFixtureBerger(
-      equipos.map((e) => ({ id: e.id, nombre: e.nombre })),
-      { ruedas: torneo.ruedas },
-    );
-
-    // Sprint 15: aplicar constraints (no 3 locales seguidos +
-    // canchas compartidas). canchaPorEquipo se omite aquí porque
-    // todavía no hay relación equipo↔cancha persistida (el campo
-    // sigue siendo asignación manual por partido).
-    const ajustado = aplicarConstraintsFixture({
-      fixture: fixtureBruto,
-      equipos: equipos.map((e) => ({ id: e.id, nombre: e.nombre })),
-      maxLocalesSeguidos: 2,
-    });
-    const fixture = ajustado.fixture;
-    if (ajustado.warnings.length > 0) {
-      // Loguear warnings — el caller los puede ver en logs.
-      // Futuro: devolverlos en la respuesta para que el admin los vea
-      // en la UI.
-      console.warn(
-        `[fixture-gen] tenant=${tenantId} torneo=${torneoId}: ${ajustado.warnings.length} advertencias`,
-        ajustado.warnings,
+    // Fase Grupos — si el torneo usa grupos, generamos un round-robin por
+    // grupo y alineamos las rondas en jornadas sincronizadas (la ronda R de
+    // cada grupo cae en la Fecha R; el total lo marca el grupo más grande).
+    // Si no, round-robin global clásico (Berger + constraints).
+    const usaGrupos =
+      torneo.tipoFormato === 'GROUPS' || torneo.tipoFormato === 'MIXTO';
+    let fixture: FixtureArmado;
+    if (usaGrupos) {
+      fixture = await this.construirFixturePorGrupos(torneoId, tenantId, torneo);
+    } else {
+      const fixtureBruto = generarFixtureBerger(
+        equipos.map((e) => ({ id: e.id, nombre: e.nombre })),
+        { ruedas: torneo.ruedas },
       );
+      // Sprint 15: aplicar constraints (no 3 locales seguidos + canchas
+      // compartidas). canchaPorEquipo se omite porque todavía no hay
+      // relación equipo↔cancha persistida (asignación manual por partido).
+      const ajustado = aplicarConstraintsFixture({
+        fixture: fixtureBruto,
+        equipos: equipos.map((e) => ({ id: e.id, nombre: e.nombre })),
+        maxLocalesSeguidos: 2,
+      });
+      fixture = ajustado.fixture;
+      if (ajustado.warnings.length > 0) {
+        console.warn(
+          `[fixture-gen] tenant=${tenantId} torneo=${torneoId}: ${ajustado.warnings.length} advertencias`,
+          ajustado.warnings,
+        );
+      }
     }
 
     // Sprint 39 — cargar horarios del torneo ya aquí (antes del loop de
@@ -420,6 +530,8 @@ export class FixtureAdminService {
           fechaId,
           inscripcionLocalId: p.equipoLocalId,
           inscripcionVisitaId: p.equipoVisitaId,
+          // Fase Grupos — null en round-robin/playoffs; el grupo en GROUPS/MIXTO.
+          grupoId: p.grupoId ?? null,
           canchaNombre,
           canchaId,
           fechaHora,
@@ -429,7 +541,7 @@ export class FixtureAdminService {
       partidosCreados++;
     }
 
-    const equiposLibres = Object.entries(fixture.libresPorFecha)
+    const equiposLibres = Object.entries(fixture.libresPorFecha ?? {})
       .filter(([, eqId]) => eqId !== null)
       .map(([fechaNumero, equipoId]) => ({
         fechaNumero: Number.parseInt(fechaNumero, 10),
