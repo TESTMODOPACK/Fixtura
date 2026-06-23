@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Shuffle,
   Trash2,
   Trophy,
   Users,
@@ -22,6 +23,8 @@ import { useEffect, useState } from 'react';
 import {
   MotivoSuspensionEquipoLabel,
   type CategoriaJugadores,
+  type GruposTorneoResponse,
+  type TablaGrupoAdmin,
   type TorneoAdmin,
 } from '@fixtura/types';
 
@@ -34,9 +37,14 @@ import {
   useDeleteEquipo,
   useDeleteTorneo,
   useEquipos,
+  useGruposTorneo,
+  useLimpiarGrupos,
+  useMoverInscripcionGrupo,
   useReactivarEquipo,
   useResyncPlanteles,
+  useSortearGrupos,
   useTablaAdmin,
+  useTablasPorGrupo,
   useTorneo,
   useUpdateTorneo,
 } from '@/hooks/use-admin';
@@ -47,7 +55,7 @@ import { GenerarFixtureForm } from './_generar-fixture-form';
 import { NuevoEquipoForm } from './_nuevo-equipo-form';
 import { SuspenderEquipoModal } from './_suspender-equipo-modal';
 
-type Tab = 'equipos' | 'fixture' | 'posiciones' | 'configuracion';
+type Tab = 'equipos' | 'grupos' | 'fixture' | 'posiciones' | 'configuracion';
 
 export default function TorneoDetailPage({
   params,
@@ -113,6 +121,11 @@ export default function TorneoDetailPage({
           <TabButton active={tab === 'equipos'} onClick={() => setTab('equipos')}>
             Equipos <span className="text-ink-mute">({torneo.equiposCount})</span>
           </TabButton>
+          {(torneo.tipoFormato === 'GROUPS' || torneo.tipoFormato === 'MIXTO') && (
+            <TabButton active={tab === 'grupos'} onClick={() => setTab('grupos')}>
+              Grupos
+            </TabButton>
+          )}
           {/* Si el torneo ya tiene fixture generado, el tab navega DIRECTO
               al detalle (sin pasar por una card intermedia con un botón
               "Ver detalle"). Si todavía no hay fixture, queda como tab
@@ -180,6 +193,13 @@ export default function TorneoDetailPage({
           }
           categoriaNombre={torneo.categoriaNombre}
           combos={combos}
+        />
+      )}
+      {tab === 'grupos' && (
+        <GruposTab
+          torneoId={id}
+          estado={torneo.estado}
+          fechasCount={torneo.fechasCount}
         />
       )}
       {tab === 'fixture' && (
@@ -738,6 +758,258 @@ function PosicionesTab({ torneoId }: { torneoId: string }): React.ReactElement {
         PJ jugados · G/E/P ganados, empatados, perdidos · GF/GC goles a favor y
         en contra · DG diferencia · Pts puntos. Desempate por:{' '}
         {data.tiebreakers.join(' → ')}.
+      </div>
+    </Card>
+  );
+}
+
+// ─── Tab: Grupos (sorteo + vistas + tabla por grupo) ────────────────
+function GruposTab({
+  torneoId,
+  estado,
+  fechasCount,
+}: {
+  torneoId: string;
+  estado: string;
+  fechasCount: number;
+}): React.ReactElement {
+  const { data, isLoading, error } = useGruposTorneo(torneoId);
+  const { data: tablas } = useTablasPorGrupo(torneoId);
+  const sortear = useSortearGrupos(torneoId);
+  const mover = useMoverInscripcionGrupo(torneoId);
+  const limpiar = useLimpiarGrupos(torneoId);
+  const apiError = error as ApiError | undefined;
+
+  // El backend solo permite sortear/mover sin fixture generado. Reflejamos
+  // ese estado: en DRAFT y sin fechas, se puede editar.
+  const bloqueado = estado !== 'DRAFT' || fechasCount > 0;
+  const filasPorGrupo = new Map(
+    (tablas?.grupos ?? []).map((g) => [g.grupoId, g.filas]),
+  );
+
+  const onSortear = (): void => {
+    if (
+      data?.sorteado &&
+      !window.confirm(
+        '¿Re-sortear los grupos? Se reparten de nuevo todos los equipos al azar.',
+      )
+    ) {
+      return;
+    }
+    sortear.mutate(undefined, {
+      onSuccess: () => toastSuccess('Grupos sorteados.'),
+      onError: (e) => toastError(e),
+    });
+  };
+
+  const onLimpiar = (): void => {
+    if (!window.confirm('¿Borrar el sorteo de grupos?')) return;
+    limpiar.mutate(undefined, {
+      onSuccess: () => toastSuccess('Sorteo borrado.'),
+      onError: (e) => toastError(e),
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <Card padding="roomy" className="text-center">
+        <p className="font-serif italic text-ink-mute">Cargando grupos…</p>
+      </Card>
+    );
+  }
+  if (apiError) {
+    return (
+      <Card padding="roomy" className="border-danger/40 bg-danger/5">
+        <p className="text-sm text-danger">{apiError.message}</p>
+      </Card>
+    );
+  }
+  if (!data) return <></>;
+
+  const equiposAsignados = data.grupos.reduce(
+    (n, g) => n + g.inscripciones.length,
+    0,
+  );
+
+  return (
+    <div className="space-y-5">
+      <Card
+        padding="comfortable"
+        className="flex items-center justify-between gap-3 flex-wrap"
+      >
+        <div>
+          <CardLabel>Fase de grupos</CardLabel>
+          <p className="text-sm text-ink-mute mt-1">
+            {data.cantidadGrupos ?? '—'} grupos · {equiposAsignados} equipos
+            asignados
+            {data.sinAsignar.length > 0 &&
+              ` · ${data.sinAsignar.length} sin asignar`}
+          </p>
+        </div>
+        {!bloqueado ? (
+          <div className="flex gap-2">
+            <Button
+              variant="accent"
+              onClick={onSortear}
+              loading={sortear.isPending}
+              disabled={limpiar.isPending}
+            >
+              <Shuffle size={14} /> {data.sorteado ? 'Re-sortear' : 'Sortear grupos'}
+            </Button>
+            {data.sorteado && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onLimpiar}
+                loading={limpiar.isPending}
+              >
+                <Trash2 size={14} /> Limpiar
+              </Button>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs font-serif italic text-ink-mute max-w-xs text-right">
+            El fixture ya está generado (o el torneo no está en borrador): los
+            grupos quedan fijos.
+          </span>
+        )}
+      </Card>
+
+      {data.sinAsignar.length > 0 && (
+        <Card padding="comfortable" className="border-accent/30 bg-accent/10">
+          <p className="text-sm text-ink">
+            <strong>{data.sinAsignar.length} equipo(s) sin grupo:</strong>{' '}
+            {data.sinAsignar.map((i) => i.clubNombre).join(', ')}.{' '}
+            {bloqueado
+              ? 'Quedaron fuera del sorteo.'
+              : 'Re-sortea para repartirlos, o asignalos a mano abajo.'}
+          </p>
+        </Card>
+      )}
+
+      {!data.sorteado ? (
+        <Card padding="roomy" className="text-center">
+          <Trophy size={36} className="mx-auto text-line mb-3" />
+          <p className="font-serif italic text-ink-mute">
+            Todavía no sorteaste los grupos. Inscribe los equipos y tocá
+            “Sortear grupos”.
+          </p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {data.grupos.map((g) => (
+            <GrupoCard
+              key={g.id}
+              grupo={g}
+              grupos={data.grupos}
+              filas={filasPorGrupo.get(g.id) ?? []}
+              bloqueado={bloqueado}
+              moverPending={mover.isPending}
+              onMover={(inscripcionId, grupoId) =>
+                mover.mutate(
+                  { inscripcionId, grupoId },
+                  { onError: (e) => toastError(e) },
+                )
+              }
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GrupoCard({
+  grupo,
+  grupos,
+  filas,
+  bloqueado,
+  moverPending,
+  onMover,
+}: {
+  grupo: GruposTorneoResponse['grupos'][number];
+  grupos: GruposTorneoResponse['grupos'];
+  filas: TablaGrupoAdmin['filas'];
+  bloqueado: boolean;
+  moverPending: boolean;
+  onMover: (inscripcionId: string, grupoId: string) => void;
+}): React.ReactElement {
+  // Mostramos los equipos ORDENADOS por posición usando las filas de la tabla
+  // por grupo (G5). Si la tabla todavía no cargó, caemos a la nómina del grupo
+  // (orden alfabético, sin stats).
+  const items =
+    filas.length > 0
+      ? filas.map((f, i) => ({
+          inscripcionId: f.equipoId,
+          nombre: f.equipoNombre,
+          pos: i + 1,
+          fila: f,
+        }))
+      : grupo.inscripciones.map((insc) => ({
+          inscripcionId: insc.inscripcionId,
+          nombre: insc.clubNombre,
+          pos: null as number | null,
+          fila: undefined,
+        }));
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="px-5 py-3 bg-paper-dark border-b border-line">
+        <CardLabel tone="mute">{grupo.nombre}</CardLabel>
+        <div className="font-display text-lg text-green-deep tracking-display">
+          {grupo.inscripciones.length} EQUIPOS
+        </div>
+      </div>
+      <div className="divide-y divide-line">
+        {items.length === 0 && (
+          <div className="px-5 py-3 text-sm font-serif italic text-ink-mute">
+            Sin equipos en este grupo.
+          </div>
+        )}
+        {items.map((it) => (
+          <div
+            key={it.inscripcionId}
+            className="px-5 py-2.5 flex items-center gap-3"
+          >
+            {it.pos != null && (
+              <span className="font-mono text-sm text-ink-mute w-5 text-right">
+                {it.pos}
+              </span>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-sm truncate">{it.nombre}</div>
+              {it.fila && (
+                <div className="text-xs text-ink-mute">
+                  {it.fila.pj} PJ · {it.fila.dg > 0 ? `+${it.fila.dg}` : it.fila.dg} DG
+                </div>
+              )}
+            </div>
+            {it.fila && (
+              <span className="font-display text-lg text-green-deep tracking-display">
+                {it.fila.pts}
+              </span>
+            )}
+            {!bloqueado && grupos.length > 1 && (
+              <select
+                className="input text-xs py-1 w-auto"
+                value={grupo.id}
+                disabled={moverPending}
+                title="Mover a otro grupo"
+                onChange={(e) => {
+                  if (e.target.value !== grupo.id) {
+                    onMover(it.inscripcionId, e.target.value);
+                  }
+                }}
+              >
+                {grupos.map((gg) => (
+                  <option key={gg.id} value={gg.id}>
+                    {gg.nombre}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        ))}
       </div>
     </Card>
   );

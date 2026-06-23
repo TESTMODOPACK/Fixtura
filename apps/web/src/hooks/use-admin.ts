@@ -36,6 +36,9 @@ import type {
   PersonalAdmin,
   SancionAdmin,
   TablaPosicionesAdmin,
+  TablasPorGrupoAdmin,
+  GruposTorneoResponse,
+  MoverInscripcionGrupoRequest,
   Temporada,
   TorneoAdmin,
   UpdatePartidoRequest,
@@ -86,6 +89,65 @@ export function useTablaAdmin(torneoId: string | null | undefined) {
     queryFn: () =>
       apiFetch<TablaPosicionesAdmin>(`/admin/torneos/${torneoId}/tabla`),
     enabled: !!torneoId,
+  });
+}
+
+// ─── Fase de grupos (G6) ─────────────────────────────────────────────
+export function useGruposTorneo(torneoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'grupos'],
+    queryFn: () =>
+      apiFetch<GruposTorneoResponse>(`/admin/torneos/${torneoId}/grupos`),
+    enabled: !!torneoId,
+  });
+}
+
+export function useTablasPorGrupo(torneoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'grupos', 'tabla'],
+    queryFn: () =>
+      apiFetch<TablasPorGrupoAdmin>(`/admin/torneos/${torneoId}/grupos/tabla`),
+    enabled: !!torneoId,
+  });
+}
+
+export function useSortearGrupos(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<GruposTorneoResponse>(`/admin/torneos/${torneoId}/grupos/sortear`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'grupos'] });
+    },
+  });
+}
+
+export function useMoverInscripcionGrupo(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: MoverInscripcionGrupoRequest) =>
+      apiFetch<GruposTorneoResponse>(`/admin/torneos/${torneoId}/grupos/mover`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'grupos'] });
+    },
+  });
+}
+
+export function useLimpiarGrupos(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<GruposTorneoResponse>(`/admin/torneos/${torneoId}/grupos`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'grupos'] });
+    },
   });
 }
 
