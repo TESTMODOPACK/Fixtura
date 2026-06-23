@@ -140,7 +140,9 @@ export default function TorneoDetailPage({
               Grupos
             </TabButton>
           )}
-          {(torneo.tipoFormato === 'PLAYOFFS' || torneo.tipoFormato === 'MIXTO') && (
+          {(torneo.tipoFormato === 'PLAYOFFS' ||
+            torneo.tipoFormato === 'MIXTO' ||
+            (torneo.tipoFormato === 'ROUND_ROBIN' && torneo.roundRobinAPlayoffs)) && (
             <TabButton active={tab === 'playoffs'} onClick={() => setTab('playoffs')}>
               Playoffs
             </TabButton>
@@ -226,6 +228,9 @@ export default function TorneoDetailPage({
           torneoId={id}
           estado={torneo.estado}
           fechasCount={torneo.fechasCount}
+          esRoundRobinPlayoffs={
+            torneo.tipoFormato === 'ROUND_ROBIN' && torneo.roundRobinAPlayoffs
+          }
         />
       )}
       {tab === 'fixture' && (
@@ -1045,10 +1050,12 @@ function PlayoffsTab({
   torneoId,
   estado,
   fechasCount,
+  esRoundRobinPlayoffs,
 }: {
   torneoId: string;
   estado: string;
   fechasCount: number;
+  esRoundRobinPlayoffs: boolean;
 }): React.ReactElement {
   const { data, isLoading, error } = useBracketPlayoffs(torneoId);
   const sortear = useSortearPlayoffs(torneoId);
@@ -1057,9 +1064,15 @@ function PlayoffsTab({
   const definirGanador = useDefinirGanadorLlave(torneoId);
   const apiError = error as ApiError | undefined;
 
-  // El backend solo permite sembrar/limpiar sin fixture generado.
-  const bloqueado = estado !== 'DRAFT' || fechasCount > 0;
+  // PLAYOFFS puro: solo se siembra/limpia sin fixture y en DRAFT (el fixture se
+  // genera aparte). Mixto round robin → playoffs: la siembra es por tabla y YA
+  // genera el fixture; el backend valida que la fase regular esté completa.
   const hayFixture = fechasCount > 0;
+  const bloqueado = estado !== 'DRAFT' || fechasCount > 0;
+  const mostrarSembrar = esRoundRobinPlayoffs ? !data?.sembrado : !bloqueado;
+  const mostrarLimpiar =
+    !!data?.sembrado && (esRoundRobinPlayoffs || !bloqueado);
+  const mostrarSincronizar = !!data?.sembrado && hayFixture;
 
   const onSortear = (): void => {
     if (
@@ -1132,29 +1145,32 @@ function PlayoffsTab({
           </p>
         </div>
         <div className="flex gap-2">
-          {!bloqueado && (
-            <>
-              <Button
-                variant="accent"
-                onClick={onSortear}
-                loading={sortear.isPending}
-                disabled={limpiar.isPending}
-              >
-                <Shuffle size={14} /> {data.sembrado ? 'Re-sembrar' : 'Sembrar cuadro'}
-              </Button>
-              {data.sembrado && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onLimpiar}
-                  loading={limpiar.isPending}
-                >
-                  <Trash2 size={14} /> Limpiar
-                </Button>
-              )}
-            </>
+          {mostrarSembrar && (
+            <Button
+              variant="accent"
+              onClick={onSortear}
+              loading={sortear.isPending}
+              disabled={limpiar.isPending}
+            >
+              <Shuffle size={14} />{' '}
+              {esRoundRobinPlayoffs
+                ? 'Sembrar desde la tabla'
+                : data.sembrado
+                  ? 'Re-sembrar'
+                  : 'Sembrar cuadro'}
+            </Button>
           )}
-          {data.sembrado && hayFixture && (
+          {mostrarLimpiar && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onLimpiar}
+              loading={limpiar.isPending}
+            >
+              <Trash2 size={14} /> Limpiar
+            </Button>
+          )}
+          {mostrarSincronizar && (
             <Button
               variant="default"
               onClick={onSincronizar}
@@ -1171,13 +1187,13 @@ function PlayoffsTab({
         <Card padding="roomy" className="text-center">
           <Swords size={36} className="mx-auto text-line mb-3" />
           <p className="font-serif italic text-ink-mute">
-            Todavía no sembraste el cuadro. Inscribe los equipos y toca “Sembrar
-            cuadro” para sortear los cruces.
+            {esRoundRobinPlayoffs
+              ? 'Cuando termine la fase regular, toca “Sembrar desde la tabla” para armar el cuadro con los mejores de la tabla y generar el fixture de la eliminatoria.'
+              : 'Todavía no sembraste el cuadro. Inscribe los equipos y toca “Sembrar cuadro” para sortear los cruces.'}
           </p>
           {data.participantes.length > 0 && (
             <p className="text-xs text-ink-mute mt-3">
-              {data.participantes.length} equipos listos:{' '}
-              {data.participantes.map((p) => p.clubNombre).join(', ')}
+              {data.participantes.length} equipos en el torneo
             </p>
           )}
         </Card>
