@@ -160,11 +160,17 @@ export class DashboardAdminService {
   }
 
   private async contarActasPendientes(tenantId: string): Promise<number> {
+    // Solo cuentan los partidos que de verdad esperan resultado: PROGRAMADO o
+    // EN_CURSO. Quedan fuera FINALIZADO/WALKOVER (ya resueltos) y también
+    // SUSPENDIDO_FUERZA_MAYOR / REPROGRAMADO (un suspendido no tiene acta que
+    // cerrar; un reprogramado es el registro histórico y el partido real vive
+    // en otra fecha). Whitelist en vez de blacklist para no recontar estos al
+    // agregar estados nuevos al enum.
     return this.partidoRepo
       .createQueryBuilder('p')
       .where('p.tenant_id = :tenantId', { tenantId })
       .andWhere('p.acta_cerrada_at IS NULL')
-      .andWhere(`p.estado NOT IN ('FINALIZADO', 'WALKOVER')`)
+      .andWhere(`p.estado IN ('PROGRAMADO', 'EN_CURSO')`)
       .andWhere('p.fecha_hora IS NOT NULL')
       .andWhere('p.fecha_hora < NOW()')
       .getCount();

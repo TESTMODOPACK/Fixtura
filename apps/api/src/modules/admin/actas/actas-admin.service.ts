@@ -43,8 +43,12 @@ export class ActasAdminService {
       qb.andWhere('p.estado = :estado', { estado: query.estado });
     }
     if (query.filtro === 'pendientes') {
+      // "Pendientes" = solo lo que espera resultado (PROGRAMADO/EN_CURSO).
+      // FINALIZADO/WALKOVER ya están resueltos; SUSPENDIDO_FUERZA_MAYOR no tiene
+      // acta que cerrar y REPROGRAMADO es el registro histórico (el partido real
+      // vive en otra fecha). Mismo criterio que el contador del panel.
       qb.andWhere('p.acta_cerrada_at IS NULL').andWhere(
-        `p.estado NOT IN ('FINALIZADO', 'WALKOVER')`,
+        `p.estado IN ('PROGRAMADO', 'EN_CURSO')`,
       );
     } else if (query.filtro === 'cerradas') {
       qb.andWhere('p.acta_cerrada_at IS NOT NULL');
