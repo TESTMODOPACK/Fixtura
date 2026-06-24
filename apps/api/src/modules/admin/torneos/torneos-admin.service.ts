@@ -300,6 +300,7 @@ export class TorneosAdminService {
       playoffTercerPuesto: input.playoffTercerPuesto,
       roundRobinAPlayoffs: input.roundRobinAPlayoffs,
       clasificanPlayoffs: input.clasificanPlayoffs,
+      gruposAPlayoffs: cfgGrupos.gruposAPlayoffs,
     });
 
     // Cargar categorías (con series) para resolver nombres y slugs de
@@ -541,13 +542,15 @@ export class TorneosAdminService {
         })
       : null;
 
-    // Fase Playoffs — recalcular si el patch toca el formato o las banderas.
+    // Fase Playoffs — recalcular si el patch toca el formato o las banderas
+    // (incluido gruposAPlayoffs, que habilita el bracket en GROUPS).
     const tocaPlayoffs =
       input.tipoFormato !== undefined ||
       input.playoffIdaVuelta !== undefined ||
       input.playoffTercerPuesto !== undefined ||
       input.roundRobinAPlayoffs !== undefined ||
-      input.clasificanPlayoffs !== undefined;
+      input.clasificanPlayoffs !== undefined ||
+      input.gruposAPlayoffs !== undefined;
     const cfgPlayoffs = tocaPlayoffs
       ? this.normalizarConfigPlayoffs({
           tipoFormato: input.tipoFormato ?? existing.tipoFormato,
@@ -558,6 +561,10 @@ export class TorneosAdminService {
             input.roundRobinAPlayoffs ?? existing.roundRobinAPlayoffs,
           clasificanPlayoffs:
             input.clasificanPlayoffs ?? existing.clasificanPlayoffs,
+          gruposAPlayoffs:
+            cfgGrupos?.gruposAPlayoffs ??
+            input.gruposAPlayoffs ??
+            existing.gruposAPlayoffs,
         })
       : null;
 
@@ -844,7 +851,11 @@ export class TorneosAdminService {
    * - PLAYOFFS/MIXTO: respeta las banderas del admin (ida/vuelta, 3er puesto).
    * - ROUND_ROBIN con roundRobinAPlayoffs: fase regular + playoffs; clasifican
    *   los mejores N (>=2) de la tabla; respeta también ida/vuelta y 3er puesto.
+   * - GROUPS con gruposAPlayoffs: la fase de grupos clasifica a una eliminatoria
+   *   (los mejores N de cada grupo); respeta ida/vuelta y 3er puesto.
    * - Otros casos: todo en false/null — no aplican.
+   *
+   * `gruposAPlayoffs` se pasa ya normalizado (lo calcula normalizarConfigGrupos).
    */
   private normalizarConfigPlayoffs(input: {
     tipoFormato: string | undefined;
@@ -852,6 +863,7 @@ export class TorneosAdminService {
     playoffTercerPuesto?: boolean | null;
     roundRobinAPlayoffs?: boolean | null;
     clasificanPlayoffs?: number | null;
+    gruposAPlayoffs?: boolean | null;
   }): {
     playoffIdaVuelta: boolean;
     playoffTercerPuesto: boolean;
@@ -860,10 +872,13 @@ export class TorneosAdminService {
   } {
     const esRoundRobin = input.tipoFormato === 'ROUND_ROBIN';
     const rrAPlayoffs = esRoundRobin ? (input.roundRobinAPlayoffs ?? false) : false;
+    const gruposAPlayoffs =
+      input.tipoFormato === 'GROUPS' ? !!input.gruposAPlayoffs : false;
     const tienePlayoffs =
       input.tipoFormato === 'PLAYOFFS' ||
       input.tipoFormato === 'MIXTO' ||
-      rrAPlayoffs;
+      rrAPlayoffs ||
+      gruposAPlayoffs;
     if (!tienePlayoffs) {
       return {
         playoffIdaVuelta: false,

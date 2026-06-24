@@ -24,6 +24,7 @@ import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo
 import { LlavePlayoff } from '../../competition/entities/llave-playoff.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { GruposAdminService } from './grupos-admin.service';
 
 /**
  * Fase Playoffs (P3) — siembra y gestión del bracket de eliminación directa
@@ -56,6 +57,7 @@ export class PlayoffsAdminService {
     private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
     @InjectRepository(Partido) private readonly partidoRepo: Repository<Partido>,
+    private readonly gruposService: GruposAdminService,
   ) {}
 
   async getBracket(
@@ -143,10 +145,14 @@ export class PlayoffsAdminService {
     const torneo = await this.ensureTorneo(torneoId, tenantId);
     this.assertFormatoPlayoffs(torneo);
 
-    // Mixto "fase regular + playoffs": la siembra es por posición en la tabla
-    // y el fixture de la eliminatoria se agrega tras la fase regular.
+    // Mixto "fase regular + playoffs": la siembra sale de la fase regular y el
+    // fixture de la eliminatoria se agrega detrás de ella. Round robin → por
+    // posición de la tabla; grupos → por los clasificados de cada grupo.
     if (this.esRoundRobinAPlayoffs(torneo)) {
       return this.sembrarDesdeTabla(torneo, tenantId);
+    }
+    if (this.esGruposAPlayoffs(torneo)) {
+      return this.sembrarDesdeGrupos(torneo, tenantId);
     }
 
     // PLAYOFFS puro: siembra aleatoria; el fixture se genera aparte (generar()).
@@ -186,15 +192,68 @@ export class PlayoffsAdminService {
     torneo: Torneo,
     tenantId: string,
   ): Promise<BracketPlayoffResponse> {
-    const torneoId = torneo.id;
     const n = torneo.clasificanPlayoffs ?? 0;
     if (n < 2) {
       throw new BadRequestException(
         'Configura cuántos equipos clasifican a los playoffs (mínimo 2).',
       );
     }
+    await this.assertFaseRegularLista(torneo, tenantId);
 
-    // Debe existir fixture de la fase regular y estar completo.
+    const orden = await this.ordenPorTabla(torneo, tenantId);
+    if (orden.length < n) {
+      throw new BadRequestException(
+        `Clasifican ${n} equipos pero la tabla tiene ${orden.length}. ` +
+          'Ajusta cuántos clasifican o revisa las inscripciones.',
+      );
+    }
+    this.logger.log(
+      `[playoffs] torneo=${torneo.id} sembrado (tabla): ${n} clasificados`,
+    );
+    return this.finalizarSiembra(torneo, tenantId, orden.slice(0, n));
+  }
+
+  /**
+   * Mixto "grupos + playoffs": siembra el cuadro con los `clasificanPorGrupo`
+   * mejores de cada grupo y agrega el fixture de la eliminatoria tras la fase
+   * de grupos. Ranking combinado: primero por posición en el grupo (todos los
+   * 1° antes que los 2°…), luego por rendimiento (pts/dg/gf).
+   */
+  @Transactional()
+  private async sembrarDesdeGrupos(
+    torneo: Torneo,
+    tenantId: string,
+  ): Promise<BracketPlayoffResponse> {
+    const porGrupo = torneo.clasificanPorGrupo ?? 0;
+    if (porGrupo < 1) {
+      throw new BadRequestException(
+        'Configura cuántos equipos clasifican por grupo a los playoffs (mínimo 1).',
+      );
+    }
+    await this.assertFaseRegularLista(torneo, tenantId);
+
+    const seeds = await this.ordenPorGrupos(torneo, tenantId, porGrupo);
+    if (seeds.length < 2) {
+      throw new BadRequestException(
+        `Solo hay ${seeds.length} clasificado(s); se necesitan al menos 2 para armar el cuadro.`,
+      );
+    }
+    this.logger.log(
+      `[playoffs] torneo=${torneo.id} sembrado (grupos): ${seeds.length} clasificados`,
+    );
+    return this.finalizarSiembra(torneo, tenantId, seeds);
+  }
+
+  /**
+   * Valida que la fase regular (liga o grupos) esté lista para sembrar: que
+   * exista su fixture, que esté completa (sin partidos pendientes) y que no
+   * haya ya un cuadro de playoffs generado (en ese caso, primero limpiar).
+   */
+  private async assertFaseRegularLista(
+    torneo: Torneo,
+    tenantId: string,
+  ): Promise<void> {
+    const torneoId = torneo.id;
     const fechasRegulares = await this.fechaRepo.count({
       where: { torneoId, tenantId, esPlayoffs: false },
     });
@@ -217,8 +276,6 @@ export class PlayoffsAdminService {
           'Termínalos antes de armar los playoffs.',
       );
     }
-
-    // Si ya hay un cuadro con fixture, exigir limpiar primero (evita huérfanos).
     const playoffFechas = await this.fechaRepo.count({
       where: { torneoId, tenantId, esPlayoffs: true },
     });
@@ -227,31 +284,62 @@ export class PlayoffsAdminService {
         'Ya hay un cuadro de playoffs generado. Bórralo (Limpiar) antes de re-sembrar.',
       );
     }
+  }
 
-    // Tabla de posiciones de la fase regular (solo partidos sin llave).
-    const orden = await this.ordenPorTabla(torneo, tenantId);
-    if (orden.length < n) {
-      throw new BadRequestException(
-        `Clasifican ${n} equipos pero la tabla tiene ${orden.length}. ` +
-          'Ajusta cuántos clasifican o revisa las inscripciones.',
-      );
-    }
-    const seeds = orden.slice(0, n); // seeds[0] = 1° de la tabla
-
-    // Siembra estándar por posición de tabla (1° vs último, byes a los mejores).
-    await this.llaveRepo.delete({ torneoId, tenantId });
+  /** Borra el cuadro previo, lo arma desde los seeds y genera el fixture appended. */
+  private async finalizarSiembra(
+    torneo: Torneo,
+    tenantId: string,
+    seeds: string[],
+  ): Promise<BracketPlayoffResponse> {
+    await this.llaveRepo.delete({ torneoId: torneo.id, tenantId });
     await this.armarYGuardarBracket(
-      torneoId,
+      torneo.id,
       tenantId,
       this.construirRonda1DesdeSeeds(seeds),
       torneo.playoffTercerPuesto,
     );
     await this.generarFixturePlayoffs(torneo, tenantId);
+    return this.getBracket(torneo.id, tenantId);
+  }
 
-    this.logger.log(
-      `[playoffs] torneo=${torneoId} sembrado (tabla): ${n} clasificados`,
+  /**
+   * Orden de siembra desde los grupos: los `porGrupo` mejores de cada grupo
+   * (filas ya rankeadas), combinados por posición y luego por rendimiento.
+   */
+  private async ordenPorGrupos(
+    torneo: Torneo,
+    tenantId: string,
+    porGrupo: number,
+  ): Promise<string[]> {
+    const tablas = await this.gruposService.getTablasPorGrupo(torneo.id, tenantId);
+    const clasificados: Array<{
+      equipoId: string;
+      posicion: number;
+      pts: number;
+      dg: number;
+      gf: number;
+    }> = [];
+    for (const g of tablas.grupos) {
+      g.filas.slice(0, porGrupo).forEach((f) => {
+        clasificados.push({
+          equipoId: f.equipoId,
+          posicion: f.posicion,
+          pts: f.pts,
+          dg: f.dg,
+          gf: f.gf,
+        });
+      });
+    }
+    clasificados.sort(
+      (a, b) =>
+        a.posicion - b.posicion ||
+        b.pts - a.pts ||
+        b.dg - a.dg ||
+        b.gf - a.gf ||
+        a.equipoId.localeCompare(b.equipoId),
     );
-    return this.getBracket(torneoId, tenantId);
+    return clasificados.map((c) => c.equipoId);
   }
 
   /**
@@ -283,9 +371,10 @@ export class PlayoffsAdminService {
     tenantId: string,
   ): Promise<BracketPlayoffResponse> {
     const torneo = await this.ensureTorneo(torneoId, tenantId);
-    if (this.esRoundRobinAPlayoffs(torneo)) {
-      // Mixto: borrar solo las fechas de playoffs (cascade → sus partidos) y
-      // las llaves; la fase regular queda intacta.
+    if (this.esConPlayoffsPorFase(torneo)) {
+      // Mixto (liga o grupos → playoffs): borrar solo las fechas de la
+      // eliminatoria (cascade → sus partidos) y las llaves; la fase regular
+      // (liga o grupos) queda intacta.
       await this.fechaRepo.delete({ torneoId, tenantId, esPlayoffs: true });
       await this.llaveRepo.delete({ torneoId, tenantId });
     } else {
@@ -492,8 +581,7 @@ export class PlayoffsAdminService {
   }
 
   private assertFormatoPlayoffs(torneo: Torneo): void {
-    const ok =
-      torneo.tipoFormato === 'PLAYOFFS' || this.esRoundRobinAPlayoffs(torneo);
+    const ok = torneo.tipoFormato === 'PLAYOFFS' || this.esConPlayoffsPorFase(torneo);
     if (!ok) {
       throw new BadRequestException(
         'El torneo no tiene fase de playoffs (eliminación directa).',
@@ -501,9 +589,19 @@ export class PlayoffsAdminService {
     }
   }
 
-  /** True si es un torneo de fase regular (round robin) que clasifica a playoffs. */
+  /** True si es un round robin que clasifica a playoffs. */
   private esRoundRobinAPlayoffs(torneo: Torneo): boolean {
     return torneo.tipoFormato === 'ROUND_ROBIN' && !!torneo.roundRobinAPlayoffs;
+  }
+
+  /** True si es una fase de grupos que clasifica a playoffs. */
+  private esGruposAPlayoffs(torneo: Torneo): boolean {
+    return torneo.tipoFormato === 'GROUPS' && !!torneo.gruposAPlayoffs;
+  }
+
+  /** True si el torneo tiene una fase regular (liga o grupos) que va a playoffs. */
+  private esConPlayoffsPorFase(torneo: Torneo): boolean {
+    return this.esRoundRobinAPlayoffs(torneo) || this.esGruposAPlayoffs(torneo);
   }
 
   /**
