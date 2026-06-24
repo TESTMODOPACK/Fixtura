@@ -190,9 +190,13 @@ export default function NuevoTorneoPage(): React.ReactElement {
   const esPlayoffs = tipoFormato === 'PLAYOFFS';
   const esRoundRobin = tipoFormato === 'ROUND_ROBIN';
   const roundRobinAPlayoffs = form.watch('roundRobinAPlayoffs');
-  // El bloque de config del bracket (ida/vuelta + 3er puesto) aplica tanto a
-  // PLAYOFFS puro como a round robin + playoffs.
-  const muestraConfigBracket = esPlayoffs || (esRoundRobin && roundRobinAPlayoffs);
+  const esGrupos = tipoFormato === 'GROUPS';
+  // El bloque de config del bracket (ida/vuelta + 3er puesto) aplica a PLAYOFFS
+  // puro, a round robin + playoffs y a grupos + playoffs.
+  const muestraConfigBracket =
+    esPlayoffs ||
+    (esRoundRobin && roundRobinAPlayoffs) ||
+    (esGrupos && gruposAPlayoffs);
 
   const ensureTemporadaActual = async (): Promise<string> => {
     if (temporadas && temporadas.length > 0) return temporadas[0]!.id;
@@ -247,10 +251,12 @@ export default function NuevoTorneoPage(): React.ReactElement {
           ? vals.clasificanPlayoffs
           : null;
 
-      // Fase Playoffs (bracket) — banderas válidas para PLAYOFFS puro o para
-      // round robin + playoffs.
+      // Fase Playoffs (bracket) — banderas válidas para PLAYOFFS puro, round
+      // robin + playoffs o grupos + playoffs.
       const esPlayoffs = vals.tipoFormato === 'PLAYOFFS';
-      const tieneBracket = esPlayoffs || roundRobinAPlayoffs;
+      const gruposABracket =
+        vals.tipoFormato === 'GROUPS' && vals.gruposAPlayoffs;
+      const tieneBracket = esPlayoffs || roundRobinAPlayoffs || gruposABracket;
       const playoffIdaVuelta = tieneBracket ? vals.playoffIdaVuelta : false;
       const playoffTercerPuesto = tieneBracket ? vals.playoffTercerPuesto : false;
 
@@ -410,9 +416,8 @@ export default function NuevoTorneoPage(): React.ReactElement {
                 <option value="ROUND_ROBIN">
                   Round Robin (todos contra todos · playoffs opcional)
                 </option>
-                <option value="GROUPS">Fase de grupos</option>
+                <option value="GROUPS">Fase de grupos (· playoffs opcional)</option>
                 <option value="PLAYOFFS">Playoffs (eliminación directa)</option>
-                <option value="MIXTO" disabled>Grupos + playoffs (próximo)</option>
               </select>
             </div>
             {tipoFormato === 'GROUPS' && (
@@ -493,7 +498,9 @@ export default function NuevoTorneoPage(): React.ReactElement {
                 <p className="text-xs font-serif italic text-ink-mute">
                   {esPlayoffs
                     ? 'Los equipos se siembran en el cuadro por sorteo.'
-                    : 'El cuadro se siembra por posición en la tabla (1° vs último clasificado).'}{' '}
+                    : esGrupos
+                      ? 'El cuadro se siembra con los clasificados de cada grupo (los mejores por posición).'
+                      : 'El cuadro se siembra por posición en la tabla (1° vs último clasificado).'}{' '}
                   El sorteo y el fixture de la eliminatoria se arman en el detalle
                   del torneo.
                 </p>

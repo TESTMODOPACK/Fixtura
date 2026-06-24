@@ -142,7 +142,8 @@ export default function TorneoDetailPage({
           )}
           {(torneo.tipoFormato === 'PLAYOFFS' ||
             torneo.tipoFormato === 'MIXTO' ||
-            (torneo.tipoFormato === 'ROUND_ROBIN' && torneo.roundRobinAPlayoffs)) && (
+            (torneo.tipoFormato === 'ROUND_ROBIN' && torneo.roundRobinAPlayoffs) ||
+            (torneo.tipoFormato === 'GROUPS' && torneo.gruposAPlayoffs)) && (
             <TabButton active={tab === 'playoffs'} onClick={() => setTab('playoffs')}>
               Playoffs
             </TabButton>
@@ -223,17 +224,27 @@ export default function TorneoDetailPage({
           fechasCount={torneo.fechasCount}
         />
       )}
-      {tab === 'playoffs' && (
-        <PlayoffsTab
-          torneoId={id}
-          estado={torneo.estado}
-          fechasCount={torneo.fechasCount}
-          esRoundRobinPlayoffs={
-            torneo.tipoFormato === 'ROUND_ROBIN' && torneo.roundRobinAPlayoffs
-          }
-          clasificanPlayoffs={torneo.clasificanPlayoffs}
-        />
-      )}
+      {tab === 'playoffs' &&
+        (() => {
+          const esRrPlayoffs =
+            torneo.tipoFormato === 'ROUND_ROBIN' && torneo.roundRobinAPlayoffs;
+          const esGruposPlayoffs =
+            torneo.tipoFormato === 'GROUPS' && torneo.gruposAPlayoffs;
+          return (
+            <PlayoffsTab
+              torneoId={id}
+              estado={torneo.estado}
+              fechasCount={torneo.fechasCount}
+              esPlayoffsPorFase={esRrPlayoffs || esGruposPlayoffs}
+              siembraPorGrupos={esGruposPlayoffs}
+              cuposClasificacion={
+                esGruposPlayoffs
+                  ? torneo.clasificanPorGrupo
+                  : torneo.clasificanPlayoffs
+              }
+            />
+          );
+        })()}
       {tab === 'fixture' && (
         <FixtureTab
           torneoId={id}
@@ -1051,14 +1062,16 @@ function PlayoffsTab({
   torneoId,
   estado,
   fechasCount,
-  esRoundRobinPlayoffs,
-  clasificanPlayoffs,
+  esPlayoffsPorFase,
+  siembraPorGrupos,
+  cuposClasificacion,
 }: {
   torneoId: string;
   estado: string;
   fechasCount: number;
-  esRoundRobinPlayoffs: boolean;
-  clasificanPlayoffs: number | null;
+  esPlayoffsPorFase: boolean;
+  siembraPorGrupos: boolean;
+  cuposClasificacion: number | null;
 }): React.ReactElement {
   const { data, isLoading, error } = useBracketPlayoffs(torneoId);
   const sortear = useSortearPlayoffs(torneoId);
@@ -1067,18 +1080,21 @@ function PlayoffsTab({
   const definirGanador = useDefinirGanadorLlave(torneoId);
   const apiError = error as ApiError | undefined;
 
+  const labelSembrar = siembraPorGrupos
+    ? 'Sembrar desde los grupos'
+    : 'Sembrar desde la tabla';
+
   // PLAYOFFS puro: solo se siembra/limpia sin fixture y en DRAFT (el fixture se
-  // genera aparte). Mixto round robin → playoffs: la siembra es por tabla y YA
-  // genera el fixture; el backend valida que la fase regular esté completa.
+  // genera aparte). Mixto (liga o grupos → playoffs): la siembra sale de la fase
+  // regular y YA genera el fixture; el backend valida que esté completa.
   const hayFixture = fechasCount > 0;
   const bloqueado = estado !== 'DRAFT' || fechasCount > 0;
   // En Mixto solo se siembra una vez generado el fixture de la fase regular
   // (el backend además exige que esté completa).
-  const mostrarSembrar = esRoundRobinPlayoffs
+  const mostrarSembrar = esPlayoffsPorFase
     ? !data?.sembrado && hayFixture
     : !bloqueado;
-  const mostrarLimpiar =
-    !!data?.sembrado && (esRoundRobinPlayoffs || !bloqueado);
+  const mostrarLimpiar = !!data?.sembrado && (esPlayoffsPorFase || !bloqueado);
   const mostrarSincronizar = !!data?.sembrado && hayFixture;
 
   const onSortear = (): void => {
@@ -1160,8 +1176,8 @@ function PlayoffsTab({
               disabled={limpiar.isPending}
             >
               <Shuffle size={14} />{' '}
-              {esRoundRobinPlayoffs
-                ? 'Sembrar desde la tabla'
+              {esPlayoffsPorFase
+                ? labelSembrar
                 : data.sembrado
                   ? 'Re-sembrar'
                   : 'Sembrar cuadro'}
@@ -1194,8 +1210,14 @@ function PlayoffsTab({
         <Card padding="roomy" className="text-center">
           <Swords size={36} className="mx-auto text-line mb-3" />
           <p className="font-serif italic text-ink-mute">
-            {esRoundRobinPlayoffs
-              ? `Cuando termine la fase regular, toca “Sembrar desde la tabla” para armar el cuadro con ${clasificanPlayoffs ? `los mejores ${clasificanPlayoffs}` : 'los mejores'} de la tabla y generar el fixture de la eliminatoria.`
+            {esPlayoffsPorFase
+              ? `Cuando termine la fase regular, toca “${labelSembrar}” para armar el cuadro con ${
+                  cuposClasificacion
+                    ? `los mejores ${cuposClasificacion}`
+                    : 'los mejores'
+                } ${
+                  siembraPorGrupos ? 'de cada grupo' : 'de la tabla'
+                } y generar el fixture de la eliminatoria.`
               : 'Todavía no sembraste el cuadro. Inscribe los equipos y toca “Sembrar cuadro” para sortear los cruces.'}
           </p>
           {data.participantes.length > 0 && (
