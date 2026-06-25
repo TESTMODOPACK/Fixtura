@@ -418,6 +418,7 @@ async function main(): Promise<void> {
         ADD COLUMN IF NOT EXISTS presidente_nombre VARCHAR(150),
         ADD COLUMN IF NOT EXISTS presidente_email VARCHAR(150),
         ADD COLUMN IF NOT EXISTS presidente_telefono VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS presidente_cargo VARCHAR(60),
         ADD COLUMN IF NOT EXISTS delegados JSONB NOT NULL DEFAULT '[]'::jsonb
     `);
 

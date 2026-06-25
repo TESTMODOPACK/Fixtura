@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useUpdateDirectivaCategoria } from '@/hooks/use-admin';
 import { useDelegadoCuenta, useInvitarDelegado } from '@/hooks/use-delegado';
-import { cn } from '@/lib/cn';
 import { toastError, toastSuccess } from '@/lib/toast';
 
 /**
@@ -37,6 +36,16 @@ import { toastError, toastSuccess } from '@/lib/toast';
 
 // Acepta dígitos, espacios, +, (), - (formato CL o internacional).
 const TEL_REGEX = /^\+?[\d\s()-]{6,20}$/;
+
+// Cargos típicos de una directiva. El select ofrece estos + "Otro" (texto libre).
+const CARGOS = [
+  'Presidente',
+  'Vicepresidente',
+  'Secretario',
+  'Tesorero',
+  'Director',
+  'Delegado',
+] as const;
 
 const MiembroSchema = z.object({
   nombre: z.string().trim().min(2, 'Ingresa el nombre').max(150),
@@ -158,8 +167,9 @@ export function DirectivaCategoriaForm({
     return (
       <Button
         type="button"
-        variant="ghost"
+        variant="default"
         size="sm"
+        className="border-accent/50 text-accent hover:bg-accent/10"
         disabled={invitar.isPending}
         loading={invitandoEste}
         onClick={() =>
@@ -244,13 +254,13 @@ export function DirectivaCategoriaForm({
         {editando?.tipo === 'presidente' ? (
           <MiembroFormInline
             inicial={presidente}
-            conCargo={false}
+            cargoDefault="Presidente"
             guardando={mutation.isPending}
             onGuardar={(c) => persistir(c, delegados)}
             onCancelar={() => setEditando(null)}
           />
         ) : presidente ? (
-          filaMiembro(presidente, 'Presidente', {
+          filaMiembro(presidente, presidente.cargo ?? 'Presidente', {
             onEditar: () => setEditando({ tipo: 'presidente' }),
             onEliminar: quitarPresidente,
           })
@@ -274,12 +284,12 @@ export function DirectivaCategoriaForm({
           </div>
           <Button
             type="button"
-            variant="ghost"
+            variant="accent"
             size="sm"
             onClick={() => setEditando({ tipo: 'nuevo' })}
             disabled={editando?.tipo === 'nuevo'}
           >
-            <Plus size={12} /> Agregar delegado
+            <Plus size={14} /> Agregar delegado
           </Button>
         </div>
         <p className="text-[11px] text-ink-mute mb-3 leading-snug">
@@ -294,7 +304,7 @@ export function DirectivaCategoriaForm({
               <MiembroFormInline
                 key={idx}
                 inicial={d}
-                conCargo
+                cargoDefault=""
                 guardando={mutation.isPending}
                 onGuardar={(c) =>
                   persistir(presidente, delegados.map((x, j) => (j === idx ? c : x)))
@@ -314,7 +324,7 @@ export function DirectivaCategoriaForm({
           {editando?.tipo === 'nuevo' && (
             <MiembroFormInline
               inicial={null}
-              conCargo
+              cargoDefault=""
               guardando={mutation.isPending}
               onGuardar={(c) => persistir(presidente, [...delegados, c])}
               onCancelar={() => setEditando(null)}
@@ -334,36 +344,43 @@ export function DirectivaCategoriaForm({
 
 /**
  * Form inline para agregar/editar un miembro. Valida email y teléfono.
- * `conCargo` habilita el campo cargo (delegados); el presidente no lo usa.
+ * El cargo es un select precargado (CARGOS) + "Otro" para texto libre;
+ * `cargoDefault` es el valor inicial cuando el miembro aún no tiene cargo.
  */
 function MiembroFormInline({
   inicial,
-  conCargo,
+  cargoDefault,
   guardando,
   onGuardar,
   onCancelar,
 }: {
   inicial: ContactoDirectiva | null;
-  conCargo: boolean;
+  cargoDefault: string;
   guardando: boolean;
   onGuardar: (c: ContactoDirectiva) => void;
   onCancelar: () => void;
 }): React.ReactElement {
+  const cargoInicial = inicial?.cargo ?? cargoDefault;
   const form = useForm<MiembroFormData>({
     resolver: zodResolver(MiembroSchema),
     defaultValues: {
       nombre: inicial?.nombre ?? '',
-      cargo: inicial?.cargo ?? '',
+      cargo: cargoInicial,
       email: inicial?.email ?? '',
       telefono: inicial?.telefono ?? '',
     },
     mode: 'onTouched',
   });
 
+  // Si el cargo cargado no está en la lista, arranca en modo "Otro" (texto libre).
+  const [modoOtro, setModoOtro] = useState(
+    !!cargoInicial && !CARGOS.includes(cargoInicial as (typeof CARGOS)[number]),
+  );
+
   const submit = (vals: MiembroFormData): void => {
     onGuardar({
       nombre: vals.nombre.trim(),
-      cargo: conCargo ? vals.cargo?.trim() || null : null,
+      cargo: vals.cargo?.trim() || null,
       email: vals.email?.trim() || null,
       telefono: vals.telefono?.trim() || null,
     });
@@ -374,21 +391,48 @@ function MiembroFormInline({
       onSubmit={form.handleSubmit(submit)}
       className="rounded-card border border-green-deep/30 bg-green-deep/[0.03] p-3 space-y-2"
     >
-      <div className={cn('grid grid-cols-1 gap-2', conCargo && 'md:grid-cols-2')}>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <Input
           label="Nombre"
           placeholder="Apellido Nombre"
           {...form.register('nombre')}
           error={form.formState.errors.nombre?.message}
         />
-        {conCargo && (
-          <Input
-            label="Cargo (opcional)"
-            placeholder="Secretario, Tesorero…"
-            {...form.register('cargo')}
-            error={form.formState.errors.cargo?.message}
-          />
-        )}
+        <div className="space-y-2">
+          <div>
+            <label className="block text-sm font-semibold text-ink mb-1">Cargo</label>
+            <select
+              className="w-full rounded-card border border-line px-3 py-2 text-sm focus:border-accent focus:outline-none bg-white"
+              value={modoOtro ? '__otro__' : form.watch('cargo') || ''}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === '__otro__') {
+                  setModoOtro(true);
+                  form.setValue('cargo', '');
+                } else {
+                  setModoOtro(false);
+                  form.setValue('cargo', v);
+                }
+              }}
+            >
+              <option value="">Sin cargo</option>
+              {CARGOS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+              <option value="__otro__">Otro…</option>
+            </select>
+          </div>
+          {modoOtro && (
+            <Input
+              label="Especifica el cargo"
+              placeholder="Ej: Encargado de cancha"
+              {...form.register('cargo')}
+              error={form.formState.errors.cargo?.message}
+            />
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <Input

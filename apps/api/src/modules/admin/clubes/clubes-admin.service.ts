@@ -583,6 +583,7 @@ export class ClubesAdminService {
       pivote.presidenteNombre = input.presidente?.nombre?.trim() || null;
       pivote.presidenteEmail = input.presidente?.email?.trim() || null;
       pivote.presidenteTelefono = input.presidente?.telefono?.trim() || null;
+      pivote.presidenteCargo = input.presidente?.cargo?.trim() || null;
     }
     if (input.delegados !== undefined) {
       pivote.delegados = this.normalizarDelegados(input.delegados).map((d) => ({
@@ -622,6 +623,7 @@ export class ClubesAdminService {
       presidente: cc.presidenteNombre
         ? {
             nombre: cc.presidenteNombre,
+            cargo: cc.presidenteCargo,
             email: cc.presidenteEmail,
             telefono: cc.presidenteTelefono,
           }

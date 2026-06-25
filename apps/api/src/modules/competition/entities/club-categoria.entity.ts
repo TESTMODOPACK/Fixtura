@@ -60,9 +60,13 @@ export class ClubCategoria {
   @Column({ name: 'presidente_telefono', type: 'varchar', length: 50, nullable: true })
   presidenteTelefono!: string | null;
 
+  @Column({ name: 'presidente_cargo', type: 'varchar', length: 60, nullable: true })
+  presidenteCargo!: string | null;
+
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   delegados!: Array<{
     nombre: string;
+    cargo?: string | null;
     email: string | null;
     telefono: string | null;
   }>;
