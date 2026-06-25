@@ -196,7 +196,7 @@ async function networkFirst(request, cacheName) {
     return new Response(
       JSON.stringify({
         error: 'Sin conexión',
-        message: 'No se pudo contactar al servidor. Conectate a internet e intentá de nuevo.',
+        message: 'No se pudo contactar al servidor. Conéctate a internet e intenta de nuevo.',
         offline: true,
       }),
       { status: 503, headers: { 'Content-Type': 'application/json' } },
@@ -211,7 +211,7 @@ async function networkOnly(request) {
     return new Response(
       JSON.stringify({
         error: 'Sin conexión',
-        message: 'No se pudo contactar al servidor. Conectate a internet e intentá de nuevo.',
+        message: 'No se pudo contactar al servidor. Conéctate a internet e intenta de nuevo.',
         offline: true,
       }),
       {

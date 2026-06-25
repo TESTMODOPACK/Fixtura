@@ -105,7 +105,7 @@ export function InstallPrompt(): React.ReactElement | null {
             </p>
           ) : (
             <p className="text-[13px] text-chalk/80 mt-1 leading-snug">
-              Accede más rápido y usala sin conexión en la cancha.
+              Accede más rápido y úsala sin conexión en la cancha.
             </p>
           )}
           {!ios && (

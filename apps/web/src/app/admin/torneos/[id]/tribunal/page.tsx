@@ -567,7 +567,7 @@ function NuevaSancionTribunalForm({
               <div className="text-xs text-ink-mute mt-0.5 font-serif italic">
                 Además de la suspensión por fechas, agrega el RUT del jugador
                 a la lista negra de la liga. No podrá ser fichado por ningún
-                club en ningún torneo futuro. Usalo solo para sanciones graves
+                club en ningún torneo futuro. Úsalo solo para sanciones graves
                 (agresión física, falsificación, etc).
               </div>
             </div>
