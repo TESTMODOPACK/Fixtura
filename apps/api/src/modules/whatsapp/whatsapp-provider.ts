@@ -121,22 +121,117 @@ export class WhatsAppTwilioProvider extends WhatsAppProvider {
  *   1. Meta Business Manager + WhatsApp Business Account.
  *   2. Phone Number ID asociado al número aprobado.
  *   3. System User Token con permisos de mensajería.
- *   4. ENV: META_WHATSAPP_PHONE_NUMBER_ID, META_WHATSAPP_TOKEN, META_WHATSAPP_API_VERSION (v18.0).
- *   5. Templates aprobados en la consola Meta.
+ *   4. ENV: META_WHATSAPP_PHONE_NUMBER_ID, META_WHATSAPP_TOKEN,
+ *      META_WHATSAPP_API_VERSION (default v21.0).
+ *   5. Templates aprobados en la consola Meta (con sus placeholders {{1}}…).
  *
- * Usa fetch nativo de Node 22 — no requiere SDK.
+ * Usa fetch nativo de Node — no requiere SDK.
+ *
+ * Errores (config faltante, red, respuesta no-2xx) NO lanzan: devuelven
+ * `enviado: false` con el detalle en `raw` y un warn al log, para que el flujo
+ * de invitación pueda reportar "no enviado" sin romper el request.
  */
 @Injectable()
 export class WhatsAppMetaProvider extends WhatsAppProvider {
+  private readonly log = new Logger(WhatsAppMetaProvider.name);
+  /** Cómo nos abandona Meta si tardamos: cortamos la espera en 10s. */
+  private static readonly TIMEOUT_MS = 10_000;
+
   get nombre(): 'META' {
     return 'META';
   }
 
-  async enviarTemplate(_args: EnviarTemplateArgs): Promise<EnviarTemplateResult> {
-    throw new Error(
-      'WhatsAppMetaProvider no implementado. Setear META_WHATSAPP_PHONE_NUMBER_ID + ' +
-        'META_WHATSAPP_TOKEN en .env y descomentar la llamada a la Graph API. ' +
-        'Mientras: usar WHATSAPP_PROVIDER=MOCK.',
+  async enviarTemplate(args: EnviarTemplateArgs): Promise<EnviarTemplateResult> {
+    const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
+    const token = process.env.META_WHATSAPP_TOKEN;
+    const apiVersion = process.env.META_WHATSAPP_API_VERSION ?? 'v21.0';
+
+    if (!phoneNumberId || !token) {
+      this.log.warn(
+        'META_WHATSAPP_PHONE_NUMBER_ID / META_WHATSAPP_TOKEN no configurados — ' +
+          'no se envía (usar WHATSAPP_PROVIDER=MOCK en dev).',
+      );
+      return {
+        enviado: false,
+        messageId: null,
+        raw: { provider: 'meta', error: 'config_missing' },
+      };
+    }
+
+    // Meta espera el número en formato internacional sin símbolos (E.164 sin
+    // el '+'): +56912345678 → 56912345678.
+    const to = args.telefono.replace(/[^\d]/g, '');
+
+    // El template puede no tener variables → omitir el componente body.
+    const components =
+      args.variables.length > 0
+        ? [
+            {
+              type: 'body',
+              parameters: args.variables.map((v) => ({ type: 'text', text: v })),
+            },
+          ]
+        : undefined;
+
+    const body = {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: args.template,
+        language: { code: args.idioma ?? 'es' },
+        ...(components ? { components } : {}),
+      },
+    };
+
+    const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      WhatsAppMetaProvider.TIMEOUT_MS,
     );
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+      if (!res.ok) {
+        const err = (json.error ?? {}) as { message?: string; code?: number };
+        this.log.warn(
+          `[META] WhatsApp → ${to} (template=${args.template}) falló: ` +
+            `${res.status} ${err.message ?? 'error desconocido'} (code=${err.code ?? '?'})`,
+        );
+        return { enviado: false, messageId: null, raw: { provider: 'meta', status: res.status, ...json } };
+      }
+
+      const messages = json.messages as Array<{ id?: string }> | undefined;
+      const messageId = messages?.[0]?.id ?? null;
+      this.log.log(
+        `[META] WhatsApp → ${to} (template=${args.template}) enviado messageId=${messageId}`,
+      );
+      return { enviado: true, messageId, raw: { provider: 'meta', ...json } };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const aborted = err instanceof Error && err.name === 'AbortError';
+      this.log.warn(
+        `[META] WhatsApp → ${to} (template=${args.template}) error de red: ` +
+          (aborted ? `timeout (${WhatsAppMetaProvider.TIMEOUT_MS}ms)` : msg),
+      );
+      return {
+        enviado: false,
+        messageId: null,
+        raw: { provider: 'meta', error: aborted ? 'timeout' : msg },
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }
