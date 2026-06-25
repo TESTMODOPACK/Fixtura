@@ -4,13 +4,10 @@ import {
   AlertTriangle,
   ArrowLeft,
   Globe,
-  Mail,
   Pencil,
-  Phone,
   Plus,
   Shield,
   Trash2,
-  User,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -254,27 +251,6 @@ export default function ClubCategoriaPage({
           Cada categoría puede tener distinta directiva. Si las dejas todas
           iguales, cópialas a mano o edita la versión &ldquo;madre&rdquo; del club.
         </p>
-
-        {/* Resumen visual (lo que está cargado ahora) */}
-        {detalle.presidente?.nombre && (
-          <div className="flex items-center gap-2 text-sm mb-3">
-            <User size={14} className="text-ink-mute" />
-            <span className="font-semibold">{detalle.presidente.nombre}</span>
-            <span className="text-xs text-ink-mute">· Presidente</span>
-            {detalle.presidente.email && (
-              <span className="flex items-center gap-1 text-xs text-ink-mute">
-                <Mail size={10} />
-                {detalle.presidente.email}
-              </span>
-            )}
-            {detalle.presidente.telefono && (
-              <span className="flex items-center gap-1 text-xs text-ink-mute">
-                <Phone size={10} />
-                {detalle.presidente.telefono}
-              </span>
-            )}
-          </div>
-        )}
 
         <DirectivaCategoriaForm
           clubId={id}

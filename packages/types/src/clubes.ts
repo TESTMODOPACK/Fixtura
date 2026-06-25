@@ -19,6 +19,9 @@ import { z } from 'zod';
 
 export const ContactoDirectivaSchema = z.object({
   nombre: z.string().min(2).max(150),
+  // Cargo libre (Secretario, Tesorero…). Opcional; el presidente se rotula
+  // "Presidente" por su slot, los delegados pueden precisar su rol.
+  cargo: z.string().trim().max(60).nullable().optional(),
   email: z.email().nullable().optional(),
   telefono: z.string().max(50).nullable().optional(),
 });

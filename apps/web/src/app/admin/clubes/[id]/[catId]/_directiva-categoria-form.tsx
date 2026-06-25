@@ -2,48 +2,69 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { ContactoDirectiva } from '@fixtura/types';
-import { ContactoDirectivaSchema } from '@fixtura/types';
-import { CheckCircle2, Clock, Plus, Save, Send, Trash2 } from 'lucide-react';
-import { useEffect } from 'react';
-import { useFieldArray, useForm } from 'react-hook-form';
+import {
+  CheckCircle2,
+  Clock,
+  Mail,
+  Pencil,
+  Phone,
+  Plus,
+  Send,
+  Trash2,
+  User,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
-import {
-  FormErrorBanner,
-  makeRhfErrorHandler,
-  rhfErrorsToBanner,
-} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { useUpdateDirectivaCategoria } from '@/hooks/use-admin';
 import { useDelegadoCuenta, useInvitarDelegado } from '@/hooks/use-delegado';
+import { cn } from '@/lib/cn';
 import { toastError, toastSuccess } from '@/lib/toast';
 
 /**
- * Sprint 32 — form para editar la directiva (presidente + delegados)
- * específica de un (club, categoría). NO toca la directiva "madre" del
- * club ni la de otras categorías.
+ * Sprint 32 (rediseño) — directiva (presidente + delegados) por
+ * (club, categoría). La directiva cargada se muestra como LISTADO de
+ * lectura; cada registro tiene acciones (editar / dar acceso / eliminar)
+ * y los inputs solo aparecen al agregar o editar un miembro.
+ *
+ * El acceso al sistema (cuenta de delegado) es de alcance CLUB: ve todas
+ * las categorías, así que la cuenta es una sola por club aunque la
+ * directiva sea por categoría.
  */
 
-const FormSchema = z.object({
-  presidenteNombre: z.string().trim().optional(),
-  presidenteEmail: z
+// Acepta dígitos, espacios, +, (), - (formato CL o internacional).
+const TEL_REGEX = /^\+?[\d\s()-]{6,20}$/;
+
+const MiembroSchema = z.object({
+  nombre: z.string().trim().min(2, 'Ingresa el nombre').max(150),
+  cargo: z.string().trim().max(60).optional(),
+  email: z
     .preprocess(
       (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
       z.email('Email inválido').optional(),
     )
     .optional(),
-  presidenteTelefono: z.string().trim().max(50).optional(),
-  delegados: z.array(ContactoDirectivaSchema).max(20, 'Máximo 20 delegados'),
+  telefono: z
+    .preprocess(
+      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z
+        .string()
+        .regex(TEL_REGEX, 'Teléfono inválido (ej. +56 9 1234 5678)')
+        .max(50)
+        .optional(),
+    )
+    .optional(),
 });
-type FormData = z.infer<typeof FormSchema>;
+type MiembroFormData = z.infer<typeof MiembroSchema>;
 
-const FIELD_LABEL: Record<string, string> = {
-  presidenteNombre: 'Presidente · nombre',
-  presidenteEmail: 'Presidente · email',
-  presidenteTelefono: 'Presidente · teléfono',
-  delegados: 'Delegados',
-};
+type Editando =
+  | { tipo: 'presidente' }
+  | { tipo: 'delegado'; index: number }
+  | { tipo: 'nuevo' }
+  | null;
 
 export function DirectivaCategoriaForm({
   clubId,
@@ -59,84 +80,60 @@ export function DirectivaCategoriaForm({
   initialDelegados: ContactoDirectiva[];
 }): React.ReactElement {
   const mutation = useUpdateDirectivaCategoria(clubId, categoriaId);
-  // F55 — acceso al sistema (delegado). Es de alcance CLUB (ve todas las
-  // categorías), así que la cuenta es una sola por club aunque la directiva
-  // sea por categoría.
   const { data: cuentaDelegado } = useDelegadoCuenta(clubId);
   const invitar = useInvitarDelegado(clubId);
 
-  const form = useForm<FormData>({
-    resolver: zodResolver(FormSchema),
-    defaultValues: {
-      presidenteNombre: initialPresidente?.nombre ?? '',
-      presidenteEmail: initialPresidente?.email ?? '',
-      presidenteTelefono: initialPresidente?.telefono ?? '',
-      delegados: initialDelegados ?? [],
-    },
-    mode: 'onChange',
-  });
+  const [presidente, setPresidente] = useState<ContactoDirectiva | null>(initialPresidente);
+  const [delegados, setDelegados] = useState<ContactoDirectiva[]>(initialDelegados ?? []);
+  const [editando, setEditando] = useState<Editando>(null);
 
-  // Reset cuando cambia la categoría (navegación entre tabs).
+  // Reset solo al cambiar de categoría (navegación entre tabs). NO dependemos
+  // de initialPresidente/initialDelegados: sus referencias cambian en cada
+  // refetch del club (p.ej. al volver el foco) y reiniciarían un form abierto
+  // a mitad de edición. Tras guardar, sincronizamos el estado a mano.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    form.reset({
-      presidenteNombre: initialPresidente?.nombre ?? '',
-      presidenteEmail: initialPresidente?.email ?? '',
-      presidenteTelefono: initialPresidente?.telefono ?? '',
-      delegados: initialDelegados ?? [],
-    });
-  }, [
-    categoriaId,
-    initialPresidente?.nombre,
-    initialPresidente?.email,
-    initialPresidente?.telefono,
-    initialDelegados,
-    form,
-  ]);
+    setPresidente(initialPresidente);
+    setDelegados(initialDelegados ?? []);
+    setEditando(null);
+  }, [categoriaId]);
 
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: 'delegados',
-  });
-
-  const onSubmit = async (vals: FormData): Promise<void> => {
+  const persistir = async (
+    pres: ContactoDirectiva | null,
+    dels: ContactoDirectiva[],
+  ): Promise<void> => {
     try {
-      const presNombre = vals.presidenteNombre?.trim();
-      const presidente: ContactoDirectiva | null = presNombre
-        ? {
-            nombre: presNombre,
-            email: vals.presidenteEmail?.trim() || null,
-            telefono: vals.presidenteTelefono?.trim() || null,
-          }
-        : null;
-      const delegados: ContactoDirectiva[] = vals.delegados
-        .filter((d) => d.nombre.trim().length > 0)
-        .map((d) => ({
-          nombre: d.nombre.trim(),
-          email: d.email?.trim() || null,
-          telefono: d.telefono?.trim() || null,
-        }));
-      await mutation.mutateAsync({ presidente, delegados });
+      await mutation.mutateAsync({ presidente: pres, delegados: dels });
+      setPresidente(pres);
+      setDelegados(dels);
+      setEditando(null);
       toastSuccess(`Directiva de ${categoriaNombre} actualizada.`);
     } catch (err) {
       toastError(err);
     }
   };
 
-  const apiError = mutation.error;
-  const fieldErrors = rhfErrorsToBanner(
-    form.formState.errors as Record<string, unknown>,
-    FIELD_LABEL,
-  );
+  const eliminarDelegado = (index: number): void => {
+    const d = delegados[index];
+    if (!window.confirm(`¿Quitar a ${d?.nombre ?? 'este delegado'} de la directiva?`)) {
+      return;
+    }
+    void persistir(presidente, delegados.filter((_, i) => i !== index));
+  };
 
-  // Acceso al sistema (delegado) — reutilizable para el presidente y para
-  // cada delegado. El acceso es a nivel CLUB (ve todas las categorías).
-  const renderAccesoSistema = (nombre: string, email: string): React.ReactNode => {
-    const e = (email ?? '').trim();
-    const n = (nombre ?? '').trim();
+  const quitarPresidente = (): void => {
+    if (!window.confirm('¿Quitar al presidente de esta categoría?')) return;
+    void persistir(null, delegados);
+  };
+
+  // Acceso al sistema — badge (si ya tiene cuenta) o botón para invitar.
+  const renderAcceso = (c: ContactoDirectiva): React.ReactNode => {
+    const e = (c.email ?? '').trim();
+    const n = (c.nombre ?? '').trim();
     if (!e) {
       return (
         <span className="text-[11px] text-ink-mute italic">
-          Agrega un email para poder darle acceso al sistema.
+          Agrega un email para darle acceso al sistema.
         </span>
       );
     }
@@ -180,52 +177,93 @@ export function DirectivaCategoriaForm({
     );
   };
 
-  return (
-    <form
-      onSubmit={form.handleSubmit(
-        onSubmit,
-        makeRhfErrorHandler({ formName: 'directiva-categoria' }),
-      )}
-      className="space-y-4"
-    >
-      <FormErrorBanner
-        fieldErrors={fieldErrors}
-        apiError={apiError}
-        apiTitle="No se pudo guardar la directiva"
-      />
+  const filaMiembro = (
+    c: ContactoDirectiva,
+    cargoFijo: string | null,
+    acciones: { onEditar: () => void; onEliminar?: () => void },
+  ): React.ReactElement => (
+    <div className="flex items-start justify-between gap-3 rounded-card border border-line/60 p-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <User size={14} className="text-ink-mute flex-shrink-0" />
+          <span className="font-semibold">{c.nombre}</span>
+          {(cargoFijo ?? c.cargo) && (
+            <span className="text-[11px] px-1.5 py-0.5 rounded bg-paper-dark text-ink-mute uppercase tracking-wider">
+              {cargoFijo ?? c.cargo}
+            </span>
+          )}
+        </div>
+        {(c.email || c.telefono) && (
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink-mute mt-1 pl-6">
+            {c.email && (
+              <span className="flex items-center gap-1">
+                <Mail size={10} /> {c.email}
+              </span>
+            )}
+            {c.telefono && (
+              <span className="flex items-center gap-1">
+                <Phone size={10} /> {c.telefono}
+              </span>
+            )}
+          </div>
+        )}
+        <div className="pl-6 mt-2">{renderAcceso(c)}</div>
+      </div>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <button
+          type="button"
+          onClick={acciones.onEditar}
+          className="h-8 w-8 flex items-center justify-center rounded-card hover:bg-paper-dark text-ink-mute"
+          title="Editar"
+          aria-label="Editar"
+        >
+          <Pencil size={14} />
+        </button>
+        {acciones.onEliminar && (
+          <button
+            type="button"
+            onClick={acciones.onEliminar}
+            className="h-8 w-8 flex items-center justify-center rounded-card hover:bg-danger/10 text-danger"
+            title="Quitar"
+            aria-label="Quitar"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
+  return (
+    <div className="space-y-5">
       {/* Presidente */}
       <div>
         <div className="text-xs uppercase tracking-wider font-semibold text-ink-mute mb-2">
           Presidente de {categoriaNombre}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Input
-            label="Nombre"
-            placeholder="Apellido Nombre"
-            {...form.register('presidenteNombre')}
-            error={form.formState.errors.presidenteNombre?.message}
+        {editando?.tipo === 'presidente' ? (
+          <MiembroFormInline
+            inicial={presidente}
+            conCargo={false}
+            guardando={mutation.isPending}
+            onGuardar={(c) => persistir(c, delegados)}
+            onCancelar={() => setEditando(null)}
           />
-          <Input
-            label="Email"
-            type="email"
-            placeholder="contacto@club.cl"
-            {...form.register('presidenteEmail')}
-            error={form.formState.errors.presidenteEmail?.message}
-          />
-          <Input
-            label="Teléfono"
-            placeholder="+56 9 1234 5678"
-            {...form.register('presidenteTelefono')}
-            error={form.formState.errors.presidenteTelefono?.message}
-          />
-        </div>
-        <div className="mt-2">
-          {renderAccesoSistema(
-            form.watch('presidenteNombre') ?? '',
-            form.watch('presidenteEmail') ?? '',
-          )}
-        </div>
+        ) : presidente ? (
+          filaMiembro(presidente, 'Presidente', {
+            onEditar: () => setEditando({ tipo: 'presidente' }),
+            onEliminar: quitarPresidente,
+          })
+        ) : (
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => setEditando({ tipo: 'presidente' })}
+          >
+            <Plus size={14} /> Agregar presidente
+          </Button>
+        )}
       </div>
 
       {/* Delegados */}
@@ -238,70 +276,141 @@ export function DirectivaCategoriaForm({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() =>
-              append({ nombre: '', email: null, telefono: null })
-            }
+            onClick={() => setEditando({ tipo: 'nuevo' })}
+            disabled={editando?.tipo === 'nuevo'}
           >
             <Plus size={12} /> Agregar delegado
           </Button>
         </div>
-        <p className="text-[11px] text-ink-mute mb-2 leading-snug">
-          Desde aquí puedes darle a un delegado <strong>acceso al sistema</strong>:
-          verá plantel, resultados, sanciones y deudas de <strong>todo el club</strong>
-          {' '}y podrá pagar en línea. Necesita un email. El enlace de activación vence en 72 h.
+        <p className="text-[11px] text-ink-mute mb-3 leading-snug">
+          Desde aquí puedes darle a un delegado <strong>acceso al sistema</strong>: verá
+          plantel, resultados, sanciones y deudas de <strong>todo el club</strong> y podrá
+          pagar en línea. Necesita un email. El enlace de activación vence en 72 h.
         </p>
-        {fields.length === 0 && (
-          <p className="text-xs font-serif italic text-ink-mute">
-            Sin delegados cargados.
-          </p>
-        )}
-        {fields.length > 0 && (
-          <div className="space-y-3">
-            {fields.map((field, idx) => (
-              <div key={field.id} className="rounded-card border border-line/60 p-3 space-y-2">
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
-                  <Input
-                    label={idx === 0 ? 'Nombre' : undefined}
-                    placeholder="Apellido Nombre"
-                    {...form.register(`delegados.${idx}.nombre`)}
-                    error={form.formState.errors.delegados?.[idx]?.nombre?.message}
-                  />
-                  <Input
-                    label={idx === 0 ? 'Email' : undefined}
-                    type="email"
-                    placeholder="email@club.cl"
-                    {...form.register(`delegados.${idx}.email`)}
-                    error={form.formState.errors.delegados?.[idx]?.email?.message}
-                  />
-                  <Input
-                    label={idx === 0 ? 'Teléfono' : undefined}
-                    placeholder="+56 9 1234 5678"
-                    {...form.register(`delegados.${idx}.telefono`)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => remove(idx)}
-                    className="h-9 w-9 flex items-center justify-center rounded-card hover:bg-danger/10 text-danger"
-                    aria-label="Eliminar delegado"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                <div>
-                  {renderAccesoSistema(
-                    form.watch(`delegados.${idx}.nombre`) ?? '',
-                    form.watch(`delegados.${idx}.email`) ?? '',
-                  )}
-                </div>
+
+        <div className="space-y-3">
+          {delegados.map((d, idx) =>
+            editando?.tipo === 'delegado' && editando.index === idx ? (
+              <MiembroFormInline
+                key={idx}
+                inicial={d}
+                conCargo
+                guardando={mutation.isPending}
+                onGuardar={(c) =>
+                  persistir(presidente, delegados.map((x, j) => (j === idx ? c : x)))
+                }
+                onCancelar={() => setEditando(null)}
+              />
+            ) : (
+              <div key={idx}>
+                {filaMiembro(d, null, {
+                  onEditar: () => setEditando({ tipo: 'delegado', index: idx }),
+                  onEliminar: () => eliminarDelegado(idx),
+                })}
               </div>
-            ))}
-          </div>
+            ),
+          )}
+
+          {editando?.tipo === 'nuevo' && (
+            <MiembroFormInline
+              inicial={null}
+              conCargo
+              guardando={mutation.isPending}
+              onGuardar={(c) => persistir(presidente, [...delegados, c])}
+              onCancelar={() => setEditando(null)}
+            />
+          )}
+
+          {delegados.length === 0 && editando?.tipo !== 'nuevo' && (
+            <p className="text-xs font-serif italic text-ink-mute">
+              Sin delegados cargados.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Form inline para agregar/editar un miembro. Valida email y teléfono.
+ * `conCargo` habilita el campo cargo (delegados); el presidente no lo usa.
+ */
+function MiembroFormInline({
+  inicial,
+  conCargo,
+  guardando,
+  onGuardar,
+  onCancelar,
+}: {
+  inicial: ContactoDirectiva | null;
+  conCargo: boolean;
+  guardando: boolean;
+  onGuardar: (c: ContactoDirectiva) => void;
+  onCancelar: () => void;
+}): React.ReactElement {
+  const form = useForm<MiembroFormData>({
+    resolver: zodResolver(MiembroSchema),
+    defaultValues: {
+      nombre: inicial?.nombre ?? '',
+      cargo: inicial?.cargo ?? '',
+      email: inicial?.email ?? '',
+      telefono: inicial?.telefono ?? '',
+    },
+    mode: 'onTouched',
+  });
+
+  const submit = (vals: MiembroFormData): void => {
+    onGuardar({
+      nombre: vals.nombre.trim(),
+      cargo: conCargo ? vals.cargo?.trim() || null : null,
+      email: vals.email?.trim() || null,
+      telefono: vals.telefono?.trim() || null,
+    });
+  };
+
+  return (
+    <form
+      onSubmit={form.handleSubmit(submit)}
+      className="rounded-card border border-green-deep/30 bg-green-deep/[0.03] p-3 space-y-2"
+    >
+      <div className={cn('grid grid-cols-1 gap-2', conCargo && 'md:grid-cols-2')}>
+        <Input
+          label="Nombre"
+          placeholder="Apellido Nombre"
+          {...form.register('nombre')}
+          error={form.formState.errors.nombre?.message}
+        />
+        {conCargo && (
+          <Input
+            label="Cargo (opcional)"
+            placeholder="Secretario, Tesorero…"
+            {...form.register('cargo')}
+            error={form.formState.errors.cargo?.message}
+          />
         )}
       </div>
-
-      <div className="flex items-center gap-3 pt-2">
-        <Button type="submit" variant="accent" size="sm" loading={mutation.isPending}>
-          <Save size={14} /> Guardar directiva
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <Input
+          label="Email"
+          type="email"
+          placeholder="contacto@club.cl"
+          {...form.register('email')}
+          error={form.formState.errors.email?.message}
+        />
+        <Input
+          label="Teléfono"
+          placeholder="+56 9 1234 5678"
+          {...form.register('telefono')}
+          error={form.formState.errors.telefono?.message}
+        />
+      </div>
+      <div className="flex items-center gap-2 pt-1">
+        <Button type="submit" variant="accent" size="sm" loading={guardando}>
+          Guardar
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancelar}>
+          Cancelar
         </Button>
       </div>
     </form>

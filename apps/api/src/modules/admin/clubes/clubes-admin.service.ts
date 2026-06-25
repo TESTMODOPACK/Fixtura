@@ -587,6 +587,7 @@ export class ClubesAdminService {
     if (input.delegados !== undefined) {
       pivote.delegados = this.normalizarDelegados(input.delegados).map((d) => ({
         nombre: d.nombre,
+        cargo: d.cargo ?? null,
         email: d.email ?? null,
         telefono: d.telefono ?? null,
       }));
@@ -601,6 +602,7 @@ export class ClubesAdminService {
     if (!delegados) return [];
     return delegados.map((d) => ({
       nombre: d.nombre.trim(),
+      cargo: d.cargo?.trim() || null,
       email: d.email?.trim() || null,
       telefono: d.telefono?.trim() || null,
     }));

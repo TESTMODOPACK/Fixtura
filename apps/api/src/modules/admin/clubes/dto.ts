@@ -27,6 +27,11 @@ export class ContactoDirectivaDto {
   nombre!: string;
 
   @IsOptional()
+  @IsString()
+  @Length(0, 60)
+  cargo?: string | null;
+
+  @IsOptional()
   @IsEmail()
   email?: string | null;
 
