@@ -74,6 +74,18 @@ export const PagosConfigSchema = z.object({
 });
 export type PagosConfig = z.infer<typeof PagosConfigSchema>;
 
+/**
+ * Config de WhatsApp de la liga (BYO — cada liga conecta su propio número de
+ * Meta Cloud API). NO incluye el token: vive cifrado y nunca se devuelve (ver
+ * whatsappTokenCargado en TenantSettings).
+ */
+export const WhatsAppConfigSchema = z.object({
+  activo: z.boolean(),
+  phoneNumberId: z.string().max(50).nullable(),
+  apiVersion: z.string().max(10),
+});
+export type WhatsAppConfig = z.infer<typeof WhatsAppConfigSchema>;
+
 export const TenantSettingsSchema = z.object({
   id: z.uuid(),
   slug: z.string(),
@@ -95,6 +107,10 @@ export const TenantSettingsSchema = z.object({
   // ¿Hay llaves de pasarela guardadas? El GET nunca devuelve las llaves
   // en sí (solo este booleano); se setean write-only desde el update.
   pasarelaCredencialesCargadas: z.boolean(),
+  // WhatsApp BYO de la liga (config no-secreta).
+  whatsapp: WhatsAppConfigSchema,
+  // ¿Hay token de Meta guardado? El GET nunca devuelve el token.
+  whatsappTokenCargado: z.boolean(),
 });
 export type TenantSettings = z.infer<typeof TenantSettingsSchema>;
 
@@ -122,6 +138,12 @@ export const UpdateTenantSettingsSchema = z.object({
   flowApiKey: z.string().max(200).optional(),
   flowSecretKey: z.string().max(400).optional(),
   limpiarCredencialesPasarela: z.boolean().optional(),
+  // WhatsApp BYO. La config no-secreta (activo/phoneNumberId/apiVersion) se
+  // envía en `whatsapp`; el token es write-only en `whatsappToken` (o se
+  // borra con limpiarWhatsappToken).
+  whatsapp: WhatsAppConfigSchema.partial().optional(),
+  whatsappToken: z.string().max(500).optional(),
+  limpiarWhatsappToken: z.boolean().optional(),
 });
 export type UpdateTenantSettingsRequest = z.infer<typeof UpdateTenantSettingsSchema>;
 

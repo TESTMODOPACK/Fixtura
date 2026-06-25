@@ -109,6 +109,7 @@ export class DelegadoInviteService {
 
     if ((canal === 'WHATSAPP' || canal === 'AMBOS') && input.telefono) {
       const r = await this.whatsapp.enviarInvitacionPersonal({
+        tenantId,
         telefono: input.telefono,
         nombre: input.nombre,
         tenantName: ligaNombre,

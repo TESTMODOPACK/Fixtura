@@ -19,6 +19,7 @@ import {
   type Role,
   type TenantSettings,
   type UsuarioSistema,
+  type WhatsAppConfig,
 } from '@fixtura/types';
 import { validarPasswordSegura } from '@fixtura/domain';
 
@@ -236,6 +237,35 @@ export class AjustesAdminService {
       t.pagosSecretosEnc = cifrarSecreto(JSON.stringify({ flowApiKey: apiKey, flowSecretKey: secretKey }));
     }
 
+    // WhatsApp BYO — config no-secreta + token write-only (cifrado).
+    if (input.whatsapp !== undefined) {
+      const actual = this.whatsappConfigDe(t);
+      const merged: WhatsAppConfig = {
+        activo: input.whatsapp.activo ?? actual.activo,
+        phoneNumberId:
+          input.whatsapp.phoneNumberId !== undefined
+            ? input.whatsapp.phoneNumberId || null
+            : actual.phoneNumberId,
+        apiVersion: input.whatsapp.apiVersion ?? actual.apiVersion,
+      };
+      // Para activar necesitamos phoneNumberId + un token (ya guardado o uno
+      // nuevo en este mismo request).
+      const tokenDisponible =
+        !!t.whatsappTokenEnc || !!(input.whatsappToken && input.whatsappToken.trim());
+      if (merged.activo && (!merged.phoneNumberId || !tokenDisponible)) {
+        throw new BadRequestException(
+          'Para activar WhatsApp necesitas el Phone Number ID y el token de Meta cargados.',
+        );
+      }
+      t.whatsappConfig = merged as unknown as Record<string, unknown>;
+    }
+
+    if (input.limpiarWhatsappToken) {
+      t.whatsappTokenEnc = null;
+    } else if (input.whatsappToken && input.whatsappToken.trim()) {
+      t.whatsappTokenEnc = cifrarSecreto(input.whatsappToken.trim());
+    }
+
     const saved = await this.tenantRepo.save(t);
     return this.toSettings(saved);
   }
@@ -402,6 +432,19 @@ export class AjustesAdminService {
       pagos: this.pagosConfigDe(t),
       // Nunca exponemos las llaves; solo si hay credenciales guardadas.
       pasarelaCredencialesCargadas: !!t.pagosSecretosEnc,
+      whatsapp: this.whatsappConfigDe(t),
+      // Nunca exponemos el token; solo si hay uno guardado.
+      whatsappTokenCargado: !!t.whatsappTokenEnc,
+    };
+  }
+
+  /** whatsapp_config del tenant con defaults defensivos. */
+  private whatsappConfigDe(t: Tenant): WhatsAppConfig {
+    const raw = (t.whatsappConfig ?? {}) as Partial<WhatsAppConfig>;
+    return {
+      activo: raw.activo ?? false,
+      phoneNumberId: raw.phoneNumberId ?? null,
+      apiVersion: raw.apiVersion ?? 'v21.0',
     };
   }
 

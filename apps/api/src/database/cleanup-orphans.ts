@@ -153,6 +153,15 @@ async function main(): Promise<void> {
     `);
     log('tenants.pagos_config / pagos_secretos_enc aseguradas.');
 
+    // WhatsApp BYO por liga: config no-secreta (activo/phoneNumberId/apiVersion)
+    // + token de Meta cifrado (mismo secret-box que pagos).
+    await client.query(`
+      ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS whatsapp_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+        ADD COLUMN IF NOT EXISTS whatsapp_token_enc TEXT
+    `);
+    log('tenants.whatsapp_config / whatsapp_token_enc aseguradas.');
+
     // Sprint 6: tabla canchas.
     await ensureCanchasTable(client, log);
 

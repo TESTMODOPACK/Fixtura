@@ -142,6 +142,7 @@ export class PersonalAdminService {
 
     if (usaWhatsapp && personal.telefono) {
       const result = await this.whatsapp.enviarInvitacionPersonal({
+        tenantId,
         telefono: personal.telefono,
         nombre: personal.nombre,
         tenantName,

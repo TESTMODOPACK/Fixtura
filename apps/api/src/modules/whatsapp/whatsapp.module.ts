@@ -1,5 +1,7 @@
 import { Global, Logger, Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { Tenant } from '../tenants/entities/tenant.entity';
 import {
   WhatsAppMetaProvider,
   WhatsAppMockProvider,
@@ -21,6 +23,7 @@ import { WhatsAppService } from './whatsapp.service';
  */
 @Global()
 @Module({
+  imports: [TypeOrmModule.forFeature([Tenant])],
   providers: [
     WhatsAppMockProvider,
     WhatsAppTwilioProvider,

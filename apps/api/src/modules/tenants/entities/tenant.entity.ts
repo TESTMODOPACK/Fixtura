@@ -58,6 +58,21 @@ export class Tenant {
   @Column({ name: 'pagos_secretos_enc', type: 'text', nullable: true })
   pagosSecretosEnc!: string | null;
 
+  /**
+   * Config de WhatsApp de la liga (BYO — cada liga conecta su propio número
+   * de Meta Cloud API). NO contiene el token: { activo, phoneNumberId,
+   * apiVersion }. El token vive cifrado en whatsapp_token_enc.
+   */
+  @Column({ name: 'whatsapp_config', type: 'jsonb', default: () => "'{}'::jsonb" })
+  whatsappConfig!: Record<string, unknown>;
+
+  /**
+   * Token de Meta Cloud API (System User Token) cifrado con AES-256-GCM
+   * (mismo secret-box que pagos). Nunca se devuelve al cliente.
+   */
+  @Column({ name: 'whatsapp_token_enc', type: 'text', nullable: true })
+  whatsappTokenEnc!: string | null;
+
   // ── Sprint 23: Super Admin / planes ───────────────────────────────
   @Column({ name: 'plan_id', type: 'uuid', nullable: true })
   planId!: string | null;

@@ -88,6 +88,13 @@ class PagosConfigDto {
   pasarela?: PagosPasarelaDto;
 }
 
+class WhatsAppConfigDto {
+  @IsOptional() @IsBoolean() activo?: boolean;
+  // '' (vacío) borra el número; lo normaliza el service a null.
+  @IsOptional() @IsString() @MaxLength(50) phoneNumberId?: string;
+  @IsOptional() @IsString() @MaxLength(10) apiVersion?: string;
+}
+
 export class UpdateTenantSettingsDto {
   @IsOptional()
   @IsString()
@@ -118,6 +125,15 @@ export class UpdateTenantSettingsDto {
   @IsOptional() @IsString() @MaxLength(200) flowApiKey?: string;
   @IsOptional() @IsString() @MaxLength(400) flowSecretKey?: string;
   @IsOptional() @IsBoolean() limpiarCredencialesPasarela?: boolean;
+
+  // WhatsApp BYO. Config no-secreta + token write-only.
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WhatsAppConfigDto)
+  whatsapp?: WhatsAppConfigDto;
+
+  @IsOptional() @IsString() @MaxLength(500) whatsappToken?: string;
+  @IsOptional() @IsBoolean() limpiarWhatsappToken?: boolean;
 }
 
 export class InvitarMiembroDto {

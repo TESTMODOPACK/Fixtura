@@ -9,6 +9,7 @@ import {
   Landmark,
   Lock,
   Mail,
+  MessageCircle,
   Palette,
   Plus,
   Trash2,
@@ -30,6 +31,7 @@ import {
   type RolAdminInvitable,
   type Role,
   type TenantSettings,
+  type WhatsAppConfig,
 } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
@@ -53,7 +55,14 @@ import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatFecha } from '@/lib/format';
 
-type Tab = 'branding' | 'dominio' | 'reglamento' | 'pagos' | 'equipo' | 'calendario';
+type Tab =
+  | 'branding'
+  | 'dominio'
+  | 'reglamento'
+  | 'pagos'
+  | 'whatsapp'
+  | 'equipo'
+  | 'calendario';
 
 // Sprint 22: labels canónicos desde @fixtura/types — 16 roles.
 const ROL_LABEL: Record<RolAdminInvitable, string> = {
@@ -144,6 +153,9 @@ export default function AjustesPage(): React.ReactElement {
               <TabButton active={tab === 'pagos'} onClick={() => setTab('pagos')}>
                 Pagos
               </TabButton>
+              <TabButton active={tab === 'whatsapp'} onClick={() => setTab('whatsapp')}>
+                WhatsApp
+              </TabButton>
               <TabButton active={tab === 'equipo'} onClick={() => setTab('equipo')}>
                 Equipo admin
               </TabButton>
@@ -160,6 +172,7 @@ export default function AjustesPage(): React.ReactElement {
           {tab === 'dominio' && <DominioTab settings={settings} />}
           {tab === 'reglamento' && <ReglamentoTab settings={settings} />}
           {tab === 'pagos' && <PagosTab settings={settings} />}
+          {tab === 'whatsapp' && <WhatsAppTab settings={settings} />}
           {tab === 'equipo' && <EquipoTab />}
           {tab === 'calendario' && <CalendarioTab />}
         </>
@@ -996,6 +1009,195 @@ function PagosTab({ settings }: { settings: TenantSettings }): React.ReactElemen
                 </span>
               </div>
             )}
+          </div>
+        )}
+      </Card>
+
+      <div className="flex items-center gap-3">
+        <Button variant="accent" onClick={() => void guardar()} disabled={update.isPending}>
+          {update.isPending ? 'Guardando…' : 'Guardar cambios'}
+        </Button>
+        {saved && !error && !clientError && (
+          <span className="text-sm text-green-bright flex items-center gap-2">
+            <CheckCircle2 size={14} /> Cambios guardados
+          </span>
+        )}
+      </div>
+
+      {(clientError || error) && (
+        <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
+          {clientError ?? error?.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tab: WhatsApp ───────────────────────────────────────────────────
+function WhatsAppTab({ settings }: { settings: TenantSettings }): React.ReactElement {
+  const update = useUpdateTenantSettings();
+  const [saved, setSaved] = useState(false);
+  const [clientError, setClientError] = useState<string | null>(null);
+
+  // Config no-secreta (on/off + Phone Number ID + versión de la API).
+  const [config, setConfig] = useState<WhatsAppConfig>(settings.whatsapp);
+  // Token de Meta — write-only. Solo vive en memoria hasta guardar; el GET
+  // nunca lo devuelve.
+  const [token, setToken] = useState('');
+
+  useEffect(() => {
+    setConfig(settings.whatsapp);
+  }, [settings.whatsapp]);
+
+  const tokenCargado = settings.whatsappTokenCargado;
+  const error = update.error as ApiError | undefined;
+
+  const guardar = async (): Promise<void> => {
+    setClientError(null);
+
+    const nuevoToken = token.trim();
+    // Para activar: Phone Number ID + token (ya guardado o uno nuevo ahora).
+    if (config.activo) {
+      if (!config.phoneNumberId?.trim()) {
+        setClientError('Ingresa el Phone Number ID de tu número de WhatsApp para activarlo.');
+        return;
+      }
+      if (!tokenCargado && !nuevoToken) {
+        setClientError('Ingresa el token de acceso de Meta para activar WhatsApp.');
+        return;
+      }
+    }
+
+    try {
+      await update.mutateAsync({
+        whatsapp: {
+          activo: config.activo,
+          phoneNumberId: config.phoneNumberId ?? '',
+          apiVersion: config.apiVersion,
+        },
+        ...(nuevoToken ? { whatsappToken: nuevoToken } : {}),
+      });
+      setToken('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      // El error del server se muestra desde update.error.
+    }
+  };
+
+  const quitarToken = async (): Promise<void> => {
+    setClientError(null);
+    try {
+      // Quitar el token implica desactivar (sin token no se puede enviar).
+      await update.mutateAsync({
+        limpiarWhatsappToken: true,
+        whatsapp: { activo: false },
+      });
+      setToken('');
+      setConfig((c) => ({ ...c, activo: false }));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      // idem
+    }
+  };
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      <Card padding="roomy">
+        <CardLabel>WhatsApp de la liga</CardLabel>
+        <p className="text-sm text-ink-mute font-serif italic mt-2 mb-4">
+          Conecta el número de WhatsApp Business de tu liga (Meta Cloud API) para enviar
+          invitaciones de personal y delegados por WhatsApp. Cada liga usa su propio número
+          y sus propias credenciales — igual que en Pagos.
+        </p>
+
+        <div className="flex items-start gap-2 text-xs text-ink-mute bg-paper/40 border border-line px-3 py-2 rounded-card">
+          <MessageCircle size={14} className="flex-shrink-0 mt-0.5 text-accent" />
+          <span>
+            Necesitas una cuenta de WhatsApp Business en Meta con un número aprobado, su
+            Phone Number ID y un token de acceso. El template{' '}
+            <span className="font-mono">fixtura_invitacion_personal</span> debe estar aprobado
+            en tu cuenta de Meta. Si no lo configuras, las invitaciones siguen saliendo por email.
+          </span>
+        </div>
+      </Card>
+
+      <Card padding="roomy">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={config.activo}
+            onChange={(e) => setConfig((c) => ({ ...c, activo: e.target.checked }))}
+            className="mt-1"
+          />
+          <div className="flex-1">
+            <div className="font-semibold text-ink flex items-center gap-2">
+              <MessageCircle size={16} className="text-accent" /> Enviar invitaciones por WhatsApp
+            </div>
+            <div className="text-xs text-ink-mute font-serif italic mt-1">
+              Cuando está activo y las credenciales están cargadas, los administradores pueden
+              elegir WhatsApp (o Email + WhatsApp) al invitar personal y delegados.
+            </div>
+          </div>
+        </label>
+
+        {config.activo && (
+          <div className="mt-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Phone Number ID"
+                placeholder="Ej: 123456789012345"
+                value={config.phoneNumberId ?? ''}
+                onChange={(e) =>
+                  setConfig((c) => ({ ...c, phoneNumberId: e.target.value }))
+                }
+              />
+              <Input
+                label="Versión de la API"
+                placeholder="v21.0"
+                value={config.apiVersion}
+                onChange={(e) => setConfig((c) => ({ ...c, apiVersion: e.target.value }))}
+              />
+            </div>
+
+            <div className="rounded-card border border-line p-4 bg-paper/40">
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-semibold text-ink flex items-center gap-2 text-sm">
+                  <Lock size={14} className="text-accent" /> Token de acceso de Meta
+                </div>
+                {tokenCargado ? (
+                  <span className="text-xs font-semibold text-green-bright flex items-center gap-1">
+                    <CheckCircle2 size={13} /> Token guardado
+                  </span>
+                ) : (
+                  <span className="text-xs text-ink-mute font-serif italic">Sin token</span>
+                )}
+              </div>
+              <p className="text-xs text-ink-mute font-serif italic mb-3">
+                Pega aquí el token de acceso (System User Token) de tu cuenta de WhatsApp
+                Business. Se guarda cifrado y nunca se vuelve a mostrar. Para reemplazarlo,
+                pega el nuevo y guarda.
+              </p>
+              <Input
+                label="Token de acceso"
+                type="password"
+                autoComplete="off"
+                placeholder={tokenCargado ? '•••••••• (guardado)' : 'Tu token de Meta'}
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+              />
+              {tokenCargado && (
+                <button
+                  type="button"
+                  onClick={() => void quitarToken()}
+                  disabled={update.isPending}
+                  className="text-xs text-danger hover:underline mt-3 font-semibold disabled:opacity-50"
+                >
+                  Quitar token y desactivar
+                </button>
+              )}
+            </div>
           </div>
         )}
       </Card>

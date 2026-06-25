@@ -18,6 +18,13 @@ import { Injectable, Logger } from '@nestjs/common';
  * Implementamos los stubs de los dos para no bloquearnos.
  */
 
+/** Credenciales Meta Cloud API ya resueltas para un tenant (BYO por liga). */
+export interface MetaWhatsAppCreds {
+  phoneNumberId: string;
+  token: string;
+  apiVersion?: string;
+}
+
 export interface EnviarTemplateArgs {
   /** Número en formato E.164: +56912345678. El provider valida formato. */
   telefono: string;
@@ -27,6 +34,12 @@ export interface EnviarTemplateArgs {
   variables: string[];
   /** Idioma del template (es, es_CL, en_US, etc.). */
   idioma?: string;
+  /**
+   * Credenciales del tenant (BYO). Las resuelve WhatsAppService desde la
+   * config cifrada de la liga. Requeridas por el provider META; ignoradas
+   * por MOCK.
+   */
+  meta?: MetaWhatsAppCreds;
 }
 
 export interface EnviarTemplateResult {
@@ -142,14 +155,17 @@ export class WhatsAppMetaProvider extends WhatsAppProvider {
   }
 
   async enviarTemplate(args: EnviarTemplateArgs): Promise<EnviarTemplateResult> {
-    const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
-    const token = process.env.META_WHATSAPP_TOKEN;
-    const apiVersion = process.env.META_WHATSAPP_API_VERSION ?? 'v21.0';
+    // BYO por liga: las credenciales llegan resueltas por tenant (las
+    // descifra WhatsAppService desde la config de la liga).
+    const phoneNumberId = args.meta?.phoneNumberId;
+    const token = args.meta?.token;
+    // `|| 'v21.0'` (no `??`): un apiVersion vacío de la config rompería la URL.
+    const apiVersion = args.meta?.apiVersion || 'v21.0';
 
     if (!phoneNumberId || !token) {
       this.log.warn(
-        'META_WHATSAPP_PHONE_NUMBER_ID / META_WHATSAPP_TOKEN no configurados — ' +
-          'no se envía (usar WHATSAPP_PROVIDER=MOCK en dev).',
+        'WhatsApp Meta sin credenciales para esta liga — no se envía. ' +
+          'Cargar Phone Number ID + token en Ajustes → WhatsApp.',
       );
       return {
         enviado: false,
