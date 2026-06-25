@@ -8,7 +8,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Not, Repository } from 'typeorm';
 
 import { Designacion } from '../competition/entities/designacion.entity';
-import { JugadorInscrito } from '../competition/entities/jugador-inscrito.entity';
+import { Jugador } from '../competition/entities/jugador.entity';
 import { Personal } from '../competition/entities/personal.entity';
 import { SancionActiva } from '../competition/entities/sancion-activa.entity';
 import { PushSubscription } from '../admin/push/entities/push-subscription.entity';
@@ -36,8 +36,8 @@ export class MeService {
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(UserRole) private readonly roleRepo: Repository<UserRole>,
     @InjectRepository(Personal) private readonly personalRepo: Repository<Personal>,
-    @InjectRepository(JugadorInscrito)
-    private readonly jugadorRepo: Repository<JugadorInscrito>,
+    @InjectRepository(Jugador)
+    private readonly jugadorRepo: Repository<Jugador>,
     @InjectRepository(Designacion)
     private readonly designacionRepo: Repository<Designacion>,
     @InjectRepository(SancionActiva)
@@ -86,9 +86,12 @@ export class MeService {
             .getMany()
         : [];
 
-    // jugador inscrito: puede haber 0..N (un user delegado puede no estar
-    // inscrito como jugador; un jugador puede estar en N torneos).
-    const jugadores = await this.jugadorRepo.find({ where: { userId } });
+    // jugador (modelo nuevo): un registro por club+categoría. El vínculo con
+    // el user es por RUT (jugadores no tiene user_id). Si el user no tiene
+    // RUT, no hay ficha de jugador que reportar.
+    const jugadores = user.rut
+      ? await this.jugadorRepo.find({ where: { rut: user.rut } })
+      : [];
 
     // sanciones por RUT (sancion_activa.rut). Si el user no tiene rut,
     // no hay sanciones para reportar.
@@ -147,18 +150,18 @@ export class MeService {
         confirmadoAt: d.confirmadoAt?.toISOString() ?? null,
         createdAt: d.createdAt.toISOString(),
       })),
-      jugadoresInscritos: jugadores.map((j) => ({
+      jugadores: jugadores.map((j) => ({
         id: j.id,
         tenantId: j.tenantId,
-        equipoId: j.equipoId,
-        torneoId: j.torneoId,
-        nombre: j.nombre,
-        apellido: j.apellido,
+        clubId: j.clubId,
+        categoriaId: j.categoriaId,
+        nombres: j.nombres,
+        apellidos: j.apellidos,
         rut: j.rut,
         numeroCamiseta: j.numeroCamiseta,
         posicion: j.posicion,
         capitan: j.capitan,
-        activo: j.activo,
+        estado: j.estado,
         createdAt: j.createdAt.toISOString(),
       })),
       sanciones: sanciones.map((s) => ({

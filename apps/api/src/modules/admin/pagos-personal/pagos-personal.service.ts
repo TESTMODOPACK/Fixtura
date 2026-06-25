@@ -66,9 +66,8 @@ export class PagosPersonalService {
   /** Nombre del equipo desde inscripción (modelo nuevo) con fallback al viejo. */
   private nombreEquipo(
     insc: { club?: { nombre?: string | null } | null } | null | undefined,
-    equipo: { nombre?: string | null } | null | undefined,
   ): string {
-    return insc?.club?.nombre ?? equipo?.nombre ?? 'Equipo';
+    return insc?.club?.nombre ?? 'Equipo';
   }
 
   private toLineaPendiente(d: Designacion): DesignacionPendientePago {
@@ -82,14 +81,8 @@ export class PagosPersonalService {
       torneoNombre: torneo?.nombre ?? 'Torneo',
       fechaNumero: fecha?.numero ?? null,
       fechaHora: partido?.fechaHora ? partido.fechaHora.toISOString() : null,
-      equipoLocalNombre: this.nombreEquipo(
-        partido?.inscripcionLocal,
-        partido?.equipoLocal,
-      ),
-      equipoVisitaNombre: this.nombreEquipo(
-        partido?.inscripcionVisita,
-        partido?.equipoVisita,
-      ),
+      equipoLocalNombre: this.nombreEquipo(partido?.inscripcionLocal),
+      equipoVisitaNombre: this.nombreEquipo(partido?.inscripcionVisita),
       rolAsignado: d.rolAsignado,
       monto: d.montoPago ?? 0,
     };
@@ -108,8 +101,6 @@ export class PagosPersonalService {
           fecha: { torneo: true },
           inscripcionLocal: { club: true },
           inscripcionVisita: { club: true },
-          equipoLocal: true,
-          equipoVisita: true,
         },
       },
       order: { createdAt: 'ASC' },
@@ -188,8 +179,6 @@ export class PagosPersonalService {
           fecha: { torneo: true },
           inscripcionLocal: { club: true },
           inscripcionVisita: { club: true },
-          equipoLocal: true,
-          equipoVisita: true,
         },
       },
     });
@@ -350,8 +339,6 @@ export class PagosPersonalService {
           fecha: { torneo: true },
           inscripcionLocal: { club: true },
           inscripcionVisita: { club: true },
-          equipoLocal: true,
-          equipoVisita: true,
         },
       },
       order: { createdAt: 'ASC' },

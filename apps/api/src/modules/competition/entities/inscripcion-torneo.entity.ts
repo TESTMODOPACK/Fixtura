@@ -13,7 +13,6 @@ import {
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { CategoriaJugadores } from './categoria-jugadores.entity';
 import { Club } from './club.entity';
-import { Equipo } from './equipo.entity';
 import { Torneo } from './torneo.entity';
 
 /**
@@ -89,16 +88,6 @@ export class InscripcionTorneo {
 
   @Column({ name: 'suspendido_por', type: 'uuid', nullable: true })
   suspendidoPor!: string | null;
-
-  // Sprint 26G.2 (ADR-0004 shim) — Referencia al "equipo sombra" del
-  // modelo viejo que se mantiene sincronizado para que fixture, actas
-  // y sanciones sigan funcionando sin refactor. NO se expone al cliente.
-  @Column({ name: 'equipo_sombra_id', type: 'uuid', nullable: true })
-  equipoSombraId!: string | null;
-
-  @ManyToOne(() => Equipo, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'equipo_sombra_id' })
-  equipoSombra?: Equipo | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

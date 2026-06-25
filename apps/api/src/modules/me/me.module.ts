@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { PushSubscription } from '../admin/push/entities/push-subscription.entity';
 import { Designacion } from '../competition/entities/designacion.entity';
-import { JugadorInscrito } from '../competition/entities/jugador-inscrito.entity';
+import { Jugador } from '../competition/entities/jugador.entity';
 import { Personal } from '../competition/entities/personal.entity';
 import { SancionActiva } from '../competition/entities/sancion-activa.entity';
 import { UserRole } from '../users/entities/user-role.entity';
@@ -18,7 +18,7 @@ import { MeService } from './me.service';
       UserRole,
       Personal,
       Designacion,
-      JugadorInscrito,
+      Jugador,
       SancionActiva,
       PushSubscription,
     ]),

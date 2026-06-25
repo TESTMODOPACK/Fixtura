@@ -92,11 +92,10 @@ export class JugadoresGlobalService {
       vetadoByRut.set(v.rut, { motivo: v.motivo });
     }
 
-    // Stats agregadas vía RUT match al modelo viejo.
-    // El SQL hace JOIN incidencias → jugadores_inscritos por id, después
-    // agrupa por rut de jugadores_inscritos. Esto suma todas las
-    // incidencias del jugador a través de todos los torneos donde
-    // participó con ese RUT.
+    // Stats agregadas vía RUT match al modelo nuevo.
+    // El SQL hace JOIN incidencias → jugadores por jugador_id, después
+    // agrupa por rut. Esto suma todas las incidencias del jugador a
+    // través de todos los torneos donde participó con ese RUT.
     let statsByRut = new Map<
       string,
       { goles: number; amarillas: number; rojas: number; mvps: number; partidos: number }
@@ -104,7 +103,7 @@ export class JugadoresGlobalService {
     if (ruts.length > 0) {
       const statsRows = await this.incidenciaRepo
         .createQueryBuilder('i')
-        .innerJoin('jugadores_inscritos', 'ji', 'ji.id = i.jugador_inscrito_id')
+        .innerJoin('jugadores', 'ji', 'ji.id = i.jugador_id')
         .select('ji.rut', 'rut')
         .addSelect(`SUM(CASE WHEN i.tipo = 'GOL' THEN 1 ELSE 0 END)`, 'goles')
         .addSelect(`SUM(CASE WHEN i.tipo = 'AMARILLA' THEN 1 ELSE 0 END)`, 'amarillas')

@@ -19,15 +19,11 @@ export type {
 } from './documento-tributario.entity';
 export { DesignacionRecinto } from './designacion-recinto.entity';
 export type { RolRecinto } from './designacion-recinto.entity';
-export { Equipo } from './equipo.entity';
-export type { EstadoEquipo } from './equipo.entity';
 export { Fecha } from './fecha.entity';
 export type { EstadoFecha } from './fecha.entity';
 export { HorarioTorneo } from './horario-torneo.entity';
 export { IncidenciaPartido } from './incidencia-partido.entity';
 export type { TipoIncidencia } from './incidencia-partido.entity';
-export { JugadorInscrito } from './jugador-inscrito.entity';
-export type { PieHabil } from './jugador-inscrito.entity';
 export { Jugador } from './jugador.entity';
 export type {
   EstadoJugadorClub,
@@ -52,7 +48,6 @@ export { Personal } from './personal.entity';
 export type { RolPersonal, TipoCuentaBancaria } from './personal.entity';
 export { SancionActiva } from './sancion-activa.entity';
 export type { MotivoSancion } from './sancion-activa.entity';
-export { Serie } from './serie.entity';
 export { Sponsor } from './sponsor.entity';
 export type { PosicionSponsor } from './sponsor.entity';
 export { TarifaTorneo } from './tarifa-torneo.entity';

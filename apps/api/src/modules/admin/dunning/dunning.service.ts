@@ -177,7 +177,7 @@ export class DunningService {
   ): Promise<{ enviado: boolean; razon?: string }> {
     const cobro = await this.cobroRepo.findOne({
       where: { id: cobroId, tenantId },
-      relations: { equipo: true },
+      relations: { inscripcion: { club: true } },
     });
     if (!cobro) throw new NotFoundException(`Cobro ${cobroId} no encontrado`);
     if (cobro.pagadoAt) {
@@ -299,7 +299,7 @@ export class DunningService {
   ): { subject: string; html: string; text: string } {
     const montoStr = `$${cobro.monto.toLocaleString('es-CL')}`;
     const concepto = cobro.concepto;
-    const equipoNombre = cobro.equipo?.nombre ?? 'Equipo';
+    const equipoNombre = cobro.inscripcion?.club?.nombre ?? 'Equipo';
 
     if (umbral >= 30) {
       // Aviso de suspensión

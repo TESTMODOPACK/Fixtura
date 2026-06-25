@@ -89,7 +89,7 @@ export class SuperAdminTenantsService {
       SELECT
         t.id AS tenant_id,
         (SELECT COUNT(*)::int FROM torneos WHERE tenant_id = t.id) AS torneos,
-        (SELECT COUNT(*)::int FROM equipos WHERE tenant_id = t.id) AS equipos,
+        (SELECT COUNT(*)::int FROM clubes WHERE tenant_id = t.id) AS equipos,
         (SELECT COUNT(DISTINCT user_id)::int FROM user_roles WHERE scope_id = t.id) AS miembros
       FROM tenants t
       WHERE t.id = ANY($1::uuid[])
@@ -116,7 +116,7 @@ export class SuperAdminTenantsService {
         `
       SELECT
         (SELECT COUNT(*)::int FROM torneos WHERE tenant_id = $1) AS torneos,
-        (SELECT COUNT(*)::int FROM equipos WHERE tenant_id = $1) AS equipos,
+        (SELECT COUNT(*)::int FROM clubes WHERE tenant_id = $1) AS equipos,
         (SELECT COUNT(DISTINCT user_id)::int FROM user_roles WHERE scope_id = $1) AS miembros
       `,
         [id],

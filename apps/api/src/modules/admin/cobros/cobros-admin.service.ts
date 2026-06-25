@@ -46,7 +46,6 @@ export class CobrosAdminService {
   ): Promise<CobroAdmin[]> {
     const qb = this.repo
       .createQueryBuilder('c')
-      .leftJoinAndSelect('c.equipo', 'equipo')
       .leftJoinAndSelect('c.torneo', 'torneo')
       .leftJoinAndSelect('c.inscripcion', 'inscripcion')
       .leftJoinAndSelect('inscripcion.club', 'club')
@@ -54,7 +53,9 @@ export class CobrosAdminService {
       .where('c.tenant_id = :tenantId', { tenantId });
 
     if (equipoId) {
-      qb.andWhere('c.equipo_id = :equipoId', { equipoId });
+      // ADR-0005 — el filtro "por equipo" usa el inscripcionId (el id que
+      // expone el DTO como equipoId).
+      qb.andWhere('c.inscripcion_id = :equipoId', { equipoId });
     }
     if (torneoId) {
       qb.andWhere('c.torneo_id = :torneoId', { torneoId });
@@ -94,7 +95,6 @@ export class CobrosAdminService {
     const c = await this.repo.findOne({
       where: { id, tenantId },
       relations: {
-        equipo: true,
         torneo: true,
         inscripcion: { club: true },
         tarifa: true,
@@ -212,7 +212,6 @@ export class CobrosAdminService {
           concepto: c.concepto,
           categoria: c.categoria,
           monto: c.monto,
-          equipoId: c.equipoId,
           inscripcionId: c.inscripcionId,
           torneoId: c.torneoId,
           pagado: c.pagadoAt != null,
@@ -252,8 +251,8 @@ export class CobrosAdminService {
     return {
       id: c.id,
       // ADR-0005 — equipoId expone el inscripcionId; el nombre sale del club.
-      equipoId: c.inscripcionId ?? c.equipoId,
-      equipoNombre: c.inscripcion?.club?.nombre ?? c.equipo?.nombre ?? null,
+      equipoId: c.inscripcionId,
+      equipoNombre: c.inscripcion?.club?.nombre ?? null,
       concepto: c.concepto,
       categoria: c.categoria,
       monto: c.monto,

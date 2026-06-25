@@ -1,6 +1,6 @@
 # ADR-0005 — Eliminar el modelo viejo de equipos (shim) y promover el modelo Clubes a fuente de verdad
 
-**Estado**: Aceptado · 2026-06-07
+**Estado**: Implementado · Fase 1 (2026-06-07) + Fase 2 (2026-06-24)
 **Autor**: Equipo Fixtura
 **Reemplaza el mecanismo de**: ADR-0004 (shim "equipo sombra", Sprint 26G.2)
 

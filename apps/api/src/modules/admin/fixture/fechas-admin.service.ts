@@ -532,8 +532,6 @@ export class FechasAdminService {
         // ADR-0005 — el clon hereda las inscripciones (fuente de verdad).
         inscripcionLocalId: p.inscripcionLocalId,
         inscripcionVisitaId: p.inscripcionVisitaId,
-        equipoLocalId: p.equipoLocalId,
-        equipoVisitaId: p.equipoVisitaId,
         // El clon conserva el vínculo a su fase: grupo (GROUPS/MIXTO) y llave
         // (playoffs). Sin esto, un partido de playoffs reprogramado perdería su
         // llave y el cuadro nunca lo computaría; un partido de grupo, su grupo.

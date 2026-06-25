@@ -9,10 +9,8 @@ import {
 } from 'typeorm';
 
 import { Tenant } from '../../tenants/entities/tenant.entity';
-import { Equipo } from './equipo.entity';
 import { InscripcionTorneo } from './inscripcion-torneo.entity';
 import { Jugador } from './jugador.entity';
-import { JugadorInscrito } from './jugador-inscrito.entity';
 import { Partido } from './partido.entity';
 
 export type TipoIncidencia =
@@ -48,16 +46,7 @@ export class IncidenciaPartido {
   @JoinColumn({ name: 'partido_id' })
   partido?: Partido;
 
-  // ADR-0005 Fase 1 — write-only-new: nullable, conservada como backup.
-  @Column({ name: 'equipo_id', type: 'uuid', nullable: true })
-  equipoId!: string | null;
-
-  @ManyToOne(() => Equipo, { nullable: true, onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'equipo_id' })
-  equipo?: Equipo | null;
-
-  // Sprint 26G.1 (ADR-0004) — referencia paralela al modelo nuevo.
-  // Poblada por backfill (migrate-clubes) y shim (Sprint 26G.2).
+  // ADR-0005 — "equipo de la incidencia" = InscripcionTorneo. Fuente de verdad.
   @Column({ name: 'inscripcion_id', type: 'uuid', nullable: true })
   inscripcionId!: string | null;
 
@@ -65,16 +54,7 @@ export class IncidenciaPartido {
   @JoinColumn({ name: 'inscripcion_id' })
   inscripcion?: InscripcionTorneo | null;
 
-  @Column({ name: 'jugador_inscrito_id', type: 'uuid', nullable: true })
-  jugadorInscritoId!: string | null;
-
-  @ManyToOne(() => JugadorInscrito, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'jugador_inscrito_id' })
-  jugadorInscrito?: JugadorInscrito | null;
-
-  // Sprint 46 (ADR-0005) — referencia al jugador del modelo nuevo.
-  // Fuente de verdad de la incidencia. jugador_inscrito_id queda como
-  // backup hasta la Fase 2.
+  // ADR-0005 — referencia al jugador del modelo nuevo (fuente de verdad).
   @Column({ name: 'jugador_id', type: 'uuid', nullable: true })
   jugadorId!: string | null;
 

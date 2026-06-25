@@ -4,7 +4,6 @@ import { In, Repository } from 'typeorm';
 
 import { AuditLogService } from '../../audit';
 import { Cobro } from '../../competition/entities/cobro.entity';
-import { Equipo } from '../../competition/entities/equipo.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Jugador } from '../../competition/entities/jugador.entity';
@@ -47,8 +46,6 @@ export class TarifaAplicadorService {
     private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Torneo)
     private readonly torneoRepo: Repository<Torneo>,
-    @InjectRepository(Equipo)
-    private readonly equipoRepo: Repository<Equipo>,
     @InjectRepository(Jugador)
     private readonly jugadorRepo: Repository<Jugador>,
     private readonly audit: AuditLogService,
@@ -194,11 +191,12 @@ export class TarifaAplicadorService {
       return { equiposProcesados: 0, matriculasCreadas: 0, cuotasCreadas: 0 };
     }
 
-    const equipos = await this.equipoRepo.find({
+    const inscripciones = await this.inscRepo.find({
       where: [
         { torneoId, tenantId, estado: 'INSCRITO' },
         { torneoId, tenantId, estado: 'ACTIVO' },
       ],
+      relations: { club: true },
     });
 
     const tarifaMatricula = await this.buscarTarifa(torneoId, 'MATRICULA');
@@ -207,9 +205,9 @@ export class TarifaAplicadorService {
 
     let matriculasCreadas = 0;
     let cuotasCreadas = 0;
-    for (const equipo of equipos) {
-      const r = await this.generarCobrosParaEquipo(
-        equipo,
+    for (const insc of inscripciones) {
+      const r = await this.generarCobrosParaInscripcion(
+        insc,
         torneo,
         tarifaMatricula,
         tarifaCuota,
@@ -225,14 +223,14 @@ export class TarifaAplicadorService {
       entityType: 'Torneo',
       entityId: torneoId,
       metadata: {
-        equiposProcesados: equipos.length,
+        equiposProcesados: inscripciones.length,
         matriculasCreadas,
         cuotasCreadas,
       },
     });
 
     return {
-      equiposProcesados: equipos.length,
+      equiposProcesados: inscripciones.length,
       matriculasCreadas,
       cuotasCreadas,
     };
@@ -321,10 +319,7 @@ export class TarifaAplicadorService {
         saldadas.set(saldoKey, saldoRestante - 1);
         continue;
       }
-      const inscripcionId = inc.inscripcionId ?? this.inferirInscripcionPartido(
-        partido,
-        inc.equipoId,
-      );
+      const inscripcionId = inc.inscripcionId;
       if (!inscripcionId) {
         // Defensa: si no podemos resolver el club, NO creamos un cobro
         // huerfano. Mejor un audit log y que el operador cargue la
@@ -334,7 +329,7 @@ export class TarifaAplicadorService {
           tenantId,
           entityType: 'IncidenciaPartido',
           entityId: inc.id,
-          metadata: { partidoId: partido.id, tipoTarifa, equipoId: inc.equipoId },
+          metadata: { partidoId: partido.id, tipoTarifa },
         });
         continue;
       }
@@ -357,7 +352,6 @@ export class TarifaAplicadorService {
         periodoAnio: null,
         periodoMes: null,
         periodoSemana: null,
-        equipoId: inc.equipoId ?? null,
       });
       creados++;
     }
@@ -446,9 +440,6 @@ export class TarifaAplicadorService {
       periodoAnio: null,
       periodoMes: null,
       periodoSemana: null,
-      // equipoId (modelo viejo) ya no se escribe: el cobro se ancla a la
-      // inscripción. Evita FK violation (equipoPerdedorId es inscripcionId).
-      equipoId: null,
     });
   }
 
@@ -477,7 +468,7 @@ export class TarifaAplicadorService {
   /**
    * C1 — Cuenta las multas auto de un partido que YA fueron saldadas:
    * pagadas o canceladas a mano (las que sobreviven a borrarCobrosAutoDelPartido).
-   * Agrupadas por (tarifa, equipo). Se usa al regenerar multas para no
+   * Agrupadas por (tarifa, inscripción). Se usa al regenerar multas para no
    * volver a cobrar una multa ya pagada ni resucitar una cancelada cuando
    * se reabre y recierra un acta.
    */
@@ -488,18 +479,18 @@ export class TarifaAplicadorService {
     const rows = await this.cobroRepo
       .createQueryBuilder('c')
       .select('c.tarifa_id', 'tarifaId')
-      .addSelect('c.equipo_id', 'equipoId')
+      .addSelect('c.inscripcion_id', 'inscripcionId')
       .addSelect('COUNT(*)', 'cnt')
       .where('c.partido_id = :partidoId', { partidoId })
       .andWhere('c.tenant_id = :tenantId', { tenantId })
       .andWhere('c.generado_auto = TRUE')
       .andWhere('(c.pagado_at IS NOT NULL OR c.cancelado = TRUE)')
       .groupBy('c.tarifa_id')
-      .addGroupBy('c.equipo_id')
-      .getRawMany<{ tarifaId: string | null; equipoId: string | null; cnt: string }>();
+      .addGroupBy('c.inscripcion_id')
+      .getRawMany<{ tarifaId: string | null; inscripcionId: string | null; cnt: string }>();
     const map = new Map<string, number>();
     for (const r of rows) {
-      map.set(`${r.tarifaId ?? ''}::${r.equipoId ?? ''}`, Number(r.cnt));
+      map.set(`${r.tarifaId ?? ''}::${r.inscripcionId ?? ''}`, Number(r.cnt));
     }
     return map;
   }
@@ -658,11 +649,11 @@ export class TarifaAplicadorService {
   // ───────── Sprint 45: cobros al iniciar el torneo ─────────
 
   /**
-   * Genera matrícula + cuotas de un equipo, idempotente. Reutilizado por
-   * el batch de inicio de torneo y por la inscripción tardía.
+   * Genera matrícula + cuotas de una inscripción, idempotente. Reutilizado
+   * por el batch de inicio de torneo y por la inscripción tardía.
    */
-  private async generarCobrosParaEquipo(
-    equipo: Equipo,
+  private async generarCobrosParaInscripcion(
+    insc: InscripcionTorneo,
     torneo: Torneo,
     tarifaMatricula: TarifaTorneo | null,
     tarifaCuota: TarifaTorneo | null,
@@ -670,18 +661,9 @@ export class TarifaAplicadorService {
   ): Promise<{ matriculasCreadas: number; cuotasCreadas: number }> {
     let matriculasCreadas = 0;
     let cuotasCreadas = 0;
+    const nombreClub = insc.club?.nombre ?? 'club';
 
-    // Resolvemos la inscripción del equipo (si es equipo sombra de una
-    // inscripción de club). La anclamos en el cobro además del equipo para
-    // que /admin/finanzas pueda filtrar por club (el filtro usa
-    // inscripcion.club_id) — igual que hacen las multas. Equipos directos
-    // (pestaña Equipos, sin inscripción) quedan con inscripcion_id null.
-    const inscripcionId = await this.resolverInscripcionDeEquipo(
-      equipo.id,
-      equipo.tenantId,
-    );
-
-    // Matrícula — un único cobro por equipo+tarifa. No filtramos por
+    // Matrícula — un único cobro por inscripción+tarifa. No filtramos por
     // cancelado/generadoAuto: si ya existe cualquier matrícula (manual,
     // auto o cancelada a mano) NO regeneramos. Así respetamos la decisión
     // del operador que la canceló y no la resucitamos al reactivar el
@@ -689,19 +671,18 @@ export class TarifaAplicadorService {
     if (tarifaMatricula) {
       const yaExiste = await this.cobroRepo.findOne({
         where: {
-          tenantId: equipo.tenantId,
-          equipoId: equipo.id,
+          tenantId: insc.tenantId,
+          inscripcionId: insc.id,
           tarifaId: tarifaMatricula.id,
         },
       });
       if (!yaExiste) {
         await this.crearCobro({
-          tenantId: equipo.tenantId,
+          tenantId: insc.tenantId,
           torneoId: torneo.id,
-          equipoId: equipo.id,
-          inscripcionId,
+          inscripcionId: insc.id,
           tarifa: tarifaMatricula,
-          concepto: this.conceptoEquipo('Matrícula', equipo, torneo),
+          concepto: this.conceptoEquipo('Matrícula', nombreClub, torneo),
           monto: tarifaMatricula.monto,
           vencimiento: this.calcularVencimientoMatriculaInicio(
             tarifaMatricula,
@@ -725,8 +706,8 @@ export class TarifaAplicadorService {
       for (const v of vencimientos) {
         const yaExiste = await this.cobroRepo.findOne({
           where: {
-            tenantId: equipo.tenantId,
-            equipoId: equipo.id,
+            tenantId: insc.tenantId,
+            inscripcionId: insc.id,
             tarifaId: tarifaCuota.id,
             periodoAnio: v.anio,
             periodoMes: v.mes,
@@ -735,13 +716,12 @@ export class TarifaAplicadorService {
         if (yaExiste) continue;
         try {
           await this.crearCobro({
-            tenantId: equipo.tenantId,
+            tenantId: insc.tenantId,
             torneoId: torneo.id,
-            equipoId: equipo.id,
-            inscripcionId,
+            inscripcionId: insc.id,
             tarifa: tarifaCuota,
             concepto: this.conceptoCuotaEquipo(
-              equipo,
+              nombreClub,
               torneo,
               v.indice,
               tarifaCuota.cantidadCuotas,
@@ -762,30 +742,13 @@ export class TarifaAplicadorService {
             continue;
           }
           this.log.warn(
-            `cuota inicio equipo=${equipo.id} tarifa=${tarifaCuota.id} periodo=${v.anio}-${v.mes} falló: ${msg}`,
+            `cuota inicio insc=${insc.id} tarifa=${tarifaCuota.id} periodo=${v.anio}-${v.mes} falló: ${msg}`,
           );
         }
       }
     }
 
     return { matriculasCreadas, cuotasCreadas };
-  }
-
-  /**
-   * Si el equipo es el "equipo sombra" de una inscripción de club, devuelve
-   * el id de esa inscripción; si no (equipo directo de la pestaña Equipos),
-   * devuelve null. Sirve para anclar el cobro al club y que /admin/finanzas
-   * lo pueda filtrar por club.
-   */
-  private async resolverInscripcionDeEquipo(
-    equipoId: string,
-    tenantId: string,
-  ): Promise<string | null> {
-    const insc = await this.inscRepo.findOne({
-      where: { equipoSombraId: equipoId, tenantId },
-      select: ['id'],
-    });
-    return insc?.id ?? null;
   }
 
   /** Busca la tarifa CUOTA activa del torneo (la del modelo nuevo upfront). */
@@ -850,17 +813,17 @@ export class TarifaAplicadorService {
     return out;
   }
 
-  private conceptoEquipo(prefijo: string, equipo: Equipo, torneo: Torneo): string {
-    return `${prefijo} — ${torneo.nombre} (${equipo.nombre})`;
+  private conceptoEquipo(prefijo: string, nombreClub: string, torneo: Torneo): string {
+    return `${prefijo} — ${torneo.nombre} (${nombreClub})`;
   }
 
   private conceptoCuotaEquipo(
-    equipo: Equipo,
+    nombreClub: string,
     torneo: Torneo,
     indice: number,
     total: number,
   ): string {
-    return `Cuota ${indice}/${total} — ${torneo.nombre} (${equipo.nombre})`;
+    return `Cuota ${indice}/${total} — ${torneo.nombre} (${nombreClub})`;
   }
 
   // ───────── Persistencia + audit ─────────
@@ -878,12 +841,10 @@ export class TarifaAplicadorService {
     periodoSemana: number | null;
     sancionId?: string | null;
     partidoId?: string | null;
-    equipoId?: string | null;
   }): Promise<Cobro> {
     const categoria = this.categoriaCobroParaTipo(args.tarifa.tipo);
     const cobro = this.cobroRepo.create({
       tenantId: args.tenantId,
-      equipoId: args.equipoId ?? null,
       torneoId: args.torneoId,
       inscripcionId: args.inscripcionId || null,
       partidoId: args.partidoId ?? null,
@@ -1064,25 +1025,6 @@ export class TarifaAplicadorService {
     return new Map(
       rows.map((j) => [j.id, `${j.nombres} ${j.apellidos}`.trim()]),
     );
-  }
-
-  /**
-   * Si la incidencia no trae inscripcion_id (modelo viejo), inferimos
-   * cuál inscripción corresponde según si el equipo es local o visita
-   * en ese partido.
-   */
-  private inferirInscripcionPartido(
-    partido: Partido,
-    equipoId: string | null,
-  ): string | null {
-    if (!equipoId) return null;
-    if (partido.equipoLocalId === equipoId) {
-      return partido.inscripcionLocalId ?? null;
-    }
-    if (partido.equipoVisitaId === equipoId) {
-      return partido.inscripcionVisitaId ?? null;
-    }
-    return null;
   }
 
   private conceptoCuota(

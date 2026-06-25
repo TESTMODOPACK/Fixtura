@@ -13,7 +13,6 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Cancha } from './cancha.entity';
-import { Equipo } from './equipo.entity';
 import { Fecha } from './fecha.entity';
 import { InscripcionTorneo } from './inscripcion-torneo.entity';
 
@@ -36,7 +35,7 @@ export type MotivoSuspension =
 @Index('idx_partidos_tenant', ['tenantId'])
 @Index('idx_partidos_fecha', ['fechaId'])
 @Index('idx_partidos_estado', ['estado'])
-@Check(`"equipo_local_id" <> "equipo_visita_id"`)
+@Check(`"inscripcion_local_id" <> "inscripcion_visita_id"`)
 export class Partido {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -55,26 +54,7 @@ export class Partido {
   @JoinColumn({ name: 'fecha_id' })
   fecha?: Fecha;
 
-  // ADR-0005 Fase 1 — write-only-new: estas FK al modelo viejo dejan de
-  // escribirse; quedan nullable y conservan valores históricos como backup.
-  @Column({ name: 'equipo_local_id', type: 'uuid', nullable: true })
-  equipoLocalId!: string | null;
-
-  @ManyToOne(() => Equipo, { nullable: true, onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'equipo_local_id' })
-  equipoLocal?: Equipo | null;
-
-  @Column({ name: 'equipo_visita_id', type: 'uuid', nullable: true })
-  equipoVisitaId!: string | null;
-
-  @ManyToOne(() => Equipo, { nullable: true, onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'equipo_visita_id' })
-  equipoVisita?: Equipo | null;
-
-  // Sprint 26G.1 (ADR-0004) — referencias paralelas al modelo nuevo.
-  // Pobladas por backfill (migrate-clubes) y por el shim (Sprint 26G.2).
-  // El código de lectura sigue usando equipo_*_id hasta el refactor
-  // incremental del Sprint 26G.3.
+  // ADR-0005 — "equipo del partido" = InscripcionTorneo. Fuente de verdad.
   @Column({ name: 'inscripcion_local_id', type: 'uuid', nullable: true })
   inscripcionLocalId!: string | null;
 

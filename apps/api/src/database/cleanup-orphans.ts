@@ -374,13 +374,9 @@ async function main(): Promise<void> {
     // con cupo de excepciones configurable.
     await ensureCategoriasYSeriesTables(client, log);
 
-    // Sprint 25 Paso 3: vincular torneos a una categoría y equipos a una
-    // serie (slug embebido de la categoría del torneo). categoria_id en
-    // torneos para evitar referencias cruzadas raras desde equipos, y
-    // serie_slug en equipos porque cada equipo del torneo puede estar en
-    // una serie distinta (Primera/Segunda/Honor dentro de la misma cat.).
-    // FK ON DELETE SET NULL: si borran una categoría, los torneos
-    // referenciados quedan sin categoría (no se rompe el torneo en curso).
+    // Sprint 25 Paso 3: vincular torneos a una categoría. FK ON DELETE SET
+    // NULL: si borran una categoría, los torneos referenciados quedan sin
+    // categoría (no se rompe el torneo en curso).
     await client.query(`
       ALTER TABLE torneos
         ADD COLUMN IF NOT EXISTS categoria_id UUID
@@ -389,25 +385,16 @@ async function main(): Promise<void> {
     await client.query(
       `CREATE INDEX IF NOT EXISTS idx_torneos_categoria ON torneos(categoria_id)`,
     );
-    await client.query(`
-      ALTER TABLE equipos
-        ADD COLUMN IF NOT EXISTS serie_slug VARCHAR(50)
-    `);
-    await client.query(
-      `CREATE INDEX IF NOT EXISTS idx_equipos_torneo_serie ON equipos(torneo_id, serie_slug)`,
-    );
-    log('torneos.categoria_id + equipos.serie_slug asegurados (Sprint 25 paso 3).');
+    log('torneos.categoria_id asegurado (Sprint 25 paso 3).');
 
-    // Sprint 26A — Clubes globales por tenant (reemplaza el modelo viejo
-    // de equipos por torneo). Ver ADR-0004. Tablas:
+    // Sprint 26A (ADR-0004/0005) — Clubes globales por tenant, fuente de
+    // verdad única. Tablas:
     //   clubes                  — entidad de primera clase a nivel tenant
     //   club_categorias         — N:N club ↔ categoría (multi-categoría)
     //   jugadores               — plantel del club por categoría
     //   inscripciones_torneo    — club inscrito a (torneo, categoría, serie)
     //   planilla_torneo         — subset del plantel que juega ese torneo
     //   jugadores_vetados       — lista negra por RUT a nivel tenant
-    // Mientras dure la coexistencia (hasta sprint 26G), las tablas viejas
-    // `equipos` y `jugadores_inscritos` siguen existiendo.
     await ensureClubesTables(client, log);
     await ensureGruposTorneo(client, log);
     await ensurePlayoffsTables(client, log);
@@ -517,48 +504,10 @@ async function main(): Promise<void> {
       );
     }
 
-    // Sprint 30 — healing: propagar nombre/escudo/colores del club a los
-    // equipos sombra de sus inscripciones. Necesario porque el backfill
-    // 26F creó equipos sombra copiando el equipo viejo (con nombres como
-    // "lifegreen.cl" heredados del seed) en vez del club ya limpio. El
-    // resultado: dashboard/fixture/portal mostraban valores viejos.
-    // Esta query es idempotente: no rompe nada si los nombres ya estaban
-    // sincronizados.
-    const healing = await client.query(`
-      UPDATE equipos e
-      SET
-        nombre = c.nombre,
-        escudo_url = c.escudo_url,
-        color_primario = c.color_primario,
-        color_secundario = c.color_secundario
-      FROM inscripciones_torneo it
-      JOIN clubes c ON c.id = it.club_id
-      WHERE it.equipo_sombra_id = e.id
-        AND e.tenant_id = it.tenant_id
-        AND (
-          e.nombre IS DISTINCT FROM c.nombre
-          OR e.escudo_url IS DISTINCT FROM c.escudo_url
-          OR e.color_primario IS DISTINCT FROM c.color_primario
-          OR e.color_secundario IS DISTINCT FROM c.color_secundario
-        )
-    `);
-    if ((healing.rowCount ?? 0) > 0) {
-      log(
-        `Sprint 30: ${healing.rowCount} equipo(s) sombra resincronizados al club.`,
-      );
-    }
-
-    // Sprint 26G.1 (ADR-0004) — columnas paralelas inscripcion_*_id en
-    // tablas que históricamente referencian equipo_id. Aditivas y NULLABLE:
-    // el modelo viejo sigue siendo source-of-truth y el nuevo se popula
-    // primero por backfill (migrate-clubes-from-equipos) y después por
-    // el shim de coexistencia (Sprint 26G.2). El refactor incremental
-    // que cambia el código de lectura es Sprint 26G.3.
-    //
-    // ON DELETE SET NULL: si una inscripción se borra (por error o por
-    // limpieza), preservamos los registros históricos (partidos jugados,
-    // incidencias, cobros). El equipo_id viejo sigue siendo la referencia
-    // funcional. El refactor 26G.3 hará el switch.
+    // Sprint 26G.1 (ADR-0004/0005) — columnas inscripcion_*_id, fuente de
+    // verdad del "equipo" en partidos/incidencias/cobros. Aditivas y NULLABLE.
+    // ON DELETE SET NULL: si una inscripción se borra preservamos los
+    // registros históricos (partidos jugados, incidencias, cobros).
     await client.query(`
       ALTER TABLE partidos
         ADD COLUMN IF NOT EXISTS inscripcion_local_id UUID
@@ -591,22 +540,6 @@ async function main(): Promise<void> {
     log(
       'partidos + incidencias_partido + cobros.inscripcion_*_id asegurados (Sprint 26G.1).',
     );
-
-    // Sprint 26G.2 (ADR-0004) — Shim de coexistencia. La inscripción
-    // del modelo nuevo guarda referencia al "equipo sombra" del modelo
-    // viejo. Cuando se inscribe un club via el modelo nuevo, se crea
-    // automáticamente un `equipo` que el fixture/actas/sanciones siguen
-    // usando. Esto permite que el modelo nuevo sea usable end-to-end
-    // SIN refactorear toda la cadena de servicios viejos.
-    await client.query(`
-      ALTER TABLE inscripciones_torneo
-        ADD COLUMN IF NOT EXISTS equipo_sombra_id UUID
-          REFERENCES equipos(id) ON DELETE SET NULL
-    `);
-    await client.query(
-      `CREATE INDEX IF NOT EXISTS idx_inscripciones_equipo_sombra ON inscripciones_torneo(equipo_sombra_id)`,
-    );
-    log('inscripciones_torneo.equipo_sombra_id asegurada (Sprint 26G.2 shim).');
 
     await client.query(`
       ALTER TABLE tenants
@@ -668,9 +601,6 @@ async function main(): Promise<void> {
         ADD COLUMN IF NOT EXISTS centro_minutos_agregados SMALLINT NOT NULL DEFAULT 0
     `);
     log('partidos.centro_* asegurado (Sprint 18, RF-17 / 29A entretiempo / tiempo agregado).');
-
-    // AUDIT-3: jugadores_inscritos.torneo_id + UNIQUE (rut, torneo).
-    await ensureJugadoresUniqueRutTorneo(client, log);
 
     // AUDIT-7: índices de performance.
     await client.query(
@@ -819,24 +749,6 @@ async function main(): Promise<void> {
     }
     log('canchas.estado + motivo_no_disponible asegurada (Sprint 40).');
 
-    // Sprint 44 — Suspension/expulsion de equipos del torneo (conducta
-    // antideportiva, no pago, otros). El estado SUSPENDIDO ya existe en
-    // el enum del equipo. Sumamos contexto: motivo categorizado para
-    // poder filtrar/reportar despues, observaciones libres, timestamp
-    // y autor de la accion. Reversible: reactivar() blanquea estos
-    // campos y vuelve estado a INSCRITO. Los walkovers que se hayan
-    // disparado al suspender se mantienen (son historia).
-    await client.query(`
-      ALTER TABLE equipos
-        ADD COLUMN IF NOT EXISTS motivo_suspension VARCHAR(20)
-          CHECK (motivo_suspension IS NULL
-            OR motivo_suspension IN ('DEPORTIVA','ECONOMICA','OTRA')),
-        ADD COLUMN IF NOT EXISTS observaciones_suspension TEXT,
-        ADD COLUMN IF NOT EXISTS suspendido_en TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS suspendido_por UUID
-    `);
-    log('equipos.motivo_suspension + observaciones + audit asegurados (Sprint 44).');
-
     // Sprint 45 — Cobros al iniciar el torneo. Dos campos nuevos en el
     // tarifario:
     //   cantidad_cuotas: solo para tarifa CUOTA. Cuántas cuotas se
@@ -859,24 +771,6 @@ async function main(): Promise<void> {
         ADD COLUMN IF NOT EXISTS cobros_generados_at TIMESTAMPTZ
     `);
     log('torneos.cobros_generados_at asegurada (Sprint 45).');
-
-    // Sprint 45 — Anti-duplicado de cuotas ancladas a EQUIPO. El índice
-    // uq_cobro_cuota_periodo es por inscripcion_id; los cobros generados
-    // al iniciar el torneo se anclan a equipo_id (inscripcion_id NULL), así
-    // que necesitan su propio índice único o dos activaciones en paralelo
-    // podrían duplicar. COALESCE trata NULL como 0 igual que el de inscripción.
-    await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_cobro_cuota_periodo_equipo
-        ON cobros (
-          equipo_id,
-          tarifa_id,
-          periodo_anio,
-          COALESCE(periodo_mes, 0),
-          COALESCE(periodo_semana, 0)
-        )
-        WHERE generado_auto = TRUE AND cancelado = FALSE AND equipo_id IS NOT NULL
-    `);
-    log('cobros UNIQUE(equipo, tarifa, periodo) asegurado (Sprint 45).');
 
     // Sprint 38 — Backfill de planillas vacias. Inscripciones que se
     // crearon antes del auto-copy quedaron con planilla en 0 jugadores
@@ -954,47 +848,8 @@ async function main(): Promise<void> {
         ADD COLUMN IF NOT EXISTS suspendido_por UUID
     `);
 
-    // CRÍTICO (ADR-0005) — Equipos "huérfanos": los creados por el viejo
-    // EquiposAdminService.create() son `equipos` sueltos SIN inscripción
-    // (no tienen quien los referencie por equipo_sombra_id). Al flipear las
-    // lecturas al modelo nuevo desaparecerían del torneo. Aquí creamos una
-    // inscripción por cada uno: matchea el club por slug, toma la categoría
-    // del torneo, copia estado/serie/suspensión, y apunta equipo_sombra_id
-    // al equipo huérfano para que el resto del backfill (partidos, planilla)
-    // los enganche. Idempotente: solo toca equipos sin inscripción y solo
-    // si existe un club con el mismo slug y el torneo tiene categoría.
-    const bfHuerfanos = await client.query(`
-      INSERT INTO inscripciones_torneo (
-        tenant_id, club_id, torneo_id, categoria_id, serie_slug, estado,
-        equipo_sombra_id, motivo_suspension, observaciones_suspension,
-        suspendido_en, suspendido_por
-      )
-      SELECT
-        e.tenant_id, c.id, e.torneo_id, t.categoria_id, e.serie_slug, e.estado,
-        e.id, e.motivo_suspension, e.observaciones_suspension,
-        e.suspendido_en, e.suspendido_por
-      FROM equipos e
-      JOIN torneos t ON t.id = e.torneo_id AND t.categoria_id IS NOT NULL
-      JOIN clubes c ON c.tenant_id = e.tenant_id AND c.slug = e.slug
-      WHERE NOT EXISTS (
-        SELECT 1 FROM inscripciones_torneo it WHERE it.equipo_sombra_id = e.id
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM inscripciones_torneo it2
-        WHERE it2.torneo_id = e.torneo_id
-          AND it2.club_id = c.id
-          AND it2.categoria_id = t.categoria_id
-      )
-      ON CONFLICT DO NOTHING
-    `);
-    if ((bfHuerfanos.rowCount ?? 0) > 0) {
-      log(
-        `Sprint 46: ${bfHuerfanos.rowCount} equipo(s) huérfano(s) convertidos a inscripción.`,
-      );
-    }
-
-    // Rellenar planilla de las inscripciones recién creadas desde el plantel
-    // del club (mismo criterio que el backfill Sprint 38, idempotente).
+    // Rellenar planilla de inscripciones vacías desde el plantel del club
+    // (mismo criterio que el backfill Sprint 38, idempotente).
     const bfPlanillaHuerfanos = await client.query(`
       WITH inscripciones_vacias AS (
         SELECT i.id AS inscripcion_id, i.tenant_id, i.club_id, i.categoria_id,
@@ -1055,66 +910,8 @@ async function main(): Promise<void> {
     `);
     log('Informes: sanciones_activas.fechas_totales asegurada.');
 
-    // Backfill partidos.inscripcion_local/visita_id desde el equipo sombra.
-    const bfPartLocal = await client.query(`
-      UPDATE partidos p
-      SET inscripcion_local_id = it.id
-      FROM inscripciones_torneo it
-      WHERE it.equipo_sombra_id = p.equipo_local_id
-        AND it.tenant_id = p.tenant_id
-        AND p.inscripcion_local_id IS NULL
-    `);
-    const bfPartVisita = await client.query(`
-      UPDATE partidos p
-      SET inscripcion_visita_id = it.id
-      FROM inscripciones_torneo it
-      WHERE it.equipo_sombra_id = p.equipo_visita_id
-        AND it.tenant_id = p.tenant_id
-        AND p.inscripcion_visita_id IS NULL
-    `);
-    log(
-      `Sprint 46: backfill partidos — ${(bfPartLocal.rowCount ?? 0)} local + ${(bfPartVisita.rowCount ?? 0)} visita.`,
-    );
-
-    // Backfill incidencias_partido.inscripcion_id desde el equipo sombra.
-    const bfIncInsc = await client.query(`
-      UPDATE incidencias_partido ip
-      SET inscripcion_id = it.id
-      FROM inscripciones_torneo it
-      WHERE it.equipo_sombra_id = ip.equipo_id
-        AND it.tenant_id = ip.tenant_id
-        AND ip.inscripcion_id IS NULL
-    `);
-    // Backfill incidencias_partido.jugador_id desde jugadores_inscritos por RUT
-    // (rut es único por tenant en la tabla jugadores nueva).
-    const bfIncJug = await client.query(`
-      UPDATE incidencias_partido ip
-      SET jugador_id = j.id
-      FROM jugadores_inscritos ji
-      JOIN jugadores j
-        ON j.tenant_id = ji.tenant_id
-       AND j.rut = ji.rut
-      WHERE ip.jugador_inscrito_id = ji.id
-        AND ji.rut IS NOT NULL
-        AND ip.jugador_id IS NULL
-    `);
-    log(
-      `Sprint 46: backfill incidencias — ${(bfIncInsc.rowCount ?? 0)} inscripción + ${(bfIncJug.rowCount ?? 0)} jugador.`,
-    );
-
-    // Backfill cobros.inscripcion_id desde el equipo sombra.
-    const bfCobros = await client.query(`
-      UPDATE cobros c
-      SET inscripcion_id = it.id
-      FROM inscripciones_torneo it
-      WHERE it.equipo_sombra_id = c.equipo_id
-        AND it.tenant_id = c.tenant_id
-        AND c.equipo_id IS NOT NULL
-        AND c.inscripcion_id IS NULL
-    `);
-    log(`Sprint 46: backfill cobros — ${(bfCobros.rowCount ?? 0)} con inscripción.`);
-
     // Backfill sanciones_activas.jugador_id por RUT (clave real de la sanción).
+    // Es del modelo nuevo (jugadores) — se mantiene tras el drop de Fase 2.
     const bfSanc = await client.query(`
       UPDATE sanciones_activas s
       SET jugador_id = j.id
@@ -1124,63 +921,7 @@ async function main(): Promise<void> {
         AND s.rut IS NOT NULL
         AND s.jugador_id IS NULL
     `);
-    log(`Sprint 46: backfill sanciones — ${(bfSanc.rowCount ?? 0)} con jugador.`);
-
-    // Backfill estado + suspensión de la inscripción desde el equipo sombra,
-    // para que los equipos suspendidos sigan suspendidos tras el flip.
-    const bfEstadoInsc = await client.query(`
-      UPDATE inscripciones_torneo it
-      SET estado = e.estado,
-          motivo_suspension = e.motivo_suspension,
-          observaciones_suspension = e.observaciones_suspension,
-          suspendido_en = e.suspendido_en,
-          suspendido_por = e.suspendido_por
-      FROM equipos e
-      WHERE it.equipo_sombra_id = e.id
-        AND it.tenant_id = e.tenant_id
-        AND e.estado = 'SUSPENDIDO'
-        AND it.estado <> 'SUSPENDIDO'
-    `);
-    log(
-      `Sprint 46: inscripciones_torneo suspensión asegurada + ${(bfEstadoInsc.rowCount ?? 0)} estado(s) backfilled desde sombra.`,
-    );
-
-    // Modo write-only-new (ADR-0005 Fase 1): las columnas FK al modelo
-    // viejo dejan de escribirse en filas nuevas. Las hacemos NULLABLE para
-    // que partidos/incidencias nuevas no las requieran. Las filas
-    // históricas conservan sus valores como backup hasta la Fase 2.
-    // ALTER ... DROP NOT NULL es idempotente (no falla si ya es nullable).
-    await client.query(`ALTER TABLE partidos ALTER COLUMN equipo_local_id DROP NOT NULL`);
-    await client.query(`ALTER TABLE partidos ALTER COLUMN equipo_visita_id DROP NOT NULL`);
-    await client.query(`ALTER TABLE incidencias_partido ALTER COLUMN equipo_id DROP NOT NULL`);
-    log('Sprint 46: FK viejas (equipo_local/visita_id, incidencias.equipo_id) ahora nullable.');
-
-    // Reporte de huérfanos: filas que NO pudieron mapearse al modelo nuevo.
-    // Deben resolverse ANTES de la Fase 2 (drop destructivo). No bloquea.
-    const huerfanos = await client.query(`
-      SELECT
-        (SELECT COUNT(*) FROM partidos WHERE inscripcion_local_id IS NULL OR inscripcion_visita_id IS NULL) AS partidos,
-        (SELECT COUNT(*) FROM incidencias_partido WHERE inscripcion_id IS NULL) AS incidencias_sin_insc,
-        (SELECT COUNT(*) FROM incidencias_partido WHERE jugador_inscrito_id IS NOT NULL AND jugador_id IS NULL) AS incidencias_sin_jug,
-        (SELECT COUNT(*) FROM cobros WHERE equipo_id IS NOT NULL AND inscripcion_id IS NULL) AS cobros,
-        (SELECT COUNT(*) FROM sanciones_activas WHERE rut IS NOT NULL AND jugador_id IS NULL AND cumplida = FALSE) AS sanciones
-    `);
-    const h = huerfanos.rows[0] ?? {};
-    const totalHuerfanos =
-      Number(h.partidos ?? 0) +
-      Number(h.incidencias_sin_insc ?? 0) +
-      Number(h.incidencias_sin_jug ?? 0) +
-      Number(h.cobros ?? 0) +
-      Number(h.sanciones ?? 0);
-    if (totalHuerfanos > 0) {
-      log(
-        `Sprint 46 ⚠ HUÉRFANOS sin mapear (resolver antes de Fase 2): ` +
-          `partidos=${h.partidos} incidencias_sin_insc=${h.incidencias_sin_insc} ` +
-          `incidencias_sin_jug=${h.incidencias_sin_jug} cobros=${h.cobros} sanciones=${h.sanciones}`,
-      );
-    } else {
-      log('Sprint 46: backfill completo, sin huérfanos. ✓');
-    }
+    log(`ADR-0005: backfill sanciones — ${(bfSanc.rowCount ?? 0)} con jugador.`);
 
     log('Done.');
   } finally {
@@ -1428,7 +1169,6 @@ async function ensureCobrosTable(
     CREATE TABLE IF NOT EXISTS cobros (
       id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id         UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-      equipo_id         UUID REFERENCES equipos(id) ON DELETE SET NULL,
       concepto          VARCHAR(200) NOT NULL,
       categoria         VARCHAR(30) NOT NULL DEFAULT 'CUOTA'
                           CHECK (categoria IN (
@@ -1451,9 +1191,6 @@ async function ensureCobrosTable(
   `);
   await ensureRls(client, 'cobros');
   await client.query(`CREATE INDEX IF NOT EXISTS idx_cobros_tenant ON cobros(tenant_id)`);
-  await client.query(
-    `CREATE INDEX IF NOT EXISTS idx_cobros_equipo ON cobros(equipo_id) WHERE equipo_id IS NOT NULL`,
-  );
   await client.query(
     `CREATE INDEX IF NOT EXISTS idx_cobros_pendientes ON cobros(vencimiento) WHERE pagado_at IS NULL AND cancelado = FALSE`,
   );
@@ -1813,53 +1550,6 @@ async function ensureDocumentosTributariosTable(
   }
   await ensureTrigger(client, 'documentos_tributarios');
   log('Documentos tributarios asegurada (idempotente).');
-}
-
-async function ensureJugadoresUniqueRutTorneo(
-  client: Client,
-  log: (msg: string) => void,
-): Promise<void> {
-  await client.query(`
-    ALTER TABLE jugadores_inscritos
-      ADD COLUMN IF NOT EXISTS torneo_id UUID
-        REFERENCES torneos(id) ON DELETE CASCADE
-  `);
-  // Backfill desde equipo (idempotente, solo NULLs)
-  await client.query(`
-    UPDATE jugadores_inscritos j
-       SET torneo_id = e.torneo_id
-      FROM equipos e
-     WHERE j.equipo_id = e.id
-       AND j.torneo_id IS NULL
-  `);
-  // No forzamos NOT NULL en cleanup-orphans (la migración formal lo
-  // hace después de validar). Aquí es best-effort.
-
-  // Resolver duplicados existentes (más antiguo gana)
-  await client.query(`
-    WITH duplicados AS (
-      SELECT id,
-             ROW_NUMBER() OVER (
-               PARTITION BY tenant_id, torneo_id, rut
-               ORDER BY created_at ASC, id ASC
-             ) AS rn
-        FROM jugadores_inscritos
-       WHERE rut IS NOT NULL AND activo = TRUE AND torneo_id IS NOT NULL
-    )
-    UPDATE jugadores_inscritos
-       SET activo = FALSE
-     WHERE id IN (SELECT id FROM duplicados WHERE rn > 1)
-  `);
-
-  await client.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_jugador_rut_torneo
-      ON jugadores_inscritos (tenant_id, torneo_id, rut)
-      WHERE rut IS NOT NULL AND activo = TRUE
-  `);
-  await client.query(
-    `CREATE INDEX IF NOT EXISTS idx_jugadores_torneo ON jugadores_inscritos (torneo_id)`,
-  );
-  log('jugadores_inscritos: torneo_id + UNIQUE(rut, torneo) asegurado.');
 }
 
 async function ensurePushSubscriptionsTable(

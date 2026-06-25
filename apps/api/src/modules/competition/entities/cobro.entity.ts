@@ -10,7 +10,6 @@ import {
 } from 'typeorm';
 
 import { Tenant } from '../../tenants/entities/tenant.entity';
-import { Equipo } from './equipo.entity';
 import { InscripcionTorneo } from './inscripcion-torneo.entity';
 import { Partido } from './partido.entity';
 import { SancionActiva } from './sancion-activa.entity';
@@ -47,15 +46,7 @@ export class Cobro {
   @JoinColumn({ name: 'tenant_id' })
   tenant?: Tenant;
 
-  @Column({ name: 'equipo_id', type: 'uuid', nullable: true })
-  equipoId!: string | null;
-
-  @ManyToOne(() => Equipo, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'equipo_id' })
-  equipo?: Equipo | null;
-
-  // Sprint 26G.1 (ADR-0004) — referencia paralela al modelo nuevo.
-  // Poblada por backfill (migrate-clubes) y shim (Sprint 26G.2).
+  // ADR-0005 — el cobro se ancla a la inscripción del club en el torneo.
   @Column({ name: 'inscripcion_id', type: 'uuid', nullable: true })
   inscripcionId!: string | null;
 

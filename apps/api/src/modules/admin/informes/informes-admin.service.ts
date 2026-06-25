@@ -95,8 +95,10 @@ export class InformesAdminService {
       .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
       .innerJoin('jugadores', 'j', 'j.id = i.jugador_id')
       .leftJoin('clubes', 'c', 'c.id = j.club_id')
-      .leftJoin('equipos', 'el', 'el.id = p.equipo_local_id')
-      .leftJoin('equipos', 'ev', 'ev.id = p.equipo_visita_id')
+      .leftJoin('inscripciones_torneo', 'il', 'il.id = p.inscripcion_local_id')
+      .leftJoin('clubes', 'el', 'el.id = il.club_id')
+      .leftJoin('inscripciones_torneo', 'iv', 'iv.id = p.inscripcion_visita_id')
+      .leftJoin('clubes', 'ev', 'ev.id = iv.club_id')
       .where('i.tenant_id = :tenantId', { tenantId })
       .andWhere('f.torneo_id = :torneoId', { torneoId })
       .andWhere(`i.tipo IN ('ROJA','AMARILLA_ROJA')`);
