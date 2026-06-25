@@ -516,7 +516,7 @@ function HistorialTab(): React.ReactElement {
 
   return (
     <Card padding="tight">
-      <div className="overflow-x-auto"><table className="w-full text-sm">
+      <div className="overflow-x-auto hidden md:block"><table className="w-full text-sm">
         <thead>
           <tr className="text-left text-ink-mute">
             <th className="pb-2 font-medium">Fecha</th>
@@ -562,6 +562,38 @@ function HistorialTab(): React.ReactElement {
           ))}
         </tbody>
       </table></div>
+
+      <div className="md:hidden divide-y divide-line">
+        {liquidaciones.map((l) => (
+          <div key={l.id} className="flex items-start justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <p className="font-medium text-green-deep">
+                {l.personalNombre} {l.personalApellido}
+              </p>
+              <p className="text-xs text-ink-mute mt-0.5">
+                {formatFecha(l.fechaPago)} · {METODO_PAGO_LIQUIDACION_LABEL[l.metodoPago]} ·{' '}
+                {l.designacionesCount} asist.
+              </p>
+              {l.comprobante && (
+                <p className="text-xs text-ink-mute">{l.comprobante}</p>
+              )}
+            </div>
+            <div className="flex flex-shrink-0 flex-col items-end gap-1">
+              <span className="font-semibold text-green-deep">{formatCLP(l.total)}</span>
+              <button
+                type="button"
+                onClick={() =>
+                  revertir(l.id, `${l.personalNombre} ${l.personalApellido}`)
+                }
+                className="text-ink-mute transition hover:text-danger"
+                title="Revertir pago"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }
@@ -887,7 +919,7 @@ function NominasLista(): React.ReactElement {
 
   return (
     <Card padding="tight">
-      <div className="overflow-x-auto"><table className="w-full text-sm">
+      <div className="overflow-x-auto hidden md:block"><table className="w-full text-sm">
         <thead>
           <tr className="text-left text-ink-mute">
             <th className="pb-2 font-medium">Período</th>
@@ -936,6 +968,44 @@ function NominasLista(): React.ReactElement {
           ))}
         </tbody>
       </table></div>
+
+      <div className="md:hidden divide-y divide-line">
+        {nominas.map((n) => (
+          <div key={n.id} className="flex items-start justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <p className="font-medium text-green-deep">
+                {formatFecha(n.periodoDesde)} → {formatFecha(n.periodoHasta)}
+              </p>
+              <p className="text-xs text-ink-mute mt-0.5">
+                Pago {formatFecha(n.fechaPago)} ·{' '}
+                {METODO_PAGO_LIQUIDACION_LABEL[n.metodoPago]} · {n.cantidadPersonas}{' '}
+                persona(s)
+              </p>
+            </div>
+            <div className="flex flex-shrink-0 flex-col items-end gap-1">
+              <span className="font-semibold text-green-deep">{formatCLP(n.total)}</span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => descargarExcel(n.id)}
+                  className="text-ink-mute transition hover:text-green-deep"
+                  title="Descargar Excel"
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => revertir(n.id)}
+                  className="text-ink-mute transition hover:text-danger"
+                  title="Revertir nómina"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }

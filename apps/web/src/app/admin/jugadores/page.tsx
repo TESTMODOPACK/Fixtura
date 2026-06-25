@@ -188,7 +188,7 @@ export default function JugadoresGlobalPage(): React.ReactElement {
           </div>
         )}
         {!isLoading && jugadores && jugadores.length > 0 && (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto hidden md:block">
             <table className="w-full text-sm">
               <thead className="bg-paper-dark border-b border-line">
                 <tr className="text-left text-[10px] uppercase tracking-[0.15em] text-ink-mute font-semibold">
@@ -210,6 +210,13 @@ export default function JugadoresGlobalPage(): React.ReactElement {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {!isLoading && jugadores && jugadores.length > 0 && (
+          <div className="md:hidden divide-y divide-line">
+            {jugadores.map((j) => (
+              <JugadorCard key={j.jugadorId} jugador={j} />
+            ))}
           </div>
         )}
       </Card>
@@ -319,5 +326,80 @@ function JugadorRow({ jugador }: { jugador: JugadorGlobal }): React.ReactElement
         </Link>
       </td>
     </tr>
+  );
+}
+
+// Versión móvil de la fila: la tabla de 10 columnas no cabe en un teléfono,
+// así que en <md mostramos cada jugador como tarjeta apilada.
+function JugadorCard({ jugador }: { jugador: JugadorGlobal }): React.ReactElement {
+  const esVetado = jugador.estado === 'VETADO';
+  const esInactivo = jugador.estado === 'INACTIVO';
+
+  return (
+    <Link
+      href={`/admin/clubes/${jugador.clubId}`}
+      className={cn(
+        'block p-4 transition-colors',
+        esVetado ? 'bg-danger/5' : esInactivo ? 'opacity-60 hover:bg-paper' : 'hover:bg-paper',
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-semibold flex items-center gap-1.5">
+            {jugador.numeroCamiseta != null && (
+              <span className="font-mono text-xs text-ink-mute flex-shrink-0">
+                #{jugador.numeroCamiseta}
+              </span>
+            )}
+            <span className="truncate">
+              {jugador.nombres} {jugador.apellidos}
+            </span>
+            {jugador.capitan && (
+              <Star size={12} className="text-accent fill-accent flex-shrink-0" />
+            )}
+          </div>
+          <div className="text-xs text-ink-mute mt-0.5 flex flex-wrap gap-x-2">
+            {jugador.apodo && <span>« {jugador.apodo} »</span>}
+            <span className="font-mono">{jugador.rut}</span>
+          </div>
+        </div>
+        <ChevronRight size={16} className="text-line flex-shrink-0 mt-0.5" />
+      </div>
+
+      <div className="text-sm mt-2 flex items-center gap-1.5">
+        <Shield size={12} className="text-ink-mute flex-shrink-0" />
+        <span className="font-semibold truncate">{jugador.clubNombre}</span>
+        <span className="text-ink-mute flex-shrink-0">· {jugador.categoriaNombre}</span>
+      </div>
+
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-mute mt-2 font-mono">
+        <span>{jugador.partidosJugados} PJ</span>
+        <span className="text-ink font-semibold">{jugador.goles} ⚽</span>
+        <span>{jugador.amarillas} 🟨</span>
+        {jugador.rojas > 0 && <span className="text-danger">{jugador.rojas} 🟥</span>}
+        {jugador.mvps > 0 && <span>{jugador.mvps} MVP</span>}
+        {jugador.posicion && <span className="uppercase">{jugador.posicion}</span>}
+      </div>
+
+      {(esVetado || esInactivo || jugador.tieneSancionActiva) && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {esVetado && (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-danger/15 text-danger">
+              <ShieldOff size={10} /> vetado
+            </span>
+          )}
+          {esInactivo && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-ink-mute/15 text-ink-mute">
+              inactivo
+            </span>
+          )}
+          {jugador.tieneSancionActiva && (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-accent/15 text-accent">
+              <AlertTriangle size={10} /> sanción
+            </span>
+          )}
+        </div>
+      )}
+    </Link>
   );
 }
