@@ -891,6 +891,30 @@ export function useAnalytics() {
   });
 }
 
+// ─── NPS (encuestas de satisfacción, módulo M5 etapa 2) ───────────────
+import type { DispararNpsResultado, NpsResumenAdmin } from '@fixtura/types';
+
+export function useNpsResumen() {
+  return useQuery({
+    queryKey: ['admin', 'nps', 'resumen'],
+    queryFn: () => apiFetch<NpsResumenAdmin>('/admin/nps/resumen'),
+  });
+}
+
+export function useDispararNps() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (torneoId: string) =>
+      apiFetch<DispararNpsResultado>('/admin/nps/disparar', {
+        method: 'POST',
+        body: { torneoId },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'nps', 'resumen'] });
+    },
+  });
+}
+
 // ─── Ajustes del tenant (settings + miembros) ─────────────────────────
 export function useTenantSettings() {
   return useQuery({

@@ -97,6 +97,12 @@ import {
 } from './delegado/delegado.controller';
 import { DelegadoInviteService } from './delegado/delegado-invite.service';
 import { DelegadoPortalService } from './delegado/delegado-portal.service';
+import { EncuestaNps } from '../competition/entities/encuesta-nps.entity';
+import { InscripcionTorneo } from '../competition/entities/inscripcion-torneo.entity';
+import { Torneo } from '../competition/entities/torneo.entity';
+import { NpsAdminController } from './nps/nps-admin.controller';
+import { NpsPublicoController } from './nps/nps-publico.controller';
+import { NpsService } from './nps/nps.service';
 
 /**
  * Módulo admin — endpoints autenticados bajo /api/v1/admin/*.
@@ -119,7 +125,16 @@ import { DelegadoPortalService } from './delegado/delegado-portal.service';
     // Ajustes necesita Tenant + User + UserRole — los registramos
     // localmente (no se duplican: TypeORM resuelve la metadata).
     // F55: MagicLink para el estado de invitación del delegado.
-    TypeOrmModule.forFeature([Tenant, User, UserRole, MagicLink]),
+    // M5 etapa 2 (NPS): EncuestaNps + Torneo/InscripcionTorneo para el disparo.
+    TypeOrmModule.forFeature([
+      Tenant,
+      User,
+      UserRole,
+      MagicLink,
+      EncuestaNps,
+      InscripcionTorneo,
+      Torneo,
+    ]),
   ],
   controllers: [
     TemporadasAdminController,
@@ -160,6 +175,8 @@ import { DelegadoPortalService } from './delegado/delegado-portal.service';
     DelegadoController,
     DelegadoAdminController,
     DelegadoPublicController,
+    NpsAdminController,
+    NpsPublicoController,
   ],
   providers: [
     TemporadasAdminService,
@@ -201,6 +218,7 @@ import { DelegadoPortalService } from './delegado/delegado-portal.service';
     PagosPersonalService,
     DelegadoInviteService,
     DelegadoPortalService,
+    NpsService,
   ],
   exports: [DiasNoJugablesService, VetadosAdminService],
 })

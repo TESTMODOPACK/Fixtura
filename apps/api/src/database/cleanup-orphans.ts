@@ -449,6 +449,52 @@ async function main(): Promise<void> {
     }
     log('club_categorias.directiva por categoría asegurada (Sprint 32).');
 
+    // Etapa 2 (módulo M5) — encuestas NPS, una por (torneo, club). El admin
+    // las dispara y el delegado responde por un link con token firmado.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS encuestas_nps (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        torneo_id UUID NOT NULL REFERENCES torneos(id) ON DELETE CASCADE,
+        club_id UUID NOT NULL REFERENCES clubes(id) ON DELETE CASCADE,
+        email_destino VARCHAR(150) NOT NULL,
+        token TEXT NOT NULL,
+        estado VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE',
+        nps SMALLINT,
+        eval_arbitraje SMALLINT,
+        eval_recinto SMALLINT,
+        eval_organizacion SMALLINT,
+        comentario TEXT,
+        enviada_at TIMESTAMPTZ,
+        respondida_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_encuesta_nps UNIQUE (tenant_id, torneo_id, club_id)
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_encuestas_nps_tenant ON encuestas_nps(tenant_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_encuestas_nps_torneo ON encuestas_nps(torneo_id)`,
+    );
+    await client.query(`ALTER TABLE encuestas_nps ENABLE ROW LEVEL SECURITY`);
+    await client.query(`ALTER TABLE encuestas_nps FORCE ROW LEVEL SECURITY`);
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE tablename = 'encuestas_nps' AND policyname = 'tenant_isolation'
+        ) THEN
+          CREATE POLICY tenant_isolation ON encuestas_nps
+            USING (
+              tenant_id::text = current_setting('app.current_tenant_id', true)
+              OR current_setting('app.current_tenant_id', true) = ''
+            );
+        END IF;
+      END $$;
+    `);
+    log('encuestas_nps asegurada (módulo M5 etapa 2).');
+
     // Sprint 26D — campos nuevos en torneos para soportar el modelo nuevo.
     // Aditivos: torneos viejos quedan con defaults razonables.
     await client.query(`

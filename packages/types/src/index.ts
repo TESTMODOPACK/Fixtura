@@ -35,3 +35,4 @@ export * from './horarios-torneo';
 export * from './delegado';
 export * from './informes';
 export * from './analytics';
+export * from './nps';
