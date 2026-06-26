@@ -7,6 +7,8 @@ import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.entity';
 import { ActasAdminController } from './actas/actas-admin.controller';
 import { ActasAdminService } from './actas/actas-admin.service';
+import { AnalyticsAdminController } from './analytics/analytics-admin.controller';
+import { AnalyticsAdminService } from './analytics/analytics-admin.service';
 import { AjustesAdminController } from './ajustes/ajustes-admin.controller';
 import { AjustesAdminService } from './ajustes/ajustes-admin.service';
 import { CanchasAdminController } from './canchas/canchas-admin.controller';
@@ -140,6 +142,7 @@ import { DelegadoPortalService } from './delegado/delegado-portal.service';
     DesignacionesRespuestaController,
     ActasAdminController,
     DashboardAdminController,
+    AnalyticsAdminController,
     AjustesAdminController,
     SponsorsAdminController,
     TarifasAdminController,
@@ -179,6 +182,7 @@ import { DelegadoPortalService } from './delegado/delegado-portal.service';
     RecintoAdminService,
     ActasAdminService,
     DashboardAdminService,
+    AnalyticsAdminService,
     AjustesAdminService,
     SponsorsAdminService,
     TarifasAdminService,

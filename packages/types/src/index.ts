@@ -34,3 +34,4 @@ export * from './plantel-import';
 export * from './horarios-torneo';
 export * from './delegado';
 export * from './informes';
+export * from './analytics';

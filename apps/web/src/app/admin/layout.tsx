@@ -78,7 +78,7 @@ const NAV: NavSection[] = [
       { href: '/admin/pagos-personal', label: 'Pagos a personal', icon: Wallet },
       { href: '/admin/canchas', label: 'Ocupación canchas', icon: Calendar },
       { href: '/admin/mi-suscripcion', label: 'Mi suscripción', icon: FileText },
-      { href: '/admin/analytics', label: 'Analytics & NPS', icon: BarChart3, comingSoon: true },
+      { href: '/admin/analytics', label: 'Analytics & NPS', icon: BarChart3 },
     ],
   },
   {

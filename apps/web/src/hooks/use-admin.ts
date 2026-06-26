@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
   ActaResumen,
+  AnalyticsAdmin,
   AsignarDesignacionRequest,
   BulkCreateJugadoresRequest,
   CerrarActaRequest,
@@ -879,6 +880,14 @@ export function useDashboardAdmin() {
     queryFn: () => apiFetch<DashboardAdmin>('/admin/dashboard'),
     // Refresh cada 60s para que los KPIs se actualicen sin recargar
     refetchInterval: 60_000,
+  });
+}
+
+// ─── Analytics admin (módulo M5) ──────────────────────────────────────
+export function useAnalytics() {
+  return useQuery({
+    queryKey: ['admin', 'analytics'],
+    queryFn: () => apiFetch<AnalyticsAdmin>('/admin/analytics'),
   });
 }
 
