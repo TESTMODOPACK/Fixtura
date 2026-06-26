@@ -48,7 +48,12 @@ export default function ActasGlobalPage(): React.ReactElement {
     return {
       total: all.length,
       cerradas: all.filter((a) => !!a.actaCerradaAt).length,
-      pendientes: all.filter((a) => !a.actaCerradaAt && a.estado !== 'FINALIZADO' && a.estado !== 'WALKOVER').length,
+      // "Pendientes" = solo lo que espera resultado (PROGRAMADO/EN_CURSO), igual
+      // que el panel y el filtro del backend. Un SUSPENDIDO_FUERZA_MAYOR o
+      // REPROGRAMADO no tiene acta que cerrar, así que no cuenta como pendiente.
+      pendientes: all.filter(
+        (a) => !a.actaCerradaAt && (a.estado === 'PROGRAMADO' || a.estado === 'EN_CURSO'),
+      ).length,
       walkovers: all.filter((a) => a.estado === 'WALKOVER').length,
     };
   }, [actas]);
