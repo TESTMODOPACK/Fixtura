@@ -55,6 +55,9 @@ export const ESTADO_PARTIDO = [
   'SUSPENDIDO_FUERZA_MAYOR',
   'REPROGRAMADO',
   'WALKOVER',
+  // Partido cuya fecha pasó y no se jugó ni se cargó acta. Lo marca el admin
+  // a mano. No suma a la tabla de posiciones ni cuenta como acta pendiente.
+  'NO_JUGADO',
 ] as const;
 export type EstadoPartido = (typeof ESTADO_PARTIDO)[number];
 

@@ -246,7 +246,9 @@ function ActaRow({ acta }: { acta: ActaResumen }): React.ReactElement {
           <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-accent/10 text-accent text-[10px] uppercase tracking-wider font-semibold">
             <Clock size={11} /> En curso
           </span>
-        ) : acta.estado === 'SUSPENDIDO_FUERZA_MAYOR' || acta.estado === 'REPROGRAMADO' ? (
+        ) : acta.estado === 'SUSPENDIDO_FUERZA_MAYOR' ||
+          acta.estado === 'REPROGRAMADO' ||
+          acta.estado === 'NO_JUGADO' ? (
           <span className="px-2 py-0.5 rounded bg-danger/10 text-danger text-[10px] uppercase tracking-wider font-semibold">
             {acta.estado.replace('_', ' ')}
           </span>

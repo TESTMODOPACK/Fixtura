@@ -131,7 +131,8 @@ export class FechasAdminService {
       .where('tenant_id = :tenantId', { tenantId })
       .andWhere('fecha_id = :fechaId', { fechaId })
       .andWhere('acta_cerrada_at IS NULL')
-      .andWhere(`estado NOT IN ('FINALIZADO','WALKOVER','SUSPENDIDO_FUERZA_MAYOR')`)
+      // Un partido ya marcado NO_JUGADO está resuelto; no lo re-suspendemos.
+      .andWhere(`estado NOT IN ('FINALIZADO','WALKOVER','SUSPENDIDO_FUERZA_MAYOR','NO_JUGADO')`)
       .execute();
 
     // Sanear input: el frontend manda "" si el campo opcional está vacío

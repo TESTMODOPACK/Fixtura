@@ -1454,6 +1454,24 @@ export function useReactivarPartido(partidoId: string, torneoId: string) {
   });
 }
 
+/** Marca un partido vencido como NO_JUGADO (no suma a posiciones). Reversible con reactivar. */
+export function useMarcarNoJugado(partidoId: string, torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (observaciones?: string | null) =>
+      apiFetch<PartidoAdmin>(`/admin/partidos/${partidoId}/no-jugado`, {
+        method: 'POST',
+        body: { observaciones: observaciones ?? null },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partido', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'dashboard'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'actas-global'] });
+    },
+  });
+}
+
 export function useSuspenderFecha(torneoId: string) {
   const qc = useQueryClient();
   return useMutation({

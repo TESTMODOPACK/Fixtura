@@ -12,6 +12,7 @@ export const ESTADO_PARTIDO_GLOBAL = [
   'SUSPENDIDO_FUERZA_MAYOR',
   'REPROGRAMADO',
   'WALKOVER',
+  'NO_JUGADO',
 ] as const;
 export type EstadoPartidoGlobal = (typeof ESTADO_PARTIDO_GLOBAL)[number];
 

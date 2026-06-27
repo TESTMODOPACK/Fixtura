@@ -268,7 +268,9 @@ export class PlayoffsAdminService {
       .where('f.torneo_id = :torneoId', { torneoId })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
       .andWhere('p.llave_id IS NULL')
-      .andWhere(`p.estado NOT IN ('FINALIZADO','WALKOVER')`)
+      // NO_JUGADO está resuelto (el admin decidió que no se juega): no cuenta
+      // como pendiente y no bloquea la siembra de playoffs.
+      .andWhere(`p.estado NOT IN ('FINALIZADO','WALKOVER','NO_JUGADO')`)
       .getCount();
     if (pendientes > 0) {
       throw new BadRequestException(

@@ -32,6 +32,7 @@ import {
   CertificarPresentesDto,
   CreateIncidenciaDto,
   DeclararWalkoverDto,
+  MarcarNoJugadoDto,
   ReprogramarPartidoDto,
   SuspenderPartidoDto,
   UpdatePartidoDto,
@@ -271,6 +272,21 @@ export class PartidosAdminController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<PartidoAdmin> {
     return this.svc.reactivarPartido(id, ensureTenant(user));
+  }
+
+  // Partido vencido que no se jugó ni se cargó acta — el admin lo cierra como
+  // NO_JUGADO. Reversible con /reactivar.
+  @Post(':id/no-jugado')
+  @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
+  @Audited({ action: 'partido.no_jugado', entityType: 'Partido', entityIdFrom: 'params.id' })
+  marcarNoJugado(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: MarcarNoJugadoDto,
+  ): Promise<PartidoAdmin> {
+    return this.svc.marcarNoJugado(id, ensureTenant(user), user.userId, {
+      observaciones: dto.observaciones ?? null,
+    });
   }
 
   // ── Sprint 9: Walkover (3-0 automático por inasistencia) ───────────

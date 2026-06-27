@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
   AlertTriangle,
   ArrowLeft,
+  Ban,
   Calendar,
   CheckCircle2,
   CloudRain,
@@ -52,6 +53,7 @@ import {
   useDesignacionesPorPartido,
   useJugadores,
   useJugadoresBloqueados,
+  useMarcarNoJugado,
   usePartido,
   useReabrirActa,
   useReactivarPartido,
@@ -467,6 +469,7 @@ function EditarPartidoCard({
       'SUSPENDIDO_FUERZA_MAYOR',
       'REPROGRAMADO',
       'WALKOVER',
+      'NO_JUGADO',
     ]),
   });
   type Form = z.infer<typeof Schema>;
@@ -613,6 +616,7 @@ function EditarPartidoCard({
             <option value="SUSPENDIDO_FUERZA_MAYOR">Suspendido (fuerza mayor)</option>
             <option value="REPROGRAMADO">Reprogramado</option>
             <option value="WALKOVER">Walkover (3-0)</option>
+            <option value="NO_JUGADO">No jugado</option>
           </select>
         </div>
 
@@ -655,24 +659,32 @@ function SuspensionCard({
   const suspender = useSuspenderPartido(partido.id, torneoId);
   const reprogramar = useReprogramarPartido(partido.id, torneoId);
   const reactivar = useReactivarPartido(partido.id, torneoId);
+  const noJugado = useMarcarNoJugado(partido.id, torneoId);
   const { data: canchas } = useCanchas(true);
 
   if (cerrada) return null;
 
   const estaSuspendido = partido.estado === 'SUSPENDIDO_FUERZA_MAYOR';
+  const estaNoJugado = partido.estado === 'NO_JUGADO';
+  const inactivo = estaSuspendido || estaNoJugado;
   const susErr =
     (suspender.error as ApiError | undefined) ??
     (reprogramar.error as ApiError | undefined) ??
-    (reactivar.error as ApiError | undefined);
+    (reactivar.error as ApiError | undefined) ??
+    (noJugado.error as ApiError | undefined);
 
   return (
     <Card padding="comfortable" className="mb-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <CardLabel className={estaSuspendido ? 'text-danger' : ''}>
-          {estaSuspendido ? '⚠ Partido suspendido' : 'Suspensión y reprogramación'}
+        <CardLabel className={inactivo ? 'text-danger' : ''}>
+          {estaSuspendido
+            ? '⚠ Partido suspendido'
+            : estaNoJugado
+              ? '⚠ Partido no jugado'
+              : 'Suspensión y reprogramación'}
         </CardLabel>
         <div className="flex items-center gap-2">
-          {estaSuspendido && (
+          {inactivo && (
             <Button
               type="button"
               variant="ghost"
@@ -684,24 +696,46 @@ function SuspensionCard({
               <Play size={14} /> Reactivar
             </Button>
           )}
-          {!estaSuspendido && mode === 'idle' && (
+          {!inactivo && mode === 'idle' && (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setMode('suspender')}
+              >
+                <CloudRain size={14} /> Suspender
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      'Marcar este partido como NO JUGADO. No sumará a la tabla de posiciones y dejará de figurar como acta pendiente. Podés revertirlo con Reactivar. ¿Continuar?',
+                    )
+                  ) {
+                    noJugado.mutate(null);
+                  }
+                }}
+                loading={noJugado.isPending}
+                title="El partido no se jugó (fecha vencida sin acta)"
+              >
+                <Ban size={14} /> No se jugó
+              </Button>
+            </>
+          )}
+          {!estaNoJugado && (
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => setMode('suspender')}
+              onClick={() => setMode(mode === 'reprogramar' ? 'idle' : 'reprogramar')}
             >
-              <CloudRain size={14} /> Suspender
+              <Calendar size={14} /> {mode === 'reprogramar' ? 'Cancelar' : 'Reprogramar'}
             </Button>
           )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setMode(mode === 'reprogramar' ? 'idle' : 'reprogramar')}
-          >
-            <Calendar size={14} /> {mode === 'reprogramar' ? 'Cancelar' : 'Reprogramar'}
-          </Button>
         </div>
       </div>
 
@@ -726,6 +760,33 @@ function SuspensionCard({
                   &ldquo;{partido.observacionesSuspension}&rdquo;
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {estaNoJugado && (
+        <div className="mt-3 p-3 rounded-card bg-danger/5 border border-danger/20">
+          <div className="flex items-start gap-2 text-sm">
+            <Ban size={16} className="text-danger flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-danger">
+                El partido no se jugó. No suma a la tabla de posiciones.
+              </div>
+              {partido.suspendidoAt && (
+                <div className="text-xs text-ink-mute mt-1">
+                  Registrado el{' '}
+                  <span className="font-mono">{formatFechaHora(partido.suspendidoAt)}</span>
+                </div>
+              )}
+              {partido.observacionesSuspension && (
+                <div className="text-xs text-ink mt-2 italic">
+                  &ldquo;{partido.observacionesSuspension}&rdquo;
+                </div>
+              )}
+              <div className="text-xs text-ink-mute mt-2">
+                Para reprogramarlo, usá <strong>Reactivar</strong> y luego asigná una nueva fecha.
+              </div>
             </div>
           </div>
         </div>

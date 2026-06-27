@@ -36,6 +36,7 @@ const ESTADO_PARTIDO = [
   'SUSPENDIDO_FUERZA_MAYOR',
   'REPROGRAMADO',
   'WALKOVER',
+  'NO_JUGADO',
 ] as const;
 
 const TIPO_INCIDENCIA = [
@@ -159,6 +160,13 @@ export class DeclararWalkoverDto {
   @IsUUID()
   equipoPerdedorId!: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  observaciones?: string | null;
+}
+
+export class MarcarNoJugadoDto {
   @IsOptional()
   @IsString()
   @MaxLength(1000)

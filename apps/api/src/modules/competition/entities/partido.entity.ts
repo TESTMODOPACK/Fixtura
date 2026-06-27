@@ -22,7 +22,8 @@ export type EstadoPartido =
   | 'FINALIZADO'
   | 'SUSPENDIDO_FUERZA_MAYOR'
   | 'REPROGRAMADO'
-  | 'WALKOVER';
+  | 'WALKOVER'
+  | 'NO_JUGADO';
 
 export type MotivoSuspension =
   | 'LLUVIA'

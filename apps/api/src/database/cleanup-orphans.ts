@@ -658,6 +658,38 @@ async function main(): Promise<void> {
     `);
     log('partidos.centro_* asegurado (Sprint 18, RF-17 / 29A entretiempo / tiempo agregado).');
 
+    // Estado NO_JUGADO — el CHECK de partidos.estado se creó en la migración
+    // formal inicial (que no corre en prod). Lo recreamos para admitir el
+    // estado nuevo. Idempotente y robusto al nombre del constraint: busca
+    // cualquier CHECK sobre estado que aún no incluya NO_JUGADO y lo reemplaza.
+    await client.query(`
+      DO $$
+      DECLARE cons_name text;
+      BEGIN
+        SELECT conname INTO cons_name
+        FROM pg_constraint
+        WHERE conrelid = 'partidos'::regclass
+          AND contype = 'c'
+          AND pg_get_constraintdef(oid) LIKE '%PROGRAMADO%'
+          AND pg_get_constraintdef(oid) NOT LIKE '%NO_JUGADO%'
+        LIMIT 1;
+        IF cons_name IS NOT NULL THEN
+          EXECUTE format('ALTER TABLE partidos DROP CONSTRAINT %I', cons_name);
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conrelid = 'partidos'::regclass AND conname = 'partidos_estado_check'
+        ) THEN
+          ALTER TABLE partidos ADD CONSTRAINT partidos_estado_check
+            CHECK (estado IN (
+              'PROGRAMADO','EN_CURSO','FINALIZADO',
+              'SUSPENDIDO_FUERZA_MAYOR','REPROGRAMADO','WALKOVER','NO_JUGADO'
+            ));
+        END IF;
+      END $$;
+    `);
+    log('partidos.estado admite NO_JUGADO (CHECK actualizado).');
+
     // AUDIT-7: índices de performance.
     await client.query(
       `CREATE INDEX IF NOT EXISTS idx_partidos_fecha_estado ON partidos(fecha_id, estado)`,

@@ -1083,6 +1083,38 @@ export class PartidosAdminService {
   }
 
   /**
+   * Marca un partido vencido como NO_JUGADO. Lo usa el admin cuando la fecha
+   * pasó y nadie cargó el acta (no se jugó). No suma a la tabla de posiciones
+   * ni cuenta como acta pendiente. Es reversible (reactivarPartido); la
+   * reprogramación o el walkover los gestiona el admin por separado.
+   */
+  async marcarNoJugado(
+    partidoId: string,
+    tenantId: string,
+    actorUserId: string | null,
+    input: { observaciones?: string | null },
+  ): Promise<PartidoAdmin> {
+    const partido = await this.findPartido(partidoId, tenantId);
+    if (partido.actaCerradaAt) {
+      throw new ConflictException(
+        'No se puede marcar como no jugado un partido con acta cerrada. Reabrir primero.',
+      );
+    }
+    if (partido.estado !== 'PROGRAMADO' && partido.estado !== 'EN_CURSO') {
+      throw new BadRequestException(
+        `Solo un partido programado o en curso puede marcarse como no jugado (estado actual: ${partido.estado}).`,
+      );
+    }
+    partido.estado = 'NO_JUGADO';
+    partido.suspendidoAt = new Date();
+    partido.suspendidoByUserId = actorUserId;
+    partido.observacionesSuspension = input.observaciones?.trim() || null;
+    await this.repo.save(partido);
+    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
+  }
+
+  /**
    * Reprograma un partido suspendido a una nueva fecha/hora/cancha.
    * Vuelve a estado PROGRAMADO. Valida choque de cancha en el nuevo
    * horario (reutiliza validarChoqueCancha).
@@ -1280,9 +1312,12 @@ export class PartidosAdminService {
    */
   async reactivarPartido(partidoId: string, tenantId: string): Promise<PartidoAdmin> {
     const partido = await this.findPartido(partidoId, tenantId);
-    if (partido.estado !== 'SUSPENDIDO_FUERZA_MAYOR') {
+    if (
+      partido.estado !== 'SUSPENDIDO_FUERZA_MAYOR' &&
+      partido.estado !== 'NO_JUGADO'
+    ) {
       throw new BadRequestException(
-        `El partido no está suspendido (estado actual: ${partido.estado}).`,
+        `El partido no está suspendido ni marcado como no jugado (estado actual: ${partido.estado}).`,
       );
     }
     partido.estado = 'PROGRAMADO';
