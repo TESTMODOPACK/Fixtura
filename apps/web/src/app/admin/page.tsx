@@ -267,7 +267,7 @@ function Alertas({
           sin cerrar.
         </>
       ),
-      href: '/admin/actas',
+      href: '/admin/actas?filtro=vencidas',
     });
   }
   if (carnetVencido > 0) {

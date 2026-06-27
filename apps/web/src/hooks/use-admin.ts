@@ -834,7 +834,7 @@ export function useActasGlobal(filters: {
   torneoId?: string;
   fechaId?: string;
   estado?: string;
-  filtro?: 'todas' | 'pendientes' | 'cerradas';
+  filtro?: 'todas' | 'pendientes' | 'cerradas' | 'vencidas';
 }) {
   const qs = new URLSearchParams();
   if (filters.torneoId) qs.set('torneoId', filters.torneoId);

@@ -41,8 +41,9 @@ export const ActasGlobalQuerySchema = z.object({
   torneoId: z.uuid().optional(),
   fechaId: z.uuid().optional(),
   estado: z.enum(ESTADO_PARTIDO_GLOBAL).optional(),
-  // 'pendientes' = no cerrada y estado no FINALIZADO/WALKOVER
+  // 'pendientes' = no cerrada y estado PROGRAMADO/EN_CURSO
+  // 'vencidas' = pendientes con fecha ya pasada (lo que alerta el panel)
   // 'cerradas' = actaCerradaAt != null
-  filtro: z.enum(['todas', 'pendientes', 'cerradas']).optional(),
+  filtro: z.enum(['todas', 'pendientes', 'cerradas', 'vencidas']).optional(),
 });
 export type ActasGlobalQuery = z.infer<typeof ActasGlobalQuerySchema>;

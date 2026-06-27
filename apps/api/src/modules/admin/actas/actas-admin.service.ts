@@ -50,6 +50,14 @@ export class ActasAdminService {
       qb.andWhere('p.acta_cerrada_at IS NULL').andWhere(
         `p.estado IN ('PROGRAMADO', 'EN_CURSO')`,
       );
+    } else if (query.filtro === 'vencidas') {
+      // "Vencidas" = pendientes cuya fecha ya pasó. Es exactamente lo que cuenta
+      // la alerta del panel ("N actas con fecha pasada sin cerrar"); el link de
+      // esa alerta entra a /admin/actas con este filtro.
+      qb.andWhere('p.acta_cerrada_at IS NULL')
+        .andWhere(`p.estado IN ('PROGRAMADO', 'EN_CURSO')`)
+        .andWhere('p.fecha_hora IS NOT NULL')
+        .andWhere('p.fecha_hora < NOW()');
     } else if (query.filtro === 'cerradas') {
       qb.andWhere('p.acta_cerrada_at IS NOT NULL');
     }

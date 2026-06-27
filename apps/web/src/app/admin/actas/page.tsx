@@ -19,12 +19,21 @@ import { useActasGlobal, useFixtureDetail, useTorneos } from '@/hooks/use-admin'
 import { cn } from '@/lib/cn';
 import { formatFecha } from '@/lib/format';
 
-type Filtro = 'todas' | 'pendientes' | 'cerradas';
+type Filtro = 'todas' | 'pendientes' | 'cerradas' | 'vencidas';
 
 export default function ActasGlobalPage(): React.ReactElement {
   const [filtro, setFiltro] = useState<Filtro>('pendientes');
   const [torneoId, setTorneoId] = useState<string>('');
   const [fechaId, setFechaId] = useState<string>('');
+
+  // El panel enlaza a /admin/actas?filtro=vencidas; respetamos ese filtro al
+  // entrar para mostrar exactamente las actas que la alerta señala.
+  useEffect(() => {
+    const f = new URLSearchParams(window.location.search).get('filtro');
+    if (f === 'vencidas' || f === 'pendientes' || f === 'cerradas' || f === 'todas') {
+      setFiltro(f);
+    }
+  }, []);
 
   const { data: torneos } = useTorneos();
   // El filtro de fecha solo tiene sentido cuando hay un torneo seleccionado:
@@ -102,9 +111,15 @@ export default function ActasGlobalPage(): React.ReactElement {
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <Filter size={14} className="text-ink-mute" />
         <div className="flex gap-2">
-          {(['pendientes', 'cerradas', 'todas'] as Filtro[]).map((f) => (
+          {(['vencidas', 'pendientes', 'cerradas', 'todas'] as Filtro[]).map((f) => (
             <FiltroChip key={f} active={filtro === f} onClick={() => setFiltro(f)}>
-              {f === 'pendientes' ? 'Pendientes' : f === 'cerradas' ? 'Cerradas' : 'Todas'}
+              {f === 'vencidas'
+                ? 'Vencidas'
+                : f === 'pendientes'
+                  ? 'Pendientes'
+                  : f === 'cerradas'
+                    ? 'Cerradas'
+                    : 'Todas'}
             </FiltroChip>
           ))}
         </div>
