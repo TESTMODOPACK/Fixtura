@@ -37,7 +37,10 @@ export class ActasAdminController {
         ? (estado as EstadoPartidoGlobal)
         : undefined;
     const filtroValid =
-      filtro === 'todas' || filtro === 'pendientes' || filtro === 'cerradas'
+      filtro === 'todas' ||
+      filtro === 'pendientes' ||
+      filtro === 'cerradas' ||
+      filtro === 'vencidas'
         ? filtro
         : undefined;
     return this.svc.list(ensureTenant(user), {
