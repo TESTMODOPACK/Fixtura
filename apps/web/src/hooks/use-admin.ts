@@ -1419,7 +1419,7 @@ export function useSuspenderPartido(partidoId: string, torneoId: string) {
         body: input,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'partido', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
       qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
     },
   });
@@ -1434,7 +1434,7 @@ export function useReprogramarPartido(partidoId: string, torneoId: string) {
         body: input,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'partido', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
       qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
     },
   });
@@ -1448,7 +1448,7 @@ export function useReactivarPartido(partidoId: string, torneoId: string) {
         method: 'POST',
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'partido', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
       qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
     },
   });
@@ -1464,7 +1464,7 @@ export function useMarcarNoJugado(partidoId: string, torneoId: string) {
         body: { observaciones: observaciones ?? null },
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'partido', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
       qc.invalidateQueries({ queryKey: ['admin', 'fixture', torneoId] });
       qc.invalidateQueries({ queryKey: ['admin', 'dashboard'] });
       qc.invalidateQueries({ queryKey: ['admin', 'actas-global'] });

@@ -94,6 +94,20 @@ export default function PartidoDetallePage({
   }
 
   const cerrada = !!partido.actaCerradaAt;
+  // El partido ya está resuelto sin haberse jugado: no aplican marcador,
+  // certificación ni incidencias.
+  const noSeJuega =
+    partido.estado === 'NO_JUGADO' ||
+    partido.estado === 'SUSPENDIDO_FUERZA_MAYOR' ||
+    partido.estado === 'REPROGRAMADO';
+  // Pendiente con fecha ya pasada: hay que resolverlo (cerrar, no jugado, etc.).
+  const vencido =
+    !cerrada &&
+    (partido.estado === 'PROGRAMADO' || partido.estado === 'EN_CURSO') &&
+    !!partido.fechaHora &&
+    new Date(partido.fechaHora).getTime() < Date.now();
+  // Cuando el partido necesita gestión, subimos esa sección arriba del todo.
+  const requiereGestion = vencido || noSeJuega;
 
   const descargarPlantilla = async (): Promise<void> => {
     const token = useAuthStore.getState().accessToken;
@@ -139,8 +153,14 @@ export default function PartidoDetallePage({
 
       <OfflineActaBanner />
 
+      {/* Vencido o ya resuelto sin jugarse: la gestión va primero, para que el
+          admin no tenga que buscarla al final de la página. */}
+      {requiereGestion && (
+        <SuspensionCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
-        <Card padding="comfortable" className="lg:col-span-2">
+        <Card padding="comfortable" className={noSeJuega ? 'lg:col-span-3' : 'lg:col-span-2'}>
           <CardLabel>Marcador</CardLabel>
           <div className="grid grid-cols-3 gap-4 items-center text-center mt-4">
             <div>
@@ -186,22 +206,28 @@ export default function PartidoDetallePage({
           </div>
         </Card>
 
-        <ActaSection partido={partido} torneoId={torneoId} />
+        {/* Cerrar acta solo tiene sentido si el partido se juega o ya se cerró. */}
+        {!noSeJuega && <ActaSection partido={partido} torneoId={torneoId} />}
       </div>
 
       <EditarPartidoCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
 
-      <SuspensionCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
+      {/* Si no requiere gestión destacada, la sección va en su lugar normal. */}
+      {!requiereGestion && (
+        <SuspensionCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
+      )}
 
-      <WalkoverCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
+      {!noSeJuega && (
+        <WalkoverCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
+      )}
 
       <DesignacionesSection partidoId={partido.id} torneoId={torneoId} cerrada={cerrada} />
 
-      {!cerrada && partido.estado !== 'WALKOVER' && (
+      {!cerrada && !noSeJuega && partido.estado !== 'WALKOVER' && (
         <CertificacionSection partido={partido} torneoId={torneoId} />
       )}
 
-      {!cerrada && (
+      {!cerrada && !noSeJuega && (
         <IncidenciasSection
           partido={partido}
           torneoId={torneoId}
@@ -209,7 +235,7 @@ export default function PartidoDetallePage({
         />
       )}
 
-      <IncidenciasList partido={partido} cerrada={cerrada} />
+      {!noSeJuega && <IncidenciasList partido={partido} cerrada={cerrada} />}
     </>
   );
 }
@@ -674,7 +700,10 @@ function SuspensionCard({
     (noJugado.error as ApiError | undefined);
 
   return (
-    <Card padding="comfortable" className="mb-5">
+    <Card
+      padding="comfortable"
+      className={`mb-5 ${inactivo ? 'border-2 border-danger/40 bg-danger/[0.03]' : ''}`}
+    >
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <CardLabel className={inactivo ? 'text-danger' : ''}>
           {estaSuspendido
