@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronRight,
   ClipboardList,
@@ -20,6 +21,16 @@ import { cn } from '@/lib/cn';
 import { formatFecha } from '@/lib/format';
 
 type Filtro = 'todas' | 'pendientes' | 'cerradas' | 'vencidas';
+
+/** Vencida = pendiente (PROGRAMADO/EN_CURSO sin acta) cuya fecha ya pasó. */
+function esVencida(a: ActaResumen): boolean {
+  return (
+    !a.actaCerradaAt &&
+    (a.estado === 'PROGRAMADO' || a.estado === 'EN_CURSO') &&
+    !!a.fechaHora &&
+    new Date(a.fechaHora).getTime() < Date.now()
+  );
+}
 
 export default function ActasGlobalPage(): React.ReactElement {
   const [filtro, setFiltro] = useState<Filtro>('pendientes');
@@ -63,6 +74,8 @@ export default function ActasGlobalPage(): React.ReactElement {
       pendientes: all.filter(
         (a) => !a.actaCerradaAt && (a.estado === 'PROGRAMADO' || a.estado === 'EN_CURSO'),
       ).length,
+      // "Vencidas" = pendientes cuya fecha ya pasó (lo que alerta el panel).
+      vencidas: all.filter(esVencida).length,
       walkovers: all.filter((a) => a.estado === 'WALKOVER').length,
     };
   }, [actas]);
@@ -75,7 +88,7 @@ export default function ActasGlobalPage(): React.ReactElement {
         sub="Vista cross-torneo de todos los partidos. Filtra por estado, torneo o fecha para encontrar actas pendientes de cierre."
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         <Card padding="comfortable">
           <CardLabel>Total visibles</CardLabel>
           <div className="font-display text-3xl text-green-deep tracking-display">
@@ -91,6 +104,17 @@ export default function ActasGlobalPage(): React.ReactElement {
             )}
           >
             {isLoading ? '…' : stats.pendientes}
+          </div>
+        </Card>
+        <Card padding="comfortable">
+          <CardLabel>Vencidas</CardLabel>
+          <div
+            className={cn(
+              'font-display text-3xl tracking-display',
+              stats.vencidas > 0 ? 'text-danger' : 'text-green-bright',
+            )}
+          >
+            {isLoading ? '…' : stats.vencidas}
           </div>
         </Card>
         <Card padding="comfortable">
@@ -214,6 +238,7 @@ function ActaRow({ acta }: { acta: ActaResumen }): React.ReactElement {
   const dia = formatFecha(fecha);
   const hora = fecha?.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
   const cerrada = !!acta.actaCerradaAt;
+  const vencida = esVencida(acta);
 
   return (
     <Link
@@ -247,6 +272,11 @@ function ActaRow({ acta }: { acta: ActaResumen }): React.ReactElement {
       <div className="font-semibold truncate">{acta.equipoVisitaNombre}</div>
 
       <div className="flex items-center gap-2 text-xs">
+        {vencida && (
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-danger/10 text-danger text-[10px] uppercase tracking-wider font-semibold">
+            <AlertTriangle size={11} /> Vencido
+          </span>
+        )}
         {acta.estado === 'WALKOVER' ? (
           // El walkover es un cierre automático (W.O.); lo distinguimos del
           // cierre normal aunque tenga actaCerradaAt seteado.
