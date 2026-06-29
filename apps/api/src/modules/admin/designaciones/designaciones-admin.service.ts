@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 
 import type {
   AutoAsignarResult,
@@ -288,6 +288,11 @@ export class DesignacionesAdminService {
       throw new BadRequestException('No se puede designar personal inactivo');
     }
 
+    // No puede estar en dos partidos cuyo horario se solape (no se teletransporta
+    // entre canchas). Bloquea la asignación; el aviso suave de doble-booking
+    // (margen amplio, para huecos cortos) se sigue mostrando en la lista.
+    await this.validarSinSolapeHorario(tenantId, input.personalId, partido);
+
     // UNIQUE (partido_id, personal_id, rol_asignado) — chequeo previo
     const existente = await this.repo.findOne({
       where: {
@@ -546,6 +551,57 @@ export class DesignacionesAdminService {
       }
     }
     return conflictos;
+  }
+
+  /**
+   * Bloquea la asignación si el personal ya tiene una designación que lo ocupa
+   * en otro partido cuyo horario SE SOLAPA con este (considerando la duración
+   * del partido). No puede estar en dos canchas a la vez.
+   */
+  private async validarSinSolapeHorario(
+    tenantId: string,
+    personalId: string,
+    partido: Partido,
+  ): Promise<void> {
+    if (!partido.fechaHora) return;
+    const inicio = partido.fechaHora.getTime();
+    const fin = inicio + this.duracionPartidoMs(partido);
+
+    const otras = await this.repo.find({
+      where: { tenantId, personalId, estado: In(['PROPUESTA', 'CONFIRMADA', 'ASISTIO']) },
+    });
+    const otrosIds = otras.map((d) => d.partidoId).filter((id) => id !== partido.id);
+    if (otrosIds.length === 0) return;
+
+    const partidos = await this.partidoRepo.find({
+      where: { id: In(otrosIds), tenantId },
+    });
+    for (const p of partidos) {
+      if (!p.fechaHora) continue;
+      const oInicio = p.fechaHora.getTime();
+      const oFin = oInicio + this.duracionPartidoMs(p);
+      // Los intervalos [inicio, fin) se cruzan.
+      if (inicio < oFin && oInicio < fin) {
+        const cuando = p.fechaHora.toLocaleString('es-CL', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        throw new BadRequestException(
+          `Esta persona ya tiene una designación que se solapa en horario ` +
+            `(${p.canchaNombre ?? 'otra cancha'}, ${cuando}). No puede estar en dos partidos a la vez.`,
+        );
+      }
+    }
+  }
+
+  /** Duración estimada del partido (2 períodos + entretiempo), en ms. */
+  private duracionPartidoMs(p: Partido): number {
+    const porPeriodo = p.centroMinutosPorPeriodo || 40;
+    const entretiempo = p.centroMinutosEntretiempo || 10;
+    const min = porPeriodo * 2 + entretiempo;
+    return (min > 0 ? min : 90) * 60 * 1000;
   }
 
   private checkCarnetWarning(

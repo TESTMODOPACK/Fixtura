@@ -1,14 +1,15 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Propagation, runInTransaction } from 'typeorm-transactional';
 
-import type { MatchCenterSnapshot } from '@fixtura/types';
+import type { EstadoDesignacion, MatchCenterSnapshot } from '@fixtura/types';
 
 import { Designacion } from '../competition/entities/designacion.entity';
 import { Fecha } from '../competition/entities/fecha.entity';
@@ -46,6 +47,34 @@ export class MatchCenterService {
     @InjectRepository(IncidenciaPartido)
     private readonly incidenciaRepo: Repository<IncidenciaPartido>,
   ) {}
+
+  /**
+   * SEC-3 — Igual que en el acta: un actor con rol de personal
+   * (árbitro/planillero) solo puede operar el partido para el que está
+   * designado. `actorPersonalIds === null` ⇒ rol de liga, sin restricción.
+   */
+  async assertActorPuedeOperar(
+    partidoId: string,
+    tenantId: string,
+    actorPersonalIds: string[] | null,
+  ): Promise<void> {
+    if (actorPersonalIds === null) return;
+    const designado =
+      actorPersonalIds.length > 0 &&
+      (await this.designacionRepo.count({
+        where: {
+          partidoId,
+          tenantId,
+          personalId: In(actorPersonalIds),
+          estado: In(['PROPUESTA', 'CONFIRMADA', 'ASISTIO'] as EstadoDesignacion[]),
+        },
+      })) > 0;
+    if (!designado) {
+      throw new ForbiddenException(
+        'Solo puedes operar el partido para el que estás designado.',
+      );
+    }
+  }
 
   /**
    * Snapshot actual del partido para emitir vía websocket.

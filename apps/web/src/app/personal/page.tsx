@@ -1,7 +1,15 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, LogOut, ShieldCheck, Wallet } from 'lucide-react';
+import {
+  CalendarDays,
+  ChevronRight,
+  ClipboardList,
+  LogOut,
+  ShieldCheck,
+  Wallet,
+} from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -201,50 +209,81 @@ export default function PersonalPortalPage(): React.ReactElement | null {
                 </Card>
               ) : (
                 <div className="space-y-2">
-                  {data.designaciones.map((d) => (
-                    <Card key={d.designacionId} padding="tight" className="flex items-center gap-4 flex-wrap">
-                      <div className="text-xs text-ink-mute w-36 shrink-0">
-                        <div className="text-[10px] uppercase tracking-wider font-semibold truncate">
-                          {d.torneoNombre}
-                          {d.fechaNumero != null ? ` · F${d.fechaNumero}` : ''}
+                  {data.designaciones.map((d) => {
+                    // El planillero/árbitro designado puede abrir la planilla del
+                    // partido (cronómetro + incidencias + cierre). Para roles que
+                    // no operan en cancha (paramédico, etc.) la tarjeta es informativa.
+                    const operable =
+                      (d.rolAsignado === 'PLANILLERO' ||
+                        d.rolAsignado === 'ARBITRO_PRINCIPAL' ||
+                        d.rolAsignado === 'ARBITRO_ASISTENTE') &&
+                      d.estado !== 'RECHAZADA' &&
+                      d.estado !== 'AUSENTE';
+                    const inner = (
+                      <>
+                        <div className="text-xs text-ink-mute w-36 shrink-0">
+                          <div className="text-[10px] uppercase tracking-wider font-semibold truncate">
+                            {d.torneoNombre}
+                            {d.fechaNumero != null ? ` · F${d.fechaNumero}` : ''}
+                          </div>
+                          <div className="mt-0.5">
+                            {d.fechaHora ? formatFechaHora(d.fechaHora) : 'Por confirmar'}
+                          </div>
                         </div>
-                        <div className="mt-0.5">
-                          {d.fechaHora ? formatFechaHora(d.fechaHora) : 'Por confirmar'}
+                        <div className="flex-1 min-w-[180px]">
+                          <div className="font-medium text-ink">
+                            {d.localNombre} vs {d.visitaNombre}
+                          </div>
+                          <div className="text-[11px] text-ink-mute">
+                            {rolLabel(d.rolAsignado)}
+                            {d.canchaNombre ? ` · ${d.canchaNombre}` : ''}
+                          </div>
+                          {operable && (
+                            <div className="text-[11px] font-semibold text-accent mt-1 flex items-center gap-1">
+                              <ClipboardList size={11} /> Abrir planilla
+                            </div>
+                          )}
                         </div>
-                      </div>
-                      <div className="flex-1 min-w-[180px]">
-                        <div className="font-medium text-ink">
-                          {d.localNombre} vs {d.visitaNombre}
-                        </div>
-                        <div className="text-[11px] text-ink-mute">
-                          {rolLabel(d.rolAsignado)}
-                          {d.canchaNombre ? ` · ${d.canchaNombre}` : ''}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 ml-auto">
-                        {d.montoPago != null && d.montoPago > 0 && (
+                        <div className="flex items-center gap-3 ml-auto">
+                          {d.montoPago != null && d.montoPago > 0 && (
+                            <span
+                              className={cn(
+                                'text-xs font-semibold tabular-nums',
+                                d.pagada ? 'text-green-deep' : 'text-orange-700',
+                              )}
+                              title={d.pagada ? 'Pagado' : 'Pendiente de pago'}
+                            >
+                              {formatCLP(d.montoPago)}
+                              {d.pagada ? ' ✓' : ''}
+                            </span>
+                          )}
                           <span
                             className={cn(
-                              'text-xs font-semibold tabular-nums',
-                              d.pagada ? 'text-green-deep' : 'text-orange-700',
+                              'text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold',
+                              ESTADO_BADGE[d.estado],
                             )}
-                            title={d.pagada ? 'Pagado' : 'Pendiente de pago'}
                           >
-                            {formatCLP(d.montoPago)}
-                            {d.pagada ? ' ✓' : ''}
+                            {ESTADO_LABEL[d.estado]}
                           </span>
-                        )}
-                        <span
-                          className={cn(
-                            'text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold',
-                            ESTADO_BADGE[d.estado],
-                          )}
+                          {operable && <ChevronRight size={16} className="text-accent shrink-0" />}
+                        </div>
+                      </>
+                    );
+                    return operable ? (
+                      <Link key={d.designacionId} href={`/personal/partido/${d.partidoId}`} className="block">
+                        <Card
+                          padding="tight"
+                          className="flex items-center gap-4 flex-wrap hover:border-accent transition-colors"
                         >
-                          {ESTADO_LABEL[d.estado]}
-                        </span>
-                      </div>
-                    </Card>
-                  ))}
+                          {inner}
+                        </Card>
+                      </Link>
+                    ) : (
+                      <Card key={d.designacionId} padding="tight" className="flex items-center gap-4 flex-wrap">
+                        {inner}
+                      </Card>
+                    );
+                  })}
                 </div>
               )}
             </div>

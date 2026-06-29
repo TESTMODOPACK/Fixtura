@@ -18,6 +18,7 @@ import {
   type UserContext,
 } from '@fixtura/types';
 
+import { actorPersonalScope } from '../../common/auth/actor-personal-scope';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -31,8 +32,22 @@ function ensureTenant(user: UserContext): string {
   return user.tenantId;
 }
 
+/**
+ * Operaciones del cronómetro/marcador. Además de los roles de liga, el
+ * personal designado al partido (árbitro/planillero) puede operarlo: cada
+ * mutación valida la designación vía assertActorPuedeOperar (SEC-3). El GET
+ * snapshot queda abierto a esos roles sin chequeo extra — ya existe una
+ * versión pública del mismo snapshot.
+ */
 @Controller('admin/match-center/:partidoId')
-@Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
+@Roles(
+  ROLE.LIGA_ADMIN,
+  ROLE.LIGA_COORDINADOR,
+  ROLE.LIGA_COORDINADOR_ARBITROS,
+  ROLE.ARBITRO,
+  ROLE.PLANILLERO,
+  ROLE.SUPER_ADMIN,
+)
 export class MatchCenterAdminController {
   constructor(
     private readonly svc: MatchCenterService,
@@ -54,9 +69,11 @@ export class MatchCenterAdminController {
     @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
     @Body() dto: StartMatchCenterRequest,
   ): Promise<MatchCenterSnapshot> {
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperar(partidoId, tenantId, actorPersonalScope(user));
     const snap = await this.svc.arrancar(
       partidoId,
-      ensureTenant(user),
+      tenantId,
       dto.minutosPorPeriodo,
       dto.forzarDia ?? false,
     );
@@ -70,7 +87,9 @@ export class MatchCenterAdminController {
     @CurrentUser() user: UserContext,
     @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
   ): Promise<MatchCenterSnapshot> {
-    const snap = await this.svc.pausar(partidoId, ensureTenant(user));
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperar(partidoId, tenantId, actorPersonalScope(user));
+    const snap = await this.svc.pausar(partidoId, tenantId);
     void this.gateway.broadcast(partidoId);
     return snap;
   }
@@ -81,7 +100,9 @@ export class MatchCenterAdminController {
     @CurrentUser() user: UserContext,
     @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
   ): Promise<MatchCenterSnapshot> {
-    const snap = await this.svc.reanudar(partidoId, ensureTenant(user));
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperar(partidoId, tenantId, actorPersonalScope(user));
+    const snap = await this.svc.reanudar(partidoId, tenantId);
     void this.gateway.broadcast(partidoId);
     return snap;
   }
@@ -93,7 +114,9 @@ export class MatchCenterAdminController {
     @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
     @Body() dto: SumarGolRequest,
   ): Promise<MatchCenterSnapshot> {
-    const snap = await this.svc.sumarGol(partidoId, ensureTenant(user), dto.equipo);
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperar(partidoId, tenantId, actorPersonalScope(user));
+    const snap = await this.svc.sumarGol(partidoId, tenantId, dto.equipo);
     void this.gateway.broadcast(partidoId);
     return snap;
   }
@@ -105,7 +128,9 @@ export class MatchCenterAdminController {
     @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
     @Body() dto: SumarGolRequest,
   ): Promise<MatchCenterSnapshot> {
-    const snap = await this.svc.quitarGol(partidoId, ensureTenant(user), dto.equipo);
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperar(partidoId, tenantId, actorPersonalScope(user));
+    const snap = await this.svc.quitarGol(partidoId, tenantId, dto.equipo);
     void this.gateway.broadcast(partidoId);
     return snap;
   }
@@ -117,9 +142,11 @@ export class MatchCenterAdminController {
     @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
     @Body() dto: { golesLocal: number; golesVisita: number },
   ): Promise<MatchCenterSnapshot> {
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperar(partidoId, tenantId, actorPersonalScope(user));
     const snap = await this.svc.ajustarGoles(
       partidoId,
-      ensureTenant(user),
+      tenantId,
       Number(dto.golesLocal),
       Number(dto.golesVisita),
     );
@@ -133,7 +160,9 @@ export class MatchCenterAdminController {
     @CurrentUser() user: UserContext,
     @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
   ): Promise<MatchCenterSnapshot> {
-    const snap = await this.svc.siguientePeriodo(partidoId, ensureTenant(user));
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperar(partidoId, tenantId, actorPersonalScope(user));
+    const snap = await this.svc.siguientePeriodo(partidoId, tenantId);
     void this.gateway.broadcast(partidoId);
     return snap;
   }
@@ -145,9 +174,11 @@ export class MatchCenterAdminController {
     @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
     @Body() dto: AjustarTiempoAgregadoRequest,
   ): Promise<MatchCenterSnapshot> {
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperar(partidoId, tenantId, actorPersonalScope(user));
     const snap = await this.svc.ajustarTiempoAgregado(
       partidoId,
-      ensureTenant(user),
+      tenantId,
       Number(dto.minutos),
     );
     void this.gateway.broadcast(partidoId);
@@ -160,7 +191,9 @@ export class MatchCenterAdminController {
     @CurrentUser() user: UserContext,
     @Param('partidoId', new ParseUUIDPipe()) partidoId: string,
   ): Promise<MatchCenterSnapshot> {
-    const snap = await this.svc.finalizarCentro(partidoId, ensureTenant(user));
+    const tenantId = ensureTenant(user);
+    await this.svc.assertActorPuedeOperar(partidoId, tenantId, actorPersonalScope(user));
+    const snap = await this.svc.finalizarCentro(partidoId, tenantId);
     void this.gateway.broadcast(partidoId);
     return snap;
   }

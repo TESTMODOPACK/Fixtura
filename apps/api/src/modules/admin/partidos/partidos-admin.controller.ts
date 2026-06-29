@@ -24,6 +24,7 @@ import {
 } from '@fixtura/types';
 
 import { Audited } from '../../audit';
+import { actorPersonalScope } from '../../../common/auth/actor-personal-scope';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import {
@@ -45,27 +46,6 @@ function ensureTenant(user: UserContext): string {
     throw new BadRequestException('No hay tenant en el contexto del usuario.');
   }
   return user.tenantId;
-}
-
-const ROLES_LIGA_ACTA: string[] = [
-  ROLE.LIGA_ADMIN,
-  ROLE.LIGA_COORDINADOR,
-  ROLE.LIGA_COORDINADOR_ARBITROS,
-  ROLE.SUPER_ADMIN,
-];
-
-/**
- * SEC-3 — Personal del actor que requiere designación para operar el acta.
- * null ⇒ rol de liga (admin/coordinador/super): sin restricción. Para
- * ARBITRO/PLANILLERO devuelve sus personalId (scopeId del rol PERSONAL); el
- * service exige una designación en el partido. RLS no aísla intra-tenant.
- */
-function actorPersonalScope(user: UserContext): string[] | null {
-  const esLiga = user.roles.some((r) => ROLES_LIGA_ACTA.includes(r.role));
-  if (esLiga) return null;
-  return user.roles
-    .filter((r) => (r.role === ROLE.ARBITRO || r.role === ROLE.PLANILLERO) && r.scopeId)
-    .map((r) => r.scopeId as string);
 }
 
 /**
