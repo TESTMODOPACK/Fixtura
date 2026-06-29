@@ -1,6 +1,6 @@
 'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { AlertTriangle, ChevronDown, Save, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';

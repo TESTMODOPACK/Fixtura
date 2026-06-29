@@ -1,6 +1,6 @@
 'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import type { Club } from '@fixtura/types';
 import { AlertTriangle, Info, Plus, Save, Users, X } from 'lucide-react';
 import { useEffect } from 'react';

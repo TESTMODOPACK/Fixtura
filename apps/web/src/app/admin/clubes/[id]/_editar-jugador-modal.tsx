@@ -1,7 +1,7 @@
 'use client';
 
 import type { Jugador } from '@fixtura/types';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { ChevronDown, Phone, Save, ShieldAlert, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';

@@ -1,6 +1,6 @@
 'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import type { ContactoDirectiva } from '@fixtura/types';
 import {
   CheckCircle2,
