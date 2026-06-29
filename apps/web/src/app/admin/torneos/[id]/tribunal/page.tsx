@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -21,7 +21,11 @@ import type { SancionAdmin } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -36,7 +40,7 @@ import {
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { toastError, toastSuccess } from '@/lib/toast';
+import { toastError, toastSuccess, toastWarning } from '@/lib/toast';
 
 const MOTIVO_LABEL: Record<string, string> = {
   ACUMULACION_AMARILLAS: 'Amarillas acumuladas',
@@ -470,7 +474,10 @@ function NuevaSancionEquipoForm({
     if (motivo.trim().length < 3) e.motivo = 'Describe el fundamento (mín. 3 caracteres)';
     if (!suspenderDelTorneo && !vetarClubPermanente) e.accion = 'Elige al menos una acción';
     setErrs(e);
-    if (Object.keys(e).length > 0) return;
+    if (Object.keys(e).length > 0) {
+      toastWarning(`Faltan datos: ${Object.values(e).join(' · ')}`);
+      return;
+    }
 
     if (vetarClubPermanente) {
       const ok = confirm(
@@ -605,11 +612,28 @@ function NuevaSancionTribunalForm({
   const [equipoSeleccionado, setEquipoSeleccionado] = useState<string>('');
   const jugadoresQ = useJugadores(equipoSeleccionado || null);
   const mutation = useCreateSancionTribunal(torneoId);
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const Schema = z.object({
     jugadorInscritoId: z.string().min(1, 'Elige un jugador'),
-    fechasSuspension: z.coerce.number().int().min(1).max(20),
-    descripcion: z.string().min(3).max(1000),
+    // valueAsNumber entrega NaN si el campo se deja vacío; lo saneamos a 0 para
+    // que falle con un mensaje claro (y no en silencio, dejando el botón "sin
+    // hacer nada").
+    fechasSuspension: z.preprocess(
+      (v) => {
+        const n = typeof v === 'number' ? v : Number(v);
+        return Number.isNaN(n) ? 0 : n;
+      },
+      z
+        .number()
+        .int('Debe ser un número entero.')
+        .min(1, 'Indica al menos 1 fecha de suspensión.')
+        .max(20, 'Máximo 20 fechas.'),
+    ),
+    descripcion: z
+      .string()
+      .min(3, 'Describe el fundamento (mínimo 3 caracteres).')
+      .max(1000, 'Máximo 1000 caracteres.'),
     // Campo opcional: con valueAsNumber un input vacío entrega NaN, que NO
     // es undefined → rompía la validación en silencio (el botón "no hacía
     // nada"). Lo normalizamos: vacío/NaN → undefined.
@@ -658,6 +682,21 @@ function NuevaSancionTribunalForm({
 
   const error = mutation.error as ApiError | undefined;
 
+  const LABEL_MAP: Record<string, string> = {
+    jugadorInscritoId: 'Jugador',
+    fechasSuspension: 'Fechas de suspensión',
+    descripcion: 'Descripción / fundamento',
+    desdeFechaNumero: 'Desde fecha número',
+  };
+  // Errores de validación cliente + el equipo (no es campo del schema, es un
+  // selector que filtra jugadores). Se muestran en el banner explícito.
+  const fieldErrors = [
+    ...(form.formState.isSubmitted && !equipoSeleccionado
+      ? [{ label: 'Equipo', mensaje: 'Elige un equipo.' }]
+      : []),
+    ...rhfErrorsToBanner(form.formState.errors as Record<string, unknown>, LABEL_MAP),
+  ];
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-3">
@@ -667,10 +706,22 @@ function NuevaSancionTribunalForm({
         </CardLabel>
       </div>
 
+      <FormErrorBanner
+        ref={bannerRef}
+        fieldErrors={fieldErrors}
+        apiError={error}
+        validationTitle="Faltan datos para imponer la sanción:"
+        apiTitle="No se pudo imponer la sanción"
+      />
+
       <form
         onSubmit={form.handleSubmit(
           onSubmit,
-          makeRhfErrorHandler({ formName: 'sancion-tribunal' }),
+          makeRhfErrorHandler({
+            formName: 'sancion-tribunal',
+            labelMap: LABEL_MAP,
+            bannerRef,
+          }),
         )}
         className="grid grid-cols-1 md:grid-cols-2 gap-3"
       >
@@ -762,12 +813,6 @@ function NuevaSancionTribunalForm({
             </div>
           </label>
         </div>
-
-        {error && (
-          <div className="md:col-span-2 text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
-            {error.message}
-          </div>
-        )}
 
         <div className="md:col-span-2 flex gap-2">
           <Button type="submit" variant="accent" loading={mutation.isPending}>
