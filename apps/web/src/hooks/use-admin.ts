@@ -2259,6 +2259,17 @@ export function useDeleteClub() {
   });
 }
 
+export function useLevantarVetoClub() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<Club>(`/admin/clubes/${id}/levantar-veto`, { method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'clubes'] });
+    },
+  });
+}
+
 /**
  * Lista el plantel de un club, opcionalmente filtrado por categoría.
  * Si no se pasa categoriaId, devuelve TODOS los jugadores del club.

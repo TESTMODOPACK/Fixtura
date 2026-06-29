@@ -66,6 +66,10 @@ export const ClubSchema = z.object({
   delegados: z.array(ContactoDirectivaSchema),
   historialManual: z.string().nullable(),
   estado: EstadoClubSchema,
+  // Sprint TRI — veto de por vida del club (resolución del Tribunal). `null` =
+  // sin veto; un club vetado no puede inscribirse en ningún torneo de la liga.
+  vetadoAt: z.iso.datetime().nullable(),
+  vetadoMotivo: z.string().nullable(),
   // IDs de categorías en las que el club compite. Se cargan via
   // tabla pivote `club_categorias` y se exponen como array en el DTO.
   categoriaIds: z.array(z.uuid()),

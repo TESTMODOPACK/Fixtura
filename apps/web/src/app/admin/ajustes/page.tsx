@@ -1328,13 +1328,12 @@ function InvitarMiembroForm({ onDone }: { onDone: () => void }): React.ReactElem
     nombre: z.string().min(2).max(100),
     apellido: z.string().min(2).max(100),
     rol: z.enum(ROLES_ADMIN_INVITABLES),
-    passwordTemporal: z.string().min(8).max(128),
   });
   type Form = z.infer<typeof Schema>;
 
   const form = useForm<Form>({
     resolver: zodResolver(Schema),
-    defaultValues: { rol: 'LIGA_COORDINADOR' as RolAdminInvitable, passwordTemporal: '' },
+    defaultValues: { rol: 'LIGA_COORDINADOR' as RolAdminInvitable },
   });
 
   const onSubmit = async (vals: Form): Promise<void> => {
@@ -1386,17 +1385,9 @@ function InvitarMiembroForm({ onDone }: { onDone: () => void }): React.ReactElem
             'Elige un rol para ver qué permisos otorga.'}
         </p>
       </div>
-      <div className="md:col-span-2">
-        <Input
-          label="Password temporal (mínimo 8 caracteres)"
-          type="password"
-          {...form.register('passwordTemporal')}
-          error={form.formState.errors.passwordTemporal?.message}
-        />
-        <p className="text-xs text-ink-mute font-serif italic mt-1">
-          Pasale al miembro este password por canal seguro. Debería cambiarlo al primer login
-          (esa pantalla aún no está construida — MVP).
-        </p>
+      <div className="md:col-span-2 text-xs text-ink-mute font-serif italic bg-paper-dark/40 rounded-card px-3 py-2">
+        Le enviaremos un email con un enlace para que cree su propia contraseña
+        (válido 72 horas). No tienes que definir ni compartir contraseñas.
       </div>
       {error && (
         <div className="md:col-span-2 text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">

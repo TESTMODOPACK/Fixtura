@@ -154,8 +154,11 @@ export class InvitarMiembroDto {
   @IsIn(ROLES_ADMIN_INVITABLES as readonly string[])
   rol!: RolAdminInvitable;
 
+  // Opcional: si no se envía, el miembro se invita por magic link (crea su
+  // propia contraseña vía email). Se mantiene como fallback manual.
+  @IsOptional()
   @IsString()
   @MinLength(10, { message: 'La contraseña debe tener al menos 10 caracteres.' })
   @MaxLength(128, { message: 'La contraseña es demasiado larga (máximo 128 caracteres).' })
-  passwordTemporal!: string;
+  passwordTemporal?: string;
 }

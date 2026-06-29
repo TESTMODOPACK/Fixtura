@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { hash } from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { In, Not, Repository } from 'typeorm';
 
 import {
@@ -24,7 +25,9 @@ import {
 import { validarPasswordSegura } from '@fixtura/domain';
 
 import { cifrarSecreto } from '../../../common/crypto/secret-box';
+import { MagicLinksService } from '../../auth/magic-links.service';
 import { Club } from '../../competition/entities/club.entity';
+import { EmailService } from '../../email/email.service';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { User } from '../../users/entities/user.entity';
 import { UserRole } from '../../users/entities/user-role.entity';
@@ -51,6 +54,8 @@ export class AjustesAdminService {
     @InjectRepository(UserRole)
     private readonly userRoleRepo: Repository<UserRole>,
     @InjectRepository(Club) private readonly clubRepo: Repository<Club>,
+    private readonly magicLinks: MagicLinksService,
+    private readonly email: EmailService,
   ) {}
 
   /**
@@ -308,16 +313,25 @@ export class AjustesAdminService {
     }
 
     let user = await this.userRepo.findOne({ where: { email: emailNorm } });
+    const esNuevo = !user;
     if (!user) {
-      const errorPwd = validarPasswordSegura(input.passwordTemporal, {
-        email: emailNorm,
-        nombre: input.nombre,
-        apellido: input.apellido,
-      });
-      if (errorPwd) {
-        throw new BadRequestException(errorPwd);
+      // Por defecto se invita por magic link: el miembro crea su contraseña vía
+      // email. Si el admin envió passwordTemporal, se respeta (fallback).
+      let passwordHash: string;
+      if (input.passwordTemporal) {
+        const errorPwd = validarPasswordSegura(input.passwordTemporal, {
+          email: emailNorm,
+          nombre: input.nombre,
+          apellido: input.apellido,
+        });
+        if (errorPwd) {
+          throw new BadRequestException(errorPwd);
+        }
+        passwordHash = await hash(input.passwordTemporal, 12);
+      } else {
+        // Password aleatoria no comunicada: el miembro la define vía el link.
+        passwordHash = await hash(randomBytes(24).toString('base64url'), 12);
       }
-      const passwordHash = await hash(input.passwordTemporal, 12);
       user = this.userRepo.create({
         email: emailNorm,
         passwordHash,
@@ -367,6 +381,12 @@ export class AjustesAdminService {
       );
     }
 
+    // Miembro nuevo invitado por magic link (sin password explícito): le
+    // mandamos el email para que cree su contraseña.
+    if (esNuevo && !input.passwordTemporal) {
+      await this.enviarInvitacionMagicLink(user);
+    }
+
     return {
       userRoleId: role.id,
       userId: user.id,
@@ -377,6 +397,50 @@ export class AjustesAdminService {
       ultimoLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
       grantedAt: role.grantedAt.toISOString(),
     };
+  }
+
+  /**
+   * Sprint TRI — email de invitación con magic link para que el miembro nuevo
+   * cree su propia contraseña (reusa el flujo RESET_PASSWORD, 72h). Best-effort:
+   * si el email falla, la cuenta + rol ya quedaron creados y el miembro puede
+   * usar "olvidé mi contraseña".
+   */
+  private async enviarInvitacionMagicLink(user: User): Promise<void> {
+    try {
+      const { token } = await this.magicLinks.crear({
+        purpose: 'RESET_PASSWORD',
+        tenantId: null,
+        email: user.email,
+        userId: user.id,
+        ttlMinutos: 72 * 60,
+      });
+      const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+      const link = `${frontendUrl}/reset-password?token=${encodeURIComponent(token)}`;
+      await this.email.send({
+        to: user.email,
+        subject: 'Te invitaron a administrar una liga en LigaPlus',
+        html: `
+          <h2 style="color:#15803d">Bienvenido a LigaPlus</h2>
+          <p>Hola ${user.nombre},</p>
+          <p>Te invitaron a administrar una liga en LigaPlus. Crea tu contraseña
+          para entrar:</p>
+          <p style="margin:20px 0">
+            <a href="${link}"
+               style="background:#15803d;color:#fff;padding:12px 24px;
+                      border-radius:6px;text-decoration:none;font-weight:bold">
+              Crear mi contraseña
+            </a>
+          </p>
+          <p style="color:#666;font-size:13px">Este link expira en 72 horas. Si
+          no esperabas esta invitación, ignora este correo.</p>
+          <p>Saludos,<br/>LigaPlus</p>
+        `,
+        text: `Te invitaron a administrar una liga en LigaPlus. Crea tu contraseña (expira en 72h): ${link}`,
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[Ajustes] Falló el envío del email de invitación:', err);
+    }
   }
 
   async removeMiembro(

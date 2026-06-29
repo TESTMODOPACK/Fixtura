@@ -141,6 +141,21 @@ export class ClubesAdminService {
     return this.toDto(club, cats, jugadoresCount, countByPair);
   }
 
+  /**
+   * Sprint TRI — levantar el veto de por vida de un club (resolución del
+   * Tribunal). Limpia las columnas de veto; el club vuelve a poder
+   * inscribirse. Idempotente: si no estaba vetado, no falla.
+   */
+  async levantarVeto(id: string, tenantId: string): Promise<ClubDto> {
+    const club = await this.clubRepo.findOne({ where: { id, tenantId } });
+    if (!club) throw new NotFoundException(`Club ${id} no encontrado.`);
+    await this.clubRepo.update(
+      { id, tenantId },
+      { vetadoAt: null, vetadoMotivo: null, vetadoPorUserId: null },
+    );
+    return this.findOne(id, tenantId);
+  }
+
   async create(tenantId: string, input: CreateClubRequest): Promise<ClubDto> {
     const slug = input.slug.toLowerCase().trim();
 
@@ -651,6 +666,8 @@ export class ClubesAdminService {
       delegados: Array.isArray(c.delegados) ? c.delegados : [],
       historialManual: c.historialManual,
       estado: c.estado,
+      vetadoAt: c.vetadoAt ? c.vetadoAt.toISOString() : null,
+      vetadoMotivo: c.vetadoMotivo,
       categoriaIds: detalles.map((d) => d.categoriaId),
       categoriaNombres: detalles.map((d) => d.categoriaNombre),
       categoriasDetalle: detalles,

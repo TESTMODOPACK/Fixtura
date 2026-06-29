@@ -6,6 +6,7 @@ import {
   Plus,
   Search,
   Shield,
+  ShieldOff,
   Users,
   X,
 } from 'lucide-react';
@@ -15,8 +16,10 @@ import { useDeferredValue, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
-import { useCategorias, useClubes } from '@/hooks/use-admin';
+import { useCategorias, useClubes, useLevantarVetoClub } from '@/hooks/use-admin';
+import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { toastError, toastSuccess } from '@/lib/toast';
 
 /**
  * Sprint 32 — listado de clubes expandido por (club, categoría).
@@ -36,6 +39,7 @@ type ClubCategoriaEntry = {
 export default function ClubesPage(): React.ReactElement {
   const { data: clubes, isLoading } = useClubes();
   const { data: categorias } = useCategorias();
+  const levantarVeto = useLevantarVetoClub();
 
   const [search, setSearch] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>(''); // '' = todas
@@ -303,6 +307,11 @@ export default function ClubesPage(): React.ReactElement {
                           Inactivo
                         </span>
                       )}
+                      {e.club.vetadoAt && (
+                        <span className="flex items-center gap-1 text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-danger/15 text-danger">
+                          <ShieldOff size={10} /> Vetado
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-3 text-xs text-ink-mute mt-3">
@@ -317,6 +326,33 @@ export default function ClubesPage(): React.ReactElement {
                         </span>
                       )}
                     </div>
+
+                    {e.club.vetadoAt && (
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.preventDefault();
+                          ev.stopPropagation();
+                          if (
+                            confirm(
+                              `¿Levantar el veto de ${e.club.nombre}? El club volverá a poder ` +
+                                'inscribirse en torneos de la liga.',
+                            )
+                          ) {
+                            levantarVeto.mutate(e.club.id, {
+                              onSuccess: () => toastSuccess('Veto del club levantado.'),
+                              onError: (err) =>
+                                toastError(
+                                  (err as ApiError).message ?? 'No se pudo levantar el veto.',
+                                ),
+                            });
+                          }
+                        }}
+                        className="mt-3 w-full text-xs font-semibold text-danger border border-danger/30 rounded py-1.5 hover:bg-danger/5 transition-colors"
+                      >
+                        Levantar veto del club
+                      </button>
+                    )}
 
                     <div className="flex items-center justify-end mt-3 text-accent text-xs font-semibold">
                       Ver ficha <ChevronRight size={14} />

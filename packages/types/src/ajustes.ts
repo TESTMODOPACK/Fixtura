@@ -185,9 +185,9 @@ export const InvitarMiembroSchema = z.object({
   nombre: z.string().min(2).max(100),
   apellido: z.string().min(2).max(100),
   rol: z.enum(ROLES_ADMIN_INVITABLES),
-  // Password temporal — el invitado debería cambiarla en el primer
-  // login. Por ahora MVP sin magic link.
-  passwordTemporal: z.string().min(8).max(128),
+  // Sprint TRI — opcional: si no se envía, el miembro se invita por magic link
+  // (crea su propia contraseña vía email). Se mantiene como fallback manual.
+  passwordTemporal: z.string().min(8).max(128).optional(),
 });
 export type InvitarMiembroRequest = z.infer<typeof InvitarMiembroSchema>;
 

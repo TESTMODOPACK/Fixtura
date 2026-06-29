@@ -92,6 +92,17 @@ export class ClubesAdminController {
     return this.svc.remove(id, ensureTenant(user));
   }
 
+  // Sprint TRI — levantar el veto de por vida que dictó el Tribunal.
+  @Post(':id/levantar-veto')
+  @Roles(ROLE.LIGA_ADMIN, ROLE.SUPER_ADMIN)
+  @Audited({ action: 'club.veto_levantado', entityType: 'Club', entityIdFrom: 'params.id' })
+  levantarVeto(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<Club> {
+    return this.svc.levantarVeto(id, ensureTenant(user));
+  }
+
   // ── Plantel del club (jugadores) ───────────────────────────────
 
   @Get(':id/jugadores')
