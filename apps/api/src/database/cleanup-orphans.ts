@@ -2210,6 +2210,14 @@ async function ensureClubesTables(
     `CREATE INDEX IF NOT EXISTS idx_clubes_estado ON clubes(estado)`,
   );
   await ensureTrigger(client, 'clubes');
+  // Sprint TRI — veto del club de por vida (resolución del Tribunal). Aditivo:
+  // un club con vetado_at != null no puede inscribirse en ningún torneo de la
+  // liga. Reversible (un admin levanta el veto poniendo las columnas en NULL).
+  await client.query(`
+    ALTER TABLE clubes ADD COLUMN IF NOT EXISTS vetado_at TIMESTAMPTZ;
+    ALTER TABLE clubes ADD COLUMN IF NOT EXISTS vetado_motivo TEXT;
+    ALTER TABLE clubes ADD COLUMN IF NOT EXISTS vetado_por_user_id UUID;
+  `);
 
   // ─── club_categorias (pivote N:N) ────────────────────────────────
   // Modelado como tabla pivote (no array) para tener FK real a

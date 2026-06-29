@@ -34,7 +34,7 @@ import { useEffect, useState } from 'react';
 
 import { ImpersonationBanner } from '@/components/impersonation-banner';
 import { SuscripcionAviso } from '@/components/suscripcion-aviso';
-import { useIsSuperAdmin } from '@/hooks/use-admin';
+import { useEsSoloTribunal, useIsSuperAdmin } from '@/hooks/use-admin';
 import { useLogout } from '@/hooks/use-logout';
 
 import { LigaPlusLockup } from '@/components/ui/logo';
@@ -116,6 +116,16 @@ const NAV_SUPER: NavSection = {
   ],
 };
 
+// Sprint TRI — menú acotado para integrantes del tribunal (sin rol admin
+// amplio): solo lo necesario para imponer/consultar sanciones y leer actas.
+const NAV_TRIBUNAL: NavSection = {
+  title: 'Disciplina',
+  items: [
+    { href: '/admin/torneos', label: 'Torneos & tribunal', icon: Gavel },
+    { href: '/admin/actas', label: 'Actas & resultados', icon: ClipboardList },
+  ],
+};
+
 /** Lista de secciones de navegación — reutilizada en sidebar y drawer. */
 function NavBody({
   sections,
@@ -193,6 +203,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const accessToken = useAuthStore((s) => s.accessToken);
   const logout = useLogout();
   const isSuperAdmin = useIsSuperAdmin();
+  const esSoloTribunal = useEsSoloTribunal();
   const [menuOpen, setMenuOpen] = useState(false);
 
   // El token se persiste en sessionStorage (Zustand persist) y se rehidrata
@@ -208,8 +219,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return useAuthStore.persist.onFinishHydration(() => setHydrated(true));
   }, []);
 
-  // SUPER_ADMIN ve SOLO el menú de plataforma — no opera ligas directamente.
-  const sections: NavSection[] = isSuperAdmin ? [NAV_SUPER] : NAV;
+  // SUPER_ADMIN ve SOLO el menú de plataforma; el tribunal, su menú acotado.
+  const sections: NavSection[] = isSuperAdmin
+    ? [NAV_SUPER]
+    : esSoloTribunal
+      ? [NAV_TRIBUNAL]
+      : NAV;
 
   useEffect(() => {
     if (!hydrated) return;
@@ -219,8 +234,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
     if (isSuperAdmin && pathname === '/admin') {
       router.replace('/admin/super');
+    } else if (esSoloTribunal && pathname === '/admin') {
+      router.replace('/admin/torneos');
     }
-  }, [hydrated, accessToken, isSuperAdmin, pathname, router]);
+  }, [hydrated, accessToken, isSuperAdmin, esSoloTribunal, pathname, router]);
 
   // Cerrar el drawer al navegar (cambio de ruta).
   useEffect(() => {

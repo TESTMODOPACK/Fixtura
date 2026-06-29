@@ -138,6 +138,14 @@ export class InscripcionesAdminService {
         `El club "${club.nombre}" está INACTIVO. Reactívalo antes de inscribirlo.`,
       );
     }
+    // Sprint TRI — un club vetado de por vida por el Tribunal no puede inscribirse.
+    if (club.vetadoAt) {
+      throw new BadRequestException(
+        `El club "${club.nombre}" está vetado de la liga` +
+          (club.vetadoMotivo ? ` (${club.vetadoMotivo})` : '') +
+          '. No puede inscribirse en torneos.',
+      );
+    }
 
     // Validar club compite en esa categoría (existe en club_categorias).
     const enCategoria = await this.clubCatRepo.findOne({

@@ -17,12 +17,14 @@ import {
   type AjustarSancionRequest,
   type CreateSancionTribunalRequest,
   type SancionAdmin,
+  type SancionarEquipoTribunalRequest,
+  type SancionEquipoResult,
   type UserContext,
 } from '@fixtura/types';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
-import { AjustarSancionDto, CreateSancionTribunalDto } from './dto';
+import { AjustarSancionDto, CreateSancionTribunalDto, SancionarEquipoDto } from './dto';
 import { TribunalAdminService } from './tribunal-admin.service';
 
 function ensureTenant(user: UserContext): string {
@@ -74,6 +76,20 @@ export class TribunalAdminController {
       torneoId,
       ensureTenant(user),
       dto as unknown as CreateSancionTribunalRequest,
+    );
+  }
+
+  @Post('equipo')
+  sancionarEquipo(
+    @CurrentUser() user: UserContext,
+    @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
+    @Body() dto: SancionarEquipoDto,
+  ): Promise<SancionEquipoResult> {
+    return this.svc.sancionarEquipo(
+      torneoId,
+      ensureTenant(user),
+      user.userId,
+      dto as unknown as SancionarEquipoTribunalRequest,
     );
   }
 

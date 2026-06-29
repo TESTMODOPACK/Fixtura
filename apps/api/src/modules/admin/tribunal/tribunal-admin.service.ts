@@ -9,15 +9,20 @@ import { Repository } from 'typeorm';
 import type {
   AjustarSancionRequest,
   CreateSancionTribunalRequest,
+  MotivoSuspensionEquipo,
   SancionAdmin,
+  SancionarEquipoTribunalRequest,
+  SancionEquipoResult,
 } from '@fixtura/types';
 
 import { AuditLogService } from '../../audit';
+import { Club } from '../../competition/entities/club.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Jugador } from '../../competition/entities/jugador.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { EquiposAdminService } from '../equipos/equipos-admin.service';
 import { VetadosAdminService } from '../vetados/vetados-admin.service';
 
 /**
@@ -35,7 +40,9 @@ export class TribunalAdminService {
     @InjectRepository(InscripcionTorneo)
     private readonly inscRepo: Repository<InscripcionTorneo>,
     @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
+    @InjectRepository(Club) private readonly clubRepo: Repository<Club>,
     private readonly vetadosService: VetadosAdminService,
+    private readonly equiposService: EquiposAdminService,
     private readonly audit: AuditLogService,
   ) {}
 
@@ -120,6 +127,76 @@ export class TribunalAdminService {
     }
 
     return this.findOne(created.id, tenantId);
+  }
+
+  /**
+   * Sprint TRI — sanción a un EQUIPO. Suspende del torneo actual (walkover 3-0
+   * batch, reusa EquiposAdminService) y/o veta al club de por vida en la liga
+   * (no podrá inscribirse en torneos). Al menos una acción (lo valida el DTO).
+   */
+  async sancionarEquipo(
+    torneoId: string,
+    tenantId: string,
+    actorUserId: string,
+    input: SancionarEquipoTribunalRequest,
+  ): Promise<SancionEquipoResult> {
+    await this.ensureTorneo(torneoId, tenantId);
+
+    const insc = await this.inscRepo.findOne({
+      where: { id: input.inscripcionId, torneoId, tenantId },
+    });
+    if (!insc) {
+      throw new NotFoundException('Equipo (inscripción) no encontrado en este torneo');
+    }
+    const club = await this.clubRepo.findOne({
+      where: { id: insc.clubId, tenantId },
+    });
+    if (!club) throw new NotFoundException('Club del equipo no encontrado');
+
+    let suspendidoDelTorneo = false;
+    if (input.suspenderDelTorneo) {
+      await this.equiposService.suspender(input.inscripcionId, tenantId, actorUserId, {
+        motivo: 'DEPORTIVA' as MotivoSuspensionEquipo,
+        observaciones:
+          `[Tribunal] ${input.motivo}` +
+          (input.observaciones ? ` — ${input.observaciones}` : ''),
+      });
+      suspendidoDelTorneo = true;
+    }
+
+    let clubVetado = false;
+    if (input.vetarClubPermanente) {
+      await this.clubRepo.update(
+        { id: club.id, tenantId },
+        {
+          vetadoAt: new Date(),
+          vetadoMotivo: input.motivo,
+          vetadoPorUserId: actorUserId,
+        },
+      );
+      clubVetado = true;
+    }
+
+    try {
+      await this.audit.record({
+        action: 'tribunal.sancion_equipo',
+        tenantId,
+        userId: actorUserId,
+        entityType: 'Club',
+        entityId: club.id,
+        metadata: {
+          torneoId,
+          inscripcionId: input.inscripcionId,
+          suspendidoDelTorneo,
+          clubVetado,
+          motivo: input.motivo,
+        },
+      });
+    } catch {
+      // best-effort
+    }
+
+    return { clubNombre: club.nombre, suspendidoDelTorneo, clubVetado };
   }
 
   async findOne(id: string, tenantId: string): Promise<SancionAdmin> {

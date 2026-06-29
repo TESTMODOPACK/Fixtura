@@ -38,6 +38,29 @@ export class CreateSancionTribunalDto {
   vetoPermanente?: boolean;
 }
 
+export class SancionarEquipoDto {
+  @IsUUID()
+  inscripcionId!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  suspenderDelTorneo?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  vetarClubPermanente?: boolean;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(1000)
+  motivo!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  observaciones?: string;
+}
+
 export class AjustarSancionDto {
   @Type(() => Number)
   @IsInt()

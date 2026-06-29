@@ -31,12 +31,16 @@ import { TorneosAdminService } from './torneos-admin.service';
 export class TorneosAdminController {
   constructor(private readonly svc: TorneosAdminService) {}
 
+  // Lectura abierta al tribunal (override): las escrituras de abajo heredan
+  // el @Roles de la clase (sin TRIBUNAL_DISCIPLINA) y quedan bloqueadas.
   @Get()
+  @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.TRIBUNAL_DISCIPLINA, ROLE.SUPER_ADMIN)
   list(@CurrentUser() user: UserContext): Promise<TorneoAdmin[]> {
     return this.svc.list(ensureTenant(user));
   }
 
   @Get(':id')
+  @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.TRIBUNAL_DISCIPLINA, ROLE.SUPER_ADMIN)
   findOne(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -45,6 +49,7 @@ export class TorneosAdminController {
   }
 
   @Get(':id/tabla')
+  @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.TRIBUNAL_DISCIPLINA, ROLE.SUPER_ADMIN)
   getTabla(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,

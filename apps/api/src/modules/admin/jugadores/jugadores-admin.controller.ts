@@ -13,7 +13,16 @@ import { JugadoresAdminService } from './jugadores-admin.service';
 export class JugadoresAdminController {
   constructor(private readonly svc: JugadoresAdminService) {}
 
+  // El tribunal lee la nómina (select de sanción a jugador). Las escrituras
+  // heredan el @Roles de la clase, sin tribunal.
   @Get()
+  @Roles(
+    ROLE.LIGA_ADMIN,
+    ROLE.LIGA_COORDINADOR,
+    ROLE.DELEGADO_EQUIPO,
+    ROLE.TRIBUNAL_DISCIPLINA,
+    ROLE.SUPER_ADMIN,
+  )
   list(
     @CurrentUser() user: UserContext,
     @Param('equipoId', new ParseUUIDPipe()) equipoId: string,

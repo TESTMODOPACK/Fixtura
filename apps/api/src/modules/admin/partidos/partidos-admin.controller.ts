@@ -77,6 +77,10 @@ export class FixtureDetailController {
   ROLE.LIGA_COORDINADOR_ARBITROS,
   ROLE.ARBITRO,
   ROLE.PLANILLERO,
+  // El tribunal lee el detalle/incidencias del partido para fundamentar fallos.
+  // Las escrituras del acta (incidencias/cerrar) están protegidas por
+  // assertActorPuedeOperarActa: sin designación, un tribunal recibe 403.
+  ROLE.TRIBUNAL_DISCIPLINA,
   ROLE.SUPER_ADMIN,
 )
 export class PartidosAdminController {

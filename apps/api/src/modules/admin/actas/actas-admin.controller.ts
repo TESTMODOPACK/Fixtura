@@ -20,7 +20,13 @@ function ensureTenant(user: UserContext): string {
 }
 
 @Controller('admin/actas')
-@Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
+@Roles(
+  ROLE.LIGA_ADMIN,
+  ROLE.LIGA_COORDINADOR,
+  // El tribunal lee actas (solo GET en este controller) para fundamentar fallos.
+  ROLE.TRIBUNAL_DISCIPLINA,
+  ROLE.SUPER_ADMIN,
+)
 export class ActasAdminController {
   constructor(private readonly svc: ActasAdminService) {}
 

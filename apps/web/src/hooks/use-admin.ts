@@ -36,6 +36,8 @@ import type {
   PartidoDetalle,
   PersonalAdmin,
   SancionAdmin,
+  SancionarEquipoTribunalRequest,
+  SancionEquipoResult,
   TablaPosicionesAdmin,
   TablasPorGrupoAdmin,
   GruposTorneoResponse,
@@ -612,6 +614,22 @@ export function useCreateSancionTribunal(torneoId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'sanciones'] });
+    },
+  });
+}
+
+export function useSancionarEquipo(torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SancionarEquipoTribunalRequest) =>
+      apiFetch<SancionEquipoResult>(`/admin/torneos/${torneoId}/sanciones/equipo`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'sanciones'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'equipos', torneoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'] });
     },
   });
 }
@@ -2082,6 +2100,28 @@ export function useMe() {
 export function useIsSuperAdmin(): boolean {
   const { data } = useMe();
   return data?.roles.some((r) => r.role === 'SUPER_ADMIN') ?? false;
+}
+
+/**
+ * Sprint TRI — true si el usuario es integrante del tribunal SIN ningún rol
+ * de administración amplio. En ese caso el panel le muestra solo el menú
+ * acotado (torneos + actas) y aterriza en el tribunal.
+ */
+const ROLES_ADMIN_AMPLIOS = [
+  'LIGA_ADMIN',
+  'LIGA_COORDINADOR',
+  'LIGA_COORDINADOR_ARBITROS',
+  'LIGA_CONTADOR',
+  'LIGA_COMERCIAL',
+  'RECINTO_ADMIN',
+  'SUPER_ADMIN',
+];
+export function useEsSoloTribunal(): boolean {
+  const { data } = useMe();
+  if (!data) return false;
+  const roles = data.roles.map((r) => r.role);
+  if (!roles.includes('TRIBUNAL_DISCIPLINA')) return false;
+  return !roles.some((r) => ROLES_ADMIN_AMPLIOS.includes(r));
 }
 
 // ─── Sprint 25: Categorías de jugadores ─────────────────────────────

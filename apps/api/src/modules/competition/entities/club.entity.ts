@@ -87,6 +87,17 @@ export class Club {
   @Column({ type: 'varchar', length: 20, default: 'ACTIVO' })
   estado!: EstadoClub;
 
+  // Sprint TRI — veto de por vida del club en la liga (resolución del Tribunal).
+  // vetadoAt != null ⇒ no puede inscribirse en ningún torneo. Reversible.
+  @Column({ name: 'vetado_at', type: 'timestamptz', nullable: true })
+  vetadoAt!: Date | null;
+
+  @Column({ name: 'vetado_motivo', type: 'text', nullable: true })
+  vetadoMotivo!: string | null;
+
+  @Column({ name: 'vetado_por_user_id', type: 'uuid', nullable: true })
+  vetadoPorUserId!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

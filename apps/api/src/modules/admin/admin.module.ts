@@ -98,6 +98,7 @@ import {
 import { DelegadoInviteService } from './delegado/delegado-invite.service';
 import { DelegadoPortalService } from './delegado/delegado-portal.service';
 import { EncuestaNps } from '../competition/entities/encuesta-nps.entity';
+import { Club } from '../competition/entities/club.entity';
 import { InscripcionTorneo } from '../competition/entities/inscripcion-torneo.entity';
 import { Torneo } from '../competition/entities/torneo.entity';
 import { NpsAdminController } from './nps/nps-admin.controller';
@@ -134,6 +135,7 @@ import { NpsService } from './nps/nps.service';
       EncuestaNps,
       InscripcionTorneo,
       Torneo,
+      Club,
     ]),
   ],
   controllers: [

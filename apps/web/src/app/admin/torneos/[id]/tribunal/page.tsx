@@ -30,6 +30,7 @@ import {
   useEquipos,
   useJugadores,
   useRevokeSancion,
+  useSancionarEquipo,
   useSanciones,
   useTorneo,
 } from '@/hooks/use-admin';
@@ -162,7 +163,7 @@ export default function TribunalPage({
 
       {adding && puedeIngresar && (
         <Card padding="comfortable" className="mb-5">
-          <NuevaSancionTribunalForm
+          <PanelNuevaSancion
             torneoId={torneoId}
             esCierre={esCierre}
             onDone={() => setAdding(false)}
@@ -401,6 +402,191 @@ function AjustarSancionForm({
         <Button type="button" variant="ghost" size="sm" onClick={onClose}>
           <X size={14} /> Cancelar
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function PanelNuevaSancion({
+  torneoId,
+  esCierre,
+  onDone,
+}: {
+  torneoId: string;
+  esCierre?: boolean;
+  onDone: () => void;
+}): React.ReactElement {
+  const [tipo, setTipo] = useState<'jugador' | 'equipo'>('jugador');
+  return (
+    <div>
+      {/* En resoluciones de cierre solo aplica jugador; ocultamos el tab equipo. */}
+      {!esCierre && (
+        <div className="flex gap-2 mb-4">
+          {(['jugador', 'equipo'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTipo(t)}
+              className={cn(
+                'px-4 py-1.5 rounded-full text-xs uppercase tracking-[0.15em] font-semibold border transition-colors',
+                tipo === t
+                  ? 'bg-green-deep text-chalk border-green-deep'
+                  : 'bg-paper text-ink-mute border-line hover:border-green-deep',
+              )}
+            >
+              {t === 'jugador' ? 'Sanción a jugador' : 'Sanción a equipo'}
+            </button>
+          ))}
+        </div>
+      )}
+      {esCierre || tipo === 'jugador' ? (
+        <NuevaSancionTribunalForm torneoId={torneoId} esCierre={esCierre} onDone={onDone} />
+      ) : (
+        <NuevaSancionEquipoForm torneoId={torneoId} onDone={onDone} />
+      )}
+    </div>
+  );
+}
+
+function NuevaSancionEquipoForm({
+  torneoId,
+  onDone,
+}: {
+  torneoId: string;
+  onDone: () => void;
+}): React.ReactElement {
+  const equiposQ = useEquipos(torneoId);
+  const mutation = useSancionarEquipo(torneoId);
+  const [inscripcionId, setInscripcionId] = useState('');
+  const [suspenderDelTorneo, setSuspender] = useState(true);
+  const [vetarClubPermanente, setVetar] = useState(false);
+  const [motivo, setMotivo] = useState('');
+  const [observaciones, setObservaciones] = useState('');
+  const [errs, setErrs] = useState<{ equipo?: string; motivo?: string; accion?: string }>({});
+
+  const onSubmit = async (): Promise<void> => {
+    const e: typeof errs = {};
+    if (!inscripcionId) e.equipo = 'Elige un equipo';
+    if (motivo.trim().length < 3) e.motivo = 'Describe el fundamento (mín. 3 caracteres)';
+    if (!suspenderDelTorneo && !vetarClubPermanente) e.accion = 'Elige al menos una acción';
+    setErrs(e);
+    if (Object.keys(e).length > 0) return;
+
+    if (vetarClubPermanente) {
+      const ok = confirm(
+        '¿Confirmas VETO DE POR VIDA del club? No podrá inscribirse en ningún ' +
+          'torneo futuro de la liga hasta que un admin levante el veto.',
+      );
+      if (!ok) return;
+    }
+    try {
+      const res = await mutation.mutateAsync({
+        inscripcionId,
+        suspenderDelTorneo,
+        vetarClubPermanente,
+        motivo: motivo.trim(),
+        observaciones: observaciones.trim() || undefined,
+      });
+      const partes = [
+        res.suspendidoDelTorneo ? 'suspendido del torneo' : null,
+        res.clubVetado ? 'club vetado de la liga' : null,
+      ].filter(Boolean);
+      toastSuccess(`${res.clubNombre}: ${partes.join(' + ')}.`);
+      onDone();
+    } catch (err) {
+      toastError((err as ApiError).message ?? 'No se pudo aplicar la sanción.');
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <AlertTriangle size={18} className="text-accent" />
+        <CardLabel>Nueva sanción a un equipo</CardLabel>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3">
+        <div>
+          <label className="label">Equipo</label>
+          <select
+            className="input"
+            value={inscripcionId}
+            onChange={(ev) => setInscripcionId(ev.target.value)}
+          >
+            <option value="">— elige equipo —</option>
+            {equiposQ.data?.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nombre}
+              </option>
+            ))}
+          </select>
+          {errs.equipo && <p className="text-xs text-danger mt-1">{errs.equipo}</p>}
+        </div>
+
+        <div className="space-y-2">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={suspenderDelTorneo}
+              onChange={(ev) => setSuspender(ev.target.checked)}
+              className="mt-1"
+            />
+            <div className="text-sm">
+              <div className="font-semibold">Suspender del torneo</div>
+              <div className="text-xs text-ink-mute font-serif italic">
+                Saca al equipo de este torneo: sus partidos pendientes se cargan
+                como walkover 3-0 a favor del rival.
+              </div>
+            </div>
+          </label>
+
+          <label className="flex items-start gap-2 cursor-pointer border border-danger/30 rounded-card p-3 bg-danger/5">
+            <input
+              type="checkbox"
+              checked={vetarClubPermanente}
+              onChange={(ev) => setVetar(ev.target.checked)}
+              className="mt-1"
+            />
+            <div className="text-sm">
+              <div className="font-semibold text-danger">Vetar al club de por vida</div>
+              <div className="text-xs text-ink-mute mt-0.5 font-serif italic">
+                Además, el club no podrá inscribirse en ningún torneo futuro de la
+                liga. Reversible: un admin puede levantar el veto. Úsalo solo para
+                faltas graves.
+              </div>
+            </div>
+          </label>
+          {errs.accion && <p className="text-xs text-danger">{errs.accion}</p>}
+        </div>
+
+        <div>
+          <label className="label">Fundamento / resolución</label>
+          <textarea
+            className="input min-h-[80px]"
+            placeholder="Ej. Agresión grupal al árbitro. Fallo Tribunal 12/05/2026."
+            value={motivo}
+            onChange={(ev) => setMotivo(ev.target.value)}
+          />
+          {errs.motivo && <p className="text-xs text-danger mt-1">{errs.motivo}</p>}
+        </div>
+
+        <div>
+          <label className="label">Observaciones (opcional)</label>
+          <textarea
+            className="input min-h-[56px]"
+            value={observaciones}
+            onChange={(ev) => setObservaciones(ev.target.value)}
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <Button type="button" variant="accent" onClick={onSubmit} loading={mutation.isPending}>
+            <Gavel size={14} /> Imponer sanción
+          </Button>
+          <Button type="button" variant="ghost" onClick={onDone}>
+            Cancelar
+          </Button>
+        </div>
       </div>
     </div>
   );

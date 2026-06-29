@@ -30,7 +30,10 @@ import { EquiposAdminService } from './equipos-admin.service';
 export class EquiposAdminController {
   constructor(private readonly svc: EquiposAdminService) {}
 
+  // El tribunal lee la lista de equipos (select de sanción). Las escrituras
+  // (POST de abajo) heredan el @Roles de la clase, sin tribunal.
   @Get()
+  @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.TRIBUNAL_DISCIPLINA, ROLE.SUPER_ADMIN)
   list(
     @CurrentUser() user: UserContext,
     @Param('torneoId', new ParseUUIDPipe()) torneoId: string,

@@ -67,6 +67,34 @@ export const AjustarSancionSchema = z.object({
 export type AjustarSancionRequest = z.infer<typeof AjustarSancionSchema>;
 
 /**
+ * Sprint TRI — sanción a un EQUIPO desde el Tribunal. Combina dos acciones
+ * (al menos una): suspender al equipo del torneo actual (walkover 3-0 batch)
+ * y/o vetar al club de por vida en la liga (no podrá inscribirse en torneos).
+ */
+export const SancionarEquipoTribunalSchema = z
+  .object({
+    inscripcionId: z.uuid(),
+    suspenderDelTorneo: z.boolean().default(false),
+    vetarClubPermanente: z.boolean().default(false),
+    motivo: z.string().min(3).max(1000),
+    observaciones: z.string().max(1000).optional(),
+  })
+  .refine((d) => d.suspenderDelTorneo || d.vetarClubPermanente, {
+    message: 'Elige al menos una acción: suspender del torneo o vetar el club.',
+    path: ['suspenderDelTorneo'],
+  });
+export type SancionarEquipoTribunalRequest = z.infer<
+  typeof SancionarEquipoTribunalSchema
+>;
+
+export const SancionEquipoResultSchema = z.object({
+  clubNombre: z.string(),
+  suspendidoDelTorneo: z.boolean(),
+  clubVetado: z.boolean(),
+});
+export type SancionEquipoResult = z.infer<typeof SancionEquipoResultSchema>;
+
+/**
  * Resultado del cierre de acta — qué sanciones se crearon
  * automáticamente. Se devuelve al cliente para feedback visual.
  */
