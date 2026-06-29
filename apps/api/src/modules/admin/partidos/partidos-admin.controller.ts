@@ -152,16 +152,21 @@ export class PartidosAdminController {
 
   /** Atribuir/reasignar el jugador de una incidencia (ej. goles del +GOL en vivo). */
   @Patch(':id/incidencias/:incidenciaId/jugador')
-  atribuirJugadorIncidencia(
+  async atribuirJugadorIncidencia(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Param('incidenciaId', new ParseUUIDPipe()) incidenciaId: string,
     @Body() dto: AtribuirIncidenciaDto,
   ): Promise<IncidenciaAdmin> {
+    const tenantId = ensureTenant(user);
+    // Es una escritura del acta: exige que el actor pueda operarla (liga, o
+    // personal designado a ESTE partido). Sin esto, el tribunal —que solo
+    // lee— y cualquier árbitro/planillero no designado podían reasignar goles.
+    await this.svc.assertActorPuedeOperarActa(id, tenantId, actorPersonalScope(user));
     return this.svc.atribuirJugadorIncidencia(
       id,
       incidenciaId,
-      ensureTenant(user),
+      tenantId,
       dto.jugadorInscritoId,
     );
   }
