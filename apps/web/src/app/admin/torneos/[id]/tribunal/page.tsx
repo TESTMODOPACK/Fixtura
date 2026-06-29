@@ -505,6 +505,9 @@ function NuevaSancionTribunalForm({
               </option>
             ))}
           </select>
+          {form.formState.isSubmitted && !equipoSeleccionado && (
+            <p className="text-xs text-danger mt-1">Elige un equipo</p>
+          )}
         </div>
 
         <div>
