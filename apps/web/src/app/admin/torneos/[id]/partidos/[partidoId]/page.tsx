@@ -76,6 +76,9 @@ export default function PartidoDetallePage({
 }): React.ReactElement {
   const { id: torneoId, partidoId } = params;
   const { data: partido, isLoading } = usePartido(partidoId);
+  // Un vencido puede haberse jugado (acta tardía): por defecto mostramos solo la
+  // gestión, y este toggle despliega el flujo de carga si el admin lo necesita.
+  const [cargarResultado, setCargarResultado] = useState(false);
 
   if (isLoading) return <div className="font-serif italic text-ink-mute">Cargando...</div>;
   if (!partido) {
@@ -108,6 +111,9 @@ export default function PartidoDetallePage({
     new Date(partido.fechaHora).getTime() < Date.now();
   // Cuando el partido necesita gestión, subimos esa sección arriba del todo.
   const requiereGestion = vencido || noSeJuega;
+  // Ocultamos el flujo de carga (goles, cerrar acta, certificación, incidencias)
+  // si el partido no se jugó, o si está vencido y el admin aún no pidió cargarlo.
+  const ocultarCarga = noSeJuega || (vencido && !cargarResultado);
 
   const descargarPlantilla = async (): Promise<void> => {
     const token = useAuthStore.getState().accessToken;
@@ -159,8 +165,24 @@ export default function PartidoDetallePage({
         <SuspensionCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
       )}
 
+      {/* Vencido sin resolver: por defecto ocultamos el flujo de carga. Si el
+          partido sí se jugó, el admin lo despliega con un clic. */}
+      {vencido && !cargarResultado && (
+        <Card
+          padding="comfortable"
+          className="mb-5 flex items-center justify-between gap-3 flex-wrap"
+        >
+          <div className="text-sm text-ink-mute">
+            ¿Este partido se jugó? Carga el resultado. Si no, usa las opciones de arriba.
+          </div>
+          <Button variant="default" size="sm" onClick={() => setCargarResultado(true)}>
+            <FileText size={14} /> Cargar resultado
+          </Button>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
-        <Card padding="comfortable" className={noSeJuega ? 'lg:col-span-3' : 'lg:col-span-2'}>
+        <Card padding="comfortable" className={ocultarCarga ? 'lg:col-span-3' : 'lg:col-span-2'}>
           <CardLabel>Marcador</CardLabel>
           <div className="grid grid-cols-3 gap-4 items-center text-center mt-4">
             <div>
@@ -206,8 +228,8 @@ export default function PartidoDetallePage({
           </div>
         </Card>
 
-        {/* Cerrar acta solo tiene sentido si el partido se juega o ya se cerró. */}
-        {!noSeJuega && <ActaSection partido={partido} torneoId={torneoId} />}
+        {/* Cerrar acta solo si el partido se juega/jugó (no cuando se gestiona). */}
+        {!ocultarCarga && <ActaSection partido={partido} torneoId={torneoId} />}
       </div>
 
       <EditarPartidoCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
@@ -217,17 +239,17 @@ export default function PartidoDetallePage({
         <SuspensionCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
       )}
 
-      {!noSeJuega && (
+      {!ocultarCarga && (
         <WalkoverCard partido={partido} torneoId={torneoId} cerrada={cerrada} />
       )}
 
       <DesignacionesSection partidoId={partido.id} torneoId={torneoId} cerrada={cerrada} />
 
-      {!cerrada && !noSeJuega && partido.estado !== 'WALKOVER' && (
+      {!cerrada && !ocultarCarga && partido.estado !== 'WALKOVER' && (
         <CertificacionSection partido={partido} torneoId={torneoId} />
       )}
 
-      {!cerrada && !noSeJuega && (
+      {!cerrada && !ocultarCarga && (
         <IncidenciasSection
           partido={partido}
           torneoId={torneoId}
@@ -235,7 +257,7 @@ export default function PartidoDetallePage({
         />
       )}
 
-      {!noSeJuega && <IncidenciasList partido={partido} cerrada={cerrada} />}
+      {!ocultarCarga && <IncidenciasList partido={partido} cerrada={cerrada} />}
     </>
   );
 }
