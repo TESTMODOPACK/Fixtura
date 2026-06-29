@@ -413,6 +413,7 @@ function IncidenciasMovil({
       });
       setJugadorId('');
       setMinuto('');
+      setIntentado(false);
     } catch (err) {
       toastError((err as ApiError).message ?? 'No se pudo registrar.');
     }

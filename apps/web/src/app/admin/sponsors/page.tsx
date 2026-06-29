@@ -355,7 +355,12 @@ function SponsorForm({
       ])
       .optional(),
     posicion: z.enum(POSICION_SPONSOR),
-    prioridad: z.coerce.number().int().min(0).max(1000).optional(),
+    // valueAsNumber entrega NaN al vaciar el campo; lo saneamos a undefined para
+    // no bloquear un campo opcional (que es la regla del proyecto).
+    prioridad: z.preprocess(
+      (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? undefined : Number(v)),
+      z.number().int().min(0).max(1000).optional(),
+    ),
     vigenteDesde: z.string().optional(),
     vigenteHasta: z.string().optional(),
     notas: z.string().max(1000).optional(),

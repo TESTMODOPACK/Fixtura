@@ -1115,7 +1115,15 @@ function WalkoverCard({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => setAbierto((v) => !v)}
+            onClick={() =>
+              setAbierto((v) => {
+                if (v) {
+                  setIntentado(false);
+                  setPerdedor('');
+                }
+                return !v;
+              })
+            }
           >
             <Flag size={14} /> {abierto ? 'Cancelar' : 'Declarar walkover'}
           </Button>

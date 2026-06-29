@@ -264,7 +264,12 @@ function NuevoJugadorForm({
       .max(20)
       .optional()
       .refine((v) => !v || validarRut(v), 'RUT inválido (verifica el dígito verificador)'),
-    numeroCamiseta: z.coerce.number().int().min(0).max(99).optional(),
+    // valueAsNumber entrega NaN al vaciar el campo; lo saneamos a undefined para
+    // no bloquear este campo opcional (muchos jugadores se cargan sin número).
+    numeroCamiseta: z.preprocess(
+      (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? undefined : Number(v)),
+      z.number().int().min(0).max(99).optional(),
+    ),
     posicion: z.enum(['ARQUERO', 'DEFENSA', 'MEDIO', 'DELANTERO']).optional(),
     pieHabil: z.enum(['IZQUIERDO', 'DERECHO', 'AMBIDIESTRO']).optional(),
     // Fecha nacimiento opcional para arrancar, pero será requerida cuando

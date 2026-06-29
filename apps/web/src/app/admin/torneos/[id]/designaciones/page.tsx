@@ -188,7 +188,7 @@ export default function DesignacionesPage({
             ))}
             {fechaId && (
               <div className="ml-auto">
-                <AutoAsignarBoton torneoId={torneoId} fechaId={fechaId} />
+                <AutoAsignarBoton key={fechaId} torneoId={torneoId} fechaId={fechaId} />
               </div>
             )}
           </div>
@@ -775,6 +775,7 @@ function AutoAsignarBoton({
     setOpen(false);
     setResultado(null);
     setIntentado(false);
+    mutation.reset();
   };
 
   if (!open) {

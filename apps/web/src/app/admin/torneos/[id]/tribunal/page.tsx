@@ -466,16 +466,24 @@ function NuevaSancionEquipoForm({
   const [vetarClubPermanente, setVetar] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [observaciones, setObservaciones] = useState('');
-  const [errs, setErrs] = useState<{ equipo?: string; motivo?: string; accion?: string }>({});
+  const [intentado, setIntentado] = useState(false);
+
+  // Errores derivados de los valores actuales: el banner y los avisos por campo
+  // se actualizan en vivo a medida que el usuario corrige (no quedan obsoletos
+  // hasta el próximo submit). Solo se muestran tras intentar enviar.
+  const errs = {
+    equipo: !inscripcionId ? 'Elige un equipo' : undefined,
+    motivo:
+      motivo.trim().length < 3 ? 'Describe el fundamento (mín. 3 caracteres)' : undefined,
+    accion:
+      !suspenderDelTorneo && !vetarClubPermanente ? 'Elige al menos una acción' : undefined,
+  };
 
   const onSubmit = async (): Promise<void> => {
-    const e: typeof errs = {};
-    if (!inscripcionId) e.equipo = 'Elige un equipo';
-    if (motivo.trim().length < 3) e.motivo = 'Describe el fundamento (mín. 3 caracteres)';
-    if (!suspenderDelTorneo && !vetarClubPermanente) e.accion = 'Elige al menos una acción';
-    setErrs(e);
-    if (Object.keys(e).length > 0) {
-      toastWarning(`Faltan datos: ${Object.values(e).join(' · ')}`);
+    setIntentado(true);
+    const faltantes = Object.values(errs).filter(Boolean);
+    if (faltantes.length > 0) {
+      toastWarning(`Faltan datos: ${faltantes.join(' · ')}`);
       return;
     }
 
@@ -510,9 +518,11 @@ function NuevaSancionEquipoForm({
     motivo: 'Fundamento',
     accion: 'Acción',
   };
-  const fieldErrors = Object.entries(errs)
-    .filter(([, v]) => Boolean(v))
-    .map(([k, v]) => ({ label: ERR_LABEL[k] ?? k, mensaje: String(v) }));
+  const fieldErrors = intentado
+    ? Object.entries(errs)
+        .filter(([, v]) => Boolean(v))
+        .map(([k, v]) => ({ label: ERR_LABEL[k] ?? k, mensaje: String(v) }))
+    : [];
 
   return (
     <div>
@@ -543,7 +553,9 @@ function NuevaSancionEquipoForm({
               </option>
             ))}
           </select>
-          {errs.equipo && <p className="text-xs text-danger mt-1">{errs.equipo}</p>}
+          {intentado && errs.equipo && (
+            <p className="text-xs text-danger mt-1">{errs.equipo}</p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -579,7 +591,9 @@ function NuevaSancionEquipoForm({
               </div>
             </div>
           </label>
-          {errs.accion && <p className="text-xs text-danger">{errs.accion}</p>}
+          {intentado && errs.accion && (
+            <p className="text-xs text-danger">{errs.accion}</p>
+          )}
         </div>
 
         <div>
@@ -590,7 +604,9 @@ function NuevaSancionEquipoForm({
             value={motivo}
             onChange={(ev) => setMotivo(ev.target.value)}
           />
-          {errs.motivo && <p className="text-xs text-danger mt-1">{errs.motivo}</p>}
+          {intentado && errs.motivo && (
+            <p className="text-xs text-danger mt-1">{errs.motivo}</p>
+          )}
         </div>
 
         <div>

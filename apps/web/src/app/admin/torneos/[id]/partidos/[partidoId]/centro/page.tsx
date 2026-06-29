@@ -455,6 +455,7 @@ function IncidenciasPanel({
       // tocamos el marcador aquí (evita el doble conteo con el botón +GOL).
       setJugadorId('');
       setMinuto('');
+      setIntentado(false);
     } catch (err) {
       toastError((err as ApiError).message ?? 'No se pudo registrar.');
     }

@@ -36,7 +36,11 @@ const Schema = z.object({
   adminEmail: z.string().email().optional().or(z.literal('')),
   adminNombre: z.string().optional(),
   adminApellido: z.string().optional(),
-  adminPassword: z.string().optional(),
+  adminPassword: z
+    .string()
+    .min(10, 'Mínimo 10 caracteres.')
+    .optional()
+    .or(z.literal('')),
 });
 type FormData = z.infer<typeof Schema>;
 
@@ -182,7 +186,7 @@ export default function NuevoTenantPage(): React.ReactElement {
               <Input type="email" placeholder="admin@liga.cl" {...form.register('adminEmail')} />
             </div>
             <div>
-              <label className="label">Password temporal (mín 8)</label>
+              <label className="label">Password temporal (mín 10)</label>
               <Input type="text" {...form.register('adminPassword')} />
             </div>
             <div>
