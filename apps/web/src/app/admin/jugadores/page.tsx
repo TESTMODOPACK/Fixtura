@@ -58,6 +58,15 @@ export default function JugadoresGlobalPage(): React.ReactElement {
     };
   }, [jugadores]);
 
+  // El club depende de la categoría: si hay una categoría elegida, solo
+  // ofrecemos los clubes que compiten en ella (club.categoriaIds). Así el
+  // segundo filtro queda subordinado al primero (categoría → club).
+  const clubesFiltrados = useMemo(() => {
+    const all = clubes ?? [];
+    if (!categoriaId) return all;
+    return all.filter((c) => c.categoriaIds.includes(categoriaId));
+  }, [clubes, categoriaId]);
+
   return (
     <>
       <PageHead
@@ -126,11 +135,16 @@ export default function JugadoresGlobalPage(): React.ReactElement {
         </div>
         <select
           className="input text-sm"
-          value={clubId}
-          onChange={(e) => setClubId(e.target.value)}
+          value={categoriaId}
+          onChange={(e) => {
+            setCategoriaId(e.target.value);
+            // El club elegido puede no competir en la nueva categoría: lo
+            // limpiamos para que no quede un filtro incoherente.
+            setClubId('');
+          }}
         >
-          <option value="">Todos los clubes</option>
-          {clubes?.map((c) => (
+          <option value="">Todas las categorías</option>
+          {categorias?.map((c) => (
             <option key={c.id} value={c.id}>
               {c.nombre}
             </option>
@@ -138,11 +152,13 @@ export default function JugadoresGlobalPage(): React.ReactElement {
         </select>
         <select
           className="input text-sm"
-          value={categoriaId}
-          onChange={(e) => setCategoriaId(e.target.value)}
+          value={clubId}
+          onChange={(e) => setClubId(e.target.value)}
         >
-          <option value="">Todas las categorías</option>
-          {categorias?.map((c) => (
+          <option value="">
+            {categoriaId ? 'Todos los clubes de la categoría' : 'Todos los clubes'}
+          </option>
+          {clubesFiltrados.map((c) => (
             <option key={c.id} value={c.id}>
               {c.nombre}
             </option>
