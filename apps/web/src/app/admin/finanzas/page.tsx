@@ -20,7 +20,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -41,7 +41,11 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -1130,6 +1134,14 @@ function CobroRow({ cobro }: { cobro: CobroAdmin }): React.ReactElement {
 function CobroForm({ onDone }: { onDone: () => void }): React.ReactElement {
   const create = useCreateCobro();
   const error = create.error as ApiError | undefined;
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const LABEL_MAP: Record<string, string> = {
+    concepto: 'Concepto',
+    categoria: 'Categoría',
+    monto: 'Monto',
+    vencimiento: 'Vencimiento',
+    notas: 'Notas',
+  };
 
   const Schema = z.object({
     concepto: z.string().min(2).max(200),
@@ -1157,6 +1169,11 @@ function CobroForm({ onDone }: { onDone: () => void }): React.ReactElement {
     onDone();
   };
 
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    LABEL_MAP,
+  );
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-3">
@@ -1164,10 +1181,22 @@ function CobroForm({ onDone }: { onDone: () => void }): React.ReactElement {
         <CardLabel>Nuevo cobro</CardLabel>
       </div>
 
+      <FormErrorBanner
+        ref={bannerRef}
+        fieldErrors={fieldErrors}
+        apiError={error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo crear el cobro"
+      />
+
       <form
         onSubmit={form.handleSubmit(
           onSubmit,
-          makeRhfErrorHandler({ formName: 'cobro' }),
+          makeRhfErrorHandler({
+            formName: 'cobro',
+            labelMap: LABEL_MAP,
+            bannerRef,
+          }),
         )}
         className="grid grid-cols-1 md:grid-cols-2 gap-3"
       >
@@ -1209,12 +1238,6 @@ function CobroForm({ onDone }: { onDone: () => void }): React.ReactElement {
           />
         </div>
 
-        {error && (
-          <div className="md:col-span-2 text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
-            {error.message}
-          </div>
-        )}
-
         <div className="md:col-span-2 flex gap-2">
           <Button type="submit" variant="accent" loading={create.isPending}>
             <Plus size={14} /> Crear cobro
@@ -1252,7 +1275,12 @@ function MarcarPagadoForm({
   };
 
   return (
-    <div className="bg-paper border border-line rounded-card p-3 flex flex-wrap items-end gap-2">
+    <div className="bg-paper border border-line rounded-card p-3">
+      <FormErrorBanner
+        apiError={error}
+        apiTitle="No se pudo registrar el pago"
+      />
+      <div className="flex flex-wrap items-end gap-2">
       <div>
         <label className="label">Método</label>
         <select
@@ -1289,9 +1317,7 @@ function MarcarPagadoForm({
       <Button type="button" variant="ghost" size="sm" onClick={onDone}>
         <X size={14} />
       </Button>
-      {error && (
-        <div className="w-full text-sm text-danger mt-2">{error.message}</div>
-      )}
+      </div>
     </div>
   );
 }

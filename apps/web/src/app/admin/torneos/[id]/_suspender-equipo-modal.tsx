@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AlertTriangle, Ban, X } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -14,6 +14,11 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { useSuspenderEquipo } from '@/hooks/use-admin';
 import { toastError, toastSuccess } from '@/lib/toast';
 
@@ -23,6 +28,12 @@ const Schema = z.object({
   aplicarMultaWalkover: z.boolean().optional(),
 });
 type FormValues = z.infer<typeof Schema>;
+
+const LABEL_MAP: Record<string, string> = {
+  motivo: 'Motivo',
+  observaciones: 'Observaciones',
+  aplicarMultaWalkover: 'Multa por walkover',
+};
 
 /**
  * Sprint 44 — Modal para suspender un equipo del torneo. Avisa al
@@ -40,6 +51,7 @@ export function SuspenderEquipoModal({
   onClose: () => void;
 }): React.ReactElement {
   const mutation = useSuspenderEquipo(torneoId);
+  const bannerRef = useRef<HTMLDivElement>(null);
   const [resultado, setResultado] = useState<{
     partidosWalkover: number;
     partidosCancelados: number;
@@ -106,6 +118,11 @@ export function SuspenderEquipoModal({
     );
   }
 
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    LABEL_MAP,
+  );
+
   return (
     <Overlay onClose={onClose}>
       <Card padding="comfortable" className="max-w-md w-full">
@@ -135,7 +152,25 @@ export function SuspenderEquipoModal({
           </div>
         </div>
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+        <FormErrorBanner
+          ref={bannerRef}
+          fieldErrors={fieldErrors}
+          apiError={mutation.error}
+          validationTitle="Revisa estos datos:"
+          apiTitle="No se pudo suspender el equipo"
+        />
+
+        <form
+          onSubmit={form.handleSubmit(
+            onSubmit,
+            makeRhfErrorHandler({
+              formName: 'suspender-equipo',
+              labelMap: LABEL_MAP,
+              bannerRef,
+            }),
+          )}
+          className="space-y-3"
+        >
           <div>
             <label className="block text-xs uppercase tracking-[0.18em] font-semibold text-ink-mute mb-1">
               Motivo

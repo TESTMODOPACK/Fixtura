@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -12,10 +12,14 @@ import type { AuthTokens, UserContext } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { CardLabel } from '@/components/ui/card';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
-import { ApiError, apiFetch } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 import { resolveLandingByRole } from '@/lib/resolve-landing';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -33,11 +37,21 @@ interface LoginModalProps {
 export function LoginModal({ open, onClose }: LoginModalProps): React.ReactElement | null {
   const router = useRouter();
   const setTokens = useAuthStore((s) => s.setTokens);
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(LoginSchema),
     defaultValues: { email: '', password: '' },
   });
+
+  const LABEL_MAP: Record<string, string> = {
+    email: 'Email',
+    password: 'Contraseña',
+  };
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    LABEL_MAP,
+  );
 
   useEffect(() => {
     if (!open) form.reset();
@@ -101,10 +115,22 @@ export function LoginModal({ open, onClose }: LoginModalProps): React.ReactEleme
         <form
           onSubmit={form.handleSubmit(
             (vals) => mutation.mutate(vals),
-            makeRhfErrorHandler({ formName: 'login' }),
+            makeRhfErrorHandler({
+              formName: 'login',
+              labelMap: LABEL_MAP,
+              bannerRef,
+            }),
           )}
           className="space-y-4"
         >
+          <FormErrorBanner
+            ref={bannerRef}
+            fieldErrors={fieldErrors}
+            apiError={mutation.error}
+            validationTitle="Revisa los datos:"
+            apiTitle="No se pudo iniciar sesión"
+          />
+
           <Input
             label="Email"
             type="email"
@@ -119,12 +145,6 @@ export function LoginModal({ open, onClose }: LoginModalProps): React.ReactEleme
             {...form.register('password')}
             error={form.formState.errors.password?.message}
           />
-
-          {mutation.isError && (
-            <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
-              {(mutation.error as ApiError | undefined)?.message ?? 'Error inesperado'}
-            </div>
-          )}
 
           <Button
             type="submit"

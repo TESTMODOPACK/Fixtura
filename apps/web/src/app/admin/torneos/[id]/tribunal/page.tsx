@@ -505,12 +505,28 @@ function NuevaSancionEquipoForm({
     }
   };
 
+  const ERR_LABEL: Record<string, string> = {
+    equipo: 'Equipo',
+    motivo: 'Fundamento',
+    accion: 'Acción',
+  };
+  const fieldErrors = Object.entries(errs)
+    .filter(([, v]) => Boolean(v))
+    .map(([k, v]) => ({ label: ERR_LABEL[k] ?? k, mensaje: String(v) }));
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-3">
         <AlertTriangle size={18} className="text-accent" />
         <CardLabel>Nueva sanción a un equipo</CardLabel>
       </div>
+
+      <FormErrorBanner
+        fieldErrors={fieldErrors}
+        apiError={mutation.error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo aplicar la sanción"
+      />
 
       <div className="grid grid-cols-1 gap-3">
         <div>

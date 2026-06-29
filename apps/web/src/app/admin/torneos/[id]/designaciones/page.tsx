@@ -33,6 +33,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { FormErrorBanner } from '@/components/ui/form-errors';
 import { PageHead } from '@/components/ui/page-head';
 import {
   useAsignarDesignacion,
@@ -52,6 +53,7 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatFecha, formatFechaHora } from '@/lib/format';
+import { toastWarning } from '@/lib/toast';
 
 const ROL_LABEL: Record<RolDesignablePartido, string> = {
   ARBITRO_PRINCIPAL: 'Árbitro principal',
@@ -679,40 +681,49 @@ function AsignarForm({
   }, [designables, rol, yaAsignados]);
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <select
-        className="input max-w-xs"
-        value={personalId}
-        onChange={(e) => setPersonalId(e.target.value)}
-      >
-        <option value="">— elige persona —</option>
-        {candidatos.map((p) => {
-          const rolBase = p.rol as RolDesignablePartido;
-          const abrev = ROL_ABREV[rolBase] ?? p.rol;
-          return (
-            <option key={p.id} value={p.id}>
-              {p.nombre} {p.apellido}
-              {p.rol !== rol ? ` (${abrev})` : ''}
-            </option>
-          );
-        })}
-      </select>
-      <Button
-        type="button"
-        variant="accent"
-        size="sm"
-        disabled={!personalId || pending}
-        onClick={() => personalId && onSubmit(personalId)}
-        loading={pending}
-      >
-        Asignar
-      </Button>
-      <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-        <X size={14} />
-      </Button>
-      {error && (
-        <span className="text-xs text-danger">{error.message}</span>
-      )}
+    <div className="w-full">
+      <FormErrorBanner
+        apiError={error}
+        apiTitle="No se pudo asignar a la persona"
+      />
+      <div className="flex items-center gap-2 flex-wrap">
+        <select
+          className="input max-w-xs"
+          value={personalId}
+          onChange={(e) => setPersonalId(e.target.value)}
+        >
+          <option value="">— elige persona —</option>
+          {candidatos.map((p) => {
+            const rolBase = p.rol as RolDesignablePartido;
+            const abrev = ROL_ABREV[rolBase] ?? p.rol;
+            return (
+              <option key={p.id} value={p.id}>
+                {p.nombre} {p.apellido}
+                {p.rol !== rol ? ` (${abrev})` : ''}
+              </option>
+            );
+          })}
+        </select>
+        <Button
+          type="button"
+          variant="accent"
+          size="sm"
+          disabled={!personalId || pending}
+          onClick={() => {
+            if (!personalId) {
+              toastWarning('Faltan datos: elige una persona para asignar.');
+              return;
+            }
+            void onSubmit(personalId);
+          }}
+          loading={pending}
+        >
+          Asignar
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          <X size={14} />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -731,6 +742,7 @@ function AutoAsignarBoton({
   ]);
   const [sobreescribir, setSobreescribir] = useState(false);
   const [resultado, setResultado] = useState<AutoAsignarResult | null>(null);
+  const [intentado, setIntentado] = useState(false);
   const mutation = useAutoAsignarDesignaciones({ torneoId, fechaId });
   const error = mutation.error as ApiError | undefined;
 
@@ -741,7 +753,11 @@ function AutoAsignarBoton({
   };
 
   const ejecutar = async (): Promise<void> => {
-    if (rolesElegidos.length === 0) return;
+    setIntentado(true);
+    if (rolesElegidos.length === 0) {
+      toastWarning('Faltan datos: elige al menos un rol a cubrir.');
+      return;
+    }
     const res = await mutation.mutateAsync({
       roles: rolesElegidos,
       sobreescribir,
@@ -749,9 +765,16 @@ function AutoAsignarBoton({
     setResultado(res);
   };
 
+  // Banner explícito: roles faltantes (solo tras intentar enviar) + error del backend.
+  const fieldErrors =
+    intentado && rolesElegidos.length === 0
+      ? [{ label: 'Roles a cubrir', mensaje: 'Elige al menos un rol.' }]
+      : [];
+
   const cerrar = (): void => {
     setOpen(false);
     setResultado(null);
+    setIntentado(false);
   };
 
   if (!open) {
@@ -833,18 +856,18 @@ function AutoAsignarBoton({
               </span>
             </label>
 
-            {error && (
-              <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mb-3">
-                {error.message}
-              </div>
-            )}
+            <FormErrorBanner
+              fieldErrors={fieldErrors}
+              apiError={error}
+              validationTitle="Falta elegir qué cubrir:"
+              apiTitle="No se pudo ejecutar la asignación automática"
+            />
 
             <div className="flex gap-2">
               <Button
                 type="button"
                 variant="accent"
                 loading={mutation.isPending}
-                disabled={rolesElegidos.length === 0}
                 onClick={ejecutar}
               >
                 <Wand2 size={14} /> Ejecutar asignación
@@ -1119,53 +1142,64 @@ function RecintoAsignarForm({
   );
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <select
-        className="input max-w-xs"
-        value={personalId}
-        onChange={(e) => setPersonalId(e.target.value)}
-      >
-        <option value="">— elige persona —</option>
-        {sugeridos.length > 0 && (
-          <optgroup label="Sugeridos por rol base">
-            {sugeridos.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre} {p.apellido}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        {restoCandidatos.length > 0 && (
-          <optgroup label="Otros candidatos">
-            {restoCandidatos.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre} {p.apellido} ({p.rol})
-              </option>
-            ))}
-          </optgroup>
-        )}
-      </select>
-      <input
-        className="input max-w-[180px] text-sm"
-        type="text"
-        placeholder="Cancha (opcional)"
-        value={canchaNombre}
-        onChange={(e) => setCanchaNombre(e.target.value)}
+    <div className="w-full">
+      <FormErrorBanner
+        apiError={error}
+        apiTitle="No se pudo asignar al recinto"
       />
-      <Button
-        type="button"
-        variant="accent"
-        size="sm"
-        disabled={!personalId || pending}
-        onClick={() => personalId && onSubmit(personalId, canchaNombre.trim())}
-        loading={pending}
-      >
-        Asignar
-      </Button>
-      <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-        <X size={14} />
-      </Button>
-      {error && <span className="text-xs text-danger">{error.message}</span>}
+      <div className="flex items-center gap-2 flex-wrap">
+        <select
+          className="input max-w-xs"
+          value={personalId}
+          onChange={(e) => setPersonalId(e.target.value)}
+        >
+          <option value="">— elige persona —</option>
+          {sugeridos.length > 0 && (
+            <optgroup label="Sugeridos por rol base">
+              {sugeridos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre} {p.apellido}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {restoCandidatos.length > 0 && (
+            <optgroup label="Otros candidatos">
+              {restoCandidatos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre} {p.apellido} ({p.rol})
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        <input
+          className="input max-w-[180px] text-sm"
+          type="text"
+          placeholder="Cancha (opcional)"
+          value={canchaNombre}
+          onChange={(e) => setCanchaNombre(e.target.value)}
+        />
+        <Button
+          type="button"
+          variant="accent"
+          size="sm"
+          disabled={!personalId || pending}
+          onClick={() => {
+            if (!personalId) {
+              toastWarning('Faltan datos: elige una persona para el recinto.');
+              return;
+            }
+            void onSubmit(personalId, canchaNombre.trim());
+          }}
+          loading={pending}
+        >
+          Asignar
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          <X size={14} />
+        </Button>
+      </div>
     </div>
   );
 }

@@ -4,12 +4,17 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -35,10 +40,23 @@ const Schema = z.object({
 });
 type FormData = z.infer<typeof Schema>;
 
+const LABEL_MAP: Record<string, string> = {
+  slug: 'Slug',
+  nombre: 'Nombre comercial',
+  tipo: 'Tipo',
+  planSlug: 'Plan',
+  trialDias: 'Días de prueba',
+  adminEmail: 'Email del administrador',
+  adminNombre: 'Nombre del administrador',
+  adminApellido: 'Apellido del administrador',
+  adminPassword: 'Password temporal',
+};
+
 export default function NuevoTenantPage(): React.ReactElement {
   const router = useRouter();
   const { data: planes } = usePlanesSuscripcion();
   const crear = useCrearTenantPlataforma();
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(Schema),
@@ -65,14 +83,22 @@ export default function NuevoTenantPage(): React.ReactElement {
         });
         router.push(`/admin/super/tenants/${r.id}`);
       } catch {
-        // MutationCache global dispara toastError; el banner abajo
+        // MutationCache global dispara toastError; el banner arriba
         // muestra el detalle del error.
       }
     },
-    makeRhfErrorHandler({ formName: 'nuevo-tenant' }),
+    makeRhfErrorHandler({
+      formName: 'nuevo-tenant',
+      labelMap: LABEL_MAP,
+      bannerRef,
+    }),
   );
 
   const error = crear.error as ApiError | undefined;
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    LABEL_MAP,
+  );
 
   return (
     <>
@@ -87,6 +113,14 @@ export default function NuevoTenantPage(): React.ReactElement {
           </Button>
         </Link>
       </PageHead>
+
+      <FormErrorBanner
+        ref={bannerRef}
+        fieldErrors={fieldErrors}
+        apiError={error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo crear la liga"
+      />
 
       <form onSubmit={onSubmit} className="space-y-5">
         <Card padding="comfortable">
@@ -161,12 +195,6 @@ export default function NuevoTenantPage(): React.ReactElement {
             </div>
           </div>
         </Card>
-
-        {error && (
-          <Card padding="comfortable" className="border-2 border-danger/40 bg-danger/5">
-            <div className="text-sm text-danger">{error.message}</div>
-          </Card>
-        )}
 
         <div className="flex gap-3">
           <Button type="submit" variant="accent" disabled={crear.isPending}>

@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -36,7 +36,11 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -53,6 +57,7 @@ import {
 import { ApiError } from '@/lib/api';
 import { formatFecha, formatFechaHora } from '@/lib/format';
 import { cn } from '@/lib/cn';
+import { toastWarning } from '@/lib/toast';
 
 /**
  * Campo CLP opcional. Un <input type="number"> vacío con valueAsNumber
@@ -440,14 +445,32 @@ function AusenciasPanel({ personaId }: { personaId: string }): React.ReactElemen
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
   const [motivo, setMotivo] = useState('');
+  const [intentado, setIntentado] = useState(false);
   const error = crear.error as ApiError | undefined;
 
+  const fieldErrors: { label: string; mensaje: string }[] = [];
+  if (intentado && !desde) {
+    fieldErrors.push({ label: 'Desde', mensaje: 'Indica la fecha de inicio.' });
+  }
+  if (intentado && !hasta) {
+    fieldErrors.push({ label: 'Hasta', mensaje: 'Indica la fecha de término.' });
+  }
+
   const agregar = async (): Promise<void> => {
-    if (!desde || !hasta) return;
+    setIntentado(true);
+    if (!desde || !hasta) {
+      toastWarning(
+        `Faltan datos: ${[!desde ? 'Desde' : null, !hasta ? 'Hasta' : null]
+          .filter(Boolean)
+          .join(', ')}`,
+      );
+      return;
+    }
     await crear.mutateAsync({ desde, hasta, motivo: motivo.trim() || null });
     setDesde('');
     setHasta('');
     setMotivo('');
+    setIntentado(false);
   };
 
   return (
@@ -455,6 +478,13 @@ function AusenciasPanel({ personaId }: { personaId: string }): React.ReactElemen
       <div className="text-[10px] uppercase tracking-[0.18em] text-ink-mute font-semibold mb-2 flex items-center gap-1">
         <CalendarOff size={12} className="text-orange-700" /> Ausencias / no disponible
       </div>
+
+      <FormErrorBanner
+        fieldErrors={fieldErrors}
+        apiError={error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo guardar la ausencia"
+      />
 
       {isLoading && (
         <div className="text-sm text-ink-mute font-serif italic mb-2">Cargando…</div>
@@ -531,7 +561,6 @@ function AusenciasPanel({ personaId }: { personaId: string }): React.ReactElemen
           <Plus size={14} /> Agregar
         </Button>
       </div>
-      {error && <div className="text-xs text-danger mt-2">{error.message}</div>}
     </div>
   );
 }
@@ -567,6 +596,27 @@ function EditarPersonalForm({
   pending?: boolean;
   error?: ApiError;
 }): React.ReactElement {
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const LABEL_MAP: Record<string, string> = {
+    nombre: 'Nombre',
+    apellido: 'Apellido',
+    roles: 'Roles',
+    rut: 'RUT',
+    email: 'Email',
+    telefono: 'Teléfono',
+    tarifaBase: 'Tarifa base',
+    tarifaArbitroPrincipal: 'Tarifa árbitro principal',
+    tarifaArbitroAsistente: 'Tarifa árbitro asistente',
+    carnetAnfaNumero: 'N° Carnet ANFA',
+    carnetAnfaVence: 'Vencimiento carnet',
+    banco: 'Banco',
+    tipoCuenta: 'Tipo de cuenta',
+    numeroCuenta: 'N° de cuenta',
+    titularNombre: 'Titular',
+    titularRut: 'RUT del titular',
+    notas: 'Notas',
+  };
+
   const Schema = z.object({
     nombre: z.string().min(2).max(100),
     apellido: z.string().min(2).max(100),
@@ -639,17 +689,35 @@ function EditarPersonalForm({
     });
   };
 
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    LABEL_MAP,
+  );
+
   return (
     <form
       onSubmit={form.handleSubmit(
         handle,
-        makeRhfErrorHandler({ formName: 'personal-editar' }),
+        makeRhfErrorHandler({
+          formName: 'personal-editar',
+          labelMap: LABEL_MAP,
+          bannerRef,
+        }),
       )}
       className="grid grid-cols-1 md:grid-cols-2 gap-3"
     >
       <div className="md:col-span-2 flex items-center gap-2">
         <Pencil size={16} className="text-accent" />
         <CardLabel>Editando · {persona.nombre} {persona.apellido}</CardLabel>
+      </div>
+      <div className="md:col-span-2">
+        <FormErrorBanner
+          ref={bannerRef}
+          fieldErrors={fieldErrors}
+          apiError={error}
+          validationTitle="Revisa estos datos:"
+          apiTitle="No se pudo guardar"
+        />
       </div>
       <Input
         label="Nombre"
@@ -764,11 +832,6 @@ function EditarPersonalForm({
           {...form.register('notas')}
         />
       </div>
-      {error && (
-        <div className="md:col-span-2 text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
-          {error.message}
-        </div>
-      )}
       <div className="md:col-span-2 flex gap-2">
         <Button type="submit" variant="accent" loading={pending}>
           Guardar cambios
@@ -783,6 +846,26 @@ function EditarPersonalForm({
 
 function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactElement {
   const mutation = useCreatePersonal();
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const LABEL_MAP: Record<string, string> = {
+    nombre: 'Nombre',
+    apellido: 'Apellido',
+    roles: 'Roles',
+    rut: 'RUT',
+    email: 'Email',
+    telefono: 'Teléfono',
+    tarifaBase: 'Tarifa base',
+    tarifaArbitroPrincipal: 'Tarifa árbitro principal',
+    tarifaArbitroAsistente: 'Tarifa árbitro asistente',
+    carnetAnfaNumero: 'N° Carnet ANFA',
+    carnetAnfaVence: 'Vencimiento carnet',
+    banco: 'Banco',
+    tipoCuenta: 'Tipo de cuenta',
+    numeroCuenta: 'N° de cuenta',
+    titularNombre: 'Titular',
+    titularRut: 'RUT del titular',
+    notas: 'Notas',
+  };
 
   const Schema = z.object({
     nombre: z.string().min(2, 'Mínimo 2 caracteres').max(100),
@@ -841,6 +924,10 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
   };
 
   const error = mutation.error as ApiError | undefined;
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    LABEL_MAP,
+  );
 
   return (
     <div>
@@ -849,10 +936,22 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
         <CardLabel>Nuevo personal</CardLabel>
       </div>
 
+      <FormErrorBanner
+        ref={bannerRef}
+        fieldErrors={fieldErrors}
+        apiError={error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo crear el personal"
+      />
+
       <form
         onSubmit={form.handleSubmit(
           onSubmit,
-          makeRhfErrorHandler({ formName: 'personal-invitar' }),
+          makeRhfErrorHandler({
+            formName: 'personal-invitar',
+            labelMap: LABEL_MAP,
+            bannerRef,
+          }),
         )}
         className="grid grid-cols-1 md:grid-cols-2 gap-3"
       >
@@ -983,12 +1082,6 @@ function NuevoPersonalForm({ onDone }: { onDone: () => void }): React.ReactEleme
             {...form.register('notas')}
           />
         </div>
-
-        {error && (
-          <div className="md:col-span-2 text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
-            {error.message}
-          </div>
-        )}
 
         <div className="md:col-span-2 flex gap-2">
           <Button type="submit" variant="accent" loading={mutation.isPending}>

@@ -14,7 +14,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -28,7 +28,11 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -320,6 +324,18 @@ function SponsorForm({
   const update = useUpdateSponsor(sponsor?.id ?? '');
   const mutation = sponsor ? update : create;
   const error = mutation.error as ApiError | undefined;
+  const bannerRef = useRef<HTMLDivElement>(null);
+
+  const LABEL_MAP: Record<string, string> = {
+    nombre: 'Nombre del sponsor',
+    imagenUrl: 'URL de la imagen',
+    linkUrl: 'URL al hacer click',
+    posicion: 'Posición',
+    prioridad: 'Prioridad',
+    vigenteDesde: 'Vigente desde',
+    vigenteHasta: 'Vigente hasta',
+    notas: 'Notas internas',
+  };
 
   const Schema = z.object({
     nombre: z.string().min(2).max(150),
@@ -381,6 +397,10 @@ function SponsorForm({
   };
 
   const imagenVal = form.watch('imagenUrl');
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    LABEL_MAP,
+  );
 
   return (
     <div>
@@ -389,10 +409,22 @@ function SponsorForm({
         <CardLabel>{sponsor ? `Editando · ${sponsor.nombre}` : 'Nuevo sponsor'}</CardLabel>
       </div>
 
+      <FormErrorBanner
+        ref={bannerRef}
+        fieldErrors={fieldErrors}
+        apiError={error}
+        validationTitle="Revisa estos datos:"
+        apiTitle={sponsor ? 'No se pudo guardar' : 'No se pudo crear el sponsor'}
+      />
+
       <form
         onSubmit={form.handleSubmit(
           onSubmit,
-          makeRhfErrorHandler({ formName: 'sponsor' }),
+          makeRhfErrorHandler({
+            formName: 'sponsor',
+            labelMap: LABEL_MAP,
+            bannerRef,
+          }),
         )}
         className="grid grid-cols-1 md:grid-cols-3 gap-3"
       >
@@ -491,12 +523,6 @@ function SponsorForm({
             )}
           </div>
         </div>
-
-        {error && (
-          <div className="md:col-span-3 text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
-            {error.message}
-          </div>
-        )}
 
         <div className="md:col-span-3 flex gap-2">
           <Button type="submit" variant="accent" loading={mutation.isPending}>

@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -25,7 +25,11 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -36,6 +40,7 @@ import {
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { toastWarning } from '@/lib/toast';
 
 const POSICIONES = [
   { value: 'ARQUERO', label: 'Arquero', emoji: '🥅' },
@@ -238,6 +243,17 @@ function NuevoJugadorForm({
   onDone: () => void;
 }): React.ReactElement {
   const mutation = useCreateJugador(equipoId);
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const LABEL_MAP: Record<string, string> = {
+    nombre: 'Nombre',
+    apellido: 'Apellido',
+    apodo: 'Apodo',
+    rut: 'RUT',
+    numeroCamiseta: 'Número de camiseta',
+    posicion: 'Posición',
+    pieHabil: 'Pie hábil',
+    fechaNac: 'Fecha de nacimiento',
+  };
 
   const Schema = z.object({
     nombre: z.string().min(2).max(100),
@@ -305,12 +321,28 @@ function NuevoJugadorForm({
   };
 
   const error = mutation.error as ApiError | undefined;
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    LABEL_MAP,
+  );
 
   return (
+    <>
+    <FormErrorBanner
+      ref={bannerRef}
+      fieldErrors={fieldErrors}
+      apiError={error}
+      validationTitle="Revisa estos datos:"
+      apiTitle="No se pudo inscribir al jugador"
+    />
     <form
       onSubmit={form.handleSubmit(
         onSubmit,
-        makeRhfErrorHandler({ formName: 'jugador-equipo' }),
+        makeRhfErrorHandler({
+          formName: 'jugador-equipo',
+          labelMap: LABEL_MAP,
+          bannerRef,
+        }),
       )}
       className="grid grid-cols-1 md:grid-cols-3 gap-3"
     >
@@ -379,9 +411,9 @@ function NuevoJugadorForm({
         <Button type="submit" variant="accent" size="sm" loading={mutation.isPending}>
           <Save size={14} /> Inscribir jugador
         </Button>
-        {error && <span className="text-xs text-danger">{error.message}</span>}
       </div>
     </form>
+    </>
   );
 }
 
@@ -401,12 +433,24 @@ function ImportCsvForm({
   onDone: () => void;
 }): React.ReactElement {
   const [csv, setCsv] = useState('');
+  const [intentado, setIntentado] = useState(false);
   const mutation = useBulkCreateJugadores(equipoId);
   const error = mutation.error as ApiError | undefined;
 
   const parsed = useMemo(() => parseCsv(csv), [csv]);
   const validos = parsed.filter((p) => p.ok);
   const invalidos = parsed.filter((p) => !p.ok);
+
+  const fieldErrors: { label: string; mensaje: string }[] = [];
+  if (intentado && validos.length === 0) {
+    fieldErrors.push({
+      label: 'Planilla',
+      mensaje:
+        invalidos.length > 0
+          ? 'Ninguna fila es válida. Corrige los errores marcados antes de importar.'
+          : 'Pega o sube un CSV con al menos una fila válida.',
+    });
+  }
 
   const handleFile = (file: File): void => {
     const reader = new FileReader();
@@ -424,7 +468,15 @@ function ImportCsvForm({
   };
 
   const enviar = async (): Promise<void> => {
-    if (validos.length === 0) return;
+    setIntentado(true);
+    if (validos.length === 0) {
+      toastWarning(
+        invalidos.length > 0
+          ? 'Faltan datos: ninguna fila de la planilla es válida.'
+          : 'Faltan datos: pega o sube un CSV con jugadores.',
+      );
+      return;
+    }
     // El backend acepta hasta 50 por request — chunked si excede.
     const CHUNK = 50;
     for (let i = 0; i < validos.length; i += CHUNK) {
@@ -443,6 +495,13 @@ function ImportCsvForm({
         <FileSpreadsheet size={18} className="text-accent" />
         <CardLabel>Importar plantilla desde planilla</CardLabel>
       </div>
+
+      <FormErrorBanner
+        fieldErrors={fieldErrors}
+        apiError={error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo importar la planilla"
+      />
 
       <div className="bg-paper border border-line rounded-card p-3 mb-3 text-xs text-ink-mute font-serif italic leading-relaxed">
         Columnas esperadas (cabecera obligatoria, separador <span className="font-mono">,</span> o{' '}
@@ -544,12 +603,6 @@ function ImportCsvForm({
               </table>
             </div>
           )}
-        </div>
-      )}
-
-      {error && (
-        <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mt-3">
-          {error.message}
         </div>
       )}
 

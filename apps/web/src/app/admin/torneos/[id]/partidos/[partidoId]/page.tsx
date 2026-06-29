@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -35,7 +35,11 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import {
   OfflineActaBanner,
@@ -66,7 +70,7 @@ import {
 import { ApiError, API_URL } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatFechaHora } from '@/lib/format';
-import { toastError } from '@/lib/toast';
+import { toastError, toastWarning } from '@/lib/toast';
 import { useAuthStore } from '@/store/auth-store';
 
 export default function PartidoDetallePage({
@@ -280,6 +284,7 @@ function ActaSection({
 }): React.ReactElement {
   const cerrarActa = useCerrarActa(partido.id, torneoId);
   const reabrirActa = useReabrirActa(partido.id, torneoId);
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const golesSinJugador = partido.incidencias.filter(
     (i) => (i.tipo === 'GOL' || i.tipo === 'AUTOGOL') && !i.jugadorInscritoId,
@@ -311,6 +316,15 @@ function ActaSection({
 
   const cerrada = !!partido.actaCerradaAt;
   const error = (cerrarActa.error ?? reabrirActa.error) as ApiError | undefined;
+
+  const ACTA_LABELS: Record<string, string> = {
+    golesLocal: 'Goles local',
+    golesVisita: 'Goles visita',
+  };
+  const actaFieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    ACTA_LABELS,
+  );
 
   if (cerrada) {
     return (
@@ -366,10 +380,21 @@ function ActaSection({
           </span>
         </div>
       )}
+      <FormErrorBanner
+        ref={bannerRef}
+        fieldErrors={actaFieldErrors}
+        apiError={cerrarActa.error}
+        validationTitle="Revisa el marcador antes de cerrar:"
+        apiTitle="No se pudo cerrar el acta"
+      />
       <form
         onSubmit={form.handleSubmit(
           (vals) => cerrarActa.mutate(vals),
-          makeRhfErrorHandler({ formName: 'cerrar-acta' }),
+          makeRhfErrorHandler({
+            formName: 'cerrar-acta',
+            labelMap: ACTA_LABELS,
+            bannerRef,
+          }),
         )}
         className="space-y-3 mt-3"
       >
@@ -403,9 +428,6 @@ function ActaSection({
         <div className="text-center">
           <OfflineSubmitHint />
         </div>
-        {error && (
-          <p className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">{error.message}</p>
-        )}
       </form>
     </Card>
   );
@@ -504,6 +526,7 @@ function EditarPartidoCard({
 }): React.ReactElement {
   const mutation = useUpdatePartido(partido.id, torneoId);
   const { data: canchas } = useCanchas(true);
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const Schema = z.object({
     // "" representa "sin cancha del catálogo / texto libre"
@@ -557,6 +580,17 @@ function EditarPartidoCard({
   const canchaIdSeleccionada = form.watch('canchaId');
   const error = mutation.error as ApiError | undefined;
 
+  const EDITAR_LABELS: Record<string, string> = {
+    canchaId: 'Cancha',
+    canchaNombre: 'Nombre de cancha',
+    fechaHora: 'Fecha y hora',
+    estado: 'Estado',
+  };
+  const editarFieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    EDITAR_LABELS,
+  );
+
   // El dropdown lista solo canchas DISPONIBLE (useCanchas(true)) para las
   // asignaciones nuevas. Pero si el partido YA tiene una cancha que después
   // se marcó NO_DISPONIBLE (o se "eliminó"), esa cancha no vendría en la
@@ -595,6 +629,13 @@ function EditarPartidoCard({
           después, el generador los va a tomar.
         </div>
       )}
+      <FormErrorBanner
+        ref={bannerRef}
+        fieldErrors={editarFieldErrors}
+        apiError={error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo guardar el partido"
+      />
       <form
         onSubmit={form.handleSubmit(
           (vals) => {
@@ -615,7 +656,11 @@ function EditarPartidoCard({
             if (!vals.canchaId) payload.canchaNombre = vals.canchaNombre;
             mutation.mutate(payload);
           },
-          makeRhfErrorHandler({ formName: 'partido-detalle' }),
+          makeRhfErrorHandler({
+            formName: 'partido-detalle',
+            labelMap: EDITAR_LABELS,
+            bannerRef,
+          }),
         )}
         className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3"
       >
@@ -673,11 +718,6 @@ function EditarPartidoCard({
             <Save size={14} /> Guardar
           </Button>
           {cerrada && <span className="text-xs text-ink-mute">Reabre el acta para editar.</span>}
-          {error && (
-            <span className="text-xs text-danger font-semibold flex-1 min-w-[200px]">
-              {error.message}
-            </span>
-          )}
         </div>
       </form>
     </Card>
@@ -957,9 +997,20 @@ function ReprogramarForm({
     partido.fechaHora ? partido.fechaHora.slice(0, 16) : '',
   );
   const [canchaId, setCanchaId] = useState<string>(partido.canchaId ?? '');
+  const [intentado, setIntentado] = useState(false);
+
+  // Banner explícito de validación: el único campo obligatorio es la fecha.
+  const fieldErrors =
+    intentado && !fechaHora
+      ? [{ label: 'Nueva fecha y hora', mensaje: 'Indica la nueva fecha y hora.' }]
+      : [];
 
   return (
     <div className="mt-4 p-4 rounded-card bg-paper border border-line">
+      <FormErrorBanner
+        fieldErrors={fieldErrors}
+        validationTitle="Falta un dato para reprogramar:"
+      />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Input
           label="Nueva fecha y hora"
@@ -991,8 +1042,9 @@ function ReprogramarForm({
           variant="accent"
           size="sm"
           onClick={() => {
+            setIntentado(true);
             if (!fechaHora) {
-              alert('Tienes que indicar la nueva fecha y hora.');
+              toastWarning('Faltan datos: indica la nueva fecha y hora.');
               return;
             }
             onSubmit({
@@ -1038,9 +1090,16 @@ function WalkoverCard({
   const [abierto, setAbierto] = useState(false);
   const [perdedor, setPerdedor] = useState<string>('');
   const [obs, setObs] = useState('');
+  const [intentado, setIntentado] = useState(false);
   const walkover = useDeclararWalkover(partido.id, torneoId);
   const err = walkover.error as ApiError | undefined;
   const esWalkover = partido.estado === 'WALKOVER';
+
+  // Validación cliente explícita: hay que elegir el equipo que no se presentó.
+  const fieldErrors =
+    intentado && !perdedor
+      ? [{ label: 'Equipo no presentado', mensaje: 'Elige cuál equipo no se presentó.' }]
+      : [];
 
   // Si ya está cerrada por acta normal, no mostramos walkover.
   if (cerrada && !esWalkover) return null;
@@ -1086,6 +1145,12 @@ function WalkoverCard({
 
       {abierto && !esWalkover && (
         <div className="mt-4 p-4 rounded-card bg-paper border border-line space-y-3">
+          <FormErrorBanner
+            fieldErrors={fieldErrors}
+            apiError={err}
+            validationTitle="Falta un dato para el walkover:"
+            apiTitle="No se pudo declarar el walkover"
+          />
           <div>
             <label className="label">Equipo NO presentado (pierde 3-0)</label>
             <select
@@ -1122,8 +1187,9 @@ function WalkoverCard({
               size="sm"
               loading={walkover.isPending}
               onClick={() => {
+                setIntentado(true);
                 if (!perdedor) {
-                  alert('Tienes que elegir cuál equipo no se presentó.');
+                  toastWarning('Faltan datos: elige cuál equipo no se presentó.');
                   return;
                 }
                 if (
@@ -1151,11 +1217,6 @@ function WalkoverCard({
               <X size={14} /> Cancelar
             </Button>
           </div>
-          {err && (
-            <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
-              {err.message}
-            </div>
-          )}
         </div>
       )}
     </Card>
@@ -1276,6 +1337,10 @@ function CertificacionSection({
         Marca quién jugó en cada equipo. Los sancionados (esta fecha) y vetados
         no se pueden certificar. Es requisito para cerrar el acta.
       </p>
+      <FormErrorBanner
+        apiError={error}
+        apiTitle="No se pudo certificar a los presentes"
+      />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {equipoBlock(roster.local)}
         {equipoBlock(roster.visita)}
@@ -1297,11 +1362,6 @@ function CertificacionSection({
           </span>
         )}
       </div>
-      {error && (
-        <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mt-3">
-          {error.message}
-        </div>
-      )}
     </Card>
   );
 }
@@ -1330,6 +1390,7 @@ function IncidenciasSection({
   );
   const addIncidencia = useAddIncidencia(partido.id);
   const error = addIncidencia.error as ApiError | undefined;
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const Schema = z.object({
     jugadorInscritoId: z.string().min(1, 'Elige un jugador'),
@@ -1337,6 +1398,12 @@ function IncidenciasSection({
     minuto: z.coerce.number().int().min(0).max(150).optional(),
   });
   type Form = z.infer<typeof Schema>;
+
+  const INCIDENCIA_LABELS: Record<string, string> = {
+    jugadorInscritoId: 'Jugador',
+    tipo: 'Tipo',
+    minuto: 'Minuto',
+  };
 
   const form = useForm<Form>({
     resolver: zodResolver(Schema),
@@ -1384,10 +1451,25 @@ function IncidenciasSection({
         </button>
       </div>
 
+      <FormErrorBanner
+        ref={bannerRef}
+        fieldErrors={rhfErrorsToBanner(
+          form.formState.errors as Record<string, unknown>,
+          INCIDENCIA_LABELS,
+        )}
+        apiError={error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo agregar la incidencia"
+      />
+
       <form
         onSubmit={form.handleSubmit(
           onSubmit,
-          makeRhfErrorHandler({ formName: 'incidencia-partido' }),
+          makeRhfErrorHandler({
+            formName: 'incidencia-partido',
+            labelMap: INCIDENCIA_LABELS,
+            bannerRef,
+          }),
         )}
         className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end"
       >
@@ -1445,7 +1527,6 @@ function IncidenciasSection({
             <Flag size={14} /> Agregar
           </Button>
           <OfflineSubmitHint />
-          {error && <span className="text-xs text-danger">{error.message}</span>}
         </div>
       </form>
     </Card>

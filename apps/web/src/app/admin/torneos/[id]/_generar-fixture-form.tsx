@@ -11,13 +11,18 @@ import {
   XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import type { FixtureAdvertencia, HorarioTorneo } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import {
   useFixturePrevalidacion,
@@ -43,9 +48,15 @@ const FixtureFormSchema = z.object({
 });
 type FixtureForm = z.infer<typeof FixtureFormSchema>;
 
+const LABEL_MAP: Record<string, string> = {
+  fechaInicio: 'Fecha de la primera fecha',
+  diasEntreFechas: 'Días entre fechas',
+};
+
 export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.ReactElement {
   const mutation = useGenerarFixture(torneoId);
   const { data: horarios, isLoading: loadingHorarios } = useHorariosTorneo(torneoId);
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const horariosActivos = (horarios ?? []).filter((h) => h.activo);
 
@@ -110,6 +121,11 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
 
   const error = mutation.error as ApiError | undefined;
 
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    LABEL_MAP,
+  );
+
   return (
     <div>
       {mutation.isSuccess && mutation.data && (
@@ -159,10 +175,22 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
 
       {prevalidacion && <PrevalidacionPanel prevalidacion={prevalidacion} />}
 
+      <FormErrorBanner
+        ref={bannerRef}
+        fieldErrors={fieldErrors}
+        apiError={error}
+        validationTitle="Revisa estos datos antes de generar el calendario:"
+        apiTitle="No se pudo generar el calendario"
+      />
+
       <form
         onSubmit={form.handleSubmit(
           onSubmit,
-          makeRhfErrorHandler({ formName: 'generar-fixture' }),
+          makeRhfErrorHandler({
+            formName: 'generar-fixture',
+            labelMap: LABEL_MAP,
+            bannerRef,
+          }),
         )}
         className="space-y-4 max-w-2xl"
       >
@@ -197,12 +225,6 @@ export function GenerarFixtureForm({ torneoId }: { torneoId: string }): React.Re
             loading={loadingHorarios}
           />
         </div>
-
-        {error && (
-          <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
-            {error.message}
-          </div>
-        )}
 
         <Button
           type="submit"

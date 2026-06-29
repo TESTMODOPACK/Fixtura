@@ -18,6 +18,7 @@ import type { TipoIncidencia } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { FormErrorBanner } from '@/components/ui/form-errors';
 import { PageHead } from '@/components/ui/page-head';
 import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import {
@@ -40,7 +41,7 @@ import {
 } from '@/hooks/use-match-center';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { toastError } from '@/lib/toast';
+import { toastError, toastWarning } from '@/lib/toast';
 
 /** Etiqueta humana del período del partido. */
 function etiquetaPeriodo(periodo: number): string {
@@ -411,7 +412,15 @@ function IncidenciasPanel({
   const [jugadorId, setJugadorId] = useState<string>('');
   const [tipo, setTipo] = useState<TipoIncidencia>('GOL');
   const [minuto, setMinuto] = useState<string>('');
+  const [intentado, setIntentado] = useState(false);
   const addIncidencia = useAddIncidencia(partidoId);
+  const addErr = addIncidencia.error as ApiError | undefined;
+
+  // Banner explícito: el jugador es obligatorio. Solo se muestra tras intentar.
+  const fieldErrors =
+    intentado && !jugadorId
+      ? [{ label: 'Jugador', mensaje: 'Elige el jugador.' }]
+      : [];
 
   // El selector de jugador debe ofrecer SOLO el roster del partido (la
   // nómina del torneo de ese equipo), no la plantilla completa del club.
@@ -429,8 +438,9 @@ function IncidenciasPanel({
   );
 
   const registrar = async (): Promise<void> => {
+    setIntentado(true);
     if (!jugadorId) {
-      toastError('Elige el jugador.');
+      toastWarning('Faltan datos: elige el jugador.');
       return;
     }
     const minutoFinal = minuto.trim() !== '' ? Number(minuto) : minutoSugerido;
@@ -453,6 +463,13 @@ function IncidenciasPanel({
   return (
     <Card padding="roomy" className="mt-5">
       <CardLabel>Registrar incidencia</CardLabel>
+
+      <FormErrorBanner
+        fieldErrors={fieldErrors}
+        apiError={addErr}
+        validationTitle="Falta un dato:"
+        apiTitle="No se pudo registrar la incidencia"
+      />
 
       {/* Equipo */}
       <div className="flex gap-2 mt-3 mb-3">

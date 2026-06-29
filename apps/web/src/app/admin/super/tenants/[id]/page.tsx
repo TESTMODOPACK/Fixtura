@@ -11,7 +11,7 @@ import {
   Save,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -19,7 +19,11 @@ import type { EstadoSuscripcion } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -119,6 +123,13 @@ const Schema = z.object({
 });
 type FormData = z.infer<typeof Schema>;
 
+const LABEL_MAP: Record<string, string> = {
+  nombre: 'Nombre comercial',
+  customDomain: 'Dominio propio',
+  planId: 'Plan',
+  estadoSuscripcion: 'Estado de suscripción',
+};
+
 export default function DetalleTenantPage({
   params,
 }: {
@@ -132,6 +143,7 @@ export default function DetalleTenantPage({
   const suspender = useSuspenderTenant(id);
   const reactivar = useReactivarTenant(id);
   const apiError = error as ApiError | undefined;
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(Schema),
@@ -169,11 +181,20 @@ export default function DetalleTenantPage({
           estadoSuscripcion: data.estadoSuscripcion,
         });
       } catch {
-        // MutationCache global muestra toastError; el banner abajo
-        // muestra el detalle.
+        // MutationCache global muestra toastError; el banner arriba
+        // del formulario muestra el detalle.
       }
     },
-    makeRhfErrorHandler({ formName: 'editar-tenant' }),
+    makeRhfErrorHandler({
+      formName: 'editar-tenant',
+      labelMap: LABEL_MAP,
+      bannerRef,
+    }),
+  );
+
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    LABEL_MAP,
   );
 
   const onSuspender = async (): Promise<void> => {
@@ -346,6 +367,14 @@ export default function DetalleTenantPage({
       )}
 
       {/* Formulario de edición */}
+      <FormErrorBanner
+        ref={bannerRef}
+        fieldErrors={fieldErrors}
+        apiError={update.error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo guardar"
+      />
+
       <form onSubmit={onSubmit} className="space-y-5">
         <Card padding="comfortable">
           <CardLabel>Datos editables</CardLabel>
@@ -433,13 +462,6 @@ export default function DetalleTenantPage({
           </div>
         </Card>
 
-        {update.error && (
-          <Card padding="comfortable" className="border-2 border-danger/40 bg-danger/5">
-            <div className="text-sm text-danger">
-              {safe((update.error as ApiError).message) || 'Error al guardar'}
-            </div>
-          </Card>
-        )}
         {update.isSuccess && (
           <Card padding="comfortable" className="border-2 border-green-bright/40 bg-green-bright/5">
             <div className="flex items-center gap-2 text-sm text-green-bright">

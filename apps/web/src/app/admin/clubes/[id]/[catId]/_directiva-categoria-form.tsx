@@ -13,11 +13,16 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { useUpdateDirectivaCategoria } from '@/hooks/use-admin';
 import { useDelegadoCuenta, useInvitarDelegado } from '@/hooks/use-delegado';
@@ -361,6 +366,7 @@ function MiembroFormInline({
   onCancelar: () => void;
 }): React.ReactElement {
   const cargoInicial = inicial?.cargo ?? cargoDefault;
+  const bannerRef = useRef<HTMLDivElement>(null);
   const form = useForm<MiembroFormData>({
     resolver: zodResolver(MiembroSchema),
     defaultValues: {
@@ -371,6 +377,17 @@ function MiembroFormInline({
     },
     mode: 'onTouched',
   });
+
+  const LABEL_MAP: Record<string, string> = {
+    nombre: 'Nombre',
+    cargo: 'Cargo',
+    email: 'Email',
+    telefono: 'Teléfono',
+  };
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    LABEL_MAP,
+  );
 
   // Si el cargo cargado no está en la lista, arranca en modo "Otro" (texto libre).
   const [modoOtro, setModoOtro] = useState(
@@ -388,9 +405,21 @@ function MiembroFormInline({
 
   return (
     <form
-      onSubmit={form.handleSubmit(submit)}
+      onSubmit={form.handleSubmit(
+        submit,
+        makeRhfErrorHandler({
+          formName: 'directiva-miembro',
+          labelMap: LABEL_MAP,
+          bannerRef,
+        }),
+      )}
       className="rounded-card border border-green-deep/30 bg-green-deep/[0.03] p-3 space-y-2"
     >
+      <FormErrorBanner
+        ref={bannerRef}
+        fieldErrors={fieldErrors}
+        validationTitle="Revisa los datos del miembro:"
+      />
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <Input
           label="Nombre"

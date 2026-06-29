@@ -15,7 +15,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm, type UseFormRegisterReturn } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -36,7 +36,12 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
-import { makeRhfErrorHandler } from '@/components/ui/form-errors';
+import {
+  FormErrorBanner,
+  makeRhfErrorHandler,
+  rhfErrorsToBanner,
+  type FormFieldError,
+} from '@/components/ui/form-errors';
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
@@ -54,6 +59,7 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatFecha } from '@/lib/format';
+import { toastWarning } from '@/lib/toast';
 
 type Tab =
   | 'branding'
@@ -248,9 +254,22 @@ function ColorField({
   );
 }
 
+const BRANDING_LABEL_MAP: Record<string, string> = {
+  nombre: 'Nombre oficial',
+  nombreComercial: 'Nombre comercial',
+  lemaCorto: 'Lema corto',
+  colorPrimario: 'Color primario',
+  colorSecundario: 'Color secundario',
+  escudoUrl: 'URL del escudo / logo',
+  emailContacto: 'Email de contacto',
+  telefonoContacto: 'Teléfono / WhatsApp',
+  footerTexto: 'Texto del footer',
+};
+
 function BrandingTab({ settings }: { settings: TenantSettings }): React.ReactElement {
   const update = useUpdateTenantSettings();
   const [saved, setSaved] = useState(false);
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const Schema = z.object({
     nombre: z.string().min(2).max(200),
@@ -324,11 +343,20 @@ function BrandingTab({ settings }: { settings: TenantSettings }): React.ReactEle
   const colorSecundarioVal = form.watch('colorSecundario');
   const escudoVal = form.watch('escudoUrl');
 
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    BRANDING_LABEL_MAP,
+  );
+
   return (
     <form
       onSubmit={form.handleSubmit(
         onSubmit,
-        makeRhfErrorHandler({ formName: 'ajustes-branding' }),
+        makeRhfErrorHandler({
+          formName: 'ajustes-branding',
+          labelMap: BRANDING_LABEL_MAP,
+          bannerRef,
+        }),
       )}
       className="grid grid-cols-1 lg:grid-cols-3 gap-5"
     >
@@ -337,6 +365,14 @@ function BrandingTab({ settings }: { settings: TenantSettings }): React.ReactEle
           <Palette size={18} className="text-accent" />
           <CardLabel>Identidad de la liga</CardLabel>
         </div>
+
+        <FormErrorBanner
+          ref={bannerRef}
+          fieldErrors={fieldErrors}
+          apiError={error}
+          validationTitle="Revisa estos datos:"
+          apiTitle="No se pudo guardar el branding"
+        />
 
         <div className="space-y-4">
           <Input
@@ -484,9 +520,14 @@ function BrandingTab({ settings }: { settings: TenantSettings }): React.ReactEle
 }
 
 // ─── Tab: Dominio ────────────────────────────────────────────────────
+const DOMINIO_LABEL_MAP: Record<string, string> = {
+  customDomain: 'Dominio propio',
+};
+
 function DominioTab({ settings }: { settings: TenantSettings }): React.ReactElement {
   const update = useUpdateTenantSettings();
   const [saved, setSaved] = useState(false);
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const Schema = z.object({
     customDomain: z.union([
@@ -518,11 +559,20 @@ function DominioTab({ settings }: { settings: TenantSettings }): React.ReactElem
   const error = update.error as ApiError | undefined;
   const dominioActual = form.watch('customDomain');
 
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    DOMINIO_LABEL_MAP,
+  );
+
   return (
     <form
       onSubmit={form.handleSubmit(
         onSubmit,
-        makeRhfErrorHandler({ formName: 'ajustes-invitacion' }),
+        makeRhfErrorHandler({
+          formName: 'ajustes-dominio',
+          labelMap: DOMINIO_LABEL_MAP,
+          bannerRef,
+        }),
       )}
       className="max-w-2xl space-y-5"
     >
@@ -537,6 +587,14 @@ function DominioTab({ settings }: { settings: TenantSettings }): React.ReactElem
           apuntes su A record a la IP del VPS, ingrésalo aquí. El portal público de la liga va a
           servirse desde ese dominio automáticamente.
         </p>
+
+        <FormErrorBanner
+          ref={bannerRef}
+          fieldErrors={fieldErrors}
+          apiError={error}
+          validationTitle="Revisa estos datos:"
+          apiTitle="No se pudo guardar el dominio"
+        />
 
         <Input
           label="Dominio propio (sin http://)"
@@ -750,7 +808,9 @@ function PagosTab({ settings }: { settings: TenantSettings }): React.ReactElemen
     setClientError(null);
 
     if (pasarela.habilitada && !pasarela.proveedor) {
-      setClientError('Elige un proveedor (Flow o Khipu) para activar el pago online.');
+      const msg = 'Elige un proveedor (Flow o Khipu) para activar el pago online.';
+      setClientError(msg);
+      toastWarning(`Faltan datos: ${msg}`);
       return;
     }
 
@@ -758,9 +818,10 @@ function PagosTab({ settings }: { settings: TenantSettings }): React.ReactElemen
     const secretKey = flowSecretKey.trim();
     // O ambas o ninguna — evitar guardar credenciales a medias.
     if (Boolean(apiKey) !== Boolean(secretKey)) {
-      setClientError(
-        'Para guardar las credenciales de la pasarela necesito el API Key y el Secret Key juntos.',
-      );
+      const msg =
+        'Para guardar las credenciales de la pasarela necesito el API Key y el Secret Key juntos.';
+      setClientError(msg);
+      toastWarning(`Faltan datos: ${msg}`);
       return;
     }
 
@@ -793,8 +854,19 @@ function PagosTab({ settings }: { settings: TenantSettings }): React.ReactElemen
 
   const ningunMetodo = !transferencia.habilitada && !pasarela.habilitada;
 
+  const fieldErrors: FormFieldError[] = clientError
+    ? [{ label: 'Configuración de pagos', mensaje: clientError }]
+    : [];
+
   return (
     <div className="max-w-2xl space-y-5">
+      <FormErrorBanner
+        fieldErrors={fieldErrors}
+        apiError={error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo guardar la configuración de pagos"
+      />
+
       <Card padding="roomy">
         <CardLabel>Métodos de cobro</CardLabel>
         <p className="text-sm text-ink-mute font-serif italic mt-2 mb-4">
@@ -1059,11 +1131,15 @@ function WhatsAppTab({ settings }: { settings: TenantSettings }): React.ReactEle
     // Para activar: Phone Number ID + token (ya guardado o uno nuevo ahora).
     if (config.activo) {
       if (!config.phoneNumberId?.trim()) {
-        setClientError('Ingresa el Phone Number ID de tu número de WhatsApp para activarlo.');
+        const msg = 'Ingresa el Phone Number ID de tu número de WhatsApp para activarlo.';
+        setClientError(msg);
+        toastWarning(`Faltan datos: ${msg}`);
         return;
       }
       if (!tokenCargado && !nuevoToken) {
-        setClientError('Ingresa el token de acceso de Meta para activar WhatsApp.');
+        const msg = 'Ingresa el token de acceso de Meta para activar WhatsApp.';
+        setClientError(msg);
+        toastWarning(`Faltan datos: ${msg}`);
         return;
       }
     }
@@ -1102,8 +1178,19 @@ function WhatsAppTab({ settings }: { settings: TenantSettings }): React.ReactEle
     }
   };
 
+  const fieldErrors: FormFieldError[] = clientError
+    ? [{ label: 'Configuración de WhatsApp', mensaje: clientError }]
+    : [];
+
   return (
     <div className="max-w-2xl space-y-5">
+      <FormErrorBanner
+        fieldErrors={fieldErrors}
+        apiError={error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo guardar la configuración de WhatsApp"
+      />
+
       <Card padding="roomy">
         <CardLabel>WhatsApp de la liga</CardLabel>
         <p className="text-sm text-ink-mute font-serif italic mt-2 mb-4">
@@ -1319,9 +1406,17 @@ function MiembroRow({ miembro }: { miembro: MiembroAdmin }): React.ReactElement 
   );
 }
 
+const INVITAR_MIEMBRO_LABEL_MAP: Record<string, string> = {
+  nombre: 'Nombre',
+  apellido: 'Apellido',
+  email: 'Email',
+  rol: 'Rol',
+};
+
 function InvitarMiembroForm({ onDone }: { onDone: () => void }): React.ReactElement {
   const mutation = useInvitarMiembro();
   const error = mutation.error as ApiError | undefined;
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const Schema = z.object({
     email: z.string().email(),
@@ -1342,17 +1437,36 @@ function InvitarMiembroForm({ onDone }: { onDone: () => void }): React.ReactElem
     onDone();
   };
 
+  const fieldErrors = rhfErrorsToBanner(
+    form.formState.errors as Record<string, unknown>,
+    INVITAR_MIEMBRO_LABEL_MAP,
+  );
+
   return (
     <form
       onSubmit={form.handleSubmit(
         onSubmit,
-        makeRhfErrorHandler({ formName: 'ajustes-anfa' }),
+        makeRhfErrorHandler({
+          formName: 'ajustes-invitar-miembro',
+          labelMap: INVITAR_MIEMBRO_LABEL_MAP,
+          bannerRef,
+        }),
       )}
       className="grid grid-cols-1 md:grid-cols-2 gap-3"
     >
       <div className="md:col-span-2 flex items-center gap-2">
         <Users size={16} className="text-accent" />
         <CardLabel>Invitar nuevo miembro</CardLabel>
+      </div>
+
+      <div className="md:col-span-2">
+        <FormErrorBanner
+          ref={bannerRef}
+          fieldErrors={fieldErrors}
+          apiError={error}
+          validationTitle="Revisa estos datos:"
+          apiTitle="No se pudo enviar la invitación"
+        />
       </div>
 
       <Input
@@ -1407,6 +1521,11 @@ function InvitarMiembroForm({ onDone }: { onDone: () => void }): React.ReactElem
 }
 
 // ─── Tab: Calendario (días no jugables, Sprint 16 / RF-13) ──────────
+const DIA_LABEL_MAP: Record<string, string> = {
+  fecha: 'Fecha',
+  motivo: 'Motivo',
+};
+
 function CalendarioTab(): React.ReactElement {
   const anioActual = new Date().getFullYear();
   const [anioImport, setAnioImport] = useState(anioActual);
@@ -1415,6 +1534,7 @@ function CalendarioTab(): React.ReactElement {
   const crear = useCrearDiaNoJugable();
   const importar = useImportarFeriados();
   const eliminar = useEliminarDiaNoJugable();
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const Schema = z.object({
     fecha: z.string().min(10),
@@ -1425,14 +1545,26 @@ function CalendarioTab(): React.ReactElement {
     resolver: zodResolver(Schema),
   });
 
-  const onSubmit = handleSubmit(async (data) => {
-    await crear.mutateAsync({
-      fecha: data.fecha,
-      motivo: data.motivo,
-      scope: 'GLOBAL',
-    });
-    reset();
-  });
+  const onSubmit = handleSubmit(
+    async (data) => {
+      await crear.mutateAsync({
+        fecha: data.fecha,
+        motivo: data.motivo,
+        scope: 'GLOBAL',
+      });
+      reset();
+    },
+    makeRhfErrorHandler({
+      formName: 'ajustes-dia-no-jugable',
+      labelMap: DIA_LABEL_MAP,
+      bannerRef,
+    }),
+  );
+
+  const fieldErrors = rhfErrorsToBanner(
+    formState.errors as Record<string, unknown>,
+    DIA_LABEL_MAP,
+  );
 
   const onImportarFeriados = async (): Promise<void> => {
     if (!feriados) return;
@@ -1501,6 +1633,15 @@ function CalendarioTab(): React.ReactElement {
 
       <Card padding="roomy">
         <CardLabel>Agregar día manual</CardLabel>
+        <div className="mt-4">
+          <FormErrorBanner
+            ref={bannerRef}
+            fieldErrors={fieldErrors}
+            apiError={crear.error}
+            validationTitle="Revisa estos datos:"
+            apiTitle="No se pudo agregar el día"
+          />
+        </div>
         <form onSubmit={onSubmit} className="mt-4 grid grid-cols-1 md:grid-cols-12 gap-3">
           <div className="md:col-span-3">
             <label className="block text-xs uppercase tracking-[0.18em] font-semibold text-ink-mute mb-1">

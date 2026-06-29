@@ -20,6 +20,7 @@ import type { PartidoDetalle, TipoIncidencia } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { FormErrorBanner } from '@/components/ui/form-errors';
 import { LigaPlusLockup } from '@/components/ui/logo';
 import {
   useAddIncidencia,
@@ -42,7 +43,7 @@ import {
 } from '@/hooks/use-match-center';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { toastError, toastSuccess } from '@/lib/toast';
+import { toastError, toastSuccess, toastWarning } from '@/lib/toast';
 import { useAuthStore } from '@/store/auth-store';
 
 function etiquetaPeriodo(periodo: number): string {
@@ -373,7 +374,15 @@ function IncidenciasMovil({
   const [jugadorId, setJugadorId] = useState<string>('');
   const [tipo, setTipo] = useState<TipoIncidencia>('GOL');
   const [minuto, setMinuto] = useState<string>('');
+  const [intentado, setIntentado] = useState(false);
   const addIncidencia = useAddIncidencia(partidoId);
+  const addErr = addIncidencia.error as ApiError | undefined;
+
+  // Banner explícito: el jugador es obligatorio. Solo se muestra tras intentar.
+  const fieldErrors =
+    intentado && !jugadorId
+      ? [{ label: 'Jugador', mensaje: 'Elige el jugador.' }]
+      : [];
 
   const minutoSugerido = Math.max(0, snapshot.periodo - 1) * snapshot.minutosPorPeriodo +
     Math.floor((snapshot.segundosTranscurridos ?? 0) / 60);
@@ -389,8 +398,9 @@ function IncidenciasMovil({
   const enJuego = snapshot.estado === 'EN_VIVO' || snapshot.estado === 'PAUSADO';
 
   const registrar = async (): Promise<void> => {
+    setIntentado(true);
     if (!jugadorId) {
-      toastError('Elige el jugador.');
+      toastWarning('Faltan datos: elige el jugador.');
       return;
     }
     const minutoFinal = minuto.trim() !== '' ? Number(minuto) : minutoSugerido;
@@ -413,6 +423,12 @@ function IncidenciasMovil({
       {enJuego && (
         <Card padding="comfortable">
           <CardLabel>Registrar incidencia</CardLabel>
+          <FormErrorBanner
+            fieldErrors={fieldErrors}
+            apiError={addErr}
+            validationTitle="Falta un dato:"
+            apiTitle="No se pudo registrar la incidencia"
+          />
           <div className="flex gap-2 mt-3 mb-3">
             {[
               { id: partido.equipoLocalId, nombre: partido.equipoLocalNombre },
@@ -593,6 +609,10 @@ function CerrarActaMovil({
   return (
     <Card padding="comfortable" className={listoParaCerrar ? 'border-2 border-accent/40' : ''}>
       <CardLabel>Cerrar acta</CardLabel>
+      <FormErrorBanner
+        apiError={cerrar.error}
+        apiTitle="No se pudo cerrar el acta"
+      />
       {!listoParaCerrar ? (
         <p className="text-sm text-ink-mute mt-2 font-serif italic">
           Finaliza el partido para poder cerrar el acta con el resultado.

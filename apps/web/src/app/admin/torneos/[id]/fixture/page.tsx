@@ -38,6 +38,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
+import { FormErrorBanner } from '@/components/ui/form-errors';
 import { PageHead } from '@/components/ui/page-head';
 import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import { apiFetch, ApiError } from '@/lib/api';
@@ -50,7 +51,7 @@ import {
   useTorneo,
 } from '@/hooks/use-admin';
 import { cn } from '@/lib/cn';
-import { toastError, toastSuccess } from '@/lib/toast';
+import { toastError, toastSuccess, toastWarning } from '@/lib/toast';
 import { useQueryClient } from '@tanstack/react-query';
 
 export default function FixtureAdminPage({
@@ -572,6 +573,7 @@ function SuspenderFechaForm({
   const [diasCorrimiento, setDiasCorrimiento] = useState(7);
   const [fechaInicioReprogramada, setFechaInicioReprogramada] = useState('');
   const [fechaDestinoId, setFechaDestinoId] = useState('');
+  const [intentado, setIntentado] = useState(false);
 
   // Candidatas para REUSAR_EXISTENTE: distintas de la actual, no
   // SUSPENDIDA/FINALIZADA, mismo torneo. Para el v1 mostramos todas las
@@ -629,6 +631,20 @@ function SuspenderFechaForm({
       'Solo marca la fecha como SUSPENDIDA. Tú reprogramas cada partido a mano desde el detalle. No crea fecha nueva.',
   };
 
+  // Banner explícito: estrategia no válida o fecha destino faltante. Solo se
+  // muestra después de un intento de confirmar, para no gritar al abrir.
+  const razonEstrategia = estrategiaInvalida(estrategia);
+  const fieldErrors = intentado
+    ? [
+        ...(razonEstrategia
+          ? [{ label: 'Estrategia', mensaje: razonEstrategia }]
+          : []),
+        ...(estrategia === 'REUSAR_EXISTENTE' && !fechaDestinoId
+          ? [{ label: 'Fecha destino', mensaje: 'Elige una fecha destino.' }]
+          : []),
+      ]
+    : [];
+
   return (
     <div className="p-5 bg-paper border-b border-line">
       <div className="flex items-center gap-2 mb-3">
@@ -642,6 +658,11 @@ function SuspenderFechaForm({
           <span>{razonBloqueo} Las estrategias que crean fecha nueva quedan deshabilitadas.</span>
         </div>
       )}
+
+      <FormErrorBanner
+        fieldErrors={fieldErrors}
+        validationTitle="Revisa la reprogramación:"
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
         <div>
@@ -795,15 +816,16 @@ function SuspenderFechaForm({
           variant="accent"
           size="sm"
           onClick={() => {
+            setIntentado(true);
             // Defensa en profundidad: el radio inválido no debería estar
             // seleccionable, pero por las dudas validamos antes del submit.
             const razon = estrategiaInvalida(estrategia);
             if (razon) {
-              alert(razon);
+              toastWarning(`No se puede suspender así: ${razon}`);
               return;
             }
             if (estrategia === 'REUSAR_EXISTENTE' && !fechaDestinoId) {
-              alert('Tienes que elegir una fecha destino.');
+              toastWarning('Faltan datos: elige una fecha destino.');
               return;
             }
             const msg =
