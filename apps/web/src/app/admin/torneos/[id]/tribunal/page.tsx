@@ -3,6 +3,7 @@
 import { zodResolver } from '@/lib/zod-resolver';
 import {
   AlertTriangle,
+  ChevronRight,
   Gavel,
   Lock,
   MessageSquare,
@@ -267,6 +268,13 @@ function TribunalPorFecha({
     ]),
   ).sort((a, b) => b - a);
 
+  // Acordeón: con muchas jornadas la lista se hace muy larga, así que cada
+  // fecha se colapsa. Por defecto abrimos solo la más reciente; el resumen del
+  // encabezado deja ver qué tiene cada fecha sin expandirla.
+  const [abiertas, setAbiertas] = useState<Set<number>>(
+    () => new Set(fechas.length > 0 ? [fechas[0]!] : []),
+  );
+
   if (fechas.length === 0) {
     return (
       <Card padding="comfortable">
@@ -277,8 +285,28 @@ function TribunalPorFecha({
     );
   }
 
+  const toggle = (f: number): void =>
+    setAbiertas((prev) => {
+      const next = new Set(prev);
+      if (next.has(f)) next.delete(f);
+      else next.add(f);
+      return next;
+    });
+  const todasAbiertas = fechas.every((f) => abiertas.has(f));
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
+      {fechas.length > 1 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setAbiertas(todasAbiertas ? new Set() : new Set(fechas))}
+            className="text-xs uppercase tracking-[0.18em] font-semibold text-accent hover:underline"
+          >
+            {todasAbiertas ? 'Colapsar todas' : 'Expandir todas'}
+          </button>
+        </div>
+      )}
       {fechas.map((fecha) => {
         const sancionesFecha = sanciones.filter((s) => s.desdeFechaNumero === fecha);
         const informesFecha = observaciones.filter((o) => o.fechaNumero === fecha);
@@ -286,15 +314,28 @@ function TribunalPorFecha({
           ...sancionesFecha.filter((s) => !s.cumplida && s.fechasPendientes > 0),
           ...sancionesFecha.filter((s) => s.cumplida || s.fechasPendientes === 0),
         ];
+        const abierta = abiertas.has(fecha);
         return (
           <Card key={fecha} padding="none" className="overflow-hidden">
-            <div className="px-5 py-3 bg-paper-dark border-b border-line flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => toggle(fecha)}
+              className={cn(
+                'w-full px-5 py-3 bg-paper-dark flex items-center gap-2 text-left hover:bg-line/40 transition-colors',
+                abierta && 'border-b border-line',
+              )}
+            >
+              <ChevronRight
+                size={15}
+                className={cn('text-ink-mute transition-transform', abierta && 'rotate-90')}
+              />
               <Gavel size={16} className="text-accent" />
               <CardLabel tone="mute">Fecha {fecha}</CardLabel>
               <span className="ml-auto text-[11px] text-ink-mute font-serif italic">
                 {sancionesFecha.length} sanción(es) · {informesFecha.length} informe(s)
               </span>
-            </div>
+            </button>
+            {abierta && (
             <div className="p-5 space-y-4">
               {ordenadas.length > 0 && (
                 <div>
@@ -347,6 +388,7 @@ function TribunalPorFecha({
                 </div>
               )}
             </div>
+            )}
           </Card>
         );
       })}
