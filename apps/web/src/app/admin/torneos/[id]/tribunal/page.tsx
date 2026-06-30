@@ -3,9 +3,6 @@
 import { zodResolver } from '@/lib/zod-resolver';
 import {
   AlertTriangle,
-  ArrowLeft,
-  Ban,
-  CheckCircle2,
   Gavel,
   Lock,
   MessageSquare,
@@ -13,7 +10,6 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -70,6 +66,7 @@ export default function TribunalPage({
   const torneoId = params.id;
   const { data: torneo } = useTorneo(torneoId);
   const { data: sanciones, isLoading } = useSanciones(torneoId);
+  const { data: observaciones } = useObservacionesTorneo(torneoId);
   const [adding, setAdding] = useState(false);
 
   const activas = sanciones?.filter((s) => !s.cumplida && s.fechasPendientes > 0) ?? [];
@@ -91,11 +88,6 @@ export default function TribunalPage({
         title="Tribunal de disciplina"
         sub="Sanciones automáticas por tarjetas + sanciones manuales del tribunal. La regla es por RUT × torneo: cambiar de club no evade la sanción."
       >
-        <Link href={`/admin/torneos/${torneoId}`}>
-          <Button variant="default" size="sm">
-            <ArrowLeft size={14} /> Torneo
-          </Button>
-        </Link>
         {puedeIngresar && (
           <Button variant="accent" size="sm" onClick={() => setAdding((v) => !v)}>
             <Gavel size={14} />{' '}
@@ -181,181 +173,203 @@ export default function TribunalPage({
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <SancionesSection
-          titulo="Sanciones activas"
-          icon={Ban}
-          sanciones={activas}
-          torneoId={torneoId}
-          emptyMsg="No hay jugadores con sanciones activas. Buen comportamiento general 👏"
-        />
-        <SancionesSection
-          titulo="Sanciones cumplidas"
-          icon={CheckCircle2}
-          sanciones={cumplidas}
-          torneoId={torneoId}
-          emptyMsg="Aún no hay sanciones cumplidas."
-          historico
-        />
-      </div>
-
-      <InformesPartidoSection torneoId={torneoId} />
+      <TribunalPorFecha
+        sanciones={sanciones ?? []}
+        observaciones={observaciones ?? []}
+        torneoId={torneoId}
+      />
     </>
   );
 }
 
-function InformesPartidoSection({
+function TribunalPorFecha({
+  sanciones,
+  observaciones,
   torneoId,
 }: {
+  sanciones: SancionAdmin[];
+  observaciones: ObservacionTribunalItem[];
   torneoId: string;
-}): React.ReactElement | null {
-  const { data: observaciones, isLoading } = useObservacionesTorneo(torneoId);
+}): React.ReactElement {
+  // Una sección por jornada: reunimos las fechas presentes en sanciones (desde
+  // qué fecha aplican) e informes, de la más reciente a la más antigua.
+  const fechas = Array.from(
+    new Set([
+      ...sanciones.map((s) => s.desdeFechaNumero),
+      ...observaciones.map((o) => o.fechaNumero),
+    ]),
+  ).sort((a, b) => b - a);
 
-  if (isLoading || !observaciones || observaciones.length === 0) return null;
+  if (fechas.length === 0) {
+    return (
+      <Card padding="comfortable">
+        <p className="text-sm text-ink-mute font-serif italic text-center py-6">
+          Todavía no hay sanciones ni informes de partido en este torneo.
+        </p>
+      </Card>
+    );
+  }
 
   return (
-    <Card padding="comfortable" className="mt-6">
-      <div className="flex items-center gap-2 mb-1">
-        <MessageSquare size={16} className="text-accent" />
-        <CardLabel>Informes de partido</CardLabel>
-      </div>
-      <p className="text-xs text-ink-mute mb-3 leading-snug">
-        Observaciones cargadas por árbitros y planilleros (conducta de la barra,
-        del DT, incidentes). Úsalas para fundamentar una sanción a un equipo.
-      </p>
-      <ul className="space-y-2">
-        {observaciones.map((o) => (
-          <li key={o.id} className="border border-line rounded-card px-3 py-2 bg-paper">
-            <div className="flex items-center gap-2 flex-wrap text-[10px] uppercase tracking-wider font-semibold text-ink-mute mb-1">
-              <span className="bg-ink-mute/10 px-2 py-0.5 rounded">Fecha {o.fechaNumero}</span>
-              <span className="normal-case tracking-normal font-medium text-ink">
-                {o.equipoLocalNombre} vs {o.equipoVisitaNombre}
+    <div className="space-y-5">
+      {fechas.map((fecha) => {
+        const sancionesFecha = sanciones.filter((s) => s.desdeFechaNumero === fecha);
+        const informesFecha = observaciones.filter((o) => o.fechaNumero === fecha);
+        const ordenadas = [
+          ...sancionesFecha.filter((s) => !s.cumplida && s.fechasPendientes > 0),
+          ...sancionesFecha.filter((s) => s.cumplida || s.fechasPendientes === 0),
+        ];
+        return (
+          <Card key={fecha} padding="none" className="overflow-hidden">
+            <div className="px-5 py-3 bg-paper-dark border-b border-line flex items-center gap-2">
+              <Gavel size={16} className="text-accent" />
+              <CardLabel tone="mute">Fecha {fecha}</CardLabel>
+              <span className="ml-auto text-[11px] text-ink-mute font-serif italic">
+                {sancionesFecha.length} sanción(es) · {informesFecha.length} informe(s)
               </span>
-              {o.equipoNombre && (
-                <span className="bg-danger/10 text-danger px-2 py-0.5 rounded normal-case tracking-normal">
-                  → {o.equipoNombre}
-                </span>
+            </div>
+            <div className="p-5 space-y-4">
+              {ordenadas.length > 0 && (
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-mute mb-2">
+                    Sanciones
+                  </div>
+                  <div className="divide-y divide-line border border-line rounded-card overflow-hidden">
+                    {ordenadas.map((s) => (
+                      <SancionRow
+                        key={s.id}
+                        sancion={s}
+                        torneoId={torneoId}
+                        historico={s.cumplida || s.fechasPendientes === 0}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {informesFecha.length > 0 && (
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-mute mb-2 flex items-center gap-1">
+                    <MessageSquare size={12} /> Informes de partido
+                  </div>
+                  <ul className="space-y-2">
+                    {informesFecha.map((o) => (
+                      <li
+                        key={o.id}
+                        className="border border-line rounded-card px-3 py-2 bg-paper"
+                      >
+                        <div className="flex items-center gap-2 flex-wrap text-[11px] font-semibold text-ink mb-1">
+                          <span>
+                            {o.equipoLocalNombre} vs {o.equipoVisitaNombre}
+                          </span>
+                          {o.equipoNombre && (
+                            <span className="bg-danger/10 text-danger px-2 py-0.5 rounded text-[10px] uppercase tracking-wider">
+                              → {o.equipoNombre}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-ink whitespace-pre-wrap break-words">
+                          {o.texto}
+                        </p>
+                        <p className="text-[11px] text-ink-mute mt-1">
+                          {o.autorNombre} ·{' '}
+                          {ROL_AUTOR_OBSERVACION_LABEL[o.autorRol] ?? o.autorRol}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
-            <p className="text-sm text-ink whitespace-pre-wrap break-words">{o.texto}</p>
-            <p className="text-[11px] text-ink-mute mt-1">
-              {o.autorNombre} · {ROL_AUTOR_OBSERVACION_LABEL[o.autorRol] ?? o.autorRol}
-            </p>
-          </li>
-        ))}
-      </ul>
-    </Card>
+          </Card>
+        );
+      })}
+    </div>
   );
 }
 
-function SancionesSection({
-  titulo,
-  icon: Icon,
-  sanciones,
+function SancionRow({
+  sancion: s,
   torneoId,
-  emptyMsg,
   historico,
 }: {
-  titulo: string;
-  icon: typeof Ban;
-  sanciones: SancionAdmin[];
+  sancion: SancionAdmin;
   torneoId: string;
-  emptyMsg: string;
-  historico?: boolean;
+  historico: boolean;
 }): React.ReactElement {
   const revoke = useRevokeSancion(torneoId);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   return (
-    <Card padding="none" className="overflow-hidden">
-      <div className="px-5 py-3 bg-paper-dark border-b border-line flex items-center gap-2">
-        <Icon size={16} className={historico ? 'text-green-bright' : 'text-accent'} />
-        <CardLabel tone="mute">{titulo}</CardLabel>
+    <div className="px-4 py-3 bg-paper">
+      <div className="flex items-start gap-3 mb-1.5">
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-ink truncate">
+            {s.jugadorNombre && s.jugadorApellido
+              ? `${s.jugadorNombre} ${s.jugadorApellido}`
+              : 'Sin jugador identificado'}
+          </div>
+          <div className="text-xs text-ink-mute truncate">
+            {s.equipoNombre} {s.rut && <span className="font-mono">· {s.rut}</span>}
+          </div>
+        </div>
+        <span
+          className={cn(
+            'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
+            MOTIVO_BADGE[s.motivo] ?? 'bg-ink-mute/10 text-ink-mute',
+          )}
+        >
+          {MOTIVO_LABEL[s.motivo] ?? s.motivo}
+        </span>
       </div>
 
-      {sanciones.length === 0 && (
-        <div className="p-8 text-center text-sm text-ink-mute font-serif italic">{emptyMsg}</div>
+      <div className="flex items-center gap-4 text-xs text-ink-mute">
+        <span>
+          Pendientes{' '}
+          <span
+            className={cn(
+              'font-mono font-semibold',
+              s.fechasPendientes > 0 ? 'text-danger' : 'text-green-bright',
+            )}
+          >
+            {s.fechasPendientes}
+          </span>
+        </span>
+        {historico && (
+          <span className="text-green-bright font-semibold uppercase tracking-wider text-[10px]">
+            Cumplida
+          </span>
+        )}
+        {s.descripcion && (
+          <span className="font-serif italic truncate flex-1">
+            {s.descripcion.split('\n')[0]}
+          </span>
+        )}
+        {!historico && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setEditing((v) => !v)}
+              className="p-1 rounded text-ink-mute hover:text-accent hover:bg-accent/10"
+              title="Ajustar sanción (agravar / corregir)"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => revoke.mutate(s.id)}
+              className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
+              title="Revocar"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {!historico && editing && (
+        <AjustarSancionForm sancion={s} torneoId={torneoId} onClose={() => setEditing(false)} />
       )}
-
-      {sanciones.length > 0 && (
-        <div className="divide-y divide-line">
-          {sanciones.map((s) => (
-            <div key={s.id} className="px-5 py-4">
-              <div className="flex items-start gap-3 mb-2">
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink truncate">
-                    {s.jugadorNombre && s.jugadorApellido
-                      ? `${s.jugadorNombre} ${s.jugadorApellido}`
-                      : 'Sin jugador identificado'}
-                  </div>
-                  <div className="text-xs text-ink-mute truncate">
-                    {s.equipoNombre} {s.rut && <span className="font-mono">· {s.rut}</span>}
-                  </div>
-                </div>
-                <span
-                  className={cn(
-                    'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
-                    MOTIVO_BADGE[s.motivo] ?? 'bg-ink-mute/10 text-ink-mute',
-                  )}
-                >
-                  {MOTIVO_LABEL[s.motivo] ?? s.motivo}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-4 text-xs text-ink-mute">
-                <span>
-                  Desde fecha <span className="font-mono font-semibold text-ink">{s.desdeFechaNumero}</span>
-                </span>
-                <span>
-                  Pendientes{' '}
-                  <span
-                    className={cn(
-                      'font-mono font-semibold',
-                      s.fechasPendientes > 0 ? 'text-danger' : 'text-green-bright',
-                    )}
-                  >
-                    {s.fechasPendientes}
-                  </span>
-                </span>
-                {s.descripcion && (
-                  <span className="font-serif italic truncate flex-1">{s.descripcion.split('\n')[0]}</span>
-                )}
-                {!historico && (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEditingId(editingId === s.id ? null : s.id)
-                      }
-                      className="p-1 rounded text-ink-mute hover:text-accent hover:bg-accent/10"
-                      title="Ajustar sanción (agravar / corregir)"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => revoke.mutate(s.id)}
-                      className="p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
-                      title="Revocar"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {!historico && editingId === s.id && (
-                <AjustarSancionForm
-                  sancion={s}
-                  torneoId={torneoId}
-                  onClose={() => setEditingId(null)}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </Card>
+    </div>
   );
 }
 
