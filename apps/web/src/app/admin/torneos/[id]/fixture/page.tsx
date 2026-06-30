@@ -439,9 +439,17 @@ function PartidoRow({
   moving: boolean;
 }): React.ReactElement {
   const cerrada = !!partido.actaCerradaAt;
+  // Un partido ya resuelto sin jugarse no se reubica a otra fecha: la
+  // reprogramación crea fechas nuevas, no se arrastra el viejo a mano.
+  const noSeJuega =
+    partido.estado === 'NO_JUGADO' ||
+    partido.estado === 'SUSPENDIDO_FUERZA_MAYOR' ||
+    partido.estado === 'REPROGRAMADO' ||
+    partido.estado === 'WALKOVER';
+  const noArrastrable = cerrada || noSeJuega;
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: partido.id,
-    disabled: cerrada, // No mover partidos con acta cerrada
+    disabled: noArrastrable,
   });
 
   const fecha = partido.fechaHora ? new Date(partido.fechaHora) : null;
@@ -471,11 +479,17 @@ function PartidoRow({
         type="button"
         {...attributes}
         {...listeners}
-        title={cerrada ? 'Acta cerrada · no se puede mover' : 'Arrastra para mover de fecha'}
-        disabled={cerrada}
+        title={
+          cerrada
+            ? 'Acta cerrada · no se puede mover'
+            : noSeJuega
+              ? 'El partido no se juega · no se puede mover'
+              : 'Arrastra para mover de fecha'
+        }
+        disabled={noArrastrable}
         className={cn(
           'p-1 rounded text-ink-mute',
-          cerrada
+          noArrastrable
             ? 'opacity-30 cursor-not-allowed'
             : 'cursor-grab hover:text-ink hover:bg-line/50 active:cursor-grabbing',
         )}

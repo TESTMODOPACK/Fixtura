@@ -213,12 +213,20 @@ export default function PersonalPortalPage(): React.ReactElement | null {
                     // El planillero/árbitro designado puede abrir la planilla del
                     // partido (cronómetro + incidencias + cierre). Para roles que
                     // no operan en cancha (paramédico, etc.) la tarjeta es informativa.
+                    // Un partido ya resuelto sin jugarse no se opera: abrir la
+                    // planilla y "Arrancar" lo resucitaría a EN_CURSO.
+                    const partidoNoSeJuega =
+                      d.partidoEstado === 'NO_JUGADO' ||
+                      d.partidoEstado === 'SUSPENDIDO_FUERZA_MAYOR' ||
+                      d.partidoEstado === 'REPROGRAMADO' ||
+                      d.partidoEstado === 'WALKOVER';
                     const operable =
                       (d.rolAsignado === 'PLANILLERO' ||
                         d.rolAsignado === 'ARBITRO_PRINCIPAL' ||
                         d.rolAsignado === 'ARBITRO_ASISTENTE') &&
                       d.estado !== 'RECHAZADA' &&
-                      d.estado !== 'AUSENTE';
+                      d.estado !== 'AUSENTE' &&
+                      !partidoNoSeJuega;
                     const inner = (
                       <>
                         <div className="text-xs text-ink-mute w-36 shrink-0">
@@ -238,11 +246,22 @@ export default function PersonalPortalPage(): React.ReactElement | null {
                             {rolLabel(d.rolAsignado)}
                             {d.canchaNombre ? ` · ${d.canchaNombre}` : ''}
                           </div>
-                          {operable && (
+                          {operable ? (
                             <div className="text-[11px] font-semibold text-accent mt-1 flex items-center gap-1">
                               <ClipboardList size={11} /> Abrir planilla
                             </div>
-                          )}
+                          ) : partidoNoSeJuega ? (
+                            <div className="text-[11px] font-semibold text-ink-mute mt-1">
+                              Partido{' '}
+                              {d.partidoEstado === 'NO_JUGADO'
+                                ? 'no jugado'
+                                : d.partidoEstado === 'REPROGRAMADO'
+                                  ? 'reprogramado'
+                                  : d.partidoEstado === 'WALKOVER'
+                                    ? 'por walkover'
+                                    : 'suspendido'}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="flex items-center gap-3 ml-auto">
                           {d.montoPago != null && d.montoPago > 0 && (

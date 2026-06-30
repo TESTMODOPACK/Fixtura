@@ -118,6 +118,7 @@ const ESTADO_PARTIDO_LABEL: Record<string, string> = {
   SUSPENDIDO_FUERZA_MAYOR: 'Suspendido',
   REPROGRAMADO: 'Reprogramado',
   WALKOVER: 'Walkover',
+  NO_JUGADO: 'No jugado',
 };
 
 function clp(n: number | null): string {

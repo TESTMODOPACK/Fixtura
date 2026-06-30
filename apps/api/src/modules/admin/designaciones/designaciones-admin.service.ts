@@ -26,6 +26,10 @@ import { Fecha } from '../../competition/entities/fecha.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { Personal } from '../../competition/entities/personal.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import {
+  assertPartidoEstadoOperable,
+  ESTADOS_PARTIDO_NO_OPERABLES,
+} from '../../competition/partido-estado.util';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { DesignacionesEmailService } from './designaciones-email.service';
 import type {
@@ -151,7 +155,7 @@ export class DesignacionesAdminService {
         // booking contra una fecha que se suspendió y reprogramó (la original
         // conserva sus designaciones como historial).
         .andWhere(
-          `(partido.estado IS NULL OR partido.estado NOT IN ('SUSPENDIDO_FUERZA_MAYOR','REPROGRAMADO'))`,
+          `(partido.estado IS NULL OR partido.estado NOT IN ('SUSPENDIDO_FUERZA_MAYOR','REPROGRAMADO','NO_JUGADO','WALKOVER'))`,
         )
         .select([
           'd2.personal_id AS "personalId"',
@@ -279,6 +283,8 @@ export class DesignacionesAdminService {
       where: { id: input.partidoId, tenantId },
     });
     if (!partido) throw new NotFoundException(`Partido ${input.partidoId} no encontrado`);
+    // No se designa personal a un partido que ya no se va a jugar.
+    assertPartidoEstadoOperable(partido.estado);
 
     const personal = await this.personalRepo.findOne({
       where: { id: input.personalId, tenantId },
@@ -577,6 +583,8 @@ export class DesignacionesAdminService {
       where: { id: In(otrosIds), tenantId },
     });
     for (const p of partidos) {
+      // Un partido que ya no se juega no ocupa a la persona: no genera solape.
+      if (ESTADOS_PARTIDO_NO_OPERABLES.includes(p.estado)) continue;
       if (!p.fechaHora) continue;
       const oInicio = p.fechaHora.getTime();
       const oFin = oInicio + this.duracionPartidoMs(p);
@@ -766,6 +774,9 @@ export class DesignacionesAdminService {
       .createQueryBuilder('p')
       .where('p.fecha_id = :fechaId', { fechaId })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
+      // Solo partidos que se van a jugar: no se designa ni se mide cobertura
+      // sobre no jugados / suspendidos / reprogramados / walkover.
+      .andWhere(`p.estado IN ('PROGRAMADO', 'EN_CURSO')`)
       .orderBy('p.fecha_hora', 'ASC', 'NULLS LAST')
       .getMany();
 
@@ -1073,6 +1084,9 @@ export class DesignacionesAdminService {
       .createQueryBuilder('p')
       .where('p.fecha_id = :fechaId', { fechaId })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
+      // Solo partidos que se van a jugar: no se designa ni se mide cobertura
+      // sobre no jugados / suspendidos / reprogramados / walkover.
+      .andWhere(`p.estado IN ('PROGRAMADO', 'EN_CURSO')`)
       .orderBy('p.fecha_hora', 'ASC', 'NULLS LAST')
       .getMany();
 

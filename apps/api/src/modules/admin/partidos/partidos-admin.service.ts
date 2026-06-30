@@ -45,6 +45,7 @@ import { Partido } from '../../competition/entities/partido.entity';
 import { PartidoJugador } from '../../competition/entities/partido-jugador.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { assertPartidoEstadoOperable } from '../../competition/partido-estado.util';
 import { PushService } from '../push/push.service';
 import { MatchCenterGateway } from '../../match-center/match-center.gateway';
 
@@ -379,6 +380,7 @@ export class PartidosAdminService {
         'No se pueden agregar incidencias a un acta cerrada. Reabrir primero (Sprint 2C+).',
       );
     }
+    assertPartidoEstadoOperable(partido.estado);
 
     // ADR-0005 — input.equipoId es el inscripcionId; jugadorInscritoId es
     // el jugadorId del modelo nuevo. Validamos contra la inscripción del
@@ -579,6 +581,9 @@ export class PartidosAdminService {
     if (partido.actaCerradaAt) {
       throw new ConflictException('El acta ya está cerrada');
     }
+    // No se cierra el acta de un partido que no se jugó/operó: forzaría
+    // FINALIZADO + devengos a personal + multas sobre un no jugado/suspendido.
+    assertPartidoEstadoOperable(partido.estado);
 
     // F46.4 — la certificación de jugadores presentes es requisito para
     // cerrar el acta (deja registro de quién jugó y bloquea inhabilitados).
@@ -1224,6 +1229,11 @@ export class PartidosAdminService {
         'El partido está suspendido. Reactívalo primero si quieres declarar walkover.',
       );
     }
+    if (partido.estado === 'NO_JUGADO' || partido.estado === 'REPROGRAMADO') {
+      throw new BadRequestException(
+        'El partido figura como no jugado/reprogramado. Reactívalo primero si quieres declarar walkover.',
+      );
+    }
 
     // ADR-0005 — equipoPerdedorId es el inscripcionId.
     if (
@@ -1539,6 +1549,9 @@ export class PartidosAdminService {
         'El acta está cerrada. Reábrela para cambiar la certificación.',
       );
     }
+    // Certificar presentes desbloquea el cierre del acta: no se hace sobre un
+    // partido que ya no se juega.
+    assertPartidoEstadoOperable(partido.estado);
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     const inscIds = [partido.inscripcionLocalId, partido.inscripcionVisitaId].filter(
       (v): v is string => !!v,

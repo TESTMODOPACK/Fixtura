@@ -63,18 +63,34 @@ export function FixtureView({ torneoSlug }: FixtureViewProps): React.ReactElemen
   );
 }
 
+// Etiqueta breve para partidos con desenlace especial (no jugados / walkover).
+const ESTADO_PUBLICO_BADGE: Record<string, string> = {
+  WALKOVER: 'W.O.',
+  NO_JUGADO: 'No jugado',
+  SUSPENDIDO_FUERZA_MAYOR: 'Suspendido',
+  REPROGRAMADO: 'Reprogramado',
+};
+
 function FechaEstadoBadge({ partidos }: { partidos: PartidoPublico[] }): React.ReactElement {
-  const finalizados = partidos.filter((p) => p.estado === 'FINALIZADO').length;
+  // "Jugados" = con marcador real (incluye walkover). "Finalizada" = no queda
+  // ningún partido pendiente de jugarse (los resueltos sin jugar no cuentan
+  // como pendientes).
+  const jugados = partidos.filter(
+    (p) => p.estado === 'FINALIZADO' || p.estado === 'WALKOVER',
+  ).length;
+  const pendientes = partidos.filter(
+    (p) => p.estado === 'PROGRAMADO' || p.estado === 'EN_CURSO',
+  ).length;
   const total = partidos.length;
-  const allDone = finalizados === total;
+  const allDone = pendientes === 0;
   return (
     <div
       className={cn(
         'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded',
-        allDone ? 'bg-green-bright/10 text-green-bright' : finalizados > 0 ? 'bg-accent/10 text-accent' : 'bg-ink-mute/10 text-ink-mute',
+        allDone ? 'bg-green-bright/10 text-green-bright' : jugados > 0 ? 'bg-accent/10 text-accent' : 'bg-ink-mute/10 text-ink-mute',
       )}
     >
-      {allDone ? 'Finalizada' : `${finalizados}/${total} jugados`}
+      {allDone ? 'Finalizada' : `${jugados}/${total} jugados`}
     </div>
   );
 }
@@ -91,15 +107,22 @@ function PartidoRow({ partido }: { partido: PartidoPublico }): React.ReactElemen
         <div className="font-semibold text-ink">{hora}</div>
       </div>
       <div className="text-right font-semibold truncate">{partido.local.nombre}</div>
-      <div className="flex items-center gap-2 font-display tracking-display text-xl text-green-deep min-w-[60px] justify-center">
-        {partido.estado === 'FINALIZADO' ? (
-          <>
-            <span>{partido.local.goles ?? '-'}</span>
-            <span className="text-ink-mute">:</span>
-            <span>{partido.visita.goles ?? '-'}</span>
-          </>
-        ) : (
-          <span className="text-ink-mute font-serif italic text-xs">vs</span>
+      <div className="flex flex-col items-center min-w-[60px]">
+        <div className="flex items-center gap-2 font-display tracking-display text-xl text-green-deep justify-center">
+          {partido.estado === 'FINALIZADO' || partido.estado === 'WALKOVER' ? (
+            <>
+              <span>{partido.local.goles ?? '-'}</span>
+              <span className="text-ink-mute">:</span>
+              <span>{partido.visita.goles ?? '-'}</span>
+            </>
+          ) : (
+            <span className="text-ink-mute font-serif italic text-xs">vs</span>
+          )}
+        </div>
+        {ESTADO_PUBLICO_BADGE[partido.estado] && (
+          <span className="text-[9px] uppercase tracking-wider font-semibold text-ink-mute mt-0.5">
+            {ESTADO_PUBLICO_BADGE[partido.estado]}
+          </span>
         )}
       </div>
       <div className="font-semibold truncate">{partido.visita.nombre}</div>

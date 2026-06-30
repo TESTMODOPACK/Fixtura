@@ -17,6 +17,7 @@ import { IncidenciaPartido } from '../competition/entities/incidencia-partido.en
 import { Partido } from '../competition/entities/partido.entity';
 import { PlanillaTorneo } from '../competition/entities/planilla-torneo.entity';
 import { Torneo } from '../competition/entities/torneo.entity';
+import { assertPartidoEstadoOperable } from '../competition/partido-estado.util';
 
 /**
  * Sprint 18 — RF-17. Lógica del cronómetro Match Center.
@@ -154,6 +155,9 @@ export class MatchCenterService {
     if (partido.actaCerradaAt) {
       throw new BadRequestException('El acta ya está cerrada — no se puede usar Match Center.');
     }
+    // El partido ya resuelto sin jugarse no se opera en vivo: arrancar lo
+    // resucitaría a EN_CURSO. Barrera dura (el front además oculta el acceso).
+    assertPartidoEstadoOperable(partido.estado);
     if (partido.centroEstado === 'EN_VIVO') {
       // Idempotente: si ya está corriendo, devolvemos snapshot.
       return this.toSnapshot(partido);
