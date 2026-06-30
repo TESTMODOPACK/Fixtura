@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Gavel,
   Lock,
+  MessageSquare,
   Pencil,
   Trash2,
   X,
@@ -17,7 +18,11 @@ import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import type { SancionAdmin } from '@fixtura/types';
+import {
+  ROL_AUTOR_OBSERVACION_LABEL,
+  type ObservacionTribunalItem,
+  type SancionAdmin,
+} from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
@@ -33,6 +38,7 @@ import {
   useCreateSancionTribunal,
   useEquipos,
   useJugadores,
+  useObservacionesTorneo,
   useRevokeSancion,
   useSancionarEquipo,
   useSanciones,
@@ -192,7 +198,53 @@ export default function TribunalPage({
           historico
         />
       </div>
+
+      <InformesPartidoSection torneoId={torneoId} />
     </>
+  );
+}
+
+function InformesPartidoSection({
+  torneoId,
+}: {
+  torneoId: string;
+}): React.ReactElement | null {
+  const { data: observaciones, isLoading } = useObservacionesTorneo(torneoId);
+
+  if (isLoading || !observaciones || observaciones.length === 0) return null;
+
+  return (
+    <Card padding="comfortable" className="mt-6">
+      <div className="flex items-center gap-2 mb-1">
+        <MessageSquare size={16} className="text-accent" />
+        <CardLabel>Informes de partido</CardLabel>
+      </div>
+      <p className="text-xs text-ink-mute mb-3 leading-snug">
+        Observaciones cargadas por árbitros y planilleros (conducta de la barra,
+        del DT, incidentes). Úsalas para fundamentar una sanción a un equipo.
+      </p>
+      <ul className="space-y-2">
+        {observaciones.map((o) => (
+          <li key={o.id} className="border border-line rounded-card px-3 py-2 bg-paper">
+            <div className="flex items-center gap-2 flex-wrap text-[10px] uppercase tracking-wider font-semibold text-ink-mute mb-1">
+              <span className="bg-ink-mute/10 px-2 py-0.5 rounded">Fecha {o.fechaNumero}</span>
+              <span className="normal-case tracking-normal font-medium text-ink">
+                {o.equipoLocalNombre} vs {o.equipoVisitaNombre}
+              </span>
+              {o.equipoNombre && (
+                <span className="bg-danger/10 text-danger px-2 py-0.5 rounded normal-case tracking-normal">
+                  → {o.equipoNombre}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-ink whitespace-pre-wrap break-words">{o.texto}</p>
+            <p className="text-[11px] text-ink-mute mt-1">
+              {o.autorNombre} · {ROL_AUTOR_OBSERVACION_LABEL[o.autorRol] ?? o.autorRol}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 

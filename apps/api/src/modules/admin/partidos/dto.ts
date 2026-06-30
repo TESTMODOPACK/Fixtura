@@ -12,6 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
 
 const MOTIVO_SUSPENSION = [
@@ -171,6 +172,19 @@ export class MarcarNoJugadoDto {
   @IsString()
   @MaxLength(1000)
   observaciones?: string | null;
+}
+
+// ── INF — Informe del partido (observaciones disciplinarias) ─────────
+const LADO_OBSERVACION = ['LOCAL', 'VISITA', 'GENERAL'] as const;
+
+export class CrearObservacionPartidoDto {
+  @IsEnum(LADO_OBSERVACION)
+  lado!: (typeof LADO_OBSERVACION)[number];
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(1000)
+  texto!: string;
 }
 
 export class SuspenderFechaDto {

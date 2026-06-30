@@ -585,6 +585,46 @@ async function main(): Promise<void> {
     }
     log('encuestas configurables (ENC) aseguradas: plantillas/preguntas/envios/respuestas.');
 
+    // ── Informe del partido (INF) — observaciones disciplinarias ─────────
+    // El árbitro/planillero/admin registran antecedentes del partido (conducta
+    // de barra, DT, etc.) asociados a un lado (local/visita/general). El
+    // tribunal los lee para decidir sanciones a equipos. Tenant-scoped, RLS.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS observaciones_partido (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        partido_id UUID NOT NULL REFERENCES partidos(id) ON DELETE CASCADE,
+        lado VARCHAR(10) NOT NULL DEFAULT 'GENERAL',
+        texto TEXT NOT NULL,
+        autor_personal_id UUID,
+        autor_user_id UUID,
+        autor_nombre VARCHAR(150) NOT NULL,
+        autor_rol VARCHAR(30) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT observaciones_partido_lado_check
+          CHECK (lado IN ('LOCAL','VISITA','GENERAL'))
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_obs_partido_tenant ON observaciones_partido(tenant_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_obs_partido_partido ON observaciones_partido(partido_id)`);
+    await client.query(`ALTER TABLE observaciones_partido ENABLE ROW LEVEL SECURITY`);
+    await client.query(`ALTER TABLE observaciones_partido FORCE ROW LEVEL SECURITY`);
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE tablename = 'observaciones_partido' AND policyname = 'tenant_isolation'
+        ) THEN
+          CREATE POLICY tenant_isolation ON observaciones_partido
+            USING (
+              tenant_id::text = current_setting('app.current_tenant_id', true)
+              OR current_setting('app.current_tenant_id', true) = ''
+            );
+        END IF;
+      END $$;
+    `);
+    log('observaciones_partido asegurada (informe disciplinario del partido).');
+
     // Sprint 26D — campos nuevos en torneos para soportar el modelo nuevo.
     // Aditivos: torneos viejos quedan con defaults razonables.
     await client.query(`

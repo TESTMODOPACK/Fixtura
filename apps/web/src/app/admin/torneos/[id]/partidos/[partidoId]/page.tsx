@@ -45,6 +45,7 @@ import {
   OfflineActaBanner,
   OfflineSubmitHint,
 } from '@/components/offline-acta-banner';
+import { InformePartido } from '@/components/informe-partido';
 import { PageHead } from '@/components/ui/page-head';
 import { ReprogramadaBadge } from '@/components/ui/reprogramada-badge';
 import {
@@ -260,6 +261,12 @@ export default function PartidoDetallePage({
       )}
 
       <DesignacionesSection partidoId={partido.id} torneoId={torneoId} cerrada={cerrada} />
+
+      <InformePartido
+        partidoId={partido.id}
+        equipoLocalNombre={partido.equipoLocalNombre}
+        equipoVisitaNombre={partido.equipoVisitaNombre}
+      />
 
       {!cerrada && !ocultarCarga && partido.estado !== 'WALKOVER' && (
         <CertificacionSection partido={partido} torneoId={torneoId} />

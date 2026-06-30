@@ -18,6 +18,7 @@ import {
   type ActaRoster,
   type FixtureAdminFull,
   type IncidenciaAdmin,
+  type ObservacionPartido,
   type PartidoAdmin,
   type PartidoDetalle,
   type UserContext,
@@ -31,6 +32,7 @@ import {
   AtribuirIncidenciaDto,
   CerrarActaDto,
   CertificarPresentesDto,
+  CrearObservacionPartidoDto,
   CreateIncidenciaDto,
   DeclararWalkoverDto,
   MarcarNoJugadoDto,
@@ -38,6 +40,7 @@ import {
   SuspenderPartidoDto,
   UpdatePartidoDto,
 } from './dto';
+import { ObservacionesPartidoService } from './observaciones-partido.service';
 import { PartidosAdminService } from './partidos-admin.service';
 import { PlantillaPdfService } from './plantilla-pdf.service';
 
@@ -87,6 +90,7 @@ export class PartidosAdminController {
   constructor(
     private readonly svc: PartidosAdminService,
     private readonly plantillaPdf: PlantillaPdfService,
+    private readonly observaciones: ObservacionesPartidoService,
   ) {}
 
   // ── F46.5 — Plantilla física (PDF para imprimir y completar a mano) ──
@@ -291,5 +295,61 @@ export class PartidosAdminController {
       equipoPerdedorId: dto.equipoPerdedorId,
       observaciones: dto.observaciones ?? null,
     });
+  }
+
+  // ── INF — Informe del partido (observaciones disciplinarias) ───────
+  // Lectura: cualquiera del controller (incluye TRIBUNAL_DISCIPLINA, que lee
+  // para fundamentar fallos). Escritura: admin o personal designado a ESTE
+  // partido (assertActorPuedeOperarActa), nunca el tribunal.
+  @Get(':id/observaciones')
+  listarObservaciones(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<ObservacionPartido[]> {
+    return this.observaciones.listar(id, ensureTenant(user));
+  }
+
+  @Post(':id/observaciones')
+  @Roles(
+    ROLE.LIGA_ADMIN,
+    ROLE.LIGA_COORDINADOR,
+    ROLE.LIGA_COORDINADOR_ARBITROS,
+    ROLE.ARBITRO,
+    ROLE.PLANILLERO,
+    ROLE.SUPER_ADMIN,
+  )
+  @Audited({ action: 'partido.observacion_creada', entityType: 'Partido', entityIdFrom: 'params.id' })
+  async crearObservacion(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: CrearObservacionPartidoDto,
+  ): Promise<ObservacionPartido> {
+    const tenantId = ensureTenant(user);
+    const scope = actorPersonalScope(user);
+    await this.svc.assertActorPuedeOperarActa(id, tenantId, scope);
+    return this.observaciones.crear(id, tenantId, user, scope, {
+      lado: dto.lado,
+      texto: dto.texto,
+    });
+  }
+
+  @Delete(':id/observaciones/:observacionId')
+  @Roles(
+    ROLE.LIGA_ADMIN,
+    ROLE.LIGA_COORDINADOR,
+    ROLE.LIGA_COORDINADOR_ARBITROS,
+    ROLE.ARBITRO,
+    ROLE.PLANILLERO,
+    ROLE.SUPER_ADMIN,
+  )
+  async eliminarObservacion(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('observacionId', new ParseUUIDPipe()) observacionId: string,
+  ): Promise<void> {
+    const tenantId = ensureTenant(user);
+    const scope = actorPersonalScope(user);
+    await this.svc.assertActorPuedeOperarActa(id, tenantId, scope);
+    return this.observaciones.eliminar(id, observacionId, tenantId, scope);
   }
 }

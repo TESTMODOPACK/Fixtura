@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 
 import type { PartidoDetalle, TipoIncidencia } from '@fixtura/types';
 
+import { InformePartido } from '@/components/informe-partido';
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { FormErrorBanner } from '@/components/ui/form-errors';
@@ -191,6 +192,14 @@ export default function PlanilleroPartidoPage({
 
         {snapshot && cerrada && partido && partido.incidencias.length > 0 && (
           <IncidenciasList partidoId={partidoId} incidencias={partido.incidencias} soloLectura />
+        )}
+
+        {snapshot && !inactivo && (
+          <InformePartido
+            partidoId={partidoId}
+            equipoLocalNombre={snapshot.equipoLocalNombre}
+            equipoVisitaNombre={snapshot.equipoVisitaNombre}
+          />
         )}
       </main>
     </div>

@@ -55,6 +55,9 @@ import type {
   DispararEncuestaResultado,
   PlantillaEncuesta,
   ResumenEncuesta,
+  ObservacionPartido,
+  ObservacionTribunalItem,
+  CrearObservacionPartidoInput,
 } from '@fixtura/types';
 
 import { apiFetch } from '@/lib/api';
@@ -557,6 +560,53 @@ export function useReabrirActa(partidoId: string, torneoId: string) {
       qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'] });
       qc.invalidateQueries({ queryKey: ['public'] });
     },
+  });
+}
+
+// ── INF — Informe del partido (observaciones disciplinarias) ─────────
+export function useObservacionesPartido(partidoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'partidos', partidoId, 'observaciones'],
+    queryFn: () =>
+      apiFetch<ObservacionPartido[]>(`/admin/partidos/${partidoId}/observaciones`),
+    enabled: !!partidoId,
+  });
+}
+
+export function useCrearObservacionPartido(partidoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CrearObservacionPartidoInput) =>
+      apiFetch<ObservacionPartido>(`/admin/partidos/${partidoId}/observaciones`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId, 'observaciones'] });
+    },
+  });
+}
+
+export function useEliminarObservacionPartido(partidoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (observacionId: string) =>
+      apiFetch<void>(`/admin/partidos/${partidoId}/observaciones/${observacionId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId, 'observaciones'] });
+    },
+  });
+}
+
+/** Todas las observaciones de los partidos del torneo — para el tribunal. */
+export function useObservacionesTorneo(torneoId: string) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'observaciones'],
+    queryFn: () =>
+      apiFetch<ObservacionTribunalItem[]>(`/admin/torneos/${torneoId}/observaciones`),
+    enabled: !!torneoId,
   });
 }
 

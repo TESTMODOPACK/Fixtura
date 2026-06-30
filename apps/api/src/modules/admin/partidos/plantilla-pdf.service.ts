@@ -1,13 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import PDFDocument from 'pdfkit';
 
 import { limpiarRut } from '@fixtura/types';
 
+import {
+  Designacion,
+  type EstadoDesignacion,
+} from '../../competition/entities/designacion.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { JugadorVetado } from '../../competition/entities/jugador-vetado.entity';
+import { ObservacionPartido } from '../../competition/entities/observacion-partido.entity';
 import { Partido } from '../../competition/entities/partido.entity';
 import { PartidoJugador } from '../../competition/entities/partido-jugador.entity';
 import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entity';
@@ -47,6 +52,10 @@ export class PlantillaPdfService {
     private readonly partidoJugadorRepo: Repository<PartidoJugador>,
     @InjectRepository(IncidenciaPartido)
     private readonly incidenciaRepo: Repository<IncidenciaPartido>,
+    @InjectRepository(Designacion)
+    private readonly designacionRepo: Repository<Designacion>,
+    @InjectRepository(ObservacionPartido)
+    private readonly observacionRepo: Repository<ObservacionPartido>,
   ) {}
 
   async generar(partidoId: string, tenantId: string): Promise<Buffer> {
@@ -95,6 +104,12 @@ export class PlantillaPdfService {
         }).format(partido.fechaHora)
       : 'Sin fecha/hora';
 
+    const personal = await this.cargarPersonal(partidoId, tenantId);
+    // El informe disciplinario solo se imprime en el acta final (cerrada).
+    const observaciones = cerrada
+      ? await this.cargarObservaciones(partidoId, tenantId)
+      : [];
+
     return this.construirPdf({
       torneoNombre: torneo?.nombre ?? 'Torneo',
       fechaNumero: fecha?.numero ?? 0,
@@ -106,7 +121,77 @@ export class PlantillaPdfService {
       golesVisita: partido.golesVisita,
       local,
       visita,
+      personal,
+      observaciones,
     });
+  }
+
+  /** Personal designado operable del partido (rol + nombre), ordenado por rol. */
+  private async cargarPersonal(
+    partidoId: string,
+    tenantId: string,
+  ): Promise<Array<{ rol: string; nombre: string }>> {
+    const ORDEN_ROL: Record<string, number> = {
+      ARBITRO_PRINCIPAL: 0,
+      ARBITRO_ASISTENTE: 1,
+      PLANILLERO: 2,
+      PARAMEDICO: 3,
+      OTRO: 4,
+    };
+    const ROL_LABEL: Record<string, string> = {
+      ARBITRO_PRINCIPAL: 'Árbitro principal',
+      ARBITRO_ASISTENTE: 'Árbitro asistente',
+      PLANILLERO: 'Planillero',
+      PARAMEDICO: 'Paramédico',
+      OTRO: 'Personal',
+    };
+    const desigs = await this.designacionRepo.find({
+      where: {
+        partidoId,
+        tenantId,
+        estado: In(['PROPUESTA', 'CONFIRMADA', 'ASISTIO'] as EstadoDesignacion[]),
+      },
+      relations: { personal: true },
+    });
+    return desigs
+      .filter((d) => d.personal)
+      .map((d) => ({
+        rol: ROL_LABEL[d.rolAsignado] ?? d.rolAsignado,
+        nombre: `${d.personal!.nombre} ${d.personal!.apellido}`.trim(),
+        orden: ORDEN_ROL[d.rolAsignado] ?? 9,
+      }))
+      .sort((a, b) => a.orden - b.orden)
+      .map(({ rol, nombre }) => ({ rol, nombre }));
+  }
+
+  /** Observaciones del informe disciplinario del partido (solo acta cerrada). */
+  private async cargarObservaciones(
+    partidoId: string,
+    tenantId: string,
+  ): Promise<Array<{ lado: string; autorNombre: string; autorRol: string; texto: string }>> {
+    const LADO_LABEL: Record<string, string> = {
+      LOCAL: 'Local',
+      VISITA: 'Visita',
+      GENERAL: 'General',
+    };
+    const ROL_AUTOR_LABEL: Record<string, string> = {
+      ARBITRO_PRINCIPAL: 'Árbitro principal',
+      ARBITRO_ASISTENTE: 'Árbitro asistente',
+      PLANILLERO: 'Planillero',
+      PARAMEDICO: 'Paramédico',
+      OTRO: 'Personal',
+      ADMIN: 'Admin',
+    };
+    const obs = await this.observacionRepo.find({
+      where: { partidoId, tenantId },
+      order: { createdAt: 'ASC' },
+    });
+    return obs.map((o) => ({
+      lado: LADO_LABEL[o.lado] ?? o.lado,
+      autorNombre: o.autorNombre,
+      autorRol: ROL_AUTOR_LABEL[o.autorRol] ?? o.autorRol,
+      texto: o.texto,
+    }));
   }
 
   /**
@@ -186,6 +271,8 @@ export class PlantillaPdfService {
     golesVisita: number | null;
     local: { nombre: string; jugadores: FilaJugador[] };
     visita: { nombre: string; jugadores: FilaJugador[] };
+    personal: Array<{ rol: string; nombre: string }>;
+    observaciones: Array<{ lado: string; autorNombre: string; autorRol: string; texto: string }>;
   }): Promise<Buffer> {
     const doc = new PDFDocument({ size: 'A4', margin: 36 });
     const chunks: Buffer[] = [];
@@ -196,14 +283,18 @@ export class PlantillaPdfService {
 
     // Hoja 1 — equipo local.
     this.dibujarEncabezado(doc, data, 'LOCAL');
+    this.dibujarPersonal(doc, data.personal);
     this.dibujarEquipo(doc, data.local.nombre, data.local.jugadores, data.cerrada);
     this.dibujarFirmas(doc, 'Capitán local', data.cerrada);
+    this.dibujarObservaciones(doc, data.observaciones);
 
     // Hoja 2 — equipo visita (hoja independiente).
     doc.addPage();
     this.dibujarEncabezado(doc, data, 'VISITA');
+    this.dibujarPersonal(doc, data.personal);
     this.dibujarEquipo(doc, data.visita.nombre, data.visita.jugadores, data.cerrada);
     this.dibujarFirmas(doc, 'Capitán visita', data.cerrada);
+    this.dibujarObservaciones(doc, data.observaciones);
 
     doc.end();
     return done;
@@ -393,5 +484,56 @@ export class PlantillaPdfService {
       y += rowH;
     }
     doc.y = y;
+  }
+
+  /** Personal designado del partido — línea "Rol: Nombre · Rol: Nombre …". */
+  private dibujarPersonal(
+    doc: PDFKit.PDFDocument,
+    personal: Array<{ rol: string; nombre: string }>,
+  ): void {
+    if (personal.length === 0) return;
+    const texto = personal.map((p) => `${p.rol}: ${p.nombre}`).join('    ·    ');
+    doc
+      .fontSize(8)
+      .font('Helvetica-Bold')
+      .fillColor('#0f3d2e')
+      .text('PERSONAL DESIGNADO', 36, doc.y, { width: 523 });
+    doc
+      .fontSize(8.5)
+      .font('Helvetica')
+      .fillColor('black')
+      .text(texto, 36, doc.y, { width: 523 });
+    doc.moveDown(0.6);
+  }
+
+  /** Informe disciplinario del partido — entradas por lado + autor + texto. */
+  private dibujarObservaciones(
+    doc: PDFKit.PDFDocument,
+    observaciones: Array<{ lado: string; autorNombre: string; autorRol: string; texto: string }>,
+  ): void {
+    if (observaciones.length === 0) return;
+    doc.moveDown(1);
+    if (doc.y > 720) doc.addPage();
+    doc
+      .fontSize(10)
+      .font('Helvetica-Bold')
+      .fillColor('#0f3d2e')
+      .text('Informe del partido', 36, doc.y, { width: 523 });
+    doc.fillColor('black');
+    doc.moveDown(0.3);
+    for (const o of observaciones) {
+      if (doc.y > 770) doc.addPage();
+      doc
+        .fontSize(8)
+        .font('Helvetica-Bold')
+        .fillColor('#555')
+        .text(`[${o.lado}] ${o.autorNombre} · ${o.autorRol}`, 36, doc.y, { width: 523 });
+      doc
+        .fontSize(9)
+        .font('Helvetica')
+        .fillColor('black')
+        .text(o.texto, 36, doc.y, { width: 523 });
+      doc.moveDown(0.4);
+    }
   }
 }

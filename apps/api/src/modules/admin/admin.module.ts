@@ -62,6 +62,8 @@ import {
 } from './partidos/partidos-admin.controller';
 import { PartidosAdminService } from './partidos/partidos-admin.service';
 import { PlantillaPdfService } from './partidos/plantilla-pdf.service';
+import { ObservacionesPartidoService } from './partidos/observaciones-partido.service';
+import { ObservacionesTorneoController } from './partidos/observaciones-torneo.controller';
 import {
   PersonalAdminController,
   PersonalPortalController,
@@ -162,6 +164,7 @@ import { EncuestasService } from './encuestas/encuestas.service';
     FixtureAdminController,
     FixtureDetailController,
     PartidosAdminController,
+    ObservacionesTorneoController,
     TribunalAdminController,
     PersonalAdminController,
     PersonalPublicController,
@@ -205,6 +208,7 @@ import { EncuestasService } from './encuestas/encuestas.service';
     FixtureAdminService,
     PartidosAdminService,
     PlantillaPdfService,
+    ObservacionesPartidoService,
     TribunalAdminService,
     PersonalAdminService,
     PersonalPortalService,
