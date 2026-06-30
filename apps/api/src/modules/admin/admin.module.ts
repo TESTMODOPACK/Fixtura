@@ -104,6 +104,13 @@ import { Torneo } from '../competition/entities/torneo.entity';
 import { NpsAdminController } from './nps/nps-admin.controller';
 import { NpsPublicoController } from './nps/nps-publico.controller';
 import { NpsService } from './nps/nps.service';
+import { PlantillaEncuesta } from '../competition/entities/plantilla-encuesta.entity';
+import { PreguntaEncuesta } from '../competition/entities/pregunta-encuesta.entity';
+import { EnvioEncuesta } from '../competition/entities/envio-encuesta.entity';
+import { RespuestaEncuesta } from '../competition/entities/respuesta-encuesta.entity';
+import { EncuestasAdminController } from './encuestas/encuestas-admin.controller';
+import { EncuestasPublicoController } from './encuestas/encuestas-publico.controller';
+import { EncuestasService } from './encuestas/encuestas.service';
 
 /**
  * Módulo admin — endpoints autenticados bajo /api/v1/admin/*.
@@ -136,6 +143,10 @@ import { NpsService } from './nps/nps.service';
       InscripcionTorneo,
       Torneo,
       Club,
+      PlantillaEncuesta,
+      PreguntaEncuesta,
+      EnvioEncuesta,
+      RespuestaEncuesta,
     ]),
   ],
   controllers: [
@@ -179,6 +190,8 @@ import { NpsService } from './nps/nps.service';
     DelegadoPublicController,
     NpsAdminController,
     NpsPublicoController,
+    EncuestasAdminController,
+    EncuestasPublicoController,
   ],
   providers: [
     TemporadasAdminService,
@@ -221,6 +234,7 @@ import { NpsService } from './nps/nps.service';
     DelegadoInviteService,
     DelegadoPortalService,
     NpsService,
+    EncuestasService,
   ],
   exports: [DiasNoJugablesService, VetadosAdminService],
 })

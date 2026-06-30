@@ -49,6 +49,12 @@ import type {
   UpdatePartidoRequest,
   UpdatePersonalRequest,
   UpdateTorneoRequest,
+  CreatePlantillaRequest,
+  UpdatePlantillaRequest,
+  UpsertPreguntaRequest,
+  DispararEncuestaResultado,
+  PlantillaEncuesta,
+  ResumenEncuesta,
 } from '@fixtura/types';
 
 import { apiFetch } from '@/lib/api';
@@ -930,6 +936,117 @@ export function useDispararNps() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'nps', 'resumen'] });
     },
+  });
+}
+
+// ─── Encuestas configurables (ADR-0011) ──────────────────────────────
+const ENCUESTAS_KEY = ['admin', 'encuestas'];
+
+export function usePlantillasEncuesta() {
+  return useQuery({
+    queryKey: ENCUESTAS_KEY,
+    queryFn: () => apiFetch<PlantillaEncuesta[]>('/admin/encuestas'),
+  });
+}
+
+export function useResumenEncuesta(plantillaId: string | null) {
+  return useQuery({
+    queryKey: ['admin', 'encuestas', 'resumen', plantillaId],
+    queryFn: () => apiFetch<ResumenEncuesta>(`/admin/encuestas/${plantillaId}/resumen`),
+    enabled: !!plantillaId,
+  });
+}
+
+export function useCrearPlantilla() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreatePlantillaRequest) =>
+      apiFetch<PlantillaEncuesta>('/admin/encuestas', { method: 'POST', body: input }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ENCUESTAS_KEY }),
+  });
+}
+
+export function useActualizarPlantilla() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdatePlantillaRequest }) =>
+      apiFetch<PlantillaEncuesta>(`/admin/encuestas/${id}`, { method: 'PATCH', body: input }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ENCUESTAS_KEY }),
+  });
+}
+
+export function useEliminarPlantilla() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ ok: boolean }>(`/admin/encuestas/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ENCUESTAS_KEY }),
+  });
+}
+
+export function useAgregarPregunta() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ plantillaId, input }: { plantillaId: string; input: UpsertPreguntaRequest }) =>
+      apiFetch<PlantillaEncuesta>(`/admin/encuestas/${plantillaId}/preguntas`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ENCUESTAS_KEY }),
+  });
+}
+
+export function useActualizarPregunta() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ preguntaId, input }: { preguntaId: string; input: UpsertPreguntaRequest }) =>
+      apiFetch<PlantillaEncuesta>(`/admin/encuestas/preguntas/${preguntaId}`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ENCUESTAS_KEY }),
+  });
+}
+
+export function useEliminarPregunta() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (preguntaId: string) =>
+      apiFetch<PlantillaEncuesta>(`/admin/encuestas/preguntas/${preguntaId}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ENCUESTAS_KEY }),
+  });
+}
+
+export function useReordenarPreguntas() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ plantillaId, preguntaIds }: { plantillaId: string; preguntaIds: string[] }) =>
+      apiFetch<PlantillaEncuesta>(`/admin/encuestas/${plantillaId}/reordenar`, {
+        method: 'POST',
+        body: { preguntaIds },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ENCUESTAS_KEY }),
+  });
+}
+
+export function useDispararEncuesta() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ plantillaId, torneoId }: { plantillaId: string; torneoId: string }) =>
+      apiFetch<DispararEncuestaResultado>('/admin/encuestas/disparar', {
+        method: 'POST',
+        body: { plantillaId, torneoId },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ENCUESTAS_KEY }),
+  });
+}
+
+export function useCrearEjemploEncuesta() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<PlantillaEncuesta>('/admin/encuestas/ejemplo', { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ENCUESTAS_KEY }),
   });
 }
 

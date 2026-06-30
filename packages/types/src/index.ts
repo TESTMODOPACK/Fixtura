@@ -36,3 +36,4 @@ export * from './delegado';
 export * from './informes';
 export * from './analytics';
 export * from './nps';
+export * from './encuestas';

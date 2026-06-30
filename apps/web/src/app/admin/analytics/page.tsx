@@ -4,14 +4,8 @@ import {
   AlertTriangle,
   BarChart3,
   Coins,
-  Frown,
   Megaphone,
-  Meh,
-  MessageSquare,
-  Send,
   ShieldOff,
-  Smile,
-  Star,
   Trophy,
   Users,
   Wallet,
@@ -29,14 +23,15 @@ import {
   YAxis,
 } from 'recharts';
 
-import type { AnalyticsAdmin, DispararNpsResultado, NpsResumenAdmin } from '@fixtura/types';
+import type { AnalyticsAdmin } from '@fixtura/types';
 
-import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
-import { useAnalytics, useDispararNps, useNpsResumen, useTorneos } from '@/hooks/use-admin';
+import { useAnalytics } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+
+import { EncuestasTab } from './_encuestas-tab';
 
 // Paleta de marca para los gráficos (recharts no lee variables CSS).
 const VERDE = '#0F2A1F';
@@ -77,11 +72,11 @@ export default function AnalyticsPage(): React.ReactElement {
           Analytics
         </TabBtn>
         <TabBtn active={tab === 'nps'} onClick={() => setTab('nps')} icon={Megaphone}>
-          NPS / Encuestas
+          Encuestas
         </TabBtn>
       </div>
 
-      {tab === 'analytics' ? <AnalyticsTab /> : <NpsTab />}
+      {tab === 'analytics' ? <AnalyticsTab /> : <EncuestasTab />}
     </>
   );
 }
@@ -257,255 +252,6 @@ function AnalyticsContent({ data }: { data: AnalyticsAdmin }): React.ReactElemen
         </ChartCard>
       </div>
     </div>
-  );
-}
-
-// ══════════════════════════ NPS ════════════════════════════════════════
-
-function NpsTab(): React.ReactElement {
-  const { data, isLoading, error } = useNpsResumen();
-  const { data: torneos } = useTorneos();
-  const disparar = useDispararNps();
-  const [torneoId, setTorneoId] = useState('');
-  const [resultado, setResultado] = useState<DispararNpsResultado | null>(null);
-  const apiError = error as ApiError | undefined;
-
-  const onEnviar = (): void => {
-    if (!torneoId) return;
-    setResultado(null);
-    disparar.mutate(torneoId, { onSuccess: (r) => setResultado(r) });
-  };
-
-  return (
-    <div className="space-y-5">
-      {/* Disparador */}
-      <Card padding="roomy">
-        <CardLabel>Enviar encuesta a los clubes de un torneo</CardLabel>
-        <p className="text-xs font-serif italic text-ink-mute mt-1 mb-4">
-          Cada club recibe un correo (al delegado) con un link para puntuar la liga. Se manda una
-          sola encuesta por club; los que ya la tienen no se reenvían.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <select
-            value={torneoId}
-            onChange={(e) => setTorneoId(e.target.value)}
-            className="flex-1 rounded-lg border border-line bg-white px-3 py-2 text-sm text-green-deep"
-          >
-            <option value="">Elige un torneo…</option>
-            {(torneos ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.nombre}
-              </option>
-            ))}
-          </select>
-          <Button onClick={onEnviar} disabled={!torneoId || disparar.isPending}>
-            <Send size={15} className="mr-1.5" />
-            {disparar.isPending ? 'Enviando…' : 'Enviar encuestas'}
-          </Button>
-        </div>
-
-        {resultado && (
-          <div className="mt-3 rounded-lg bg-green-bright/10 border border-green-bright/30 px-3 py-2 text-sm text-green-deep">
-            Se enviaron <strong>{resultado.enviadas}</strong> encuesta(s).
-            {resultado.yaEnviadas > 0 && ` ${resultado.yaEnviadas} club(es) ya tenían encuesta.`}
-            {resultado.sinEmail > 0 &&
-              ` ${resultado.sinEmail} club(es) sin email de contacto — cárgalo en la directiva del club.`}
-          </div>
-        )}
-        {disparar.isError && (
-          <div className="mt-3 rounded-lg bg-danger/5 border border-danger/30 px-3 py-2 text-sm text-danger">
-            No se pudieron enviar las encuestas. {(disparar.error as ApiError)?.message}
-          </div>
-        )}
-      </Card>
-
-      {isLoading && (
-        <div className="font-serif italic text-ink-mute py-8">Calculando NPS…</div>
-      )}
-      {!isLoading && apiError && (
-        <Card padding="roomy" className="border-2 border-danger/40 bg-danger/5">
-          <div className="text-sm text-danger">{apiError.message}</div>
-        </Card>
-      )}
-      {data && <NpsResultados data={data} />}
-    </div>
-  );
-}
-
-function NpsResultados({ data }: { data: NpsResumenAdmin }): React.ReactElement {
-  if (data.totalEnviadas === 0) {
-    return (
-      <Card padding="roomy">
-        <div className="flex items-center justify-center h-[160px] text-sm font-serif italic text-ink-mute text-center px-4">
-          Todavía no enviaste ninguna encuesta. Elige un torneo arriba y manda la primera para
-          empezar a medir la satisfacción de tus clubes.
-        </div>
-      </Card>
-    );
-  }
-
-  const tasa =
-    data.totalEnviadas > 0
-      ? Math.round((data.totalRespondidas / data.totalEnviadas) * 100)
-      : 0;
-  const scoreTono = data.score > 0 ? 'ok' : data.score < 0 ? 'bad' : 'neutral';
-
-  return (
-    <div className="space-y-5">
-      {/* Score + tasas */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card padding="comfortable">
-          <CardLabel>Score NPS</CardLabel>
-          <div
-            className={cn(
-              'font-display tracking-display text-4xl mt-1',
-              scoreTono === 'ok'
-                ? 'text-green-bright'
-                : scoreTono === 'bad'
-                  ? 'text-danger'
-                  : 'text-ink-mute',
-            )}
-          >
-            {data.score > 0 ? `+${data.score}` : data.score}
-          </div>
-          <div className="text-xs font-serif italic text-ink-mute mt-0.5">
-            de −100 a +100
-          </div>
-        </Card>
-        <Stat icon={Send} label="Enviadas" valor={data.totalEnviadas} />
-        <Stat icon={MessageSquare} label="Respondidas" valor={data.totalRespondidas} />
-        <Stat icon={BarChart3} label="Tasa de respuesta" valor={`${tasa}%`} />
-      </div>
-
-      {/* Desglose promotores / pasivos / detractores */}
-      <Card padding="roomy">
-        <CardLabel>Cómo se reparten las respuestas</CardLabel>
-        <p className="text-xs font-serif italic text-ink-mute mt-1 mb-4">
-          Promotores (9-10) impulsan; detractores (0-6) restan. El NPS es la diferencia.
-        </p>
-        <BarraNps
-          promotores={data.promotores}
-          pasivos={data.pasivos}
-          detractores={data.detractores}
-        />
-        <div className="grid grid-cols-3 gap-3 mt-4">
-          <Segmento icon={Smile} label="Promotores" valor={data.promotores} tono="ok" />
-          <Segmento icon={Meh} label="Pasivos" valor={data.pasivos} tono="neutral" />
-          <Segmento icon={Frown} label="Detractores" valor={data.detractores} tono="bad" />
-        </div>
-      </Card>
-
-      {/* Promedios de sub-evaluaciones */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <PromedioCard label="Arbitraje" valor={data.promArbitraje} />
-        <PromedioCard label="Recinto" valor={data.promRecinto} />
-        <PromedioCard label="Organización" valor={data.promOrganizacion} />
-      </div>
-
-      {/* Comentarios */}
-      <Card padding="roomy">
-        <CardLabel>Comentarios recientes</CardLabel>
-        {data.comentarios.length === 0 ? (
-          <div className="text-sm font-serif italic text-ink-mute mt-3">
-            Aún no hay comentarios escritos.
-          </div>
-        ) : (
-          <ul className="mt-3 space-y-3">
-            {data.comentarios.map((c, i) => (
-              <li key={i} className="border-l-2 border-line pl-3">
-                <p className="text-sm text-green-deep">“{c.comentario}”</p>
-                <p className="text-xs text-ink-mute mt-1">
-                  <span className="font-medium">{c.club}</span> · {c.torneo} · nota {c.nps}/10
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function BarraNps({
-  promotores,
-  pasivos,
-  detractores,
-}: {
-  promotores: number;
-  pasivos: number;
-  detractores: number;
-}): React.ReactElement {
-  const total = promotores + pasivos + detractores;
-  if (total === 0) {
-    return <div className="h-3 rounded-full bg-line" />;
-  }
-  const pct = (n: number): string => `${(n / total) * 100}%`;
-  return (
-    <div className="flex h-3 rounded-full overflow-hidden">
-      {promotores > 0 && <div style={{ width: pct(promotores) }} className="bg-green-bright" />}
-      {pasivos > 0 && <div style={{ width: pct(pasivos) }} className="bg-amber-400" />}
-      {detractores > 0 && <div style={{ width: pct(detractores) }} className="bg-danger" />}
-    </div>
-  );
-}
-
-function Segmento({
-  icon: Icon,
-  label,
-  valor,
-  tono,
-}: {
-  icon: typeof Smile;
-  label: string;
-  valor: number;
-  tono: 'ok' | 'neutral' | 'bad';
-}): React.ReactElement {
-  return (
-    <div className="text-center">
-      <Icon
-        size={20}
-        className={cn(
-          'mx-auto mb-1',
-          tono === 'ok' ? 'text-green-bright' : tono === 'bad' ? 'text-danger' : 'text-ink-mute',
-        )}
-      />
-      <div className="font-display tracking-display text-2xl text-green-deep">{valor}</div>
-      <div className="text-xs text-ink-mute">{label}</div>
-    </div>
-  );
-}
-
-function PromedioCard({
-  label,
-  valor,
-}: {
-  label: string;
-  valor: number | null;
-}): React.ReactElement {
-  return (
-    <Card padding="comfortable">
-      <CardLabel>{label}</CardLabel>
-      {valor == null ? (
-        <div className="font-serif italic text-ink-mute text-sm mt-2">Sin datos</div>
-      ) : (
-        <div className="flex items-center gap-2 mt-1">
-          <span className="font-display tracking-display text-3xl text-green-deep">
-            {valor.toFixed(1)}
-          </span>
-          <span className="text-xs text-ink-mute">/ 5</span>
-          <div className="flex ml-auto">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Star
-                key={n}
-                size={14}
-                className={n <= Math.round(valor) ? 'text-orange' : 'text-line'}
-                fill={n <= Math.round(valor) ? '#E76F26' : 'none'}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </Card>
   );
 }
 

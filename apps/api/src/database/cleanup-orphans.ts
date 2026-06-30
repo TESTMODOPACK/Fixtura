@@ -495,6 +495,96 @@ async function main(): Promise<void> {
     `);
     log('encuestas_nps asegurada (módulo M5 etapa 2).');
 
+    // ── Sprint ENC (ADR-0011) — encuestas configurables ──────────────────
+    // Reemplaza el NPS fijo por un constructor: plantillas + preguntas +
+    // envíos + respuestas, todas tenant-scoped con RLS FORCE.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS plantillas_encuesta (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        nombre VARCHAR(150) NOT NULL,
+        descripcion TEXT,
+        estado VARCHAR(20) NOT NULL DEFAULT 'BORRADOR',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS preguntas_encuesta (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        plantilla_id UUID NOT NULL REFERENCES plantillas_encuesta(id) ON DELETE CASCADE,
+        orden SMALLINT NOT NULL DEFAULT 0,
+        texto VARCHAR(300) NOT NULL,
+        tipo VARCHAR(20) NOT NULL,
+        opciones JSONB NOT NULL DEFAULT '[]'::jsonb,
+        obligatoria BOOLEAN NOT NULL DEFAULT FALSE,
+        es_nps BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS envios_encuesta (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        plantilla_id UUID NOT NULL REFERENCES plantillas_encuesta(id) ON DELETE CASCADE,
+        torneo_id UUID NOT NULL REFERENCES torneos(id) ON DELETE CASCADE,
+        club_id UUID NOT NULL REFERENCES clubes(id) ON DELETE CASCADE,
+        email_destino VARCHAR(150) NOT NULL,
+        token TEXT NOT NULL,
+        estado VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE',
+        enviada_at TIMESTAMPTZ,
+        respondida_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_envio_encuesta UNIQUE (tenant_id, plantilla_id, torneo_id, club_id)
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS respuestas_encuesta (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        envio_id UUID NOT NULL REFERENCES envios_encuesta(id) ON DELETE CASCADE,
+        pregunta_id UUID NOT NULL REFERENCES preguntas_encuesta(id) ON DELETE CASCADE,
+        valor_numero SMALLINT,
+        valor_texto TEXT,
+        valor_opciones JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_respuesta_encuesta UNIQUE (envio_id, pregunta_id)
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_plantillas_encuesta_tenant ON plantillas_encuesta(tenant_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_preguntas_encuesta_tenant ON preguntas_encuesta(tenant_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_preguntas_encuesta_plantilla ON preguntas_encuesta(plantilla_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_envios_encuesta_tenant ON envios_encuesta(tenant_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_envios_encuesta_plantilla ON envios_encuesta(plantilla_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_respuestas_encuesta_tenant ON respuestas_encuesta(tenant_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_respuestas_encuesta_envio ON respuestas_encuesta(envio_id)`);
+    // RLS para las 4 (nombres de tabla controlados por el código, no input).
+    for (const tabla of [
+      'plantillas_encuesta',
+      'preguntas_encuesta',
+      'envios_encuesta',
+      'respuestas_encuesta',
+    ]) {
+      await client.query(`ALTER TABLE ${tabla} ENABLE ROW LEVEL SECURITY`);
+      await client.query(`ALTER TABLE ${tabla} FORCE ROW LEVEL SECURITY`);
+      await client.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE tablename = '${tabla}' AND policyname = 'tenant_isolation'
+          ) THEN
+            CREATE POLICY tenant_isolation ON ${tabla}
+              USING (
+                tenant_id::text = current_setting('app.current_tenant_id', true)
+                OR current_setting('app.current_tenant_id', true) = ''
+              );
+          END IF;
+        END $$;
+      `);
+    }
+    log('encuestas configurables (ENC) aseguradas: plantillas/preguntas/envios/respuestas.');
+
     // Sprint 26D — campos nuevos en torneos para soportar el modelo nuevo.
     // Aditivos: torneos viejos quedan con defaults razonables.
     await client.query(`
