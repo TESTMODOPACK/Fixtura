@@ -364,7 +364,11 @@ export class PlantillaPdfService {
     cerrada: boolean,
   ): void {
     doc.moveDown(2);
-    const y = doc.y > 720 ? 720 : doc.y;
+    // Si la tabla terminó cerca del borde inferior, saltamos a una página
+    // nueva en vez de clampear la posición (clampear pisaba la última fila en
+    // rosters largos, más aún ahora que el encabezado incluye el personal).
+    if (doc.y > 700) doc.addPage();
+    const y = doc.y;
     doc.fontSize(9).font('Helvetica').fillColor('black');
     if (cerrada) {
       // Acta cerrada: ya está certificada en el sistema; no se firma a mano.
@@ -522,7 +526,11 @@ export class PlantillaPdfService {
     doc.fillColor('black');
     doc.moveDown(0.3);
     for (const o of observaciones) {
-      if (doc.y > 770) doc.addPage();
+      // Estimamos el alto del bloque (encabezado + texto) y saltamos de página
+      // si no entra completo, para no cortar una observación por la mitad.
+      doc.fontSize(9).font('Helvetica');
+      const alto = 14 + doc.heightOfString(o.texto, { width: 523 });
+      if (doc.y + alto > 806) doc.addPage();
       doc
         .fontSize(8)
         .font('Helvetica-Bold')

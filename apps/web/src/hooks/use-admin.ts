@@ -583,6 +583,14 @@ export function useCrearObservacionPartido(partidoId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId, 'observaciones'] });
+      // El tribunal lista las observaciones por torneo (otra key). Como el hook
+      // no conoce el torneoId, invalidamos las del torneo por predicado.
+      qc.invalidateQueries({
+        predicate: (q) =>
+          q.queryKey[0] === 'admin' &&
+          q.queryKey[1] === 'torneos' &&
+          q.queryKey[3] === 'observaciones',
+      });
     },
   });
 }
@@ -596,6 +604,14 @@ export function useEliminarObservacionPartido(partidoId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId, 'observaciones'] });
+      // El tribunal lista las observaciones por torneo (otra key). Como el hook
+      // no conoce el torneoId, invalidamos las del torneo por predicado.
+      qc.invalidateQueries({
+        predicate: (q) =>
+          q.queryKey[0] === 'admin' &&
+          q.queryKey[1] === 'torneos' &&
+          q.queryKey[3] === 'observaciones',
+      });
     },
   });
 }

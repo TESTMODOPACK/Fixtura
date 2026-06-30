@@ -116,7 +116,15 @@ export function InformePartido({
               {!soloLectura && (
                 <button
                   type="button"
-                  onClick={() => eliminar.mutate(o.id)}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        '¿Eliminar esta observación del informe? El tribunal dejará de verla.',
+                      )
+                    ) {
+                      eliminar.mutate(o.id);
+                    }
+                  }}
                   className="text-ink-mute hover:text-danger p-1 shrink-0"
                   title="Eliminar observación"
                 >
