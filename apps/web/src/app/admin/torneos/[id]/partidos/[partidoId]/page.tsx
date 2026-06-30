@@ -118,6 +118,11 @@ export default function PartidoDetallePage({
   // Ocultamos el flujo de carga (goles, cerrar acta, certificación, incidencias)
   // si el partido no se jugó, o si está vencido y el admin aún no pidió cargarlo.
   const ocultarCarga = noSeJuega || (vencido && !cargarResultado);
+  // El Match Center opera el partido en vivo (cronómetro, goles, acta). Solo
+  // aplica si el partido todavía puede jugarse o cargarse: no cuando ya se
+  // resolvió sin jugarse (no jugado, suspendido, reprogramado), ni si es
+  // walkover, ni con el acta ya cerrada.
+  const puedeOperarEnVivo = !cerrada && !noSeJuega && partido.estado !== 'WALKOVER';
 
   const descargarPlantilla = async (): Promise<void> => {
     const token = useAuthStore.getState().accessToken;
@@ -152,7 +157,7 @@ export default function PartidoDetallePage({
         <Button variant="default" size="sm" onClick={descargarPlantilla}>
           <FileText size={14} /> Plantilla PDF
         </Button>
-        {!partido.actaCerradaAt && (
+        {puedeOperarEnVivo && (
           <Link href={`/admin/torneos/${torneoId}/partidos/${partidoId}/centro`}>
             <Button variant="accent" size="sm">
               Match Center

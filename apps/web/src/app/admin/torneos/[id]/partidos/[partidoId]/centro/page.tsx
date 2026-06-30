@@ -89,6 +89,50 @@ export default function CentroPage({
       minutosVisibles
     : 0;
 
+  // El partido ya se resolvió sin jugarse (o el acta cerró): el Match Center no
+  // aplica. Si se llegó por un link directo, mostramos un aviso en vez del panel.
+  const noOperable =
+    !!partido &&
+    (!!partido.actaCerradaAt ||
+      partido.estado === 'NO_JUGADO' ||
+      partido.estado === 'SUSPENDIDO_FUERZA_MAYOR' ||
+      partido.estado === 'REPROGRAMADO' ||
+      partido.estado === 'WALKOVER');
+
+  if (partido && noOperable) {
+    const etiquetaEstado = partido.actaCerradaAt
+      ? 'tiene el acta cerrada'
+      : `está en estado "${partido.estado.replace(/_/g, ' ').toLowerCase()}"`;
+    return (
+      <>
+        <PageHead
+          eyebrow={`Match Center · Fecha ${partido.fechaNumero}`}
+          title={`${partido.equipoLocalNombre} vs ${partido.equipoVisitaNombre}`}
+          sub="Panel del cronista — marcador y cronómetro en vivo."
+        >
+          <Link href={`/admin/torneos/${torneoId}/partidos/${partidoId}`}>
+            <Button variant="default" size="sm">
+              <ArrowLeft size={14} /> Detalle partido
+            </Button>
+          </Link>
+        </PageHead>
+        <Card padding="roomy" className="border-2 border-orange-700/40 bg-orange-700/5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={20} className="text-orange-700 flex-shrink-0 mt-0.5" />
+            <div>
+              <CardLabel>Match Center no disponible</CardLabel>
+              <p className="text-sm text-ink-mute mt-1">
+                Este partido {etiquetaEstado}, así que no se opera desde el Match
+                Center. Volvé al detalle del partido para gestionarlo (reactivar,
+                reprogramar o cargar el resultado).
+              </p>
+            </div>
+          </div>
+        </Card>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHead
