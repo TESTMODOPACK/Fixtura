@@ -119,10 +119,17 @@ export default function PartidoDetallePage({
   // si el partido no se jugó, o si está vencido y el admin aún no pidió cargarlo.
   const ocultarCarga = noSeJuega || (vencido && !cargarResultado);
   // El Match Center opera el partido en vivo (cronómetro, goles, acta). Solo
-  // aplica si el partido todavía puede jugarse o cargarse: no cuando ya se
-  // resolvió sin jugarse (no jugado, suspendido, reprogramado), ni si es
-  // walkover, ni con el acta ya cerrada.
-  const puedeOperarEnVivo = !cerrada && !noSeJuega && partido.estado !== 'WALKOVER';
+  // aplica si el partido todavía puede jugarse: no cuando ya se resolvió sin
+  // jugarse (no jugado, suspendido, reprogramado), ni si es walkover, ni con el
+  // acta cerrada. Tampoco en un PROGRAMADO ya vencido: ese partido se gestiona
+  // desde arriba (cargar resultado / no jugado / reprogramar), no se cronometra
+  // en vivo. Un EN_CURSO sí lo conserva (puede estar jugándose), y el planillero
+  // mantiene su acceso desde /personal aunque el partido empiece tarde.
+  const puedeOperarEnVivo =
+    !cerrada &&
+    !noSeJuega &&
+    partido.estado !== 'WALKOVER' &&
+    !(vencido && partido.estado === 'PROGRAMADO');
 
   const descargarPlantilla = async (): Promise<void> => {
     const token = useAuthStore.getState().accessToken;
