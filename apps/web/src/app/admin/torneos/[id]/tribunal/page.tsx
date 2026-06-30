@@ -7,6 +7,7 @@ import {
   Lock,
   MessageSquare,
   Pencil,
+  ShieldAlert,
   Trash2,
   X,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ import {
   ROL_AUTOR_OBSERVACION_LABEL,
   type ObservacionTribunalItem,
   type SancionAdmin,
+  type SancionEquipoItem,
 } from '@fixtura/types';
 
 import { Button } from '@/components/ui/button';
@@ -38,6 +40,7 @@ import {
   useRevokeSancion,
   useSancionarEquipo,
   useSanciones,
+  useSancionesEquipo,
   useTorneo,
 } from '@/hooks/use-admin';
 import { ApiError } from '@/lib/api';
@@ -67,6 +70,7 @@ export default function TribunalPage({
   const { data: torneo } = useTorneo(torneoId);
   const { data: sanciones, isLoading } = useSanciones(torneoId);
   const { data: observaciones } = useObservacionesTorneo(torneoId);
+  const { data: sancionesEquipo } = useSancionesEquipo(torneoId);
   const [adding, setAdding] = useState(false);
 
   const activas = sanciones?.filter((s) => !s.cumplida && s.fechasPendientes > 0) ?? [];
@@ -173,12 +177,75 @@ export default function TribunalPage({
         </Card>
       )}
 
+      <SancionesEquipoSection items={sancionesEquipo ?? []} />
+
       <TribunalPorFecha
         sanciones={sanciones ?? []}
         observaciones={observaciones ?? []}
         torneoId={torneoId}
       />
     </>
+  );
+}
+
+const MOTIVO_SUSPENSION_EQUIPO_LABEL: Record<string, string> = {
+  DEPORTIVA: 'Deportiva',
+  ECONOMICA: 'Económica',
+  OTRA: 'Otra',
+};
+
+function SancionesEquipoSection({
+  items,
+}: {
+  items: SancionEquipoItem[];
+}): React.ReactElement | null {
+  if (items.length === 0) return null;
+  return (
+    <Card padding="comfortable" className="mb-5 border-2 border-danger/30 bg-danger/[0.03]">
+      <div className="flex items-center gap-2 mb-1">
+        <ShieldAlert size={16} className="text-danger" />
+        <CardLabel>Sanciones a equipos</CardLabel>
+      </div>
+      <p className="text-xs text-ink-mute mb-3 leading-snug">
+        Equipos suspendidos del torneo y clubes vetados de la liga. No dependen de
+        una fecha: aplican mientras estén vigentes.
+      </p>
+      <ul className="space-y-2">
+        {items.map((s, i) => (
+          <li
+            key={`${s.tipo}-${s.inscripcionId ?? s.clubId}-${i}`}
+            className="border border-line rounded-card px-3 py-2 bg-paper"
+          >
+            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+              <span className="font-semibold text-ink truncate">{s.clubNombre}</span>
+              <span
+                className={cn(
+                  'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-0.5 rounded',
+                  s.tipo === 'VETO_CLUB'
+                    ? 'bg-danger/15 text-danger'
+                    : 'bg-orange-700/10 text-orange-700',
+                )}
+              >
+                {s.tipo === 'VETO_CLUB' ? 'Veto de club' : 'Suspendido del torneo'}
+              </span>
+              {s.tipo === 'SUSPENSION_TORNEO' && s.motivo && (
+                <span className="text-[10px] uppercase tracking-wider text-ink-mute">
+                  {MOTIVO_SUSPENSION_EQUIPO_LABEL[s.motivo] ?? s.motivo}
+                </span>
+              )}
+            </div>
+            {s.tipo === 'VETO_CLUB' && s.motivo && (
+              <p className="text-sm text-ink whitespace-pre-wrap break-words">{s.motivo}</p>
+            )}
+            {s.observaciones && (
+              <p className="text-sm text-ink whitespace-pre-wrap break-words">
+                {s.observaciones}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 

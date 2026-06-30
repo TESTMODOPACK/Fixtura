@@ -95,6 +95,24 @@ export const SancionEquipoResultSchema = z.object({
 export type SancionEquipoResult = z.infer<typeof SancionEquipoResultSchema>;
 
 /**
+ * Sprint TRI — listado de sanciones a EQUIPO vigentes para el Tribunal:
+ * suspensiones del torneo (inscripción SUSPENDIDA) y vetos de club (de por
+ * vida). No tienen jornada de origen, por eso van en su propia sección.
+ */
+export const SANCION_EQUIPO_TIPO = ['SUSPENSION_TORNEO', 'VETO_CLUB'] as const;
+export type SancionEquipoTipo = (typeof SANCION_EQUIPO_TIPO)[number];
+
+export interface SancionEquipoItem {
+  tipo: SancionEquipoTipo;
+  clubId: string;
+  clubNombre: string;
+  inscripcionId: string | null;
+  motivo: string | null;
+  observaciones: string | null;
+  fecha: string | null;
+}
+
+/**
  * Resultado del cierre de acta — qué sanciones se crearon
  * automáticamente. Se devuelve al cliente para feedback visual.
  */

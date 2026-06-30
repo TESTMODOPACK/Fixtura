@@ -12,6 +12,7 @@ import type {
   MotivoSuspensionEquipo,
   SancionAdmin,
   SancionarEquipoTribunalRequest,
+  SancionEquipoItem,
   SancionEquipoResult,
 } from '@fixtura/types';
 
@@ -197,6 +198,56 @@ export class TribunalAdminService {
     }
 
     return { clubNombre: club.nombre, suspendidoDelTorneo, clubVetado };
+  }
+
+  /**
+   * Sprint TRI — sanciones a EQUIPO vigentes del torneo para el Tribunal:
+   * inscripciones SUSPENDIDAS + clubes vetados (entre los inscritos al torneo).
+   * No se almacenan en `sanciones_activas` (esas son por jugador/RUT), por eso
+   * el tribunal no las veía: se derivan del estado de inscripción/club.
+   */
+  async sancionesEquipoDelTorneo(
+    torneoId: string,
+    tenantId: string,
+  ): Promise<SancionEquipoItem[]> {
+    await this.ensureTorneo(torneoId, tenantId);
+    const inscripciones = await this.inscRepo.find({
+      where: { torneoId, tenantId },
+      relations: { club: true },
+    });
+    const items: SancionEquipoItem[] = [];
+    for (const i of inscripciones) {
+      if (i.estado === 'SUSPENDIDO') {
+        items.push({
+          tipo: 'SUSPENSION_TORNEO',
+          clubId: i.clubId,
+          clubNombre: i.club?.nombre ?? 'Club',
+          inscripcionId: i.id,
+          motivo: i.motivoSuspension,
+          observaciones: i.observacionesSuspension,
+          fecha: i.suspendidoEn ? i.suspendidoEn.toISOString() : null,
+        });
+      }
+    }
+    // Veto de club: a nivel club (cross-torneo). Dedup por club y solo para los
+    // clubes que participan de este torneo.
+    const vetados = new Set<string>();
+    for (const i of inscripciones) {
+      if (i.club?.vetadoAt && !vetados.has(i.clubId)) {
+        vetados.add(i.clubId);
+        items.push({
+          tipo: 'VETO_CLUB',
+          clubId: i.clubId,
+          clubNombre: i.club.nombre,
+          inscripcionId: null,
+          motivo: i.club.vetadoMotivo,
+          observaciones: null,
+          fecha: i.club.vetadoAt.toISOString(),
+        });
+      }
+    }
+    // Más recientes primero.
+    return items.sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? ''));
   }
 
   async findOne(id: string, tenantId: string): Promise<SancionAdmin> {

@@ -58,6 +58,7 @@ import type {
   ObservacionPartido,
   ObservacionTribunalItem,
   CrearObservacionPartidoInput,
+  SancionEquipoItem,
 } from '@fixtura/types';
 
 import { apiFetch } from '@/lib/api';
@@ -622,6 +623,16 @@ export function useObservacionesTorneo(torneoId: string) {
     queryKey: ['admin', 'torneos', torneoId, 'observaciones'],
     queryFn: () =>
       apiFetch<ObservacionTribunalItem[]>(`/admin/torneos/${torneoId}/observaciones`),
+    enabled: !!torneoId,
+  });
+}
+
+/** Sanciones a equipo del torneo (suspensiones + vetos de club) — tribunal. */
+export function useSancionesEquipo(torneoId: string) {
+  return useQuery({
+    queryKey: ['admin', 'torneos', torneoId, 'sanciones', 'equipos'],
+    queryFn: () =>
+      apiFetch<SancionEquipoItem[]>(`/admin/torneos/${torneoId}/sanciones/equipos`),
     enabled: !!torneoId,
   });
 }

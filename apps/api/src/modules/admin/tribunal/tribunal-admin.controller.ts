@@ -18,6 +18,7 @@ import {
   type CreateSancionTribunalRequest,
   type SancionAdmin,
   type SancionarEquipoTribunalRequest,
+  type SancionEquipoItem,
   type SancionEquipoResult,
   type UserContext,
 } from '@fixtura/types';
@@ -64,6 +65,15 @@ export class TribunalAdminController {
     @Query('fechaNumero', new ParseIntPipe()) fechaNumero: number,
   ): Promise<Array<{ jugadorInscritoId: string; rut: string | null; motivo: string }>> {
     return this.svc.jugadoresBloqueadosEnFecha(torneoId, ensureTenant(user), fechaNumero);
+  }
+
+  /** Sanciones a equipo vigentes (suspensiones del torneo + vetos de club). */
+  @Get('equipos')
+  sancionesEquipo(
+    @CurrentUser() user: UserContext,
+    @Param('torneoId', new ParseUUIDPipe()) torneoId: string,
+  ): Promise<SancionEquipoItem[]> {
+    return this.svc.sancionesEquipoDelTorneo(torneoId, ensureTenant(user));
   }
 
   @Post()
