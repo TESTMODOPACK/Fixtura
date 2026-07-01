@@ -100,6 +100,13 @@ import {
 } from './delegado/delegado.controller';
 import { DelegadoInviteService } from './delegado/delegado-invite.service';
 import { DelegadoPortalService } from './delegado/delegado-portal.service';
+import {
+  JugadorController,
+  JugadorCuentaAdminController,
+  JugadorPublicController,
+} from './jugador-portal/jugador.controller';
+import { JugadorInviteService } from './jugador-portal/jugador-invite.service';
+import { JugadorPortalService } from './jugador-portal/jugador-portal.service';
 import { EncuestaNps } from '../competition/entities/encuesta-nps.entity';
 import { Club } from '../competition/entities/club.entity';
 import { InscripcionTorneo } from '../competition/entities/inscripcion-torneo.entity';
@@ -193,6 +200,9 @@ import { EncuestasService } from './encuestas/encuestas.service';
     DelegadoController,
     DelegadoAdminController,
     DelegadoPublicController,
+    JugadorController,
+    JugadorCuentaAdminController,
+    JugadorPublicController,
     NpsAdminController,
     NpsPublicoController,
     EncuestasAdminController,
@@ -239,6 +249,8 @@ import { EncuestasService } from './encuestas/encuestas.service';
     PagosPersonalService,
     DelegadoInviteService,
     DelegadoPortalService,
+    JugadorInviteService,
+    JugadorPortalService,
     NpsService,
     EncuestasService,
   ],
