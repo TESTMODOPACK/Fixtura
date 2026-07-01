@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Transactional } from 'typeorm-transactional';
 
 import type { CreateJugadorRequest, JugadorAdmin } from '@fixtura/types';
 import { calcularEdad, calcularEdadCalendario } from '@fixtura/domain';
@@ -76,6 +77,10 @@ export class JugadoresAdminService {
     return toDto(jugador, inscripcionId);
   }
 
+  // DB-5 (auditoría) — importar la planilla es todo-o-nada: si un jugador de
+  // la lista falla (RUT duplicado en otro club, etc.), no debe quedar media
+  // planilla cargada. Los errores propagan y la tx revierte.
+  @Transactional()
   async bulkCreate(
     inscripcionId: string,
     tenantId: string,

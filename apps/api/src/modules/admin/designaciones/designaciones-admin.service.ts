@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import { Transactional } from 'typeorm-transactional';
 
 import type {
   AutoAsignarResult,
@@ -792,6 +793,9 @@ export class DesignacionesAdminService {
    * Devuelve resumen de qué se asignó, qué quedó sin asignar y qué
    * ya tenía designación (cuando sobreescribir=false).
    */
+  // DB-5 (auditoría) — la auto-asignación crea N designaciones en lote; con
+  // @Transactional o falla completa o no deja ninguna a medias.
+  @Transactional()
   async autoAsignar(
     torneoId: string,
     fechaId: string,

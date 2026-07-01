@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { Transactional } from 'typeorm-transactional';
 
 import { AuditLogService } from '../../audit';
 import { Cobro } from '../../competition/entities/cobro.entity';
@@ -176,6 +177,10 @@ export class TarifaAplicadorService {
    * Equipos crea equipos directos sin inscripción, y /admin/finanzas ya
    * filtra por equipo.
    */
+  // DB-5 (auditoría) — al activar el torneo se generan matrículas + cuotas de
+  // TODAS las inscripciones en lote. @Transactional: o se crean todos los
+  // cobros o ninguno (evita cobros a medias si algo falla a mitad del loop).
+  @Transactional()
   async generarCobrosInicioTorneo(
     torneoId: string,
     tenantId: string,

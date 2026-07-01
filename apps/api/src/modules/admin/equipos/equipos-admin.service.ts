@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { Transactional } from 'typeorm-transactional';
 
 import {
   validarPlantelCategoria,
@@ -264,6 +265,12 @@ export class EquiposAdminService {
    * suspendidos; si el rival también está suspendido, marca el partido
    * SUSPENDIDO_FUERZA_MAYOR. El estado/motivo viven ahora en la inscripción.
    */
+  // DB-4 (auditoría) — batch de walkovers todo-o-nada. El request ya corre
+  // dentro de una tx (TenantContextInterceptor), pero @Transactional deja la
+  // intención explícita y protege a un eventual llamador no-HTTP. La clave del
+  // fix está abajo: un walkover que falla re-lanza (no se traga) para que la
+  // tx revierta y no quede el equipo suspendido con partidos pendientes sueltos.
+  @Transactional()
   async suspender(
     inscripcionId: string,
     tenantId: string,
@@ -366,8 +373,12 @@ export class EquiposAdminService {
           this.logger.warn(
             `[suspender] no se pudo declarar walkover partido=${partido.id}: ${
               (err as Error).message
-            }`,
+            } — se aborta la suspensión (rollback).`,
           );
+          // DB-4 — re-lanzar: aborta la tx del request y revierte los
+          // walkovers ya aplicados. Antes se tragaba el error y la suspensión
+          // committeaba con walkovers parciales.
+          throw err;
         }
       }
     }

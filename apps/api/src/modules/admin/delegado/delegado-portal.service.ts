@@ -21,6 +21,7 @@ import { IncidenciaPartido } from '../../competition/entities/incidencia-partido
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Jugador } from '../../competition/entities/jugador.entity';
 import { Partido } from '../../competition/entities/partido.entity';
+import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { CobrosAdminService } from '../cobros/cobros-admin.service';
 import { InformesAdminService } from '../informes/informes-admin.service';
@@ -41,6 +42,8 @@ export class DelegadoPortalService {
     @InjectRepository(IncidenciaPartido)
     private readonly inciRepo: Repository<IncidenciaPartido>,
     @InjectRepository(Cobro) private readonly cobroRepo: Repository<Cobro>,
+    @InjectRepository(SancionActiva)
+    private readonly sancionRepo: Repository<SancionActiva>,
     private readonly cobros: CobrosAdminService,
     private readonly pagos: PagosService,
     private readonly informes: InformesAdminService,
@@ -286,9 +289,11 @@ export class DelegadoPortalService {
   }
 
   private async sanciones(clubId: string, tenantId: string): Promise<SancionDelegado[]> {
-    const rows = await this.cobroRepo.manager
-      .createQueryBuilder()
-      .from('sanciones_activas', 's')
+    // SEG-4 — repo inyectado (no this.cobroRepo.manager crudo): el
+    // EntityManager del repo comparte el contexto transaccional/RLS del
+    // request. El filtro explícito por tenant_id se mantiene igual.
+    const rows = await this.sancionRepo
+      .createQueryBuilder('s')
       // Match por jugador_id (modelo nuevo) O por rut (sanciones legacy que
       // pueden tener jugador_id NULL). rut es UNIQUE por tenant, así que el
       // OR machea a un único jugador del club — sin duplicar filas.
