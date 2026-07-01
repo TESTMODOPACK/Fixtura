@@ -146,9 +146,17 @@ Esfuerzo: XS ≤1h · S ≤½ día · M 1-4 días · L 1-2 semanas.
   - Fix: `attempts` + backoff exponencial con cap + `maxRetries` + dead-letter visible para 4xx permanentes; refrescar token antes del replay (no trabar en 401); encolar `certificarPresentes` (antes del cierre); superficializar `result.errors` en el banner.
   - Aceptación: ítem que da 401 se refresca y drena; 4xx permanente va a dead-letter con feedback; certificar+cerrar funcionan offline.
 
-- **MOV-3 + DB-3 — Paginación y PII**
-  - Fix: `{ data, meta:{total,page,limit} }` con `take/skip` real en `jugadores-global.list` (mover filtros a SQL, sacar PII innecesaria), `delegado-portal.resumen`, `public.getFixture` (lazy por fecha), `personal-portal.miPortal` (próximos/últimos N).
-  - Aceptación: payload acotado; el listado global no expone RUT/email/teléfono masivos; front con paginación/scroll infinito.
+- **DB-3 — PII fuera del listado masivo** ✅ hecho (`4634399`)
+  - `jugadores-global.list` dejó de exponer email/teléfono; se movieron a la ficha individual (`JugadorGlobalDetalle`). El RUT queda (identificador de búsqueda/desambiguación). Front del listado ya no renderiza el email.
+
+- **MOV-3 — Paginación real** ⏸️ diferido (decisión de diseño pendiente)
+  - Al implementarlo se descubrió que los 4 endpoints candidatos mezclan la lista con **agregados que necesitan el set completo**, así que "agregar `take/skip`" no es un drop-in:
+    - `jugadores-global.list`: la página es un **ranking client-side** (ordena y cuenta activos/vetados/goleadores sobre TODOS los jugadores; RANK-1). Paginar el backend rompe el ranking → hay que mover el orden y los contadores a SQL primero.
+    - `personal-portal.miPortal`: `pendienteTotal`/`recibidoTotal` son SUM sobre todas las designaciones/liquidaciones → separar agregado (SUM) de lista (últimos N).
+    - `public.getFixture`: carga toda la temporada de una; lazy-por-fecha requiere endpoint nuevo + lazy-load en el front.
+    - `delegado-portal.resumen`: revisar si acota o también agrega.
+  - Cada uno es backend + frontend por separado. **Recomendación:** encararlo como sprint propio (no al hilo de Fase 4), empezando por el ranking server-side de jugadores.
+  - Aceptación (cuando se haga): payload acotado con `{ data, meta }`; front con paginación/scroll; los agregados siguen correctos.
 
 - **DB-1 — N+1 en `public.getTorneos`**
   - Fix: una query con `LEFT JOIN` + `COUNT(...) GROUP BY` para fechas/inscripciones y `DISTINCT ON` para próximo partido, en lugar del loop.
