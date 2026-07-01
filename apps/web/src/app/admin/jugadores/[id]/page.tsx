@@ -3,9 +3,12 @@
 import {
   AlertTriangle,
   ArrowLeft,
+  CheckCircle2,
+  Clock,
   Gavel,
   Mail,
   Phone,
+  Send,
   Shield,
   ShieldOff,
   Star,
@@ -16,10 +19,13 @@ import Link from 'next/link';
 
 import type { JugadorGlobalDetalle } from '@fixtura/types';
 
+import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { PageHead } from '@/components/ui/page-head';
 import { useJugadorGlobalDetalle } from '@/hooks/use-admin';
+import { useInvitarJugador, useJugadorCuenta } from '@/hooks/use-jugador';
 import { cn } from '@/lib/cn';
+import { toastError, toastSuccess } from '@/lib/toast';
 
 const MOTIVO_LABEL: Record<string, string> = {
   ACUMULACION_AMARILLAS: 'Acumulación de amarillas',
@@ -157,6 +163,8 @@ function Detalle({ jugador }: { jugador: JugadorGlobalDetalle }): React.ReactEle
           </div>
         </Card>
       </div>
+
+      <CuentaAcceso jugador={jugador} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Ficha */}
@@ -297,6 +305,70 @@ function Detalle({ jugador }: { jugador: JugadorGlobalDetalle }): React.ReactEle
         )}
       </Card>
     </>
+  );
+}
+
+function CuentaAcceso({
+  jugador,
+}: {
+  jugador: JugadorGlobalDetalle;
+}): React.ReactElement {
+  const { data: cuenta, isLoading } = useJugadorCuenta(jugador.jugadorId);
+  const invitar = useInvitarJugador(jugador.jugadorId);
+  const sinEmail = !jugador.email;
+
+  const enviar = (): void => {
+    invitar.mutate(
+      { email: jugador.email, canal: 'EMAIL' },
+      {
+        onSuccess: (r) => toastSuccess(r.mensaje),
+        onError: (err) => toastError(err),
+      },
+    );
+  };
+
+  return (
+    <Card className="mb-6">
+      <CardLabel>Acceso al sistema</CardLabel>
+      <div className="flex items-center justify-between gap-3 flex-wrap mt-2">
+        <p className="text-sm text-ink-mute leading-snug flex-1 min-w-[220px]">
+          Dale acceso al jugador para que vea sus estadísticas, próximos partidos
+          y sanciones desde su celular.
+        </p>
+        <div className="flex-shrink-0">
+          {isLoading ? (
+            <span className="text-xs text-ink-mute">Cargando…</span>
+          ) : cuenta?.estado === 'ACTIVA' ? (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-green-bright/15 text-green-bright">
+              <CheckCircle2 size={14} /> Tiene acceso
+            </span>
+          ) : cuenta?.estado === 'PENDIENTE' ? (
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-orange-700/15 text-orange-700">
+                <Clock size={14} /> Invitación pendiente
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                loading={invitar.isPending}
+                disabled={sinEmail}
+                onClick={enviar}
+              >
+                <Send size={13} /> Reenviar
+              </Button>
+            </div>
+          ) : sinEmail ? (
+            <span className="text-xs text-ink-mute text-right block max-w-[220px]">
+              Agrega un email en la ficha para darle acceso.
+            </span>
+          ) : (
+            <Button variant="default" size="sm" loading={invitar.isPending} onClick={enviar}>
+              <Send size={13} /> Dar acceso al sistema
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }
 
