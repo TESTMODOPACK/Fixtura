@@ -38,6 +38,7 @@ import { DiaNoJugable } from '../../competition/entities/dia-no-jugable.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { TarifaAplicadorService } from '../tarifas/tarifa-aplicador.service';
+import { AuditLogService } from '../../audit';
 import { Jugador } from '../../competition/entities/jugador.entity';
 import { JugadorVetado } from '../../competition/entities/jugador-vetado.entity';
 import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entity';
@@ -78,6 +79,9 @@ export class PartidosAdminService {
     private readonly matchCenter: MatchCenterGateway,
     // Sprint 34D — hooks de multas automaticas al cerrar acta y walkover.
     private readonly tarifaAplicador: TarifaAplicadorService,
+    // LOG-5 (auditoría) — dejar rastro cuando la generación best-effort de
+    // multas falla, para poder regenerarlas después.
+    private readonly audit: AuditLogService,
   ) {}
 
   /**
@@ -730,10 +734,21 @@ export class PartidosAdminService {
         tenantId,
       );
     } catch (err) {
-      // No bloquear el cierre del acta si la generacion de multas falla.
-      console.warn(
-        `[partido] multas auto fallaron partido=${partido.id}: ${(err as Error).message}`,
-      );
+      // LOG-5 — No bloquear el cierre del acta si la generación de multas
+      // falla, PERO dejar rastro auditable (antes solo iba a console.warn y
+      // el fallo era invisible → multas silenciosamente ausentes). Con este
+      // audit, el admin puede detectar el fallo y regenerar las multas con
+      // POST /admin/partidos/:id/regenerar-multas (idempotente).
+      const mensaje = (err as Error).message;
+      console.warn(`[partido] multas auto fallaron partido=${partido.id}: ${mensaje}`);
+      await this.audit.record({
+        action: 'partido.multas_auto_fallidas',
+        tenantId,
+        userId: actorUserId,
+        entityType: 'Partido',
+        entityId: partido.id,
+        metadata: { error: mensaje, contexto: 'cierre_acta' },
+      });
     }
 
     // 2. Si todos los partidos de la fecha están FINALIZADO/WALKOVER,
@@ -763,6 +778,48 @@ export class PartidosAdminService {
       );
 
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
+  }
+
+  /**
+   * LOG-5 (auditoría) — Regenera las multas automáticas de un partido con
+   * acta cerrada. Idempotente: aplicarMultasDePartido borra los cobros auto
+   * pendientes y respeta los ya saldados/cancelados (C1), así que invocarlo
+   * N veces converge al mismo estado. Sirve para recuperar multas que la
+   * generación best-effort del cierre de acta no alcanzó a crear (queda un
+   * audit `partido.multas_auto_fallidas` cuando eso pasa).
+   */
+  async regenerarMultas(
+    partidoId: string,
+    tenantId: string,
+    actorUserId: string | null,
+  ): Promise<{ creados: number }> {
+    const partido = await this.repo.findOne({
+      where: { id: partidoId, tenantId },
+      relations: { fecha: true },
+    });
+    if (!partido) throw new NotFoundException(`Partido ${partidoId} no encontrado`);
+    if (partido.estado !== 'FINALIZADO') {
+      throw new BadRequestException(
+        'Solo se regeneran multas de un partido con acta cerrada (FINALIZADO).',
+      );
+    }
+    const incidencias = await this.incidenciaRepo.find({
+      where: { partidoId: partido.id, tenantId },
+    });
+    const res = await this.tarifaAplicador.aplicarMultasDePartido(
+      partido,
+      incidencias,
+      tenantId,
+    );
+    await this.audit.record({
+      action: 'partido.multas_regeneradas',
+      tenantId,
+      userId: actorUserId,
+      entityType: 'Partido',
+      entityId: partido.id,
+      metadata: { creados: res.creados },
+    });
+    return res;
   }
 
   /**

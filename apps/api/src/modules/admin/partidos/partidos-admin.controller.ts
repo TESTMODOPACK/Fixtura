@@ -228,6 +228,19 @@ export class PartidosAdminController {
     return this.svc.reabrirActa(id, ensureTenant(user));
   }
 
+  // LOG-5 (auditoría) — regenerar multas de un partido cerrado (idempotente).
+  // Recuperación manual cuando la generación best-effort del cierre de acta
+  // falló (queda audit `partido.multas_auto_fallidas`). El service ya registra
+  // el audit del resultado, por eso no lleva @Audited.
+  @Post(':id/regenerar-multas')
+  @Roles(ROLE.LIGA_ADMIN, ROLE.SUPER_ADMIN)
+  regenerarMultas(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<{ creados: number }> {
+    return this.svc.regenerarMultas(id, ensureTenant(user), user.userId);
+  }
+
   // ── Sprint 8: Suspensión / reprogramación / reactivación ───────────
   @Post(':id/suspender')
   @Roles(ROLE.LIGA_ADMIN, ROLE.LIGA_COORDINADOR, ROLE.SUPER_ADMIN)
