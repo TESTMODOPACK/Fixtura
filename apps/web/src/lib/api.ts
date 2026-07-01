@@ -78,7 +78,7 @@ type FetchOpts = Omit<RequestInit, 'body'> & {
    * tolerar ese caso (típicamente con optimistic update en UI).
    */
   enqueueIfOffline?: {
-    kind: 'incidencia' | 'cerrar-acta' | 'otro';
+    kind: 'incidencia' | 'cerrar-acta' | 'certificar-presentes' | 'otro';
     partidoId?: string;
   };
 };

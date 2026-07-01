@@ -661,6 +661,9 @@ export function useCertificarPresentes(partidoId: string, torneoId: string) {
       apiFetch<ActaRoster>(`/admin/partidos/${partidoId}/certificar-presentes`, {
         method: 'POST',
         body: input,
+        // MOV-4 — la certificación es el paso previo al cierre del acta; si se
+        // hace en cancha sin señal, se encola y se replica al reconectar.
+        enqueueIfOffline: { kind: 'certificar-presentes', partidoId },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId, 'roster'] });
