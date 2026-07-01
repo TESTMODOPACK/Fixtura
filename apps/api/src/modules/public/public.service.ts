@@ -166,13 +166,73 @@ export class PublicService {
 
     if (torneos.length === 0) return [];
 
+    // DB-1 — antes esto hacía ~3 queries POR torneo (fechas + count
+    // inscripciones + próximo/último partido) = N+1. Ahora agregamos todo el
+    // set de torneos en 4 queries fijas.
+    const ids = torneos.map((t) => t.id);
+
+    const fechasAgg = await this.fechaRepo
+      .createQueryBuilder('f')
+      .select('f.torneo_id', 'torneoId')
+      .addSelect('COUNT(*)', 'total')
+      .addSelect(`COUNT(*) FILTER (WHERE f.estado = 'FINALIZADA')`, 'finalizadas')
+      .where('f.torneo_id IN (:...ids)', { ids })
+      .groupBy('f.torneo_id')
+      .getRawMany<{ torneoId: string; total: string; finalizadas: string }>();
+    const fechasByTorneo = new Map(
+      fechasAgg.map((r) => [
+        r.torneoId,
+        { total: Number(r.total), finalizadas: Number(r.finalizadas) },
+      ]),
+    );
+
+    const inscAgg = await this.inscRepo
+      .createQueryBuilder('i')
+      .select('i.torneo_id', 'torneoId')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('i.torneo_id IN (:...ids)', { ids })
+      .groupBy('i.torneo_id')
+      .getRawMany<{ torneoId: string; cnt: string }>();
+    const equiposByTorneo = new Map(inscAgg.map((r) => [r.torneoId, Number(r.cnt)]));
+
+    // Próximo partido por torneo (DISTINCT ON toma el 1ro por fecha_hora
+    // ascendente dentro de cada torneo). Solo se usa para los ACTIVO.
+    const proxRaw = await this.partidoRepo
+      .createQueryBuilder('p')
+      .innerJoin('p.fecha', 'f')
+      .select('f.torneo_id', 'torneoId')
+      .addSelect('p.fecha_hora', 'fechaHora')
+      .distinctOn(['f.torneo_id'])
+      .where('f.torneo_id IN (:...ids)', { ids })
+      .andWhere(`p.estado IN ('PROGRAMADO','EN_CURSO')`)
+      .andWhere('p.fecha_hora IS NOT NULL')
+      .orderBy('f.torneo_id')
+      .addOrderBy('p.fecha_hora', 'ASC')
+      .getRawMany<{ torneoId: string; fechaHora: Date }>();
+    const proximoByTorneo = new Map(
+      proxRaw.map((r) => [r.torneoId, new Date(r.fechaHora).toISOString()]),
+    );
+
+    // Último partido jugado por torneo (para los CERRADO).
+    const ultRaw = await this.partidoRepo
+      .createQueryBuilder('p')
+      .innerJoin('p.fecha', 'f')
+      .select('f.torneo_id', 'torneoId')
+      .addSelect('p.fecha_hora', 'fechaHora')
+      .distinctOn(['f.torneo_id'])
+      .where('f.torneo_id IN (:...ids)', { ids })
+      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .andWhere('p.fecha_hora IS NOT NULL')
+      .orderBy('f.torneo_id')
+      .addOrderBy('p.fecha_hora', 'DESC')
+      .getRawMany<{ torneoId: string; fechaHora: Date }>();
+    const ultimoByTorneo = new Map(
+      ultRaw.map((r) => [r.torneoId, new Date(r.fechaHora).toISOString()]),
+    );
+
     const result: TorneoListaPublico[] = [];
     for (const t of torneos) {
-      const fechas = await this.fechaRepo.find({ where: { torneoId: t.id } });
-      const fechasFinalizadas = fechas.filter(
-        (f) => f.estado === 'FINALIZADA',
-      ).length;
-      const equiposCount = await this.inscRepo.count({ where: { torneoId: t.id } });
+      const fechasInfo = fechasByTorneo.get(t.id) ?? { total: 0, finalizadas: 0 };
 
       // Categorias: agrupar las categorias_series por categoriaId.
       const cats = Array.isArray(t.categoriasSeries) ? t.categoriasSeries : [];
@@ -197,43 +257,20 @@ export class PublicService {
         });
       }
 
-      // Proximo partido si activo, ultimo si cerrado.
-      let proximoPartidoAt: string | null = null;
-      let ultimoPartidoAt: string | null = null;
-      if (t.estado === 'ACTIVO') {
-        const prox = await this.partidoRepo
-          .createQueryBuilder('p')
-          .innerJoin('p.fecha', 'f')
-          .where('f.torneo_id = :torneoId', { torneoId: t.id })
-          .andWhere(`p.estado IN ('PROGRAMADO','EN_CURSO')`)
-          .andWhere('p.fecha_hora IS NOT NULL')
-          .orderBy('p.fecha_hora', 'ASC')
-          .getOne();
-        proximoPartidoAt = prox?.fechaHora ? prox.fechaHora.toISOString() : null;
-      } else {
-        const ult = await this.partidoRepo
-          .createQueryBuilder('p')
-          .innerJoin('p.fecha', 'f')
-          .where('f.torneo_id = :torneoId', { torneoId: t.id })
-          .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
-          .andWhere('p.fecha_hora IS NOT NULL')
-          .orderBy('p.fecha_hora', 'DESC')
-          .getOne();
-        ultimoPartidoAt = ult?.fechaHora ? ult.fechaHora.toISOString() : null;
-      }
-
       result.push({
         id: t.id,
         slug: t.slug,
         nombre: t.nombre,
         temporadaNombre: t.temporada?.nombre ?? String(new Date(t.createdAt).getFullYear()),
         estado: t.estado as 'ACTIVO' | 'CERRADO',
-        fechaActual: fechasFinalizadas,
-        fechasTotales: fechas.length,
-        equiposCount,
+        fechaActual: fechasInfo.finalizadas,
+        fechasTotales: fechasInfo.total,
+        equiposCount: equiposByTorneo.get(t.id) ?? 0,
         categorias: categoriasDto,
-        proximoPartidoAt,
-        ultimoPartidoAt,
+        proximoPartidoAt:
+          t.estado === 'ACTIVO' ? proximoByTorneo.get(t.id) ?? null : null,
+        ultimoPartidoAt:
+          t.estado !== 'ACTIVO' ? ultimoByTorneo.get(t.id) ?? null : null,
       });
     }
     return result;

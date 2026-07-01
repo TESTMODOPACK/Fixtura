@@ -63,7 +63,23 @@ export class MatchCenterGateway
 
   afterInit(_server: Server): void {
     this.iniciarTick();
+    // MOV-5 — repoblar el set de partidos a tickear desde la DB. Sin esto,
+    // tras un restart a mitad de partido el auto-pausa server-side no corría
+    // hasta que algún viewer se suscribía.
+    void this.seedPartidosActivos();
     this.log.log('[ws] Match Center gateway iniciado — tick cada 1s');
+  }
+
+  private async seedPartidosActivos(): Promise<void> {
+    try {
+      const ids = await this.svc.listarPartidosActivosSistema();
+      for (const id of ids) this.partidosActivos.add(id);
+      if (ids.length > 0) {
+        this.log.log(`[ws] MOV-5: ${ids.length} partido(s) en vivo repoblados al boot`);
+      }
+    } catch (err) {
+      this.log.warn(`[ws] MOV-5 seed falló: ${(err as Error).message}`);
+    }
   }
 
   handleConnection(client: Socket): void {
@@ -72,9 +88,9 @@ export class MatchCenterGateway
 
   handleDisconnect(client: Socket): void {
     this.log.debug(`[ws] cliente desconectado: ${client.id}`);
-    // Al desconectar Socket.io ya saca al socket de todas sus rooms.
-    // Hacemos una pasada para limpiar partidos sin viewers.
-    this.depurarPartidosActivos();
+    // MOV-5 — NO depuramos por "sin viewers": un partido EN_VIVO/PAUSADO debe
+    // seguir tickeando (auto-pausa server-side) aunque nadie lo mire. El tick
+    // ya saca del set los partidos que llegan a IDLE / FINALIZADO_CENTRO.
   }
 
   onModuleDestroy(): void {
@@ -117,7 +133,8 @@ export class MatchCenterGateway
   ): Promise<void> {
     if (!data?.partidoId) return;
     await client.leave(this.roomKey(data.partidoId));
-    this.depurarPartidosActivos();
+    // MOV-5 — no se saca del set al desuscribirse: si sigue EN_VIVO/PAUSADO
+    // debe seguir tickeando. El tick lo remueve al llegar a IDLE/FINALIZADO.
   }
 
   /**
@@ -167,16 +184,6 @@ export class MatchCenterGateway
         }
       }),
     );
-  }
-
-  private depurarPartidosActivos(): void {
-    // Sacar partidos cuyas rooms quedaron sin sockets conectados.
-    for (const partidoId of this.partidosActivos) {
-      const room = this.server.sockets.adapter.rooms.get(this.roomKey(partidoId));
-      if (!room || room.size === 0) {
-        this.partidosActivos.delete(partidoId);
-      }
-    }
   }
 
   private roomKey(partidoId: string): string {

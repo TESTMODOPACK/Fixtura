@@ -21,6 +21,22 @@ import {
 } from './flyer-pdf.service';
 
 /**
+ * DB-2 — cómputo caro por torneo SIN el resaltado por club (tabla de
+ * posiciones + partidos de la próxima/última fecha). Se memoiza por torneoId
+ * en la corrida del cron para no recomputarlo por cada club del mismo torneo.
+ */
+interface TorneoRaw {
+  torneoNombre: string;
+  subtitulo: string | null;
+  proximaTitulo: string | null;
+  proximaPartidos: Partido[];
+  ultimaTitulo: string | null;
+  ultimaPartidos: Partido[];
+  filas: ReturnType<typeof calcularTablaPosiciones>;
+  inscToClub: Map<string, string>;
+}
+
+/**
  * FLY — Arma los datos del flyer semanal y lo envía a los delegados de club.
  *
  *   - datosTorneo: próxima fecha (fixture) + última jugada (resultados) +
@@ -97,9 +113,18 @@ export class FlyerDelegadosService {
     const semanaLabel = this.semanaLabel();
     let clubes = 0;
     let correos = 0;
+    // DB-2 — cache de datos crudos por torneo, compartido por toda la corrida:
+    // los clubes de un mismo torneo reusan el cálculo de tabla/fechas.
+    const torneoCache = new Map<string, TorneoRaw | null>();
 
     for (const [clubId, emails] of emailsByClub) {
-      const data = await this.datosClub(clubId, tenantId, ligaNombre, semanaLabel);
+      const data = await this.datosClub(
+        clubId,
+        tenantId,
+        ligaNombre,
+        semanaLabel,
+        torneoCache,
+      );
       // Sin torneos activos → no hay nada útil que mandar esta semana.
       if (!data || data.torneos.length === 0) continue;
 
@@ -130,6 +155,7 @@ export class FlyerDelegadosService {
     tenantId: string,
     ligaNombre: string,
     semanaLabel: string,
+    cache?: Map<string, TorneoRaw | null>,
   ): Promise<FlyerData | null> {
     const club = await this.clubRepo.findOne({ where: { id: clubId, tenantId } });
     if (!club) return null;
@@ -148,8 +174,14 @@ export class FlyerDelegadosService {
 
     const torneos: FlyerTorneo[] = [];
     for (const tId of torneoIds) {
-      const t = await this.datosTorneo(tId, tenantId, clubId);
-      if (t) torneos.push(t);
+      // DB-2 — reusar el cómputo del torneo si ya lo hizo otro club en esta
+      // corrida; solo se re-aplica el resaltado del club (barato).
+      let raw = cache?.get(tId);
+      if (raw === undefined) {
+        raw = await this.computeTorneoRaw(tId, tenantId);
+        cache?.set(tId, raw);
+      }
+      if (raw) torneos.push(this.applyHighlight(raw, clubId));
     }
 
     return { ligaNombre, clubNombre: club.nombre, semanaLabel, torneos };
@@ -160,6 +192,18 @@ export class FlyerDelegadosService {
     tenantId: string,
     resaltarClubId: string | null,
   ): Promise<FlyerTorneo | null> {
+    const raw = await this.computeTorneoRaw(torneoId, tenantId);
+    return raw ? this.applyHighlight(raw, resaltarClubId) : null;
+  }
+
+  /**
+   * DB-2 — cómputo caro del torneo (tabla + próxima/última fecha con sus
+   * partidos) SIN el resaltado por club. Memoizable por torneoId.
+   */
+  private async computeTorneoRaw(
+    torneoId: string,
+    tenantId: string,
+  ): Promise<TorneoRaw | null> {
     const torneo = await this.torneoRepo.findOne({
       where: { id: torneoId, tenantId },
     });
@@ -192,36 +236,69 @@ export class FlyerDelegadosService {
         .filter((f) => f.estado === 'FINALIZADA')
         .sort((a, b) => b.numero - a.numero)[0] ?? null;
 
-    const proxima = proximaFecha
-      ? (await this.partidosDeFecha(proximaFecha.id, tenantId)).map((p) =>
-          this.toMatch(p, resaltarClubId),
-        )
+    const proximaPartidos = proximaFecha
+      ? await this.partidosDeFecha(proximaFecha.id, tenantId)
       : [];
-    const ultima = ultimaFecha
-      ? (await this.partidosDeFecha(ultimaFecha.id, tenantId)).map((p) =>
-          this.toMatch(p, resaltarClubId),
-        )
+    const ultimaPartidos = ultimaFecha
+      ? await this.partidosDeFecha(ultimaFecha.id, tenantId)
       : [];
 
-    const tabla = await this.calcularTabla(torneo, inscripciones, tenantId, resaltarClubId);
+    const { filas, inscToClub } = await this.computeTablaFilas(
+      torneo,
+      inscripciones,
+      tenantId,
+    );
 
     return {
       torneoNombre: torneo.nombre,
       subtitulo,
       proximaTitulo: proximaFecha ? this.fechaLabel(proximaFecha) : null,
-      proxima,
+      proximaPartidos,
       ultimaTitulo: ultimaFecha ? this.fechaLabel(ultimaFecha) : null,
-      ultima,
+      ultimaPartidos,
+      filas,
+      inscToClub,
+    };
+  }
+
+  /** DB-2 — aplica el resaltado del club (barato) sobre el raw memoizado. */
+  private applyHighlight(
+    raw: TorneoRaw,
+    resaltarClubId: string | null,
+  ): FlyerTorneo {
+    const tabla: FlyerTablaRow[] = raw.filas.map((f) => ({
+      posicion: f.posicion,
+      equipo: f.equipoNombre,
+      pj: f.pj,
+      pg: f.pg,
+      pe: f.pe,
+      pp: f.pp,
+      gf: f.gf,
+      gc: f.gc,
+      dg: f.dg,
+      pts: f.pts,
+      esDelClub:
+        !!resaltarClubId && raw.inscToClub.get(f.equipoId) === resaltarClubId,
+    }));
+    return {
+      torneoNombre: raw.torneoNombre,
+      subtitulo: raw.subtitulo,
+      proximaTitulo: raw.proximaTitulo,
+      proxima: raw.proximaPartidos.map((p) => this.toMatch(p, resaltarClubId)),
+      ultimaTitulo: raw.ultimaTitulo,
+      ultima: raw.ultimaPartidos.map((p) => this.toMatch(p, resaltarClubId)),
       tabla,
     };
   }
 
-  private async calcularTabla(
+  private async computeTablaFilas(
     torneo: Torneo,
     inscripciones: InscripcionTorneo[],
     tenantId: string,
-    resaltarClubId: string | null,
-  ): Promise<FlyerTablaRow[]> {
+  ): Promise<{
+    filas: ReturnType<typeof calcularTablaPosiciones>;
+    inscToClub: Map<string, string>;
+  }> {
     const equipos = inscripciones
       .filter((i) => i.estado !== 'RETIRADO')
       .map((i) => ({
@@ -230,7 +307,7 @@ export class FlyerDelegadosService {
         slug: i.club?.slug ?? '',
         escudoUrl: i.club?.escudoUrl ?? null,
       }));
-    if (equipos.length === 0) return [];
+    if (equipos.length === 0) return { filas: [], inscToClub: new Map() };
 
     const partidosRaw = await this.partidoRepo
       .createQueryBuilder('p')
@@ -259,19 +336,7 @@ export class FlyerDelegadosService {
     });
 
     const inscToClub = new Map(inscripciones.map((i) => [i.id, i.clubId]));
-    return filas.map((f) => ({
-      posicion: f.posicion,
-      equipo: f.equipoNombre,
-      pj: f.pj,
-      pg: f.pg,
-      pe: f.pe,
-      pp: f.pp,
-      gf: f.gf,
-      gc: f.gc,
-      dg: f.dg,
-      pts: f.pts,
-      esDelClub: !!resaltarClubId && inscToClub.get(f.equipoId) === resaltarClubId,
-    }));
+    return { filas, inscToClub };
   }
 
   private partidosDeFecha(fechaId: string, tenantId: string): Promise<Partido[]> {

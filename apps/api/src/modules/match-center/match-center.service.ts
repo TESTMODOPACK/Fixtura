@@ -146,6 +146,27 @@ export class MatchCenterService {
     );
   }
 
+  /**
+   * MOV-5 — ids de partidos con el centro corriendo (EN_VIVO/PAUSADO), como
+   * sistema (bypass RLS, sin tenant). Lo usa el gateway al boot para repoblar
+   * su Set de partidos a tickear tras un restart: así el auto-pausa
+   * server-side corre aunque no haya ningún viewer conectado.
+   */
+  async listarPartidosActivosSistema(): Promise<string[]> {
+    return runInTransaction(
+      async () => {
+        await this.dataSource.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+        const rows = await this.repo
+          .createQueryBuilder('p')
+          .select('p.id', 'id')
+          .where(`p.centro_estado IN ('EN_VIVO','PAUSADO')`)
+          .getRawMany<{ id: string }>();
+        return rows.map((r) => r.id);
+      },
+      { propagation: Propagation.REQUIRES_NEW },
+    );
+  }
+
   async arrancar(
     partidoId: string,
     tenantId: string,
