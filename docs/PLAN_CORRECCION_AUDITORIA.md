@@ -178,11 +178,11 @@ Esfuerzo: XS ≤1h · S ≤½ día · M 1-4 días · L 1-2 semanas.
 
 **Alcance:** DB-4, DB-5, LOG-5, SEG-3, SEG-4. **Esfuerzo:** ~3-5 días.
 
-- **DB-4 — `@Transactional()` en `equipos.suspender`** (walkover batch todo-o-nada). Aceptación: fallo a mitad no deja walkovers parciales.
-- **DB-5 — `@Transactional()` en `autoAsignar`, `plantel-import.bulkCreate`, `generarCobrosInicioTorneo`**. Aceptación: escritura atómica; fallo revierte todo.
-- **LOG-5 — Regeneración de multas confiable**: endpoint idempotente "regenerar multas del partido" + flag de audit cuando el `catch` best-effort se dispara. Aceptación: multas recuperables tras un re-cierre con fallo parcial.
-- **SEG-3 — Cerrar M7**: habilitar RLS en `facturas_plataforma` + refactor del cron para setear tenant por iteración (o mantener filtro explícito + test cross-tenant).
-- **SEG-4 — Repo inyectado en `delegado-portal.sanciones`** (quitar `.manager` crudo). Aceptación: sin `.manager`; query sigue filtrando `tenant_id`.
+- **DB-4 — `@Transactional()` en `equipos.suspender`** ✅ `1f11d2e`. El bug de fondo era el try/catch que se tragaba el fallo del walkover (la tx del request ya era atómica); ahora re-lanza → rollback. + `@Transactional` explícito.
+- **DB-5 — `@Transactional()` en `autoAsignar`, `jugadores.bulkCreate`, `generarCobrosInicioTorneo`** ✅ `1f11d2e`.
+- **LOG-5 — Regeneración de multas confiable** ✅ `128122e`. Audit `partido.multas_auto_fallidas` cuando el catch best-effort se dispara + `POST /admin/partidos/:id/regenerar-multas` idempotente.
+- **SEG-3 — Cerrar M7** ✅ `001ce6b`. RLS FORCE + policy en `facturas_plataforma`. El "refactor del cron" ya estaba: todos los paths setean el contexto ('' sistema / request de liga). Verificar en staging.
+- **SEG-4 — Repo inyectado en `delegado-portal.sanciones`** ✅ `1f11d2e`. Repo `SancionActiva` inyectado en vez de `cobroRepo.manager` crudo; filtro `tenant_id` intacto.
 
 **Entrega:** PR `chore: consistencia transaccional + deuda de auditoría`. Deploy API.
 
