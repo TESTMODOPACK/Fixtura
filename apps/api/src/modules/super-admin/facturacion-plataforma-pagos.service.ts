@@ -96,7 +96,31 @@ export class FacturacionPlataformaPagosService {
       throw new BadRequestException('Monto inválido.');
     }
 
-    const ordenCompra = `FACT-${factura.id.slice(0, 8).toUpperCase()}-${factura.periodoMes}${factura.periodoAnio}`;
+    // FIX idempotencia: si ya hay una transacción en tránsito y no vencida para
+    // esta factura, reusamos su checkout en vez de crear otra. Evita el 500 por
+    // "duplicate key" en el UNIQUE de idempotency_key ante doble click o
+    // reintento (antes el idempotency_key era determinístico por factura).
+    const enTransito = await this.transRepo.findOne({
+      where: { facturaPlataformaId: factura.id, estado: 'PAGO_EN_TRANSITO' },
+      order: { createdAt: 'DESC' },
+    });
+    if (
+      enTransito?.tokenPasarela &&
+      enTransito.urlRedireccion &&
+      enTransito.expiraAt &&
+      enTransito.expiraAt.getTime() > Date.now()
+    ) {
+      return {
+        token: enTransito.tokenPasarela,
+        url: enTransito.urlRedireccion,
+        transaccionId: enTransito.id,
+      };
+    }
+
+    // Orden de compra única por intento: Webpay exige buy_order único y el
+    // UNIQUE de idempotency_key rechaza claves repetidas. El sufijo aleatorio
+    // permite reintentar tras una transacción vencida/rechazada sin colisionar.
+    const ordenCompra = `FACT-${factura.id.slice(0, 8).toUpperCase()}-${factura.periodoMes}${factura.periodoAnio}-${randomUUID().slice(0, 4).toUpperCase()}`;
     const sessionId = randomUUID();
     const urlRetorno = `${baseUrlFrontend.replace(/\/$/, '')}/admin/mi-suscripcion/retorno`;
 
@@ -268,8 +292,14 @@ export class FacturacionPlataformaPagosService {
       doc.ultimoIntentoAt = new Date();
       await this.docTribRepo.save(doc);
 
+      // FIX: update DIRIGIDO (solo doc_tributario_id), no save de la entidad
+      // completa. Esta función corre fire-and-forget (retornoWebpay la dispara
+      // sin await), y un facturaRepo.save(factura) pisaba el estado=PAGADA que
+      // marcarPagada recién había seteado, con el PENDIENTE viejo cargado en la
+      // línea 220 → la factura quedaba impaga (lost update). El update dirigido
+      // no toca estado/metodo_pago/fecha_pago.
       factura.docTributarioId = doc.id;
-      await this.facturaRepo.save(factura);
+      await this.facturaRepo.update({ id: factura.id }, { docTributarioId: doc.id });
 
       this.log.log(`Boleta SII emitida folio=${result.folio} factura=${facturaId}`);
 
