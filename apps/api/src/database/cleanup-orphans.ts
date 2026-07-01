@@ -143,6 +143,12 @@ async function main(): Promise<void> {
     );
     log('tenants.requiere_carnet_anfa asegurada.');
 
+    // Sprint FLY: flag por tenant para el flyer semanal a delegados (lunes).
+    await client.query(
+      `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS flyer_semanal_delegados BOOLEAN NOT NULL DEFAULT FALSE`,
+    );
+    log('tenants.flyer_semanal_delegados asegurada.');
+
     // Etapa 1 pagos: config de métodos de cobro por liga + secretos cifrados
     // de la pasarela (Flow/Khipu). pagos_config es JSON no-secreto; las llaves
     // van en pagos_secretos_enc (AES-256-GCM, ver common/crypto/secret-box).

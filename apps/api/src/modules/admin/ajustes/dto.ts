@@ -117,6 +117,10 @@ export class UpdateTenantSettingsDto {
   requiereCarnetAnfa?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  flyerSemanalDelegados?: boolean;
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => PagosConfigDto)
   pagos?: PagosConfigDto;

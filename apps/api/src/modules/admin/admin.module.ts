@@ -50,6 +50,7 @@ import { JugadoresAdminService } from './jugadores/jugadores-admin.service';
 import { JugadoresGlobalController } from './jugadores-global/jugadores-global.controller';
 import { JugadoresGlobalService } from './jugadores-global/jugadores-global.service';
 import { DunningModule } from './dunning/dunning.module';
+import { FlyerDelegadosModule } from './flyer-delegados/flyer-delegados.module';
 import { InformesModule } from './informes/informes.module';
 import { PagosModule } from './pagos/pagos.module';
 import { PagosPersonalController } from './pagos-personal/pagos-personal.controller';
@@ -128,6 +129,7 @@ import { EncuestasService } from './encuestas/encuestas.service';
     CompetitionModule,
     PagosModule,
     DunningModule,
+    FlyerDelegadosModule,
     InformesModule,
     PushModule,
     MatchCenterModule,

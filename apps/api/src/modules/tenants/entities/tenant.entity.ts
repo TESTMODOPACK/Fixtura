@@ -44,6 +44,14 @@ export class Tenant {
   requiereCarnetAnfa!: boolean;
 
   /**
+   * ¿La liga manda un flyer semanal (lunes) a los delegados de club con el
+   * fixture de la próxima fecha + resultados de la última + la tabla del
+   * torneo? Default false. Lo activa el admin en Ajustes.
+   */
+  @Column({ name: 'flyer_semanal_delegados', type: 'boolean', default: false })
+  flyerSemanalDelegados!: boolean;
+
+  /**
    * Config de métodos de cobro de la liga (transferencia + on/off pasarela
    * + proveedor). NO contiene secretos — las llaves de la pasarela viven
    * cifradas en `pagosSecretosEnc`.

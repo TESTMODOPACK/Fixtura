@@ -983,6 +983,17 @@ export function useJugadorGlobalDetalle(id: string | null | undefined) {
   });
 }
 
+// ─── Flyer semanal a delegados ─────────────────────────────────────────
+export function useEnviarFlyerDelegados() {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ clubes: number; correos: number }>(
+        '/admin/flyer-delegados/enviar',
+        { method: 'POST' },
+      ),
+  });
+}
+
 // ─── Dashboard admin ──────────────────────────────────────────────────
 export function useDashboardAdmin() {
   return useQuery({

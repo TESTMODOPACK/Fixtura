@@ -102,6 +102,12 @@ export const TenantSettingsSchema = z.object({
    * carnets vencidos y la UI muestra alertas. Default false.
    */
   requiereCarnetAnfa: z.boolean(),
+  /**
+   * ¿La liga envía a los delegados de club un flyer semanal (lunes) con el
+   * fixture de la próxima fecha, la última jugada y la tabla del torneo?
+   * Default false — el admin lo activa acá.
+   */
+  flyerSemanalDelegados: z.boolean(),
   // Métodos de cobro de la liga.
   pagos: PagosConfigSchema,
   // ¿Hay llaves de pasarela guardadas? El GET nunca devuelve las llaves
@@ -131,6 +137,7 @@ export const UpdateTenantSettingsSchema = z.object({
     .optional(),
   branding: BrandingSchema.optional(),
   requiereCarnetAnfa: z.boolean().optional(),
+  flyerSemanalDelegados: z.boolean().optional(),
   // Config de cobros (se envía el objeto completo desde la pestaña Pagos).
   pagos: PagosConfigSchema.optional(),
   // Llaves de pasarela — write-only. Se setean juntas (las dos) o no se

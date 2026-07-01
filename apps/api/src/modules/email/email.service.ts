@@ -48,10 +48,15 @@ export class EmailService {
     html: string;
     text?: string;
     replyTo?: string;
+    // Adjuntos (ej. el flyer semanal en PDF). content es el binario ya
+    // en memoria; Resend lo acepta como Buffer.
+    attachments?: Array<{ filename: string; content: Buffer }>;
   }): Promise<boolean> {
     if (!this.resend) {
       this.log.log(
-        `[log-only] to=${opts.to} subject="${opts.subject}" — set RESEND_API_KEY para enviar real`,
+        `[log-only] to=${opts.to} subject="${opts.subject}"${
+          opts.attachments?.length ? ` (+${opts.attachments.length} adjunto/s)` : ''
+        } — set RESEND_API_KEY para enviar real`,
       );
       return false;
     }
@@ -64,6 +69,10 @@ export class EmailService {
         html: opts.html,
         text: opts.text,
         replyTo: opts.replyTo,
+        attachments: opts.attachments?.map((a) => ({
+          filename: a.filename,
+          content: a.content,
+        })),
       });
       if (error) {
         this.log.warn(`Resend error to=${opts.to}: ${error.message}`);

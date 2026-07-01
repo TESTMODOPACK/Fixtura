@@ -204,6 +204,10 @@ export class AjustesAdminService {
       t.requiereCarnetAnfa = input.requiereCarnetAnfa;
     }
 
+    if (input.flyerSemanalDelegados !== undefined) {
+      t.flyerSemanalDelegados = input.flyerSemanalDelegados;
+    }
+
     if (input.pagos !== undefined) {
       const actual = this.pagosConfigDe(t);
       const merged: PagosConfig = {
@@ -493,6 +497,7 @@ export class AjustesAdminService {
       tipo: t.tipo,
       isActive: t.isActive,
       requiereCarnetAnfa: t.requiereCarnetAnfa ?? false,
+      flyerSemanalDelegados: t.flyerSemanalDelegados ?? false,
       pagos: this.pagosConfigDe(t),
       // Nunca exponemos las llaves; solo si hay credenciales guardadas.
       pasarelaCredencialesCargadas: !!t.pagosSecretosEnc,

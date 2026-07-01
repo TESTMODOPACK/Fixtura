@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   CreditCard,
+  Download,
   Globe,
   Landmark,
   Lock,
@@ -12,6 +13,7 @@ import {
   MessageCircle,
   Palette,
   Plus,
+  Send,
   Trash2,
   Users,
 } from 'lucide-react';
@@ -48,18 +50,21 @@ import {
   useCrearDiaNoJugable,
   useDiasNoJugables,
   useEliminarDiaNoJugable,
+  useEnviarFlyerDelegados,
   useFeriadosChile,
   useImportarFeriados,
   useInvitarMiembro,
   useMiembros,
   useRemoveMiembro,
   useTenantSettings,
+  useTorneos,
   useUpdateTenantSettings,
 } from '@/hooks/use-admin';
-import { ApiError } from '@/lib/api';
+import { ApiError, API_URL } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatFecha } from '@/lib/format';
-import { toastWarning } from '@/lib/toast';
+import { toastError, toastSuccess, toastWarning } from '@/lib/toast';
+import { useAuthStore } from '@/store/auth-store';
 
 type Tab =
   | 'branding'
@@ -67,6 +72,7 @@ type Tab =
   | 'reglamento'
   | 'pagos'
   | 'whatsapp'
+  | 'delegados'
   | 'equipo'
   | 'calendario';
 
@@ -162,6 +168,12 @@ export default function AjustesPage(): React.ReactElement {
               <TabButton active={tab === 'whatsapp'} onClick={() => setTab('whatsapp')}>
                 WhatsApp
               </TabButton>
+              <TabButton
+                active={tab === 'delegados'}
+                onClick={() => setTab('delegados')}
+              >
+                Delegados
+              </TabButton>
               <TabButton active={tab === 'equipo'} onClick={() => setTab('equipo')}>
                 Equipo admin
               </TabButton>
@@ -179,6 +191,7 @@ export default function AjustesPage(): React.ReactElement {
           {tab === 'reglamento' && <ReglamentoTab settings={settings} />}
           {tab === 'pagos' && <PagosTab settings={settings} />}
           {tab === 'whatsapp' && <WhatsAppTab settings={settings} />}
+          {tab === 'delegados' && <DelegadosTab settings={settings} />}
           {tab === 'equipo' && <EquipoTab />}
           {tab === 'calendario' && <CalendarioTab />}
         </>
@@ -1306,6 +1319,188 @@ function WhatsAppTab({ settings }: { settings: TenantSettings }): React.ReactEle
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Tab: Delegados (flyer semanal) ──────────────────────────────────
+/** Descarga el flyer de ejemplo (endpoint autenticado, vía blob). */
+async function descargarFlyerPdf(torneoId: string): Promise<boolean> {
+  const token = useAuthStore.getState().accessToken;
+  const res = await fetch(
+    `${API_URL}/admin/flyer-delegados/torneo/${torneoId}/flyer.pdf`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  );
+  if (!res.ok) return false;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'flyer-semanal-ejemplo.pdf';
+  a.click();
+  URL.revokeObjectURL(url);
+  return true;
+}
+
+function DelegadosTab({ settings }: { settings: TenantSettings }): React.ReactElement {
+  const update = useUpdateTenantSettings();
+  const { data: torneos } = useTorneos();
+  const enviar = useEnviarFlyerDelegados();
+  const [activo, setActivo] = useState(settings.flyerSemanalDelegados);
+  const [saved, setSaved] = useState(false);
+  const [torneoId, setTorneoId] = useState('');
+  const [descargando, setDescargando] = useState(false);
+
+  useEffect(() => {
+    setActivo(settings.flyerSemanalDelegados);
+  }, [settings.flyerSemanalDelegados]);
+
+  const torneosActivos = (torneos ?? []).filter((t) => t.estado === 'ACTIVO');
+
+  const toggle = async (next: boolean): Promise<void> => {
+    setActivo(next);
+    try {
+      await update.mutateAsync({ flyerSemanalDelegados: next });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      setActivo(!next);
+      toastError('No se pudo guardar el cambio. Reintenta.');
+    }
+  };
+
+  const descargar = async (): Promise<void> => {
+    if (!torneoId) {
+      toastWarning('Elige un torneo para la vista previa.');
+      return;
+    }
+    setDescargando(true);
+    const ok = await descargarFlyerPdf(torneoId);
+    setDescargando(false);
+    if (!ok) toastError('No se pudo generar el flyer de ejemplo.');
+  };
+
+  const enviarAhora = async (): Promise<void> => {
+    if (
+      !window.confirm(
+        'Se enviará el flyer AHORA por correo a todos los delegados de clubes en torneos activos. ¿Continuar?',
+      )
+    ) {
+      return;
+    }
+    try {
+      const r = await enviar.mutateAsync();
+      toastSuccess(
+        `Flyer enviado: ${r.correos} correo(s) a ${r.clubes} club(es).`,
+      );
+    } catch {
+      toastError('No se pudo enviar el flyer.');
+    }
+  };
+
+  return (
+    <Card padding="roomy">
+      <CardLabel>Flyer semanal a delegados</CardLabel>
+      <p className="text-sm text-ink-mute font-serif italic mt-1 mb-4 max-w-2xl">
+        Cada lunes por la mañana, LigaPlus le envía a los delegados de club un PDF
+        con la próxima fecha, los resultados de la última jornada y la tabla de
+        posiciones de cada torneo donde juega su club. Ideal para reenviar al
+        grupo del equipo.
+      </p>
+
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={activo}
+          onChange={(e) => void toggle(e.target.checked)}
+          className="mt-1"
+        />
+        <div>
+          <div className="font-semibold text-sm">
+            Enviar el flyer automáticamente (lunes 08:00, hora de Chile)
+          </div>
+          <div className="text-xs text-ink-mute">
+            Solo a delegados con email, de clubes inscritos en torneos activos.
+          </div>
+        </div>
+      </label>
+      {saved && (
+        <div className="text-xs text-green-bright font-semibold mt-2 flex items-center gap-1">
+          <CheckCircle2 size={12} /> Guardado
+        </div>
+      )}
+
+      <div
+        className={cn(
+          'mt-4 p-3 rounded-card text-sm border max-w-2xl',
+          activo
+            ? 'bg-green-bright/5 border-green-bright/30 text-ink'
+            : 'bg-paper border-line text-ink-mute',
+        )}
+      >
+        <div className="font-semibold mb-1">
+          {activo ? '→ Envío automático activado' : '→ Envío automático desactivado'}
+        </div>
+        <p className="text-xs font-serif italic">
+          {activo
+            ? 'El próximo lunes a las 08:00 saldrá el flyer solo. Podés probarlo ahora con los botones de abajo.'
+            : 'No se enviará nada automáticamente. Igual podés generar una vista previa o mandarlo manualmente abajo.'}
+        </p>
+      </div>
+
+      <div className="mt-6 border-t border-line pt-5 space-y-5 max-w-2xl">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-ink-mute font-semibold mb-2">
+            → Vista previa (no envía nada)
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="input text-sm max-w-xs"
+              value={torneoId}
+              onChange={(e) => setTorneoId(e.target.value)}
+            >
+              <option value="">— elige un torneo —</option>
+              {torneosActivos.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nombre}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => void descargar()}
+              loading={descargando}
+              disabled={!torneoId}
+            >
+              <Download size={14} /> Descargar PDF de ejemplo
+            </Button>
+          </div>
+          {torneosActivos.length === 0 && (
+            <p className="text-xs text-ink-mute font-serif italic mt-1.5">
+              No hay torneos activos para previsualizar.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-ink-mute font-semibold mb-2">
+            → Enviar ahora (correos reales)
+          </div>
+          <Button
+            variant="accent"
+            size="sm"
+            onClick={() => void enviarAhora()}
+            loading={enviar.isPending}
+          >
+            <Send size={14} /> Enviar flyer a todos los delegados
+          </Button>
+          <p className="text-xs text-ink-mute font-serif italic mt-1.5">
+            Manda el correo de inmediato a todos los delegados con email de clubes
+            en torneos activos. Útil para probar sin esperar al lunes.
+          </p>
+        </div>
+      </div>
+    </Card>
   );
 }
 
