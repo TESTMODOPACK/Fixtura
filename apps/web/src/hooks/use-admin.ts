@@ -1741,6 +1741,26 @@ export function useDeclararWalkover(partidoId: string, torneoId: string) {
   });
 }
 
+// LOG-4 (auditoría) — revertir un walkover mal declarado. Reabre el partido
+// a PROGRAMADO, limpia marcador y acta, y deshace multas/decrementos.
+export function useAnularWalkover(partidoId: string, torneoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<PartidoAdmin>(`/admin/partidos/${partidoId}/anular-walkover`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'partidos', partidoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId, 'fixture-detail'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'torneos', torneoId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'dashboard'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'actas-global'] });
+      qc.invalidateQueries({ queryKey: ['public'] });
+    },
+  });
+}
+
 export function useReactivarFecha(torneoId: string) {
   const qc = useQueryClient();
   return useMutation({

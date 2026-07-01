@@ -54,6 +54,7 @@ import {
   useCanchas,
   useCertificarPresentes,
   useCerrarActa,
+  useAnularWalkover,
   useDeclararWalkover,
   useDesignacionesPorPartido,
   useJugadores,
@@ -599,6 +600,14 @@ function EditarPartidoCard({
   const canchaIdSeleccionada = form.watch('canchaId');
   const error = mutation.error as ApiError | undefined;
 
+  // LOG-1 (auditoría): el estado es una máquina de estados, no un campo libre.
+  // Desde este form solo permitimos el toggle operativo PROGRAMADO ↔ EN_CURSO.
+  // Los estados terminales/gestionados (finalizado, walkover, suspendido, no
+  // jugado, reprogramado) tienen sus flujos dedicados; el backend rechaza por
+  // PATCH cualquier otra transición.
+  const estadoOperativo =
+    partido.estado === 'PROGRAMADO' || partido.estado === 'EN_CURSO';
+
   const EDITAR_LABELS: Record<string, string> = {
     canchaId: 'Cancha',
     canchaNombre: 'Nombre de cancha',
@@ -662,14 +671,18 @@ function EditarPartidoCard({
               canchaId: string | null;
               canchaNombre?: string | null;
               fechaHora: string | null;
-              estado: Form['estado'];
+              estado?: Form['estado'];
             } = {
               canchaId: vals.canchaId || null,
               fechaHora: vals.fechaHora
                 ? new Date(vals.fechaHora).toISOString()
                 : null,
-              estado: vals.estado,
             };
+            // LOG-1: el estado solo viaja cuando es un toggle operativo
+            // (PROGRAMADO ↔ EN_CURSO). Para estados gestionados ni lo
+            // incluimos: sus flujos dedicados lo manejan y el PATCH lo
+            // rechazaría.
+            if (estadoOperativo) payload.estado = vals.estado;
             // Solo enviamos canchaNombre cuando no hay cancha del catálogo
             // (modo legacy). Si hay canchaId, el backend setea el nombre.
             if (!vals.canchaId) payload.canchaNombre = vals.canchaNombre;
@@ -721,15 +734,22 @@ function EditarPartidoCard({
         />
         <div>
           <label className="label">Estado</label>
-          <select className="input" {...form.register('estado')} disabled={cerrada}>
+          <select
+            className="input"
+            {...form.register('estado')}
+            disabled={cerrada || !estadoOperativo}
+          >
             <option value="PROGRAMADO">Programado</option>
             <option value="EN_CURSO">En curso</option>
-            <option value="FINALIZADO">Finalizado</option>
-            <option value="SUSPENDIDO_FUERZA_MAYOR">Suspendido (fuerza mayor)</option>
-            <option value="REPROGRAMADO">Reprogramado</option>
-            <option value="WALKOVER">Walkover (3-0)</option>
-            <option value="NO_JUGADO">No jugado</option>
           </select>
+          {!estadoOperativo && !cerrada && (
+            <p className="text-[11px] text-ink-mute mt-1 leading-snug">
+              Estado actual:{' '}
+              <strong>{partido.estado.replace(/_/g, ' ').toLowerCase()}</strong>. Los
+              cambios de estado (finalizar, walkover, suspender, no jugado o
+              reactivar) se hacen con las acciones dedicadas de esta página.
+            </p>
+          )}
         </div>
 
         <div className="md:col-span-3 flex items-start gap-2 flex-wrap">
@@ -1111,7 +1131,8 @@ function WalkoverCard({
   const [obs, setObs] = useState('');
   const [intentado, setIntentado] = useState(false);
   const walkover = useDeclararWalkover(partido.id, torneoId);
-  const err = walkover.error as ApiError | undefined;
+  const anular = useAnularWalkover(partido.id, torneoId);
+  const err = (walkover.error ?? anular.error) as ApiError | undefined;
   const esWalkover = partido.estado === 'WALKOVER';
 
   // Validación cliente explícita: hay que elegir el equipo que no se presentó.
@@ -1165,6 +1186,39 @@ function WalkoverCard({
                   &ldquo;{partido.observaciones}&rdquo;
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* LOG-4 (auditoría) — deshacer un walkover mal declarado. */}
+          <div className="mt-3 pt-3 border-t border-orange-700/20">
+            <FormErrorBanner
+              apiError={anular.error as ApiError | undefined}
+              apiTitle="No se pudo anular el walkover"
+            />
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs text-ink-mute leading-snug flex-1 min-w-[200px]">
+                ¿Se declaró por error? Anúlalo para volver el partido a{' '}
+                <strong>programado</strong>: se borra el 3-0, se reabre el acta y
+                se revierten las multas y el descuento de sanciones.
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                loading={anular.isPending}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      'Vas a anular el walkover. El partido vuelve a PROGRAMADO, ' +
+                        'se borra el marcador 3-0 y se revierten las multas asociadas. ¿Continuar?',
+                    )
+                  )
+                    return;
+                  anular.mutate();
+                }}
+              >
+                <X size={14} /> Anular walkover
+              </Button>
             </div>
           </div>
         </div>

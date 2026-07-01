@@ -266,6 +266,9 @@ export class MatchCenterService {
     equipo: 'LOCAL' | 'VISITA',
   ): Promise<MatchCenterSnapshot> {
     const partido = await this.ensure(partidoId, tenantId);
+    // LOG-6 (auditoría) — defensa en profundidad: no operar el marcador de
+    // un partido que ya no se juega (NO_JUGADO/SUSPENDIDO/REPROGRAMADO/WO).
+    assertPartidoEstadoOperable(partido.estado);
     if (partido.centroEstado === 'IDLE') {
       throw new BadRequestException(
         'Inicia el partido antes de cargar goles.',
@@ -309,6 +312,7 @@ export class MatchCenterService {
     equipo: 'LOCAL' | 'VISITA',
   ): Promise<MatchCenterSnapshot> {
     const partido = await this.ensure(partidoId, tenantId);
+    assertPartidoEstadoOperable(partido.estado);
     const inscripcionId =
       equipo === 'LOCAL' ? partido.inscripcionLocalId : partido.inscripcionVisitaId;
     if (!inscripcionId) return this.toSnapshot(partido);
@@ -358,6 +362,7 @@ export class MatchCenterService {
       throw new BadRequestException('Los goles no pueden ser negativos.');
     }
     const partido = await this.ensure(partidoId, tenantId);
+    assertPartidoEstadoOperable(partido.estado);
     if (partido.centroEstado === 'IDLE') {
       throw new BadRequestException(
         'Inicia el partido antes de ajustar el marcador.',

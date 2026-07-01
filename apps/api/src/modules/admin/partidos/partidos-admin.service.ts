@@ -252,7 +252,28 @@ export class PartidosAdminService {
         );
       }
     }
-    if (input.estado !== undefined) partido.estado = input.estado;
+    // LOG-1 (auditoría) — el cambio de estado por PATCH solo se permite
+    // entre PROGRAMADO y EN_CURSO (transiciones inocuas: sin acta, sin
+    // marcador, no cuentan en la tabla). FINALIZADO / WALKOVER / NO_JUGADO
+    // / SUSPENDIDO_FUERZA_MAYOR / REPROGRAMADO tienen endpoints dedicados
+    // con sus validaciones, multas y reversibilidad. Sin este guard, un
+    // PATCH podía inyectar un FINALIZADO 0-0 fantasma en la tabla o
+    // resucitar un partido con acta cerrada dejándolo en estado incoherente.
+    if (input.estado !== undefined && input.estado !== partido.estado) {
+      if (partido.actaCerradaAt) {
+        throw new ConflictException(
+          'El acta de este partido está cerrada. Reábrela antes de cambiar el estado.',
+        );
+      }
+      const PATCH_OK = ['PROGRAMADO', 'EN_CURSO'];
+      if (!PATCH_OK.includes(partido.estado) || !PATCH_OK.includes(input.estado)) {
+        throw new ConflictException(
+          `No se puede cambiar el estado de ${partido.estado} a ${input.estado} por esta vía. ` +
+            'Usá las acciones dedicadas: cerrar/reabrir acta, walkover, suspender, marcar no jugado o reactivar.',
+        );
+      }
+      partido.estado = input.estado;
+    }
     if (input.observaciones !== undefined) partido.observaciones = input.observaciones;
 
     // Detección de choque cancha+horario. Solo aplica si hay AMBOS
@@ -988,6 +1009,14 @@ export class PartidosAdminService {
     if (!partido.actaCerradaAt) {
       throw new BadRequestException('El acta no está cerrada');
     }
+    // LOG-4 (auditoría) — un WALKOVER también tiene acta cerrada, pero
+    // reabrirlo lo dejaría EN_CURSO con el 3-0 intacto. Para deshacerlo va
+    // por su flujo dedicado (anularWalkover), que limpia marcador y multa.
+    if (partido.estado === 'WALKOVER') {
+      throw new ConflictException(
+        'Este partido es un WALKOVER. Para deshacerlo usá "Anular walkover", no reabrir el acta.',
+      );
+    }
 
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     const eraFechaFinalizada = fecha.estado === 'FINALIZADA';
@@ -996,6 +1025,20 @@ export class PartidosAdminService {
     partido.actaCerradaBy = null;
     partido.estado = 'EN_CURSO';
     await this.repo.save(partido);
+
+    // LOG-2 (auditoría) — borrar las sanciones AUTOMÁTICAS originadas por
+    // este partido (roja directa / doble amarilla / acumulación). Si el
+    // operador corrige/elimina una tarjeta mal cargada y re-cierra, se
+    // regeneran desde las incidencias actuales. Las de TRIBUNAL (manuales)
+    // nunca se tocan. Va antes del revert de contadores para no re-inflar
+    // sanciones que ya no existen.
+    await this.sancionRepo
+      .createQueryBuilder()
+      .delete()
+      .where('tenant_id = :tenantId', { tenantId })
+      .andWhere('origen_incidencia_partido_id = :partidoId', { partidoId: partido.id })
+      .andWhere(`motivo IN ('ROJA_DIRECTA', 'DOBLE_AMARILLA', 'ACUMULACION_AMARILLAS')`)
+      .execute();
 
     // Sprint 34D — al reabrir el acta, borrar los cobros auto del
     // partido (multas amarillas/rojas/walkover) que aun no fueron
@@ -1019,37 +1062,50 @@ export class PartidosAdminService {
       fecha.estado = 'EN_CURSO';
     }
 
-    // AUDIT-9: si la fecha estaba FINALIZADA (todos los partidos
-    // cerrados), su cierre disparó decremento de sanciones. Al reabrir
-    // este partido, esa fecha vuelve a EN_CURSO y el decremento queda
-    // "adelantado": sanciones que cumplieron por ese decremento ahora
-    // están en estado inconsistente.
-    //
-    // Revertimos: sumamos +1 a fechas_pendientes de las sanciones del
-    // torneo que estaban bajando hasta esta fecha. Marcamos como no
-    // cumplidas si el incremento las saca del cero.
+    // AUDIT-9 + LOG-3 (auditoría): la fecha vuelve a EN_CURSO, así que hay
+    // que revertir el decremento de sanciones que había disparado su
+    // cierre. El helper cappea contra fechas_totales para no inflar el
+    // contador (fechas_pendientes > fechas_totales).
     if (eraFechaFinalizada) {
-      await this.sancionRepo
-        .createQueryBuilder()
-        .update()
-        .set({ fechasPendientes: () => 'fechas_pendientes + 1' })
-        .where('tenant_id = :tenantId', { tenantId })
-        .andWhere('torneo_id = :torneoId', { torneoId: fecha.torneoId })
-        .andWhere('desde_fecha_numero <= :fechaNumero', { fechaNumero: fecha.numero })
-        .execute();
-      // Marcar no-cumplidas las que volvieron a tener fechas pendientes.
-      await this.sancionRepo
-        .createQueryBuilder()
-        .update()
-        .set({ cumplida: false })
-        .where('tenant_id = :tenantId', { tenantId })
-        .andWhere('torneo_id = :torneoId', { torneoId: fecha.torneoId })
-        .andWhere('cumplida = true')
-        .andWhere('fechas_pendientes > 0')
-        .execute();
+      await this.revertirDecrementoSanciones(tenantId, fecha.torneoId, fecha.numero);
     }
 
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
+  }
+
+  /**
+   * Revierte el decremento de `fechas_pendientes` disparado al finalizar
+   * una fecha (al reabrir un acta o anular un walkover). Suma +1 a las
+   * sanciones del torneo que bajaban hasta esa fecha, **capeando contra
+   * fechas_totales** (LOG-3) para no dejar `fechas_pendientes` por encima
+   * del total original, y re-marca como no cumplidas las que vuelven a
+   * tener pendientes. COALESCE cubre sanciones legacy sin fechas_totales.
+   */
+  private async revertirDecrementoSanciones(
+    tenantId: string,
+    torneoId: string,
+    fechaNumero: number,
+  ): Promise<void> {
+    await this.sancionRepo
+      .createQueryBuilder()
+      .update()
+      .set({
+        fechasPendientes: () =>
+          'LEAST(COALESCE(fechas_totales, fechas_pendientes + 1), fechas_pendientes + 1)',
+      })
+      .where('tenant_id = :tenantId', { tenantId })
+      .andWhere('torneo_id = :torneoId', { torneoId })
+      .andWhere('desde_fecha_numero <= :fechaNumero', { fechaNumero })
+      .execute();
+    await this.sancionRepo
+      .createQueryBuilder()
+      .update()
+      .set({ cumplida: false })
+      .where('tenant_id = :tenantId', { tenantId })
+      .andWhere('torneo_id = :torneoId', { torneoId })
+      .andWhere('cumplida = true')
+      .andWhere('fechas_pendientes > 0')
+      .execute();
   }
 
   // ─── Sprint 8: Suspensión y reprogramación ─────────────────────────
@@ -1082,6 +1138,10 @@ export class PartidosAdminService {
     partido.suspendidoAt = new Date();
     partido.suspendidoByUserId = actorUserId;
     partido.observacionesSuspension = input.observaciones?.trim() || null;
+    // LOG-6: cortar el cronómetro del match-center — un partido suspendido
+    // no debe seguir con reloj en vivo en la vista pública.
+    partido.centroEstado = 'IDLE';
+    partido.centroArrancadoAt = null;
     await this.repo.save(partido);
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
@@ -1114,6 +1174,9 @@ export class PartidosAdminService {
     partido.suspendidoAt = new Date();
     partido.suspendidoByUserId = actorUserId;
     partido.observacionesSuspension = input.observaciones?.trim() || null;
+    // LOG-6: cortar el cronómetro del match-center (idem suspensión).
+    partido.centroEstado = 'IDLE';
+    partido.centroArrancadoAt = null;
     await this.repo.save(partido);
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
@@ -1314,6 +1377,54 @@ export class PartidosAdminService {
 
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
+  }
+
+  /**
+   * LOG-4 (auditoría) — Anula un WALKOVER declarado por error. Resetea el
+   * marcador y el estado a PROGRAMADO, limpia la observación auto, borra la
+   * multa auto (cobro no pagado) y, si el walkover había finalizado la
+   * fecha, la revierte a EN_CURSO deshaciendo el decremento de sanciones
+   * (simétrico a reabrirActa). El partido queda listo para volver a jugarse
+   * o declararse walkover de nuevo. Un WALKOVER no genera sanciones de
+   * jugador (no hay incidencias), así que no hay sanciones que borrar.
+   */
+  @Transactional()
+  async anularWalkover(partidoId: string, tenantId: string): Promise<PartidoAdmin> {
+    const partido = await this.findPartido(partidoId, tenantId);
+    if (partido.estado !== 'WALKOVER') {
+      throw new BadRequestException('El partido no es un WALKOVER.');
+    }
+
+    const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
+    const eraFechaFinalizada = fecha.estado === 'FINALIZADA';
+
+    partido.estado = 'PROGRAMADO';
+    partido.golesLocal = null;
+    partido.golesVisita = null;
+    partido.actaCerradaAt = null;
+    partido.actaCerradaBy = null;
+    partido.observaciones = null;
+    await this.repo.save(partido);
+
+    try {
+      await this.tarifaAplicador.borrarCobrosAutoDelPartido(partido.id, tenantId);
+    } catch (err) {
+      console.warn(
+        `[partido] cleanup multa walkover fallo partido=${partido.id}: ${(err as Error).message}`,
+      );
+    }
+
+    if (eraFechaFinalizada) {
+      await this.fechaRepo.update({ id: partido.fechaId }, { estado: 'EN_CURSO' });
+      await this.revertirDecrementoSanciones(tenantId, fecha.torneoId, fecha.numero);
+    }
+
+    return this.toDto(
+      partido,
+      fecha.numero,
+      fecha.etiqueta,
+      fecha.tipoReprogramacion === 'REPROGRAMADA',
+    );
   }
 
   /**

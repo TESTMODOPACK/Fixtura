@@ -297,6 +297,17 @@ export class PartidosAdminController {
     });
   }
 
+  // LOG-4 (auditoría) — deshacer un walkover declarado por error.
+  @Post(':id/anular-walkover')
+  @Roles(ROLE.LIGA_ADMIN, ROLE.SUPER_ADMIN)
+  @Audited({ action: 'partido.walkover_anulado', entityType: 'Partido', entityIdFrom: 'params.id' })
+  anularWalkover(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<PartidoAdmin> {
+    return this.svc.anularWalkover(id, ensureTenant(user));
+  }
+
   // ── INF — Informe del partido (observaciones disciplinarias) ───────
   // Lectura: cualquiera del controller (incluye TRIBUNAL_DISCIPLINA, que lee
   // para fundamentar fallos). Escritura: admin o personal designado a ESTE
