@@ -23,8 +23,10 @@ export const JugadorGlobalSchema = z.object({
   apellidos: z.string(),
   apodo: z.string().nullable(),
   rut: z.string(),
-  email: z.string().nullable(),
-  telefono: z.string().nullable(),
+  // DB-3 (auditoría) — email/teléfono NO viajan en el listado masivo: son
+  // PII de contacto que solo se necesita en la ficha individual. Viven en
+  // JugadorGlobalDetalle, no acá. El RUT sí queda: es el identificador con
+  // el que el admin busca y desambigua homónimos.
   numeroCamiseta: z.number().int().nullable(),
   posicion: z.string().nullable(),
   fechaNac: z.string().nullable(),
@@ -100,6 +102,9 @@ export interface JugadorSancionDetalle {
  * torneo y las sanciones activas vigentes.
  */
 export type JugadorGlobalDetalle = JugadorGlobal & {
+  // DB-3 — PII de contacto: solo en la ficha individual, no en el listado.
+  email: string | null;
+  telefono: string | null;
   pieHabil: string | null;
   nombreContacto: string | null;
   telefonoContacto: string | null;

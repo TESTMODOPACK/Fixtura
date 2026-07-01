@@ -3,7 +3,6 @@
 import {
   AlertTriangle,
   ChevronRight,
-  Mail,
   Search,
   Shield,
   ShieldOff,
@@ -375,11 +374,8 @@ function JugadorRow({ jugador }: { jugador: JugadorGlobal }): React.ReactElement
             <div className="text-xs text-ink-mute flex flex-wrap gap-2">
               {jugador.apodo && <span>« {jugador.apodo} »</span>}
               <span className="font-mono">{jugador.rut}</span>
-              {jugador.email && (
-                <span className="flex items-center gap-0.5">
-                  <Mail size={10} /> {jugador.email}
-                </span>
-              )}
+              {/* DB-3 — el email es PII de contacto: se ve en la ficha del
+                  jugador, no en el listado masivo. */}
             </div>
           </div>
         </div>

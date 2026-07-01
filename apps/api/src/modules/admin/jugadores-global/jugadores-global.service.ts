@@ -178,8 +178,8 @@ export class JugadoresGlobalService {
         apellidos: j.apellidos,
         apodo: j.apodo,
         rut: j.rut,
-        email: j.email,
-        telefono: j.telefono,
+        // DB-3 — email/teléfono NO salen en el listado (PII masiva). La ficha
+        // individual (getDetalle) sí los devuelve.
         numeroCamiseta: j.numeroCamiseta,
         posicion: j.posicion,
         fechaNac: j.fechaNac,
