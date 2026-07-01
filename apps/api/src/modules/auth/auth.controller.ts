@@ -48,6 +48,11 @@ export class AuthController {
     });
   }
 
+  // SEG-5 (auditoría) — throttle explícito del refresh. El token es random de
+  // 48 bytes (no brute-forceable) + rotado + revocable, así que esto es sobre
+  // todo anti-abuso/DoS: un cliente sano refresca ~1 vez cada 15 min; 30/min
+  // por IP tolera oficinas detrás de NAT y corta loops de refresh descontrolados.
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post('refresh')
   @Public()
   @HttpCode(200)
