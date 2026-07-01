@@ -264,7 +264,12 @@ function JugadorRow({ jugador }: { jugador: JugadorGlobal }): React.ReactElement
           )}
           <div>
             <div className="font-semibold flex items-center gap-1">
-              {jugador.nombres} {jugador.apellidos}
+              <Link
+                href={`/admin/jugadores/${jugador.jugadorId}`}
+                className="hover:text-accent hover:underline"
+              >
+                {jugador.nombres} {jugador.apellidos}
+              </Link>
               {jugador.capitan && (
                 <Star size={12} className="text-accent fill-accent" />
               )}
@@ -332,13 +337,13 @@ function JugadorRow({ jugador }: { jugador: JugadorGlobal }): React.ReactElement
           )}
         </div>
       </td>
-      <td className="px-3 py-2.5">
+      <td className="px-3 py-2.5 text-right">
         <Link
-          href={`/admin/clubes/${jugador.clubId}`}
-          className="text-line hover:text-ink-mute"
-          title="Ver ficha del club"
+          href={`/admin/jugadores/${jugador.jugadorId}`}
+          className="inline-flex items-center gap-1 text-accent font-semibold text-xs hover:underline whitespace-nowrap"
+          title="Ver información del jugador"
         >
-          <ChevronRight size={14} />
+          Detalle <ChevronRight size={14} />
         </Link>
       </td>
     </tr>
@@ -353,7 +358,7 @@ function JugadorCard({ jugador }: { jugador: JugadorGlobal }): React.ReactElemen
 
   return (
     <Link
-      href={`/admin/clubes/${jugador.clubId}`}
+      href={`/admin/jugadores/${jugador.jugadorId}`}
       className={cn(
         'block p-4 transition-colors',
         esVetado ? 'bg-danger/5' : esInactivo ? 'opacity-60 hover:bg-paper' : 'hover:bg-paper',
@@ -379,7 +384,7 @@ function JugadorCard({ jugador }: { jugador: JugadorGlobal }): React.ReactElemen
             <span className="font-mono">{jugador.rut}</span>
           </div>
         </div>
-        <ChevronRight size={16} className="text-line flex-shrink-0 mt-0.5" />
+        <ChevronRight size={18} className="text-accent flex-shrink-0 mt-0.5" />
       </div>
 
       <div className="text-sm mt-2 flex items-center gap-1.5">

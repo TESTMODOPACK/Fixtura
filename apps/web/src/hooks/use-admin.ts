@@ -10,6 +10,7 @@ import type {
   DashboardAdmin,
   InvitarMiembroRequest,
   JugadorGlobal,
+  JugadorGlobalDetalle,
   MiembroAdmin,
   SponsorAdmin,
   TenantSettings,
@@ -971,6 +972,14 @@ export function useJugadoresGlobal(filters: {
     queryKey: ['admin', 'jugadores-global', filters],
     queryFn: () =>
       apiFetch<JugadorGlobal[]>(`/admin/jugadores${query ? `?${query}` : ''}`),
+  });
+}
+
+export function useJugadorGlobalDetalle(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'jugadores-global', 'detalle', id],
+    queryFn: () => apiFetch<JugadorGlobalDetalle>(`/admin/jugadores/${id}`),
+    enabled: !!id,
   });
 }
 

@@ -1,6 +1,18 @@
-import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Query,
+} from '@nestjs/common';
 
-import { ROLE, type JugadorGlobal, type UserContext } from '@fixtura/types';
+import {
+  ROLE,
+  type JugadorGlobal,
+  type JugadorGlobalDetalle,
+  type UserContext,
+} from '@fixtura/types';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -36,5 +48,13 @@ export class JugadoresGlobalController {
       categoriaId: categoriaId || undefined,
       estado: estadoValid,
     });
+  }
+
+  @Get(':id')
+  detalle(
+    @CurrentUser() user: UserContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<JugadorGlobalDetalle> {
+    return this.svc.getDetalle(ensureTenant(user), id);
   }
 }

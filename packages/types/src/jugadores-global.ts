@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import type { MotivoSancion } from './sanciones';
+
 /**
  * Vista cross-tenant del plantel global de la liga.
  *
@@ -63,6 +65,47 @@ export const JugadorGlobalSchema = z.object({
   tieneSancionActiva: z.boolean(),
 });
 export type JugadorGlobal = z.infer<typeof JugadorGlobalSchema>;
+
+/**
+ * Stats de un jugador desglosadas por torneo donde participó (match por
+ * RUT). El total agregado de JugadorGlobal es la suma de estos rubros.
+ */
+export interface JugadorTorneoStats {
+  torneoId: string;
+  torneoNombre: string;
+  goles: number;
+  amarillas: number;
+  rojas: number;
+  mvps: number;
+  partidos: number;
+}
+
+/** Sanción activa del jugador (fechas_pendientes > 0), con su torneo. */
+export interface JugadorSancionDetalle {
+  id: string;
+  torneoId: string;
+  torneoNombre: string;
+  motivo: MotivoSancion;
+  fechasPendientes: number;
+  fechasTotales: number | null;
+  desdeFechaNumero: number;
+  descripcion: string | null;
+  createdAt: string;
+}
+
+/**
+ * Ficha completa de un jugador para la página de detalle
+ * (/admin/jugadores/[id]). Extiende la fila del listado con datos de
+ * ficha (pie hábil, contacto de emergencia), el desglose de stats por
+ * torneo y las sanciones activas vigentes.
+ */
+export type JugadorGlobalDetalle = JugadorGlobal & {
+  pieHabil: string | null;
+  nombreContacto: string | null;
+  telefonoContacto: string | null;
+  porTorneo: JugadorTorneoStats[];
+  sanciones: JugadorSancionDetalle[];
+};
 
 export const JugadoresGlobalQuerySchema = z.object({
   search: z.string().optional(),

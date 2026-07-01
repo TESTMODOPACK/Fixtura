@@ -1,9 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { calcularEdad, calcularEdadCalendario } from '@fixtura/domain';
-import type { JugadorGlobal, JugadoresGlobalQuery } from '@fixtura/types';
+import type {
+  JugadorGlobal,
+  JugadorGlobalDetalle,
+  JugadoresGlobalQuery,
+  JugadorSancionDetalle,
+  JugadorTorneoStats,
+} from '@fixtura/types';
 
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
 import { Jugador } from '../../competition/entities/jugador.entity';
@@ -210,5 +216,154 @@ export class JugadoresGlobalService {
       return result.filter((j) => j.estado === 'ACTIVO');
     }
     return result;
+  }
+
+  /**
+   * Ficha completa de un jugador para /admin/jugadores/[id]: datos de
+   * plantel + estado consolidado + desglose de stats por torneo (match
+   * por RUT, igual que el listado) + sanciones activas vigentes.
+   *
+   * Los totales agregados (goles, amarillas, etc.) se derivan sumando el
+   * desglose por torneo, así el header del detalle coincide siempre con
+   * la fila del listado (cada partido pertenece a un solo torneo, no hay
+   * doble conteo).
+   */
+  async getDetalle(tenantId: string, jugadorId: string): Promise<JugadorGlobalDetalle> {
+    const j = await this.jugadorRepo
+      .createQueryBuilder('j')
+      .leftJoinAndSelect('j.club', 'club')
+      .leftJoinAndSelect('j.categoria', 'categoria')
+      .where('j.id = :id', { id: jugadorId })
+      .andWhere('j.tenant_id = :tenantId', { tenantId })
+      .getOne();
+    if (!j) {
+      throw new NotFoundException('Jugador no encontrado.');
+    }
+
+    const veto = await this.vetadoRepo.findOne({
+      where: { tenantId, rut: j.rut },
+      select: ['motivo'],
+    });
+
+    let estado: JugadorGlobal['estado'];
+    if (veto) {
+      estado = 'VETADO';
+    } else if (j.estado === 'INACTIVO') {
+      estado = 'INACTIVO';
+    } else {
+      estado = 'ACTIVO';
+    }
+
+    // Desglose por torneo. El join incidencias→partidos→fechas→torneos
+    // permite agrupar las stats por el torneo donde se generó cada
+    // incidencia. Match por RUT (ji.rut) para ser consistente con list().
+    const porTorneoRows = await this.incidenciaRepo
+      .createQueryBuilder('i')
+      .innerJoin('jugadores', 'ji', 'ji.id = i.jugador_id')
+      .innerJoin('partidos', 'p', 'p.id = i.partido_id')
+      .innerJoin('fechas', 'f', 'f.id = p.fecha_id')
+      .innerJoin('torneos', 't', 't.id = f.torneo_id')
+      .select('t.id', 'torneoId')
+      .addSelect('t.nombre', 'torneoNombre')
+      .addSelect(`SUM(CASE WHEN i.tipo = 'GOL' THEN 1 ELSE 0 END)`, 'goles')
+      .addSelect(`SUM(CASE WHEN i.tipo = 'AMARILLA' THEN 1 ELSE 0 END)`, 'amarillas')
+      .addSelect(
+        `SUM(CASE WHEN i.tipo IN ('ROJA','AMARILLA_ROJA') THEN 1 ELSE 0 END)`,
+        'rojas',
+      )
+      .addSelect(`SUM(CASE WHEN i.tipo = 'MVP' THEN 1 ELSE 0 END)`, 'mvps')
+      .addSelect(`COUNT(DISTINCT i.partido_id)`, 'partidos')
+      .where('i.tenant_id = :tenantId', { tenantId })
+      .andWhere('ji.rut = :rut', { rut: j.rut })
+      .groupBy('t.id')
+      .addGroupBy('t.nombre')
+      .orderBy('t.nombre', 'ASC')
+      .getRawMany<{
+        torneoId: string;
+        torneoNombre: string;
+        goles: string;
+        amarillas: string;
+        rojas: string;
+        mvps: string;
+        partidos: string;
+      }>();
+
+    const porTorneo: JugadorTorneoStats[] = porTorneoRows.map((row) => ({
+      torneoId: row.torneoId,
+      torneoNombre: row.torneoNombre,
+      goles: Number(row.goles),
+      amarillas: Number(row.amarillas),
+      rojas: Number(row.rojas),
+      mvps: Number(row.mvps),
+      partidos: Number(row.partidos),
+    }));
+
+    const tot = porTorneo.reduce(
+      (acc, t) => ({
+        goles: acc.goles + t.goles,
+        amarillas: acc.amarillas + t.amarillas,
+        rojas: acc.rojas + t.rojas,
+        mvps: acc.mvps + t.mvps,
+        partidos: acc.partidos + t.partidos,
+      }),
+      { goles: 0, amarillas: 0, rojas: 0, mvps: 0, partidos: 0 },
+    );
+
+    // Sanciones activas vigentes (cumplida=false y fechas_pendientes>0),
+    // match por RUT. Incluye el torneo para mostrar en qué competencia
+    // pesa la sanción.
+    const sancionEnts = await this.sancionRepo.find({
+      where: { tenantId, rut: j.rut, cumplida: false },
+      relations: { torneo: true },
+      order: { createdAt: 'DESC' },
+    });
+    const sanciones: JugadorSancionDetalle[] = sancionEnts
+      .filter((s) => s.fechasPendientes > 0)
+      .map((s) => ({
+        id: s.id,
+        torneoId: s.torneoId,
+        torneoNombre: s.torneo?.nombre ?? '',
+        motivo: s.motivo,
+        fechasPendientes: s.fechasPendientes,
+        fechasTotales: s.fechasTotales,
+        desdeFechaNumero: s.desdeFechaNumero,
+        descripcion: s.descripcion,
+        createdAt: s.createdAt.toISOString(),
+      }));
+
+    return {
+      jugadorId: j.id,
+      nombres: j.nombres,
+      apellidos: j.apellidos,
+      apodo: j.apodo,
+      rut: j.rut,
+      email: j.email,
+      telefono: j.telefono,
+      numeroCamiseta: j.numeroCamiseta,
+      posicion: j.posicion,
+      fechaNac: j.fechaNac,
+      edad: calcularEdad(j.fechaNac),
+      edadCalendario: calcularEdadCalendario(j.fechaNac),
+      capitan: j.capitan,
+      estado,
+      vetoMotivo: veto?.motivo ?? null,
+      clubId: j.clubId,
+      clubNombre: j.club?.nombre ?? '',
+      clubSlug: j.club?.slug ?? '',
+      clubEscudoUrl: j.club?.escudoUrl ?? null,
+      categoriaId: j.categoriaId,
+      categoriaNombre: j.categoria?.nombre ?? '',
+      goles: tot.goles,
+      amarillas: tot.amarillas,
+      rojas: tot.rojas,
+      mvps: tot.mvps,
+      partidosJugados: tot.partidos,
+      tieneSancionActiva: sanciones.length > 0,
+      pieHabil: j.pieHabil,
+      nombreContacto: j.nombreContacto,
+      telefonoContacto: j.telefonoContacto,
+      porTorneo,
+      sanciones,
+    };
   }
 }
