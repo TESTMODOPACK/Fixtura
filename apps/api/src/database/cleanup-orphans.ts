@@ -2262,7 +2262,28 @@ async function ensureFacturasPlataformaTable(
        WHERE estado = 'PENDIENTE'`,
   );
   await ensureTrigger(client, 'facturas_plataforma');
-  log('facturas_plataforma asegurada (Sprint 24A).');
+  // SEG-3 / M7 (auditoría) — RLS en la tabla de facturación de plataforma.
+  // Aditivo y seguro: todos los paths ya setean app.current_tenant_id — los
+  // de sistema/cron/webhook/super-admin a '' (bypass) y el path de liga
+  // (listPorTenant) corre bajo el contexto del request + filtra tenant_id
+  // explícito. La policy es la misma de siempre: match por tenant o bypass ''.
+  await client.query(`ALTER TABLE facturas_plataforma ENABLE ROW LEVEL SECURITY`);
+  await client.query(`ALTER TABLE facturas_plataforma FORCE ROW LEVEL SECURITY`);
+  await client.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE tablename = 'facturas_plataforma' AND policyname = 'tenant_isolation'
+      ) THEN
+        CREATE POLICY tenant_isolation ON facturas_plataforma
+          USING (
+            tenant_id::text = current_setting('app.current_tenant_id', true)
+            OR current_setting('app.current_tenant_id', true) = ''
+          );
+      END IF;
+    END $$;
+  `);
+  log('facturas_plataforma asegurada (Sprint 24A + RLS SEG-3).');
 }
 
 /**
