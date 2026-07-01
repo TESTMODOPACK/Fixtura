@@ -83,7 +83,11 @@ export class ImpersonationService {
       impersonatorId: superAdminId,
     };
 
-    const tokens = await this.auth.issueTokens(ctx, { ipAddress, userAgent });
+    // A5 — access token SOLO: no creamos refresh para la impersonación, así la
+    // cookie HttpOnly del super admin queda intacta (su sesión no se corrompe).
+    // La impersonación dura lo que el access token (≤15 min); al expirar o
+    // salir, el refresh del super admin (su cookie) lo devuelve a su sesión.
+    const tokens = await this.auth.issueAccessOnly(ctx);
 
     await this.audit.record({
       action: 'admin.impersonate.start',

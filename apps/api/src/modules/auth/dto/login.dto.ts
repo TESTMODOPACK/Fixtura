@@ -10,9 +10,3 @@ export class LoginDto {
   @Length(8, 128)
   password!: string;
 }
-
-export class RefreshDto {
-  @IsString()
-  @Length(20, 200)
-  refreshToken!: string;
-}

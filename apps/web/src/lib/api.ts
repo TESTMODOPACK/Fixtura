@@ -92,21 +92,27 @@ let refreshPromise: Promise<AuthTokens> | null = null;
 
 async function refreshTokens(): Promise<AuthTokens> {
   if (refreshPromise) return refreshPromise;
-  const { refreshToken, setTokens, clearTokens } = useAuthStore.getState();
-  if (!refreshToken) throw new ApiError(401, 'No refresh token');
 
+  // A5 — el refresh token va en la cookie HttpOnly (credentials: 'include'); no
+  // se manda en el body ni se lee del store.
   refreshPromise = fetch(`${API_BASE}/auth/refresh`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken }),
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
   })
     .then(async (res) => {
+      const { setTokens, clearTokens, impersonationTarget } = useAuthStore.getState();
       if (!res.ok) {
         clearTokens();
         throw new ApiError(res.status, 'Refresh failed');
       }
       const tokens = (await res.json()) as AuthTokens;
       setTokens(tokens);
+      // Si estábamos impersonando, este refresh usó la cookie del super admin
+      // (el access del target expiró) → volvemos a su sesión y cerramos el modo.
+      if (impersonationTarget) {
+        useAuthStore.setState({ impersonationTarget: null, originalAccessToken: null });
+      }
       return tokens;
     })
     .finally(() => {

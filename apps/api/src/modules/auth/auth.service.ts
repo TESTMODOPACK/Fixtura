@@ -244,6 +244,22 @@ export class AuthService {
     };
   }
 
+  /**
+   * A5 — Emite SOLO un access token (sin refresh ni fila en refresh_tokens).
+   * Lo usa la impersonación: el super admin actúa como el target por la vida del
+   * access token (≤15 min) sin tocar su propia cookie de refresh. Al expirar o
+   * salir, el refresh del super admin (su cookie) lo devuelve a su sesión.
+   */
+  async issueAccessOnly(
+    ctx: UserContext,
+  ): Promise<{ accessToken: string; accessTokenExpiresIn: number }> {
+    const accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m');
+    const accessToken = await this.jwt.signAsync(ctx, {
+      expiresIn: accessTtl as `${number}m`,
+    });
+    return { accessToken, accessTokenExpiresIn: ttlToSeconds(accessTtl) };
+  }
+
   static async hashPassword(plain: string): Promise<string> {
     return bcrypt.hash(plain, BCRYPT_COST);
   }

@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 
+import { apiFetch } from '@/lib/api';
 import { clearAll as clearOfflineQueue } from '@/lib/offline-queue';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -23,6 +24,10 @@ export function useLogout(): () => void {
   const clearTokens = useAuthStore((s) => s.clearTokens);
 
   return useCallback(() => {
+    // A5 — avisar al backend para revocar el refresh token y borrar su cookie
+    // HttpOnly. Best-effort (captura el access token actual antes de limpiar);
+    // no bloquea el cierre de sesión local.
+    void apiFetch('/auth/logout', { method: 'POST', body: {} }).catch(() => {});
     clearTokens();
     qc.clear();
     // SEC-5 — Limpia datos locales sensibles antes de soltar la sesión:

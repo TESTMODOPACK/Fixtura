@@ -41,14 +41,11 @@ export default function ImpersonatePage(): React.ReactElement {
     }
     try {
       const result = await start.mutateAsync(userId);
-      startStore(
-        {
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
-          accessTokenExpiresIn: result.accessTokenExpiresIn,
-        },
-        { userId: result.targetUserId, email: result.targetEmail },
-      );
+      // A5 — solo el access token (la impersonación no emite refresh).
+      startStore(result.accessToken, {
+        userId: result.targetUserId,
+        email: result.targetEmail,
+      });
       router.push('/admin');
       // Forzar reload para descartar queries cacheadas con el JWT anterior.
       window.location.href = '/admin';
