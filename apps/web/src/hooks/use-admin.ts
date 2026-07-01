@@ -489,7 +489,12 @@ export function useAddIncidencia(partidoId: string) {
     mutationFn: (input: CreateIncidenciaRequest) =>
       apiFetch<IncidenciaAdmin>(`/admin/partidos/${partidoId}/incidencias`, {
         method: 'POST',
-        body: input,
+        // MOV-1 — clientKey estable para esta acción. Se genera una vez acá
+        // (useMutation no reintenta solo) y viaja en el body: si el request se
+        // encola offline y se reintenta al reconectar, se reenvía la MISMA
+        // clave y el backend devuelve la incidencia ya creada en vez de
+        // duplicarla.
+        body: { ...input, clientKey: input.clientKey ?? crypto.randomUUID() },
         // Si estamos en cancha sin señal, encolar en IndexedDB y resolver
         // optimista. El banner offline + auto-flush hacen el resto.
         enqueueIfOffline: { kind: 'incidencia', partidoId },

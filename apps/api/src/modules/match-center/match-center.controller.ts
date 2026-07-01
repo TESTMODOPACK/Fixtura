@@ -116,7 +116,7 @@ export class MatchCenterAdminController {
   ): Promise<MatchCenterSnapshot> {
     const tenantId = ensureTenant(user);
     await this.svc.assertActorPuedeOperar(partidoId, tenantId, actorPersonalScope(user));
-    const snap = await this.svc.sumarGol(partidoId, tenantId, dto.equipo);
+    const snap = await this.svc.sumarGol(partidoId, tenantId, dto.equipo, dto.clientKey);
     void this.gateway.broadcast(partidoId);
     return snap;
   }

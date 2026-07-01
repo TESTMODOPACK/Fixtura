@@ -52,6 +52,9 @@ export type StartMatchCenterRequest = z.infer<typeof StartMatchCenterRequestSche
 
 export const SumarGolRequestSchema = z.object({
   equipo: z.enum(['LOCAL', 'VISITA']),
+  // MOV-1 — clave de idempotencia del cliente (uuid v4). Un doble-tap o
+  // reintento con la misma clave no suma dos goles.
+  clientKey: z.uuid().nullable().optional(),
 });
 export type SumarGolRequest = z.infer<typeof SumarGolRequestSchema>;
 

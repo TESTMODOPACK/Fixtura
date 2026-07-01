@@ -71,6 +71,13 @@ export class IncidenciaPartido {
   @Column({ type: 'jsonb', default: () => "'{}'::jsonb" })
   detalle!: Record<string, unknown>;
 
+  // MOV-1 (auditoría) — clave de idempotencia generada por el cliente
+  // (uuid v4). Un replay del mismo evento (cola offline, doble-tap,
+  // reconexión) reusa la misma clave y el UNIQUE parcial
+  // (partido_id, client_key) evita duplicar la incidencia.
+  @Column({ name: 'client_key', type: 'uuid', nullable: true })
+  clientKey!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

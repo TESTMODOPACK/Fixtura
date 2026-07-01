@@ -225,7 +225,10 @@ export function useSumarGolCentro(partidoId: string) {
     mutationFn: (equipo: 'LOCAL' | 'VISITA') =>
       apiFetch<MatchCenterSnapshot>(`/admin/match-center/${partidoId}/sumar-gol`, {
         method: 'POST',
-        body: { equipo },
+        // MOV-1 — clientKey estable por invocación. useMutation no reintenta
+        // solo, así que se genera una vez; si el request se reenvía (refresh
+        // de token) reusa el mismo body y el backend no duplica el gol.
+        body: { equipo, clientKey: crypto.randomUUID() },
       }),
     // F46.6 — +GOL crea una incidencia (marcador derivado); refrescar la
     // lista de incidencias del partido.

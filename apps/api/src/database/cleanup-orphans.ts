@@ -258,6 +258,23 @@ async function main(): Promise<void> {
     `);
     log('partido_jugadores + partidos.presentes_certificados_* asegurados (F46.4).');
 
+    // MOV-1 (auditoría) — idempotencia de incidencias/goles cargados desde la
+    // cancha. client_key es un uuid v4 que el cliente genera al crear la acción
+    // y reusa entre reintentos (cola offline, doble-tap, reconexión). El UNIQUE
+    // parcial (partido_id, client_key) hace que un replay del mismo evento NO
+    // duplique la incidencia. Parcial (WHERE client_key IS NOT NULL) para no
+    // chocar con las filas históricas sin clave, y porque al crear la columna
+    // toda la tabla queda NULL → el índice nace sin filas y no puede fallar.
+    await client.query(
+      `ALTER TABLE incidencias_partido ADD COLUMN IF NOT EXISTS client_key UUID`,
+    );
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_incidencias_partido_client_key
+        ON incidencias_partido (partido_id, client_key)
+        WHERE client_key IS NOT NULL
+    `);
+    log('incidencias_partido.client_key + UNIQUE parcial asegurados (MOV-1).');
+
     // F47 (ADR-0006) — Pagos a personal: liquidaciones (pago agrupado por
     // persona) + columna liquidacion_id en designaciones. Las cuentas por
     // pagar pendientes = designaciones ASISTIO con liquidacion_id NULL.

@@ -46,6 +46,7 @@ import { PartidoJugador } from '../../competition/entities/partido-jugador.entit
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { assertPartidoEstadoOperable } from '../../competition/partido-estado.util';
+import { saveIncidenciaIdempotente } from '../../competition/incidencia-idempotente.util';
 import { PushService } from '../push/push.service';
 import { MatchCenterGateway } from '../../match-center/match-center.gateway';
 
@@ -396,6 +397,22 @@ export class PartidosAdminService {
     input: CreateIncidenciaRequest,
   ): Promise<IncidenciaAdmin> {
     const partido = await this.findPartido(partidoId, tenantId);
+
+    // MOV-1 (auditoría) — idempotencia: si ya existe una incidencia con esta
+    // clientKey en este partido, es un replay (cola offline / doble-tap /
+    // reconexión). Devolvemos la existente sin re-validar ni duplicar. Va
+    // ANTES de los checks de estado: un replay legítimo puede llegar cuando el
+    // acta ya se cerró, y no queremos fallarlo con un 409 espurio.
+    if (input.clientKey) {
+      const existente = await this.incidenciaRepo.findOne({
+        where: { partidoId, clientKey: input.clientKey },
+      });
+      if (existente) {
+        const incidencias = await this.listIncidencias(partidoId);
+        return incidencias.find((i) => i.id === existente.id)!;
+      }
+    }
+
     if (partido.actaCerradaAt) {
       throw new ConflictException(
         'No se pueden agregar incidencias a un acta cerrada. Reabrir primero (Sprint 2C+).',
@@ -467,17 +484,16 @@ export class PartidosAdminService {
       }
     }
 
-    const created = await this.incidenciaRepo.save(
-      this.incidenciaRepo.create({
-        tenantId,
-        partidoId,
-        inscripcionId: input.equipoId,
-        jugadorId: input.jugadorInscritoId,
-        tipo: input.tipo,
-        minuto: input.minuto ?? null,
-        detalle: {},
-      }),
-    );
+    const created = await saveIncidenciaIdempotente(this.incidenciaRepo, {
+      tenantId,
+      partidoId,
+      inscripcionId: input.equipoId,
+      jugadorId: input.jugadorInscritoId,
+      tipo: input.tipo,
+      minuto: input.minuto ?? null,
+      detalle: {},
+      clientKey: input.clientKey ?? null,
+    });
 
     // F46.6 — marcador derivado: recalcular goles desde las incidencias.
     if (input.tipo === 'GOL' || input.tipo === 'AUTOGOL') {

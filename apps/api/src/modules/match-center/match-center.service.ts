@@ -18,6 +18,7 @@ import { Partido } from '../competition/entities/partido.entity';
 import { PlanillaTorneo } from '../competition/entities/planilla-torneo.entity';
 import { Torneo } from '../competition/entities/torneo.entity';
 import { assertPartidoEstadoOperable } from '../competition/partido-estado.util';
+import { saveIncidenciaIdempotente } from '../competition/incidencia-idempotente.util';
 
 /**
  * Sprint 18 — RF-17. Lógica del cronómetro Match Center.
@@ -264,8 +265,24 @@ export class MatchCenterService {
     partidoId: string,
     tenantId: string,
     equipo: 'LOCAL' | 'VISITA',
+    clientKey?: string | null,
   ): Promise<MatchCenterSnapshot> {
     const partido = await this.ensure(partidoId, tenantId);
+
+    // MOV-1 (auditoría) — idempotencia: si ya existe una incidencia con esta
+    // clientKey, es un replay (reintento por reconexión) del mismo gol.
+    // Recomputamos y devolvemos sin duplicar. Va antes de los checks de estado
+    // para que un replay no falle si el cronómetro ya cambió de estado.
+    if (clientKey) {
+      const existente = await this.incidenciaRepo.findOne({
+        where: { partidoId, clientKey },
+      });
+      if (existente) {
+        await this.recomputarMarcador(partido);
+        return this.toSnapshot(partido);
+      }
+    }
+
     // LOG-6 (auditoría) — defensa en profundidad: no operar el marcador de
     // un partido que ya no se juega (NO_JUGADO/SUSPENDIDO/REPROGRAMADO/WO).
     assertPartidoEstadoOperable(partido.estado);
@@ -286,17 +303,16 @@ export class MatchCenterService {
     // crea una incidencia de gol "sin jugador" que se puede atribuir luego en
     // el detalle del acta. Así el botón y el registro de incidencias nunca
     // desincronizan el marcador.
-    await this.incidenciaRepo.save(
-      this.incidenciaRepo.create({
-        tenantId,
-        partidoId,
-        inscripcionId,
-        jugadorId: null,
-        tipo: 'GOL',
-        minuto: null,
-        detalle: {},
-      }),
-    );
+    await saveIncidenciaIdempotente(this.incidenciaRepo, {
+      tenantId,
+      partidoId,
+      inscripcionId,
+      jugadorId: null,
+      tipo: 'GOL',
+      minuto: null,
+      detalle: {},
+      clientKey: clientKey ?? null,
+    });
     await this.recomputarMarcador(partido);
     return this.toSnapshot(partido);
   }

@@ -93,6 +93,13 @@ export class CreateIncidenciaDto {
   @Min(0)
   @Max(150)
   minuto?: number | null;
+
+  // MOV-1 — clave de idempotencia del cliente (uuid v4). Si se reintenta la
+  // misma acción con la misma clave, el backend devuelve la incidencia ya
+  // creada en vez de duplicarla.
+  @IsOptional()
+  @IsUUID()
+  clientKey?: string | null;
 }
 
 export class AtribuirIncidenciaDto {

@@ -66,6 +66,9 @@ export const CreateIncidenciaSchema = z.object({
   jugadorInscritoId: z.uuid().nullable(),
   tipo: z.enum(TIPO_INCIDENCIA),
   minuto: z.number().int().min(0).max(150).nullable().optional(),
+  // MOV-1 — clave de idempotencia del cliente (uuid v4). Reintentar con la
+  // misma clave devuelve la incidencia ya creada en vez de duplicarla.
+  clientKey: z.uuid().nullable().optional(),
 });
 export type CreateIncidenciaRequest = z.infer<typeof CreateIncidenciaSchema>;
 
