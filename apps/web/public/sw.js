@@ -16,7 +16,7 @@
  *
  * Versión cache — bumpear cuando cambien las estrategias.
  */
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const STATIC_CACHE = `fixtura-static-${CACHE_VERSION}`;
 const API_CACHE = `fixtura-api-${CACHE_VERSION}`;
 const ACTA_CACHE = `fixtura-acta-${CACHE_VERSION}`;
@@ -143,9 +143,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Default: network-first
+  // Default: network-first. IMPORTANTE: respondWith() exige un Response;
+  // si el fetch falla (ej. un prefetch RSC de Next.js abortado en una ruta
+  // dinámica) y el request no está cacheado, caches.match resuelve a
+  // undefined → "Failed to convert value to 'Response'". Garantizamos
+  // siempre un Response de fallback.
   event.respondWith(
-    fetch(request).catch(() => caches.match(request)),
+    fetch(request).catch(async () => {
+      const cached = await caches.match(request);
+      return cached ?? new Response('Sin conexión', { status: 503 });
+    }),
   );
 });
 
@@ -180,7 +187,8 @@ async function staleWhileRevalidate(request, cacheName) {
       if (fresh.ok) cache.put(request, fresh.clone());
       return fresh;
     })
-    .catch(() => cached);
+    // Sin cache y red caída, no devolvemos undefined a respondWith().
+    .catch(() => cached ?? new Response('Sin conexión', { status: 503 }));
   return cached ?? fetchPromise;
 }
 
