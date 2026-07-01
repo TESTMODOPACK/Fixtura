@@ -27,6 +27,22 @@ import { cn } from '@/lib/cn';
  * INACTIVO, VETADO) y stats agregadas vía match por RUT al modelo
  * viejo (que se mantiene sincronizado por el shim del 26G.2).
  */
+
+// Ordenamiento del ranking. 'default' = orden que devuelve el backend
+// (club → categoría → apellido). Las demás claves ordenan por la stat
+// (desc por defecto: es un ranking).
+type StatSortKey = 'partidosJugados' | 'goles' | 'amarillas' | 'rojas' | 'mvps';
+type SortKey = 'default' | StatSortKey;
+
+const SORT_LABEL: Record<SortKey, string> = {
+  default: 'Club · Nombre',
+  goles: 'Más goles',
+  amarillas: 'Más amarillas',
+  rojas: 'Más rojas',
+  mvps: 'Más MVP',
+  partidosJugados: 'Más partidos',
+};
+
 export default function JugadoresGlobalPage(): React.ReactElement {
   const [search, setSearch] = useState('');
   const [clubId, setClubId] = useState('');
@@ -34,6 +50,8 @@ export default function JugadoresGlobalPage(): React.ReactElement {
   const [estado, setEstado] = useState<'activos' | 'todos' | 'vetados'>(
     'activos',
   );
+  const [sortKey, setSortKey] = useState<SortKey>('default');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Deferred para que el input no dispare query en cada tecla.
   const deferredSearch = useDeferredValue(search);
@@ -66,6 +84,30 @@ export default function JugadoresGlobalPage(): React.ReactElement {
     if (!categoriaId) return all;
     return all.filter((c) => c.categoriaIds.includes(categoriaId));
   }, [clubes, categoriaId]);
+
+  // Ranking client-side sobre la lista ya filtrada (el backend trae todas
+  // las filas, sin paginar). 'default' respeta el orden del backend; una
+  // stat ordena por ese valor con desempate estable por apellido/nombre.
+  const jugadoresOrdenados = useMemo(() => {
+    const all = jugadores ?? [];
+    if (sortKey === 'default') return all;
+    const factor = sortDir === 'asc' ? 1 : -1;
+    return [...all].sort((a, b) => {
+      const diff = a[sortKey] - b[sortKey];
+      if (diff !== 0) return diff * factor;
+      const porApellido = a.apellidos.localeCompare(b.apellidos);
+      return porApellido !== 0 ? porApellido : a.nombres.localeCompare(b.nombres);
+    });
+  }, [jugadores, sortKey, sortDir]);
+
+  const toggleSort = (k: StatSortKey): void => {
+    if (sortKey === k) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(k);
+      setSortDir('desc');
+    }
+  };
 
   return (
     <>
@@ -177,6 +219,28 @@ export default function JugadoresGlobalPage(): React.ReactElement {
         </select>
       </div>
 
+      {/* Orden del ranking (en desktop también se ordena clickeando la
+          columna; este selector sirve para móvil y descubribilidad). */}
+      <div className="flex items-center justify-end gap-2 mb-3">
+        <span className="text-[10px] uppercase tracking-[0.15em] text-ink-mute font-semibold">
+          Ordenar por
+        </span>
+        <select
+          className="input text-sm w-auto"
+          value={sortKey}
+          onChange={(e) => {
+            setSortKey(e.target.value as SortKey);
+            setSortDir('desc');
+          }}
+        >
+          {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+            <option key={k} value={k}>
+              {SORT_LABEL[k]}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Tabla */}
       <Card padding="none" className="overflow-hidden">
         {isLoading && (
@@ -211,17 +275,17 @@ export default function JugadoresGlobalPage(): React.ReactElement {
                   <th className="px-4 py-2.5">Jugador</th>
                   <th className="px-3 py-2.5">Club · Categoría</th>
                   <th className="px-3 py-2.5">Pos</th>
-                  <th className="px-3 py-2.5 text-right">PJ</th>
-                  <th className="px-3 py-2.5 text-right">⚽</th>
-                  <th className="px-3 py-2.5 text-right">🟨</th>
-                  <th className="px-3 py-2.5 text-right">🟥</th>
-                  <th className="px-3 py-2.5 text-right">MVP</th>
+                  <SortTh k="partidosJugados" label="PJ" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh k="goles" label="⚽" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh k="amarillas" label="🟨" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh k="rojas" label="🟥" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh k="mvps" label="MVP" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <th className="px-3 py-2.5">Estado</th>
                   <th className="px-3 py-2.5"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {jugadores.map((j) => (
+                {jugadoresOrdenados.map((j) => (
                   <JugadorRow key={j.jugadorId} jugador={j} />
                 ))}
               </tbody>
@@ -230,13 +294,47 @@ export default function JugadoresGlobalPage(): React.ReactElement {
         )}
         {!isLoading && jugadores && jugadores.length > 0 && (
           <div className="md:hidden divide-y divide-line">
-            {jugadores.map((j) => (
+            {jugadoresOrdenados.map((j) => (
               <JugadorCard key={j.jugadorId} jugador={j} />
             ))}
           </div>
         )}
       </Card>
     </>
+  );
+}
+
+// Encabezado de columna numérica que ordena el ranking al clickearlo.
+// Muestra ▲/▼ en la columna activa. Reusa el estilo uppercase del <tr>.
+function SortTh({
+  k,
+  label,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  k: StatSortKey;
+  label: string;
+  sortKey: SortKey;
+  sortDir: 'asc' | 'desc';
+  onSort: (k: StatSortKey) => void;
+}): React.ReactElement {
+  const active = sortKey === k;
+  return (
+    <th className="px-3 py-2.5 text-right">
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        className={cn(
+          'inline-flex items-center gap-0.5 uppercase tracking-[0.15em] font-semibold hover:text-ink transition-colors',
+          active ? 'text-accent' : 'text-ink-mute',
+        )}
+        title={`Ordenar por ${label}`}
+      >
+        {label}
+        {active && <span aria-hidden>{sortDir === 'asc' ? '▲' : '▼'}</span>}
+      </button>
+    </th>
   );
 }
 
