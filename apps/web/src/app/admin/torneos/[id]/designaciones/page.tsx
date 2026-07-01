@@ -6,6 +6,7 @@ import {
   Building2,
   CalendarRange,
   CheckCircle2,
+  Lock,
   Plus,
   Trash2,
   UserCog,
@@ -446,6 +447,7 @@ function PartidoCard({
   const remove = useRemoveDesignacion({ torneoId, fechaId });
   const updateEstado = useUpdateDesignacionEstado({ torneoId, fechaId });
 
+  const cerrada = partido.actaCerrada;
   const fechaHora = partido.fechaHora ? new Date(partido.fechaHora) : null;
   const hora = fechaHora
     ? fechaHora.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
@@ -467,6 +469,14 @@ function PartidoCard({
             {!fechaHora && <span className="italic">Sin fecha/hora</span>}
           </div>
         </div>
+        {cerrada && (
+          <span
+            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] uppercase tracking-wider font-semibold bg-green-deep/15 text-green-deep whitespace-nowrap"
+            title="El acta de este partido está cerrada. Reábrela para cambiar las designaciones."
+          >
+            <Lock size={11} /> Acta cerrada
+          </span>
+        )}
       </div>
 
       <div className="divide-y divide-line">
@@ -501,11 +511,16 @@ function PartidoCard({
                       {d ? (
                         <DesignacionRow
                           desig={d}
+                          cerrada={cerrada}
                           onRemove={() => remove.mutate(d.id)}
                           onUpdateEstado={(estado) =>
                             updateEstado.mutate({ id: d.id, estado })
                           }
                         />
+                      ) : cerrada ? (
+                        <span className="text-sm text-ink-mute italic font-serif">
+                          Sin designar
+                        </span>
                       ) : addingRol === slotId ? (
                         <AsignarForm
                           personal={personal}
@@ -551,10 +566,12 @@ function PartidoCard({
 
 function DesignacionRow({
   desig,
+  cerrada,
   onRemove,
   onUpdateEstado,
 }: {
   desig: DesignacionAdmin;
+  cerrada: boolean;
   onRemove: () => void;
   onUpdateEstado: (estado: EstadoDesignacion) => void;
 }): React.ReactElement {
@@ -569,20 +586,35 @@ function DesignacionRow({
         {desig.personalNombre} {desig.personalApellido}
       </span>
 
-      <select
-        value={desig.estado}
-        onChange={(e) => onUpdateEstado(e.target.value as EstadoDesignacion)}
-        className={cn(
-          'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded border-0 cursor-pointer',
-          ESTADO_BADGE[desig.estado],
-        )}
-      >
-        <option value="PROPUESTA">{ESTADO_LABEL.PROPUESTA}</option>
-        <option value="CONFIRMADA">{ESTADO_LABEL.CONFIRMADA}</option>
-        <option value="RECHAZADA">{ESTADO_LABEL.RECHAZADA}</option>
-        <option value="ASISTIO">{ESTADO_LABEL.ASISTIO}</option>
-        <option value="AUSENTE">{ESTADO_LABEL.AUSENTE}</option>
-      </select>
+      {cerrada ? (
+        // Acta cerrada: el estado queda fijo (ASISTIO ya devengó el pago).
+        // Se muestra como badge de solo lectura con candado; para cambiarlo
+        // hay que reabrir el acta del partido.
+        <span
+          className={cn(
+            'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded flex items-center gap-1',
+            ESTADO_BADGE[desig.estado],
+          )}
+          title="Acta cerrada — reábrela para cambiar el estado del personal"
+        >
+          <Lock size={10} /> {ESTADO_LABEL[desig.estado]}
+        </span>
+      ) : (
+        <select
+          value={desig.estado}
+          onChange={(e) => onUpdateEstado(e.target.value as EstadoDesignacion)}
+          className={cn(
+            'text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded border-0 cursor-pointer',
+            ESTADO_BADGE[desig.estado],
+          )}
+        >
+          <option value="PROPUESTA">{ESTADO_LABEL.PROPUESTA}</option>
+          <option value="CONFIRMADA">{ESTADO_LABEL.CONFIRMADA}</option>
+          <option value="RECHAZADA">{ESTADO_LABEL.RECHAZADA}</option>
+          <option value="ASISTIO">{ESTADO_LABEL.ASISTIO}</option>
+          <option value="AUSENTE">{ESTADO_LABEL.AUSENTE}</option>
+        </select>
+      )}
 
       {desig.conflictoDobleBooking && (
         <span
@@ -629,14 +661,16 @@ function DesignacionRow({
         </span>
       )}
 
-      <button
-        type="button"
-        onClick={onRemove}
-        className="ml-auto p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
-        title="Quitar designación"
-      >
-        <Trash2 size={14} />
-      </button>
+      {!cerrada && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="ml-auto p-1 rounded text-ink-mute hover:text-danger hover:bg-danger/10"
+          title="Quitar designación"
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
     </div>
   );
 }

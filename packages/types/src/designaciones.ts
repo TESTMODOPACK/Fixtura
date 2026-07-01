@@ -75,6 +75,9 @@ export const DesignacionesPorFechaSchema = z.object({
       equipoVisitaNombre: z.string(),
       fechaHora: z.iso.datetime().nullable(),
       canchaNombre: z.string().nullable(),
+      // Acta cerrada → estados del personal bloqueados (no editar/borrar
+      // sin reabrir el acta; ASISTIO ya generó el devengo del pago).
+      actaCerrada: z.boolean(),
       designaciones: z.array(DesignacionAdminSchema),
     }),
   ),

@@ -195,6 +195,10 @@ export class DesignacionesAdminService {
         equipoVisitaNombre: p.inscripcionVisita?.club?.nombre ?? '',
         fechaHora: p.fechaHora ? p.fechaHora.toISOString() : null,
         canchaNombre: p.canchaNombre,
+        // Acta cerrada → los estados del personal quedan bloqueados (ASISTIO
+        // ya generó el devengo del pago). El front no permite editarlos ni
+        // borrarlos hasta reabrir el acta.
+        actaCerrada: !!p.actaCerradaAt,
         designaciones: desigsDelPartido,
       };
     });
@@ -285,6 +289,12 @@ export class DesignacionesAdminService {
     if (!partido) throw new NotFoundException(`Partido ${input.partidoId} no encontrado`);
     // No se designa personal a un partido que ya no se va a jugar.
     assertPartidoEstadoOperable(partido.estado);
+    // Ni a un partido con acta cerrada (FINALIZADO/WALKOVER): reabrir primero.
+    if (partido.actaCerradaAt) {
+      throw new ConflictException(
+        'El acta de este partido está cerrada. Reábrela para designar personal.',
+      );
+    }
 
     const personal = await this.personalRepo.findOne({
       where: { id: input.personalId, tenantId },
@@ -399,6 +409,17 @@ export class DesignacionesAdminService {
     const d = await this.repo.findOne({ where: { id: designacionId, tenantId } });
     if (!d) return { ok: false, estado: 'NO_ENCONTRADA' };
 
+    // Si el acta ya se cerró, la respuesta del árbitro llega tarde: al cerrar,
+    // el estado quedó fijo (ASISTIO/AUSENTE) y devengó el pago. Un link viejo
+    // no debe pisarlo → no-op idempotente con el estado actual.
+    const partidoAsoc = await this.partidoRepo.findOne({
+      where: { id: d.partidoId, tenantId },
+      select: ['id', 'actaCerradaAt'],
+    });
+    if (partidoAsoc?.actaCerradaAt) {
+      return { ok: true, estado: d.estado };
+    }
+
     // Si ya estaba CONFIRMADA/RECHAZADA/ASISTIO, devolvemos idempotente OK
     // para que el usuario no se confunda si recarga el link.
     if (accion === 'CONFIRMAR') {
@@ -456,6 +477,9 @@ export class DesignacionesAdminService {
   ): Promise<DesignacionAdmin> {
     const d = await this.repo.findOne({ where: { id, tenantId } });
     if (!d) throw new NotFoundException(`Designación ${id} no encontrada`);
+    // El acta cerrada fija el estado del personal (ASISTIO = base del pago).
+    // Cambiarlo requiere reabrir el acta.
+    await this.assertActaAbierta(d.partidoId, tenantId);
     d.estado = input.estado;
     if (input.estado === 'CONFIRMADA' && !d.confirmadoAt) {
       d.confirmadoAt = new Date();
@@ -467,6 +491,9 @@ export class DesignacionesAdminService {
   async remove(id: string, tenantId: string): Promise<void> {
     const d = await this.repo.findOne({ where: { id, tenantId } });
     if (!d) throw new NotFoundException(`Designación ${id} no encontrada`);
+    // Borrar una designación de un acta cerrada eliminaría la base del pago
+    // ya devengado. Reabrir primero.
+    await this.assertActaAbierta(d.partidoId, tenantId);
     await this.repo.remove(d);
   }
 
@@ -474,6 +501,23 @@ export class DesignacionesAdminService {
   private async ensureTorneo(torneoId: string, tenantId: string): Promise<void> {
     const t = await this.torneoRepo.findOne({ where: { id: torneoId, tenantId } });
     if (!t) throw new NotFoundException(`Torneo ${torneoId} no encontrado`);
+  }
+
+  /**
+   * Rechaza la operación si el acta del partido está cerrada. Un acta
+   * cerrada ya devengó los pagos (ASISTIO), así que sus designaciones no
+   * se editan ni se borran hasta reabrirla.
+   */
+  private async assertActaAbierta(partidoId: string, tenantId: string): Promise<void> {
+    const partido = await this.partidoRepo.findOne({
+      where: { id: partidoId, tenantId },
+      select: ['id', 'actaCerradaAt'],
+    });
+    if (partido?.actaCerradaAt) {
+      throw new ConflictException(
+        'El acta de este partido está cerrada. Reábrela para cambiar los estados del personal.',
+      );
+    }
   }
 
   private toDto(
