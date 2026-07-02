@@ -13,6 +13,7 @@ import {
   ROLE,
   type ActivarJugadorInfo,
   type InvitarJugadorResponse,
+  type InvitarPlantelMasivoResponse,
   type JugadorCuenta,
   type JugadorGlobalDetalle,
   type PartidoDelegado,
@@ -77,6 +78,19 @@ export class JugadorCuentaAdminController {
     @Param('jugadorId', ParseUUIDPipe) jugadorId: string,
   ): Promise<JugadorCuenta> {
     return this.invite.estadoCuenta(jugadorId, ensureTenant(user));
+  }
+
+  /**
+   * Invitación masiva: todo el plantel activo del club (todas las categorías),
+   * solo por email. clubId por parámetro; el scope de tenant lo valida el
+   * servicio (where clubId + tenantId).
+   */
+  @Post('club/:clubId/invitar-masivo')
+  invitarMasivo(
+    @CurrentUser() user: UserContext,
+    @Param('clubId', ParseUUIDPipe) clubId: string,
+  ): Promise<InvitarPlantelMasivoResponse> {
+    return this.invite.invitarMasivo(clubId, ensureTenant(user), user.userId);
   }
 }
 

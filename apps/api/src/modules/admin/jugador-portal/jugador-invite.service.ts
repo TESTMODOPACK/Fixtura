@@ -2,15 +2,17 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { IsNull, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 
 import type {
   ActivarJugadorInfo,
   InvitarJugadorResponse,
+  InvitarPlantelMasivoResponse,
   JugadorCuenta,
 } from '@fixtura/types';
 import { validarPasswordSegura } from '@fixtura/domain';
@@ -54,6 +56,8 @@ export class JugadorInviteService {
     private readonly email: EmailService,
     private readonly whatsapp: WhatsAppService,
   ) {}
+
+  private readonly logger = new Logger(JugadorInviteService.name);
 
   async invitar(
     jugadorId: string,
@@ -131,6 +135,96 @@ export class JugadorInviteService {
       whatsappEnviado,
       mensaje: `Invitación generada para ${nombre}. Válida por 72 horas.`,
     };
+  }
+
+  /**
+   * Invitación MASIVA al portal del jugador: todo el plantel ACTIVO del club
+   * (todas las categorías), por email. Se saltan los que ya tienen cuenta
+   * activa; a los pendientes se les manda un link nuevo (refresca el anterior);
+   * los que no tienen email se listan aparte para que el admin los complete.
+   * Best-effort por jugador — un fallo de envío no aborta el resto del lote.
+   */
+  async invitarMasivo(
+    clubId: string,
+    tenantId: string,
+    actorUserId: string | null,
+  ): Promise<InvitarPlantelMasivoResponse> {
+    const jugadores = await this.jugadorRepo.find({
+      where: { clubId, tenantId, estado: 'ACTIVO' },
+      relations: { club: true, categoria: true },
+      order: { apellidos: 'ASC', nombres: 'ASC' },
+    });
+
+    const resp: InvitarPlantelMasivoResponse = {
+      total: jugadores.length,
+      invitados: 0,
+      yaActivos: 0,
+      sinEmail: 0,
+      fallidos: 0,
+      saltadosSinEmail: [],
+    };
+    if (jugadores.length === 0) return resp;
+
+    // Batch: qué jugadores ya tienen cuenta JUGADOR activa (evita N+1).
+    const ids = jugadores.map((j) => j.id);
+    const rolesActivos = await this.roleRepo.find({
+      where: {
+        role: 'JUGADOR',
+        scopeType: 'PERSONAL',
+        scopeId: In(ids),
+        revokedAt: IsNull(),
+      },
+      select: ['scopeId'],
+    });
+    const cuentaActiva = new Set(rolesActivos.map((r) => r.scopeId));
+
+    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    const ligaNombre = tenant?.nombre ?? 'tu liga';
+    const clubNombre = jugadores[0]?.club?.nombre ?? 'tu club';
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+
+    for (const j of jugadores) {
+      if (cuentaActiva.has(j.id)) {
+        resp.yaActivos++;
+        continue;
+      }
+      const email = j.email?.trim().toLowerCase();
+      const nombre = `${j.nombres} ${j.apellidos}`.trim();
+      if (!email) {
+        resp.sinEmail++;
+        resp.saltadosSinEmail.push({
+          jugadorId: j.id,
+          nombre,
+          categoriaNombre: j.categoria?.nombre ?? '',
+        });
+        continue;
+      }
+      try {
+        const { token } = await this.magicLinks.crear({
+          purpose: 'INVITE_USER',
+          tenantId,
+          email,
+          metadata: { role: 'JUGADOR', jugadorId: j.id, clubNombre, nombre },
+          ttlMinutos: TTL_INVITACION_MIN,
+          createdByUserId: actorUserId,
+        });
+        const link = `${frontendUrl}/jugador/activar?token=${encodeURIComponent(token)}`;
+        const enviado = await this.email.send({
+          to: email,
+          subject: `Tu acceso de jugador — ${clubNombre} (${ligaNombre})`,
+          html: this.htmlInvitacion(nombre, clubNombre, ligaNombre, link),
+        });
+        if (enviado) resp.invitados++;
+        else resp.fallidos++;
+      } catch (err) {
+        resp.fallidos++;
+        this.logger.warn(
+          `[invitarMasivo] falló jugador=${j.id}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    return resp;
   }
 
   /** Estado de la cuenta del jugador (para la ficha del plantel). */

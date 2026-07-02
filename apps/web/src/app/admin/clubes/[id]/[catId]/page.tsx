@@ -19,6 +19,7 @@ import { PageHead } from '@/components/ui/page-head';
 import { useClub, useDeleteClub } from '@/hooks/use-admin';
 import { toastSuccess } from '@/lib/toast';
 
+import { InvitarPlantelBoton } from '../_invitar-plantel-boton';
 import { PlantelTab } from '../_plantel-tab';
 
 import { DirectivaCategoriaForm } from './_directiva-categoria-form';
@@ -157,6 +158,12 @@ export default function ClubCategoriaPage({
         >
           <Plus size={12} /> Agregar otra categoría
         </button>
+      </div>
+
+      {/* Acceso al portal del jugador: invitación masiva a TODO el plantel del
+          club (todas las categorías), solo por email. */}
+      <div className="mb-5">
+        <InvitarPlantelBoton clubId={id} clubNombre={club.nombre} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">

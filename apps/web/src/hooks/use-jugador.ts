@@ -6,6 +6,7 @@ import type {
   ActivarJugadorInfo,
   InvitarJugadorRequest,
   InvitarJugadorResponse,
+  InvitarPlantelMasivoResponse,
   JugadorCuenta,
   JugadorGlobalDetalle,
   PartidoDelegado,
@@ -53,6 +54,24 @@ export function useInvitarJugador(jugadorId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'jugadores', jugadorId, 'cuenta'] });
+    },
+  });
+}
+
+/**
+ * Invitación masiva al portal: todo el plantel activo del club (todas las
+ * categorías), solo por email. Devuelve el resumen de enviados / saltados.
+ */
+export function useInvitarPlantelMasivo(clubId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<InvitarPlantelMasivoResponse>(
+        `/admin/jugadores/club/${clubId}/invitar-masivo`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'jugadores'] });
     },
   });
 }
