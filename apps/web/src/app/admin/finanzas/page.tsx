@@ -87,6 +87,15 @@ function formatCLP(n: number): string {
   return `$${n.toLocaleString('es-CL')}`;
 }
 
+/**
+ * Una URL de boleta es "real" si NO viene del provider SII mock, que fabrica
+ * links inexistentes (http://localhost:3000/mock-sii/...). Con mock, el botón
+ * de descarga se muestra deshabilitado con aviso "próximamente".
+ */
+function esPdfBoletaReal(url: string): boolean {
+  return !url.includes('/mock-sii/') && !url.includes('localhost');
+}
+
 const MESES_CUOTA = [
   'Enero',
   'Febrero',
@@ -846,7 +855,10 @@ function BoletaRow({ doc }: { doc: DocumentoTributarioAdmin }): React.ReactEleme
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
-          {doc.estado === 'EMITIDO' && doc.urlPdf && (
+          {/* El provider SII mock genera URLs falsas (localhost/mock-sii) que
+              no existen: mostramos el botón deshabilitado con aviso. Cuando el
+              SII real (OpenFactura) emita URLs reales, se habilita solo. */}
+          {doc.estado === 'EMITIDO' && doc.urlPdf && esPdfBoletaReal(doc.urlPdf) && (
             <a
               href={doc.urlPdf}
               target="_blank"
@@ -856,6 +868,14 @@ function BoletaRow({ doc }: { doc: DocumentoTributarioAdmin }): React.ReactEleme
             >
               <Download size={12} /> PDF
             </a>
+          )}
+          {doc.estado === 'EMITIDO' && (!doc.urlPdf || !esPdfBoletaReal(doc.urlPdf)) && (
+            <span
+              className="px-2 py-1 rounded text-xs uppercase tracking-wider font-semibold bg-paper-dark text-ink-mute inline-flex items-center gap-1 cursor-not-allowed select-none"
+              title="La descarga del PDF estará disponible próximamente, cuando se active la emisión real ante el SII."
+            >
+              <Download size={12} /> PDF · Pronto
+            </span>
           )}
           {(doc.estado === 'PENDIENTE_EMISION' || doc.estado === 'RECHAZADO_SII') && (
             <button
