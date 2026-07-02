@@ -14,9 +14,10 @@
  *   - Fallback offline: si todo lo anterior falla y la request es navegación
  *     HTML, devolvemos la página /offline.html.
  *
- * Versión cache — bumpear cuando cambien las estrategias.
+ * Versión cache — bumpear cuando cambien las estrategias O tras un lote
+ * grande de deploys (fuerza a los clientes PWA a soltar caches viejas).
  */
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const STATIC_CACHE = `fixtura-static-${CACHE_VERSION}`;
 const API_CACHE = `fixtura-api-${CACHE_VERSION}`;
 const ACTA_CACHE = `fixtura-acta-${CACHE_VERSION}`;
