@@ -3,6 +3,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -34,4 +35,21 @@ export class ActivarJugadorDto {
   @MinLength(8)
   @MaxLength(200)
   password!: string;
+}
+
+/** Verificación de carnet: por QR escaneado o por RUT manual. */
+export class VerificarCarnetDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  qr?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  rut?: string;
+
+  @IsOptional()
+  @IsUUID()
+  torneoId?: string;
 }

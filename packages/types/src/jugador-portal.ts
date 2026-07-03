@@ -82,3 +82,52 @@ export const ActivarJugadorSchema = z.object({
   password: z.string().min(8).max(200),
 });
 export type ActivarJugadorRequest = z.infer<typeof ActivarJugadorSchema>;
+
+// ─── Carnet digital con QR ────────────────────────────────────────────
+// El jugador muestra su carnet (QR firmado, TTL corto) desde /jugador; el
+// árbitro/planillero lo escanea desde /personal y ve al instante si está
+// habilitado (ficha activa, sin veto, sin sanción vigente, en planilla).
+
+/** Datos visibles del carnet (los mismos que ve el verificador). */
+export const CarnetJugadorDatosSchema = z.object({
+  id: z.uuid(),
+  nombres: z.string(),
+  apellidos: z.string(),
+  rut: z.string(),
+  clubNombre: z.string(),
+  clubEscudoUrl: z.string().nullable(),
+  categoriaNombre: z.string(),
+  numeroCamiseta: z.number().int().nullable(),
+});
+export type CarnetJugadorDatos = z.infer<typeof CarnetJugadorDatosSchema>;
+
+export const CarnetJugadorSchema = z.object({
+  /** Token firmado (HMAC) que se codifica en el QR. */
+  qr: z.string(),
+  expiraAt: z.iso.datetime(),
+  ligaNombre: z.string(),
+  jugador: CarnetJugadorDatosSchema,
+});
+export type CarnetJugador = z.infer<typeof CarnetJugadorSchema>;
+
+/** Verificación: por QR escaneado o por RUT manual (uno de los dos). */
+export const VerificarCarnetSchema = z.object({
+  qr: z.string().max(500).optional(),
+  rut: z.string().max(20).optional(),
+  /** Contexto opcional: valida además la planilla de este torneo. */
+  torneoId: z.uuid().optional(),
+});
+export type VerificarCarnetRequest = z.infer<typeof VerificarCarnetSchema>;
+
+export const VerificacionCarnetSchema = z.object({
+  encontrado: z.boolean(),
+  /** null = verificación por RUT (sin QR). false = QR inválido/vencido. */
+  qrValido: z.boolean().nullable(),
+  habilitado: z.boolean(),
+  /** Razones cuando NO está habilitado (sanción, veto, ficha, planilla). */
+  motivos: z.array(z.string()),
+  jugador: CarnetJugadorDatosSchema.nullable(),
+  /** Torneos activos donde el jugador figura en planilla. */
+  torneosEnPlanilla: z.array(z.string()),
+});
+export type VerificacionCarnet = z.infer<typeof VerificacionCarnetSchema>;

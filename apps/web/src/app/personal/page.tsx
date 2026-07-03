@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ClipboardList,
   LogOut,
+  ScanLine,
   ShieldCheck,
   Wallet,
 } from 'lucide-react';
@@ -120,6 +121,25 @@ export default function PersonalPortalPage(): React.ReactElement | null {
 
         {data && (
           <div className="space-y-6">
+            {/* Verificar carnet (paso de jugadores) */}
+            <Link href="/personal/verificar" className="block">
+              <Card
+                padding="tight"
+                className="flex items-center gap-3 hover:border-accent transition-colors"
+              >
+                <div className="w-10 h-10 rounded-card bg-accent/15 flex items-center justify-center flex-shrink-0">
+                  <ScanLine size={18} className="text-accent" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-ink">Verificar carnet</div>
+                  <div className="text-[11px] text-ink-mute">
+                    Escanea el QR de un jugador o busca por RUT en el paso de jugadores
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-accent flex-shrink-0" />
+              </Card>
+            </Link>
+
             {/* Perfil */}
             <Card padding="comfortable">
               <div className="flex items-center gap-2 mb-2">

@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
@@ -12,21 +13,25 @@ import {
 import {
   ROLE,
   type ActivarJugadorInfo,
+  type CarnetJugador,
   type InvitarJugadorResponse,
   type InvitarPlantelMasivoResponse,
   type JugadorCuenta,
   type JugadorGlobalDetalle,
   type PartidoDelegado,
   type UserContext,
+  type VerificacionCarnet,
 } from '@fixtura/types';
 
+import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { CarnetService } from './carnet.service';
 import { resolveJugadorId, resolveTenantId } from './jugador-context';
 import { JugadorInviteService } from './jugador-invite.service';
 import { JugadorPortalService } from './jugador-portal.service';
-import { ActivarJugadorDto, InvitarJugadorDto } from './dto';
+import { ActivarJugadorDto, InvitarJugadorDto, VerificarCarnetDto } from './dto';
 
 function ensureTenant(user: UserContext): string {
   if (!user.tenantId) throw new BadRequestException('No hay tenant en el contexto');
@@ -40,7 +45,10 @@ function ensureTenant(user: UserContext): string {
 @Controller('jugador')
 @Roles(ROLE.JUGADOR)
 export class JugadorController {
-  constructor(private readonly portal: JugadorPortalService) {}
+  constructor(
+    private readonly portal: JugadorPortalService,
+    private readonly carnet: CarnetService,
+  ) {}
 
   @Get('mi-perfil')
   miPerfil(@CurrentUser() user: UserContext): Promise<JugadorGlobalDetalle> {
@@ -50,6 +58,39 @@ export class JugadorController {
   @Get('mis-partidos')
   misPartidos(@CurrentUser() user: UserContext): Promise<PartidoDelegado[]> {
     return this.portal.misPartidos(resolveJugadorId(user), resolveTenantId(user));
+  }
+
+  /** Carnet digital: QR firmado de vida corta para el paso de jugadores. */
+  @Get('carnet')
+  carnetDigital(@CurrentUser() user: UserContext): Promise<CarnetJugador> {
+    return this.carnet.emitir(resolveJugadorId(user), resolveTenantId(user));
+  }
+}
+
+/**
+ * Verificación de carnet en cancha — la usa el personal designado (árbitro/
+ * planillero/turno) y también el admin de la liga. Tenant del JWT; el carnet
+ * escaneado debe pertenecer al mismo tenant.
+ */
+@Controller('personal')
+@Roles(
+  ROLE.ARBITRO,
+  ROLE.PLANILLERO,
+  ROLE.LIGA_ADMIN,
+  ROLE.LIGA_COORDINADOR,
+  ROLE.SUPER_ADMIN,
+)
+export class CarnetVerificacionController {
+  constructor(private readonly carnet: CarnetService) {}
+
+  @Post('verificar-carnet')
+  @HttpCode(200)
+  @Audited({ action: 'carnet.verificado' })
+  verificar(
+    @CurrentUser() user: UserContext,
+    @Body() dto: VerificarCarnetDto,
+  ): Promise<VerificacionCarnet> {
+    return this.carnet.verificar(ensureTenant(user), dto);
   }
 }
 

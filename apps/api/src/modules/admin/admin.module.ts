@@ -102,10 +102,12 @@ import {
 import { DelegadoInviteService } from './delegado/delegado-invite.service';
 import { DelegadoPortalService } from './delegado/delegado-portal.service';
 import {
+  CarnetVerificacionController,
   JugadorController,
   JugadorCuentaAdminController,
   JugadorPublicController,
 } from './jugador-portal/jugador.controller';
+import { CarnetService } from './jugador-portal/carnet.service';
 import { JugadorInviteService } from './jugador-portal/jugador-invite.service';
 import { JugadorPortalService } from './jugador-portal/jugador-portal.service';
 import { EncuestaNps } from '../competition/entities/encuesta-nps.entity';
@@ -206,6 +208,7 @@ import { EncuestasService } from './encuestas/encuestas.service';
     JugadorController,
     JugadorCuentaAdminController,
     JugadorPublicController,
+    CarnetVerificacionController,
     NpsAdminController,
     NpsPublicoController,
     EncuestasAdminController,
@@ -254,6 +257,7 @@ import { EncuestasService } from './encuestas/encuestas.service';
     DelegadoPortalService,
     JugadorInviteService,
     JugadorPortalService,
+    CarnetService,
     NpsService,
     EncuestasService,
   ],

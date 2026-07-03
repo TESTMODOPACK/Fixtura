@@ -4,12 +4,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
   ActivarJugadorInfo,
+  CarnetJugador,
   InvitarJugadorRequest,
   InvitarJugadorResponse,
   InvitarPlantelMasivoResponse,
   JugadorCuenta,
   JugadorGlobalDetalle,
   PartidoDelegado,
+  VerificacionCarnet,
+  VerificarCarnetRequest,
 } from '@fixtura/types';
 
 import { apiFetch } from '@/lib/api';
@@ -30,6 +33,29 @@ export function useMisPartidos() {
   return useQuery({
     queryKey: ['jugador', 'mis-partidos'],
     queryFn: () => apiFetch<PartidoDelegado[]>('/jugador/mis-partidos'),
+  });
+}
+
+// ─── Carnet digital con QR ───────────────────────────────────────────
+
+/** Carnet del jugador logueado: token firmado + datos visibles. TTL 48h. */
+export function useMiCarnet() {
+  return useQuery({
+    queryKey: ['jugador', 'carnet'],
+    queryFn: () => apiFetch<CarnetJugador>('/jugador/carnet'),
+    // El token dura 48h: con refrescarlo al montar la vista alcanza.
+    staleTime: 1000 * 60 * 30,
+  });
+}
+
+/** Verificación en cancha (personal/admin): por QR escaneado o RUT manual. */
+export function useVerificarCarnet() {
+  return useMutation({
+    mutationFn: (input: VerificarCarnetRequest) =>
+      apiFetch<VerificacionCarnet>('/personal/verificar-carnet', {
+        method: 'POST',
+        body: input,
+      }),
   });
 }
 

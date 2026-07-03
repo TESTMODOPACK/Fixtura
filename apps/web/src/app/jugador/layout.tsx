@@ -3,6 +3,7 @@
 import {
   CalendarDays,
   LayoutDashboard,
+  QrCode,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -24,6 +25,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: '/jugador', label: 'Mi perfil', icon: LayoutDashboard },
   { href: '/jugador/partidos', label: 'Partidos', icon: CalendarDays },
+  { href: '/jugador/carnet', label: 'Mi carnet', icon: QrCode },
 ];
 
 export default function JugadorLayout({
