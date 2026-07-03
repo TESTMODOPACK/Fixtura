@@ -2,12 +2,20 @@ import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import type { DocumentoTributarioAdmin } from '@fixtura/types';
+import type { DocumentoTributarioAdmin, SiiTenantConfig } from '@fixtura/types';
 
+import { descifrarSecreto } from '../../../common/crypto/secret-box';
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { DocumentoTributario } from '../../competition/entities/documento-tributario.entity';
 import { Transaccion } from '../../competition/entities/transaccion.entity';
-import { SII_PROVIDER, SIIProvider } from './sii-provider';
+import { Tenant } from '../../tenants/entities/tenant.entity';
+import {
+  OpenFacturaProvider,
+  SII_PROVIDER,
+  SIIProvider,
+  type SiiCredenciales,
+  type SiiEmisor,
+} from './sii-provider';
 
 /**
  * Servicio de documentos tributarios.
@@ -41,9 +49,51 @@ export class SIIService {
     private readonly txRepo: Repository<Transaccion>,
     @InjectRepository(Cobro)
     private readonly cobroRepo: Repository<Cobro>,
+    @InjectRepository(Tenant)
+    private readonly tenantRepo: Repository<Tenant>,
     @Inject(SII_PROVIDER)
     private readonly provider: SIIProvider,
+    private readonly openFactura: OpenFacturaProvider,
   ) {}
+
+  /**
+   * BYO por liga: si el tenant tiene el SII activo y su API key de
+   * OpenFactura cargada, devuelve credenciales + emisor para emitir con SU
+   * cuenta. Si no (o si PAGOS_ENC_KEY falta y no se puede descifrar),
+   * devuelve null y la emisión cae al provider global (mock/env).
+   */
+  private async byoDe(
+    tenantId: string,
+  ): Promise<{ credenciales: SiiCredenciales; emisor: SiiEmisor } | null> {
+    const t = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    if (!t?.siiApiKeyEnc) return null;
+    const cfg = (t.siiConfig ?? {}) as Partial<SiiTenantConfig>;
+    if (!cfg.activo) return null;
+    if (!cfg.rutEmisor || !cfg.razonSocial) {
+      this.log.warn(
+        `Tenant ${tenantId} tiene SII activo pero sin emisor verificado — usando provider global.`,
+      );
+      return null;
+    }
+    const apiKey = descifrarSecreto(t.siiApiKeyEnc);
+    if (!apiKey) {
+      this.log.warn(
+        `Tenant ${tenantId}: no se pudo descifrar la API key SII (¿PAGOS_ENC_KEY?) — usando provider global.`,
+      );
+      return null;
+    }
+    return {
+      credenciales: { apiKey, ambiente: cfg.ambiente ?? 'PRODUCCION' },
+      emisor: {
+        rut: cfg.rutEmisor,
+        razonSocial: cfg.razonSocial,
+        giro: cfg.giro ?? null,
+        direccion: cfg.direccion ?? null,
+        comuna: cfg.comuna ?? null,
+        acteco: cfg.acteco ?? null,
+      },
+    };
+  }
 
   /**
    * Crea el DocumentoTributario asociado a una transacción aprobada y
@@ -124,7 +174,11 @@ export class SIIService {
     doc.ultimoIntentoAt = new Date();
 
     try {
-      const result = await this.provider.emitirBoleta({
+      // BYO: con credenciales de la liga → OpenFactura con SU cuenta.
+      // Sin ellas → provider global (mock en dev, o env de plataforma).
+      const byo = await this.byoDe(doc.tenantId);
+      const provider = byo ? this.openFactura : this.provider;
+      const result = await provider.emitirBoleta({
         monto: doc.monto,
         rutReceptor: doc.rutReceptor,
         razonSocial: doc.razonSocial,
@@ -136,6 +190,7 @@ export class SIIService {
           },
         ],
         externalReference: `doc-${doc.id}`,
+        ...(byo ?? {}),
       });
 
       doc.estado = 'EMITIDO';
@@ -146,7 +201,7 @@ export class SIIService {
       doc.emitidoAt = new Date();
       doc.ultimoError = null;
       this.log.log(
-        `Documento ${doc.id} EMITIDO: folio=${result.folio} provider=${this.provider.nombre}`,
+        `Documento ${doc.id} EMITIDO: folio=${result.folio} provider=${provider.nombre}${byo ? ' (BYO liga)' : ''}`,
       );
     } catch (err) {
       const msg = (err as Error).message;

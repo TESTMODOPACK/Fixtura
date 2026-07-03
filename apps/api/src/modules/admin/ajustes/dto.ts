@@ -95,6 +95,13 @@ class WhatsAppConfigDto {
   @IsOptional() @IsString() @MaxLength(10) apiVersion?: string;
 }
 
+class SiiConfigDto {
+  @IsOptional() @IsBoolean() activo?: boolean;
+  @IsOptional() @IsIn(['CERTIFICACION', 'PRODUCCION']) ambiente?:
+    | 'CERTIFICACION'
+    | 'PRODUCCION';
+}
+
 export class UpdateTenantSettingsDto {
   @IsOptional()
   @IsString()
@@ -138,6 +145,24 @@ export class UpdateTenantSettingsDto {
 
   @IsOptional() @IsString() @MaxLength(500) whatsappToken?: string;
   @IsOptional() @IsBoolean() limpiarWhatsappToken?: boolean;
+
+  // Boletas SII BYO. Config editable (activo/ambiente) + API key write-only.
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SiiConfigDto)
+  sii?: SiiConfigDto;
+
+  @IsOptional() @IsString() @MaxLength(200) siiApiKey?: string;
+  @IsOptional() @IsBoolean() limpiarSiiApiKey?: boolean;
+}
+
+export class VerificarSiiDto {
+  // Opcional: si viene, se verifica esta key (y se guarda cifrada al éxito);
+  // si no, se usa la ya guardada.
+  @IsOptional() @IsString() @MaxLength(200) apiKey?: string;
+  @IsOptional() @IsIn(['CERTIFICACION', 'PRODUCCION']) ambiente?:
+    | 'CERTIFICACION'
+    | 'PRODUCCION';
 }
 
 export class InvitarMiembroDto {

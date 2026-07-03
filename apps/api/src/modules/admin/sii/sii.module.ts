@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { CompetitionModule } from '../../competition/competition.module';
+import { Tenant } from '../../tenants/entities/tenant.entity';
 import { SiiAdminController } from './sii.controller';
 import { SiiCron } from './sii.cron';
 import { SIIService } from './sii.service';
@@ -22,7 +24,7 @@ import {
  * emisión asíncrona al aprobar una transacción.
  */
 @Module({
-  imports: [CompetitionModule],
+  imports: [CompetitionModule, TypeOrmModule.forFeature([Tenant])],
   controllers: [SiiAdminController],
   providers: [
     SIIService,
@@ -39,6 +41,8 @@ import {
       },
     },
   ],
-  exports: [SIIService, SII_PROVIDER],
+  // OpenFacturaProvider se exporta para el flujo BYO: Ajustes lo usa en
+  // "Probar conexión" (GET organization con la key de la liga).
+  exports: [SIIService, SII_PROVIDER, OpenFacturaProvider],
 })
 export class SIIModule {}

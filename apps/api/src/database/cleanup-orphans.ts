@@ -168,6 +168,16 @@ async function main(): Promise<void> {
     `);
     log('tenants.whatsapp_config / whatsapp_token_enc aseguradas.');
 
+    // Boletas SII BYO por liga: config no-secreta (activo/ambiente + snapshot
+    // del emisor autocompletado desde OpenFactura) + API key cifrada (mismo
+    // secret-box que pagos/WhatsApp).
+    await client.query(`
+      ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS sii_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+        ADD COLUMN IF NOT EXISTS sii_api_key_enc TEXT
+    `);
+    log('tenants.sii_config / sii_api_key_enc aseguradas.');
+
     // Sprint 6: tabla canchas.
     await ensureCanchasTable(client, log);
 

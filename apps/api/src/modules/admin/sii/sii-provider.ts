@@ -15,6 +15,22 @@ import { randomInt } from 'crypto';
  *  - sandbox|production  → OpenFacturaProvider
  */
 
+/** Credenciales BYO de la liga (API key descifrada de tenants.sii_api_key_enc). */
+export interface SiiCredenciales {
+  apiKey: string;
+  ambiente: 'CERTIFICACION' | 'PRODUCCION';
+}
+
+/** Datos del emisor para el DTE (snapshot de tenants.sii_config). */
+export interface SiiEmisor {
+  rut: string;
+  razonSocial: string;
+  giro: string | null;
+  direccion: string | null;
+  comuna: string | null;
+  acteco: number | null;
+}
+
 export interface EmitirBoletaArgs {
   monto: number;
   rutReceptor?: string | null;
@@ -22,6 +38,9 @@ export interface EmitirBoletaArgs {
   conceptos: Array<{ descripcion: string; monto: number; cantidad?: number }>;
   /** Para idempotencia: si Open Factura recibe la misma key, no re-emite. */
   externalReference: string;
+  /** BYO por liga: si vienen, el provider las usa en vez de las env globales. */
+  credenciales?: SiiCredenciales;
+  emisor?: SiiEmisor;
 }
 
 export interface EmitirBoletaResult {
@@ -83,26 +102,234 @@ export class SIIMockProvider extends SIIProvider {
   }
 }
 
+/** Datos del emisor que devuelve GET /v2/dte/organization de OpenFactura. */
+export interface SiiOrganizacion {
+  rut: string;
+  razonSocial: string;
+  giro: string | null;
+  direccion: string | null;
+  comuna: string | null;
+  acteco: number | null;
+}
+
 /**
- * Stub para Open Factura (https://openfactura.cl). Cuando lleguen las
- * credenciales del cliente:
- *   1. Setear env OPENFACTURA_API_KEY y OPENFACTURA_API_BASE
- *   2. Implementar emitirBoleta usando fetch contra el endpoint
- *      `POST /v1/dte/emitir` con tipo=39 (boleta electrónica afecta).
- *   3. Mapear la respuesta a EmitirBoletaResult.
+ * Keys de demo PÚBLICAS de OpenFactura (documentadas por Haulmer): rutean
+ * siempre al ambiente de desarrollo, con CAF simulado. Útiles para que una
+ * liga pruebe el flujo antes de contratar su cuenta.
+ */
+const OPENFACTURA_DEMO_KEYS = [
+  '928e15a2d14d4a6292345f04960f4bd3',
+  '41eb78998d444dbaa4922c410ef14057',
+];
+
+/**
+ * Integración real con Open Factura (Haulmer). API REST autenticada con
+ * header `apikey`.
  *
- * Por ahora lanza error explícito si SII_MODE=sandbox|production.
+ *   - POST /v2/dte/document      → emite el DTE (boleta 39). Pedimos
+ *     response ["FOLIO","SELF_SERVICE"]: el folio asignado + una URL web
+ *     donde ver/descargar el documento (evita manejar PDF base64).
+ *   - GET  /v2/dte/organization  → datos del emisor asociado a la API key
+ *     (para "probar conexión" y autocompletar el snapshot del emisor).
+ *
+ * Ambientes: producción api.haulmer.com / certificación dev-api.haulmer.com.
+ * Las API keys de demo público van SIEMPRE contra dev (como hace el plugin
+ * oficial de WooCommerce de Haulmer).
+ *
+ * Multi-tenant (BYO): si args.credenciales viene, se usa esa key/ambiente;
+ * si no, cae a las env globales (OPENFACTURA_API_KEY + SII_MODE) — ese es el
+ * caso de la facturación de plataforma (LigaPlus → liga).
  */
 @Injectable()
 export class OpenFacturaProvider extends SIIProvider {
+  private readonly log = new Logger(OpenFacturaProvider.name);
+
+  private static readonly TIMEOUT_MS = 30_000;
+
   get nombre(): 'OPENFACTURA' {
     return 'OPENFACTURA';
   }
 
-  async emitirBoleta(_args: EmitirBoletaArgs): Promise<EmitirBoletaResult> {
-    throw new Error(
-      'OpenFacturaProvider no implementado. Setear SII_MODE=mock o completar la integración Open Factura.',
+  private baseUrl(creds?: SiiCredenciales): string {
+    const apiKey = creds?.apiKey ?? process.env.OPENFACTURA_API_KEY ?? '';
+    if (OPENFACTURA_DEMO_KEYS.includes(apiKey)) return 'https://dev-api.haulmer.com';
+    const ambiente =
+      creds?.ambiente ??
+      ((process.env.SII_MODE ?? '').toLowerCase() === 'production'
+        ? 'PRODUCCION'
+        : 'CERTIFICACION');
+    return ambiente === 'PRODUCCION'
+      ? 'https://api.haulmer.com'
+      : 'https://dev-api.haulmer.com';
+  }
+
+  private apiKeyDe(creds?: SiiCredenciales): string {
+    const key = creds?.apiKey ?? process.env.OPENFACTURA_API_KEY;
+    if (!key || !key.trim()) {
+      throw new Error(
+        'Sin API key de OpenFactura: la liga no tiene la suya configurada y OPENFACTURA_API_KEY no está seteada.',
+      );
+    }
+    return key.trim();
+  }
+
+  private async request(
+    method: 'GET' | 'POST',
+    path: string,
+    creds: SiiCredenciales | undefined,
+    body?: unknown,
+  ): Promise<Record<string, unknown>> {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), OpenFacturaProvider.TIMEOUT_MS);
+    try {
+      const res = await fetch(`${this.baseUrl(creds)}${path}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: this.apiKeyDe(creds),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: ctrl.signal,
+      });
+      const text = await res.text();
+      let json: Record<string, unknown> = {};
+      try {
+        json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+      } catch {
+        json = { raw: text };
+      }
+      if (!res.ok) {
+        // OpenFactura devuelve el detalle del rechazo en el body — lo
+        // propagamos para que quede en documento.ultimo_error.
+        throw new Error(
+          `OpenFactura ${method} ${path} → HTTP ${res.status}: ${text.slice(0, 400)}`,
+        );
+      }
+      return json;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Datos del emisor asociado a la API key. Usado por "Probar conexión" en
+   * Ajustes: valida la key y autocompleta el snapshot del emisor.
+   */
+  async obtenerOrganizacion(creds: SiiCredenciales): Promise<SiiOrganizacion> {
+    const org = await this.request('GET', '/v2/dte/organization', creds);
+    const actividades = Array.isArray(org.actividades)
+      ? (org.actividades as Array<Record<string, unknown>>)
+      : [];
+    const acteco = Number(actividades[0]?.codigoActividadEconomica) || null;
+    if (!org.rut || !org.razonSocial) {
+      throw new Error(
+        'OpenFactura respondió sin rut/razón social — revisa que la API key sea válida.',
+      );
+    }
+    return {
+      rut: String(org.rut),
+      razonSocial: String(org.razonSocial),
+      giro: org.glosaDescriptiva ? String(org.glosaDescriptiva) : null,
+      direccion: org.direccion ? String(org.direccion) : null,
+      comuna: org.comuna ? String(org.comuna) : null,
+      acteco,
+    };
+  }
+
+  async emitirBoleta(args: EmitirBoletaArgs): Promise<EmitirBoletaResult> {
+    const emisor = args.emisor ?? this.emisorDesdeEnv();
+    // Boleta afecta (39): montos brutos con IVA incluido. El SII exige
+    // desglosar neto + IVA en Totales; el detalle va en bruto.
+    const total = Math.round(args.monto);
+    const neto = Math.round(total / 1.19);
+    const iva = total - neto;
+    const hoy = new Date().toISOString().slice(0, 10);
+
+    const detalle = args.conceptos.map((c, i) => ({
+      NroLinDet: i + 1,
+      NmbItem: c.descripcion.slice(0, 80),
+      QtyItem: c.cantidad ?? 1,
+      PrcItem: Math.round(c.monto / (c.cantidad ?? 1)),
+      MontoItem: Math.round(c.monto),
+    }));
+
+    const payload = {
+      response: ['FOLIO', 'SELF_SERVICE'],
+      dte: {
+        Encabezado: {
+          IdDoc: {
+            TipoDTE: 39,
+            FchEmis: hoy,
+            // 3 = boletas de venta y servicios (obligatorio en tipo 39).
+            IndServicio: 3,
+          },
+          Emisor: {
+            RUTEmisor: emisor.rut,
+            RznSocEmisor: emisor.razonSocial.slice(0, 100),
+            GiroEmisor: (emisor.giro ?? 'Servicios').slice(0, 80),
+            ...(emisor.direccion ? { DirOrigen: emisor.direccion.slice(0, 70) } : {}),
+            ...(emisor.comuna ? { CmnaOrigen: emisor.comuna.slice(0, 20) } : {}),
+            ...(emisor.acteco ? { Acteco: emisor.acteco } : {}),
+          },
+          Receptor: {
+            // Consumidor final: RUT genérico del SII si no hay receptor real.
+            RUTRecep: args.rutReceptor?.trim() || '66666666-6',
+            RznSocRecep: (args.razonSocial?.trim() || 'Consumidor final').slice(0, 100),
+          },
+          Totales: {
+            MntNeto: neto,
+            TasaIVA: '19.00',
+            IVA: iva,
+            MntTotal: total,
+          },
+        },
+        Detalle: detalle,
+      },
+    };
+
+    const res = await this.request('POST', '/v2/dte/document', args.credenciales, payload);
+
+    const folio = Number(res.FOLIO);
+    if (!Number.isFinite(folio) || folio <= 0) {
+      throw new Error(
+        `OpenFactura no devolvió FOLIO válido: ${JSON.stringify(res).slice(0, 300)}`,
+      );
+    }
+    const selfService = res.SELF_SERVICE as Record<string, unknown> | undefined;
+    const urlDoc = selfService?.url ? String(selfService.url) : '';
+
+    this.log.log(
+      `[OPENFACTURA] emitirBoleta ref=${args.externalReference} monto=${total} → folio=${folio}`,
     );
+    return {
+      folio,
+      // SELF_SERVICE.url es la página pública del documento (ver/descargar
+      // PDF). Si el plan no la incluye, queda vacía y la UI muestra "Pronto".
+      urlPdf: urlDoc,
+      urlXml: urlDoc,
+      raw: { ...res, externalReference: args.externalReference },
+    };
+  }
+
+  /** Emisor global (facturación de plataforma) desde env. */
+  private emisorDesdeEnv(): SiiEmisor {
+    const rut = process.env.OPENFACTURA_EMISOR_RUT;
+    const razonSocial = process.env.OPENFACTURA_EMISOR_RAZON_SOCIAL;
+    if (!rut || !razonSocial) {
+      throw new Error(
+        'Faltan OPENFACTURA_EMISOR_RUT / OPENFACTURA_EMISOR_RAZON_SOCIAL para emitir sin credenciales de liga.',
+      );
+    }
+    return {
+      rut,
+      razonSocial,
+      giro: process.env.OPENFACTURA_EMISOR_GIRO ?? null,
+      direccion: process.env.OPENFACTURA_EMISOR_DIRECCION ?? null,
+      comuna: process.env.OPENFACTURA_EMISOR_COMUNA ?? null,
+      acteco: process.env.OPENFACTURA_EMISOR_ACTECO
+        ? Number(process.env.OPENFACTURA_EMISOR_ACTECO)
+        : null,
+    };
   }
 }
 

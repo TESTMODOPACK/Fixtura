@@ -13,6 +13,7 @@ import {
 import {
   ROLE,
   type MiembroAdmin,
+  type SiiVerificacionResult,
   type TenantSettings,
   type UserContext,
   type UsuarioSistema,
@@ -25,6 +26,7 @@ import { AjustesAdminService } from './ajustes-admin.service';
 import {
   InvitarMiembroDto,
   UpdateTenantSettingsDto,
+  VerificarSiiDto,
 } from './dto';
 
 function ensureTenant(user: UserContext): string {
@@ -57,6 +59,19 @@ export class AjustesAdminController {
     @Body() dto: UpdateTenantSettingsDto,
   ): Promise<TenantSettings> {
     return this.svc.updateSettings(ensureTenant(user), dto);
+  }
+
+  /**
+   * "Probar conexión" con OpenFactura: valida la API key, autocompleta el
+   * snapshot del emisor (RUT, razón social, giro...) y lo persiste.
+   */
+  @Post('sii/verificar')
+  @Audited({ action: 'tenant.sii_verificado', entityType: 'Tenant' })
+  verificarSii(
+    @CurrentUser() user: UserContext,
+    @Body() dto: VerificarSiiDto,
+  ): Promise<SiiVerificacionResult> {
+    return this.svc.verificarSii(ensureTenant(user), dto);
   }
 
   @Get('miembros')

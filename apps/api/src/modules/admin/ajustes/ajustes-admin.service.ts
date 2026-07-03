@@ -18,13 +18,16 @@ import {
   type PagosConfig,
   type ProveedorPasarela,
   type Role,
+  type SiiTenantConfig,
+  type SiiVerificacionResult,
   type TenantSettings,
   type UsuarioSistema,
   type WhatsAppConfig,
 } from '@fixtura/types';
 import { validarPasswordSegura } from '@fixtura/domain';
 
-import { cifrarSecreto } from '../../../common/crypto/secret-box';
+import { cifrarSecreto, descifrarSecreto } from '../../../common/crypto/secret-box';
+import { OpenFacturaProvider } from '../sii/sii-provider';
 import { MagicLinksService } from '../../auth/magic-links.service';
 import { Club } from '../../competition/entities/club.entity';
 import { EmailService } from '../../email/email.service';
@@ -56,6 +59,7 @@ export class AjustesAdminService {
     @InjectRepository(Club) private readonly clubRepo: Repository<Club>,
     private readonly magicLinks: MagicLinksService,
     private readonly email: EmailService,
+    private readonly openFactura: OpenFacturaProvider,
   ) {}
 
   /**
@@ -275,8 +279,111 @@ export class AjustesAdminService {
       t.whatsappTokenEnc = cifrarSecreto(input.whatsappToken.trim());
     }
 
+    // Boletas SII BYO — API key write-only (cifrada) + activo/ambiente. El
+    // snapshot del emisor NO se edita acá: lo escribe verificarSii().
+    if (input.limpiarSiiApiKey) {
+      t.siiApiKeyEnc = null;
+      const actual = this.siiConfigDe(t);
+      t.siiConfig = {
+        ...actual,
+        activo: false,
+        rutEmisor: null,
+        razonSocial: null,
+        giro: null,
+        direccion: null,
+        comuna: null,
+        acteco: null,
+        verificadoAt: null,
+      } as unknown as Record<string, unknown>;
+    } else if (input.siiApiKey && input.siiApiKey.trim()) {
+      t.siiApiKeyEnc = cifrarSecreto(input.siiApiKey.trim());
+    }
+
+    if (input.sii !== undefined) {
+      const actual = this.siiConfigDe(t);
+      const merged: SiiTenantConfig = {
+        ...actual,
+        activo: input.sii.activo ?? actual.activo,
+        ambiente: input.sii.ambiente ?? actual.ambiente,
+      };
+      // Para activar necesitamos key cargada (guardada o en este request) y
+      // el emisor verificado contra OpenFactura.
+      const keyDisponible = !!t.siiApiKeyEnc;
+      if (merged.activo && (!keyDisponible || !merged.rutEmisor)) {
+        throw new BadRequestException(
+          'Para activar la emisión SII carga la API key de OpenFactura y usa "Probar conexión" primero.',
+        );
+      }
+      t.siiConfig = merged as unknown as Record<string, unknown>;
+    }
+
     const saved = await this.tenantRepo.save(t);
     return this.toSettings(saved);
+  }
+
+  /**
+   * "Probar conexión" SII: valida la API key contra OpenFactura
+   * (GET /v2/dte/organization) y persiste el snapshot del emisor en
+   * sii_config. Si viene apiKey nueva, se guarda cifrada al éxito.
+   */
+  async verificarSii(
+    tenantId: string,
+    input: { apiKey?: string; ambiente?: 'CERTIFICACION' | 'PRODUCCION' },
+  ): Promise<SiiVerificacionResult> {
+    const t = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    if (!t) throw new NotFoundException(`Tenant ${tenantId} no encontrado`);
+
+    const actual = this.siiConfigDe(t);
+    const ambiente = input.ambiente ?? actual.ambiente;
+    const apiKey =
+      input.apiKey?.trim() ||
+      (t.siiApiKeyEnc ? descifrarSecreto(t.siiApiKeyEnc) : null);
+    if (!apiKey) {
+      throw new BadRequestException(
+        'Ingresa la API key de OpenFactura para probar la conexión.',
+      );
+    }
+
+    try {
+      const org = await this.openFactura.obtenerOrganizacion({ apiKey, ambiente });
+      // Éxito: persistimos key (si vino nueva) + snapshot del emisor.
+      if (input.apiKey?.trim()) {
+        t.siiApiKeyEnc = cifrarSecreto(input.apiKey.trim());
+      }
+      t.siiConfig = {
+        ...actual,
+        ambiente,
+        rutEmisor: org.rut,
+        razonSocial: org.razonSocial,
+        giro: org.giro,
+        direccion: org.direccion,
+        comuna: org.comuna,
+        acteco: org.acteco,
+        verificadoAt: new Date().toISOString(),
+      } as unknown as Record<string, unknown>;
+      await this.tenantRepo.save(t);
+      return {
+        ok: true,
+        rutEmisor: org.rut,
+        razonSocial: org.razonSocial,
+        giro: org.giro,
+        direccion: org.direccion,
+        comuna: org.comuna,
+        acteco: org.acteco,
+        mensaje: `Conexión OK: ${org.razonSocial} (${org.rut}).`,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        rutEmisor: null,
+        razonSocial: null,
+        giro: null,
+        direccion: null,
+        comuna: null,
+        acteco: null,
+        mensaje: `No se pudo verificar con OpenFactura: ${(err as Error).message}`,
+      };
+    }
   }
 
   // ─── Miembros ──────────────────────────────────────────────────────
@@ -504,6 +611,9 @@ export class AjustesAdminService {
       whatsapp: this.whatsappConfigDe(t),
       // Nunca exponemos el token; solo si hay uno guardado.
       whatsappTokenCargado: !!t.whatsappTokenEnc,
+      sii: this.siiConfigDe(t),
+      // Nunca exponemos la API key; solo si hay una guardada.
+      siiApiKeyCargada: !!t.siiApiKeyEnc,
     };
   }
 
@@ -514,6 +624,22 @@ export class AjustesAdminService {
       activo: raw.activo ?? false,
       phoneNumberId: raw.phoneNumberId ?? null,
       apiVersion: raw.apiVersion ?? 'v21.0',
+    };
+  }
+
+  /** sii_config del tenant con defaults defensivos. */
+  private siiConfigDe(t: Tenant): SiiTenantConfig {
+    const raw = (t.siiConfig ?? {}) as Partial<SiiTenantConfig>;
+    return {
+      activo: raw.activo ?? false,
+      ambiente: raw.ambiente ?? 'PRODUCCION',
+      rutEmisor: raw.rutEmisor ?? null,
+      razonSocial: raw.razonSocial ?? null,
+      giro: raw.giro ?? null,
+      direccion: raw.direccion ?? null,
+      comuna: raw.comuna ?? null,
+      acteco: raw.acteco ?? null,
+      verificadoAt: raw.verificadoAt ?? null,
     };
   }
 

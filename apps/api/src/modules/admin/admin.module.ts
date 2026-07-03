@@ -53,6 +53,7 @@ import { DunningModule } from './dunning/dunning.module';
 import { FlyerDelegadosModule } from './flyer-delegados/flyer-delegados.module';
 import { InformesModule } from './informes/informes.module';
 import { PagosModule } from './pagos/pagos.module';
+import { SIIModule } from './sii/sii.module';
 import { PagosPersonalController } from './pagos-personal/pagos-personal.controller';
 import { PagosPersonalService } from './pagos-personal/pagos-personal.service';
 import { PushModule } from './push/push.module';
@@ -141,6 +142,8 @@ import { EncuestasService } from './encuestas/encuestas.service';
     PushModule,
     MatchCenterModule,
     UsersModule,
+    // SII BYO: Ajustes usa OpenFacturaProvider para "Probar conexión".
+    SIIModule,
     // Ajustes necesita Tenant + User + UserRole — los registramos
     // localmente (no se duplican: TypeORM resuelve la metadata).
     // F55: MagicLink para el estado de invitación del delegado.

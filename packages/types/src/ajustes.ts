@@ -86,6 +86,45 @@ export const WhatsAppConfigSchema = z.object({
 });
 export type WhatsAppConfig = z.infer<typeof WhatsAppConfigSchema>;
 
+/**
+ * Config SII de la liga (BYO — cada liga emite sus boletas electrónicas con
+ * su propia cuenta de OpenFactura/Haulmer). NO incluye la API key: vive
+ * cifrada y nunca se devuelve (ver siiApiKeyCargada en TenantSettings).
+ *
+ * Los datos del emisor NO se tipean: se autocompletan desde OpenFactura
+ * (GET /v2/dte/organization) al verificar la conexión, y quedan como
+ * snapshot para armar el DTE en cada emisión.
+ */
+export const SII_AMBIENTE = ['CERTIFICACION', 'PRODUCCION'] as const;
+export type SiiAmbiente = (typeof SII_AMBIENTE)[number];
+
+export const SiiTenantConfigSchema = z.object({
+  activo: z.boolean(),
+  ambiente: z.enum(SII_AMBIENTE),
+  // Snapshot del emisor (solo lectura en la UI).
+  rutEmisor: z.string().max(20).nullable(),
+  razonSocial: z.string().max(200).nullable(),
+  giro: z.string().max(200).nullable(),
+  direccion: z.string().max(250).nullable(),
+  comuna: z.string().max(100).nullable(),
+  acteco: z.number().int().nullable(),
+  verificadoAt: z.string().nullable(),
+});
+export type SiiTenantConfig = z.infer<typeof SiiTenantConfigSchema>;
+
+/** Resultado de "Probar conexión" con OpenFactura. */
+export const SiiVerificacionResultSchema = z.object({
+  ok: z.boolean(),
+  rutEmisor: z.string().nullable(),
+  razonSocial: z.string().nullable(),
+  giro: z.string().nullable(),
+  direccion: z.string().nullable(),
+  comuna: z.string().nullable(),
+  acteco: z.number().int().nullable(),
+  mensaje: z.string(),
+});
+export type SiiVerificacionResult = z.infer<typeof SiiVerificacionResultSchema>;
+
 export const TenantSettingsSchema = z.object({
   id: z.uuid(),
   slug: z.string(),
@@ -117,6 +156,10 @@ export const TenantSettingsSchema = z.object({
   whatsapp: WhatsAppConfigSchema,
   // ¿Hay token de Meta guardado? El GET nunca devuelve el token.
   whatsappTokenCargado: z.boolean(),
+  // Boletas SII BYO de la liga (config no-secreta).
+  sii: SiiTenantConfigSchema,
+  // ¿Hay API key de OpenFactura guardada? El GET nunca la devuelve.
+  siiApiKeyCargada: z.boolean(),
 });
 export type TenantSettings = z.infer<typeof TenantSettingsSchema>;
 
@@ -151,6 +194,17 @@ export const UpdateTenantSettingsSchema = z.object({
   whatsapp: WhatsAppConfigSchema.partial().optional(),
   whatsappToken: z.string().max(500).optional(),
   limpiarWhatsappToken: z.boolean().optional(),
+  // Boletas SII BYO. Solo activo/ambiente son editables (el snapshot del
+  // emisor lo escribe la verificación); la API key es write-only en
+  // `siiApiKey` (o se borra con limpiarSiiApiKey).
+  sii: z
+    .object({
+      activo: z.boolean().optional(),
+      ambiente: z.enum(SII_AMBIENTE).optional(),
+    })
+    .optional(),
+  siiApiKey: z.string().max(200).optional(),
+  limpiarSiiApiKey: z.boolean().optional(),
 });
 export type UpdateTenantSettingsRequest = z.infer<typeof UpdateTenantSettingsSchema>;
 

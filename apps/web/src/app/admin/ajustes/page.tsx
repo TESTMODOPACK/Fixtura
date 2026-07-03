@@ -13,6 +13,7 @@ import {
   MessageCircle,
   Palette,
   Plus,
+  Receipt,
   Send,
   Trash2,
   Users,
@@ -32,6 +33,7 @@ import {
   type ProveedorPasarela,
   type RolAdminInvitable,
   type Role,
+  type SiiTenantConfig,
   type TenantSettings,
   type WhatsAppConfig,
 } from '@fixtura/types';
@@ -59,6 +61,7 @@ import {
   useTenantSettings,
   useTorneos,
   useUpdateTenantSettings,
+  useVerificarSii,
 } from '@/hooks/use-admin';
 import { ApiError, API_URL } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -71,6 +74,7 @@ type Tab =
   | 'dominio'
   | 'reglamento'
   | 'pagos'
+  | 'sii'
   | 'whatsapp'
   | 'delegados'
   | 'equipo'
@@ -165,6 +169,9 @@ export default function AjustesPage(): React.ReactElement {
               <TabButton active={tab === 'pagos'} onClick={() => setTab('pagos')}>
                 Pagos
               </TabButton>
+              <TabButton active={tab === 'sii'} onClick={() => setTab('sii')}>
+                Boletas SII
+              </TabButton>
               <TabButton active={tab === 'whatsapp'} onClick={() => setTab('whatsapp')}>
                 WhatsApp
               </TabButton>
@@ -190,6 +197,7 @@ export default function AjustesPage(): React.ReactElement {
           {tab === 'dominio' && <DominioTab settings={settings} />}
           {tab === 'reglamento' && <ReglamentoTab settings={settings} />}
           {tab === 'pagos' && <PagosTab settings={settings} />}
+          {tab === 'sii' && <SiiTab settings={settings} />}
           {tab === 'whatsapp' && <WhatsAppTab settings={settings} />}
           {tab === 'delegados' && <DelegadosTab settings={settings} />}
           {tab === 'equipo' && <EquipoTab />}
@@ -1300,6 +1308,260 @@ function WhatsAppTab({ settings }: { settings: TenantSettings }): React.ReactEle
             </div>
           </div>
         )}
+      </Card>
+
+      <div className="flex items-center gap-3">
+        <Button variant="accent" onClick={() => void guardar()} disabled={update.isPending}>
+          {update.isPending ? 'Guardando…' : 'Guardar cambios'}
+        </Button>
+        {saved && !error && !clientError && (
+          <span className="text-sm text-green-bright flex items-center gap-2">
+            <CheckCircle2 size={14} /> Cambios guardados
+          </span>
+        )}
+      </div>
+
+      {(clientError || error) && (
+        <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card">
+          {clientError ?? error?.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tab: Boletas SII (BYO OpenFactura) ──────────────────────────────
+function SiiTab({ settings }: { settings: TenantSettings }): React.ReactElement {
+  const update = useUpdateTenantSettings();
+  const verificar = useVerificarSii();
+  const [saved, setSaved] = useState(false);
+  const [clientError, setClientError] = useState<string | null>(null);
+
+  const [config, setConfig] = useState<SiiTenantConfig>(settings.sii);
+  // API key de OpenFactura — write-only. Solo vive en memoria hasta
+  // verificar/guardar; el GET nunca la devuelve.
+  const [apiKey, setApiKey] = useState('');
+
+  useEffect(() => {
+    setConfig(settings.sii);
+  }, [settings.sii]);
+
+  const keyCargada = settings.siiApiKeyCargada;
+  const verificado = !!config.rutEmisor;
+  const error = update.error as ApiError | undefined;
+
+  const probarConexion = async (): Promise<void> => {
+    setClientError(null);
+    const nuevaKey = apiKey.trim();
+    if (!keyCargada && !nuevaKey) {
+      const msg = 'Pega la API key de OpenFactura para probar la conexión.';
+      setClientError(msg);
+      toastWarning(`Faltan datos: ${msg}`);
+      return;
+    }
+    try {
+      const res = await verificar.mutateAsync({
+        ...(nuevaKey ? { apiKey: nuevaKey } : {}),
+        ambiente: config.ambiente,
+      });
+      if (res.ok) {
+        setApiKey('');
+        toastSuccess(res.mensaje);
+      } else {
+        setClientError(res.mensaje);
+        toastError(res.mensaje);
+      }
+    } catch {
+      // El error del server se muestra desde verificar.error / banner.
+    }
+  };
+
+  const guardar = async (): Promise<void> => {
+    setClientError(null);
+    if (config.activo && (!keyCargada || !verificado)) {
+      const msg =
+        'Para activar la emisión, primero carga la API key y usa "Probar conexión".';
+      setClientError(msg);
+      toastWarning(`Faltan datos: ${msg}`);
+      return;
+    }
+    try {
+      await update.mutateAsync({
+        sii: { activo: config.activo, ambiente: config.ambiente },
+        ...(apiKey.trim() ? { siiApiKey: apiKey.trim() } : {}),
+      });
+      setApiKey('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      // idem
+    }
+  };
+
+  const quitarKey = async (): Promise<void> => {
+    setClientError(null);
+    try {
+      // Quitar la key implica desactivar (sin key no se puede emitir).
+      await update.mutateAsync({ limpiarSiiApiKey: true, sii: { activo: false } });
+      setApiKey('');
+      setConfig((c) => ({ ...c, activo: false }));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      // idem
+    }
+  };
+
+  const fieldErrors: FormFieldError[] = clientError
+    ? [{ label: 'Boletas SII', mensaje: clientError }]
+    : [];
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      <FormErrorBanner
+        fieldErrors={fieldErrors}
+        apiError={error}
+        validationTitle="Revisa estos datos:"
+        apiTitle="No se pudo guardar la configuración SII"
+      />
+
+      <Card padding="roomy">
+        <CardLabel>Boletas electrónicas (SII)</CardLabel>
+        <p className="text-sm text-ink-mute font-serif italic mt-2 mb-4">
+          Emite boletas electrónicas reales ante el SII por los cobros pagados online.
+          Cada liga usa su propia cuenta de <strong>OpenFactura</strong> (Haulmer) — igual
+          que en Pagos y WhatsApp: tus credenciales, tus folios, tus documentos.
+        </p>
+        <div className="flex items-start gap-2 text-xs text-ink-mute bg-paper/40 border border-line px-3 py-2 rounded-card">
+          <Receipt size={14} className="flex-shrink-0 mt-0.5 text-accent" />
+          <span>
+            Necesitas una cuenta en{' '}
+            <span className="font-mono">openfactura.cl</span> con tu RUT y certificado
+            digital cargados (OpenFactura administra los folios ante el SII). De ahí
+            copia tu <strong>API key</strong> y pégala aquí. Mientras no actives esto,
+            las boletas se generan en modo simulado (sin validez tributaria).
+          </span>
+        </div>
+      </Card>
+
+      <Card padding="roomy">
+        <div className="rounded-card border border-line p-4 bg-paper/40">
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-semibold text-ink flex items-center gap-2 text-sm">
+              <Lock size={14} className="text-accent" /> API key de OpenFactura
+            </div>
+            {keyCargada ? (
+              <span className="text-xs font-semibold text-green-bright flex items-center gap-1">
+                <CheckCircle2 size={13} /> Key guardada
+              </span>
+            ) : (
+              <span className="text-xs text-ink-mute font-serif italic">Sin key</span>
+            )}
+          </div>
+          <p className="text-xs text-ink-mute font-serif italic mb-3">
+            Se guarda cifrada y nunca se vuelve a mostrar. Para reemplazarla, pega la
+            nueva y prueba la conexión.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="API key"
+              type="password"
+              autoComplete="off"
+              placeholder={keyCargada ? '•••••••• (guardada)' : 'Tu API key de OpenFactura'}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+            <div>
+              <label className="label">Ambiente</label>
+              <select
+                className="input"
+                value={config.ambiente}
+                onChange={(e) =>
+                  setConfig((c) => ({
+                    ...c,
+                    ambiente: e.target.value as SiiTenantConfig['ambiente'],
+                  }))
+                }
+              >
+                <option value="PRODUCCION">Producción (emisión real)</option>
+                <option value="CERTIFICACION">Certificación (pruebas)</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 mt-4">
+            <Button
+              variant="dark"
+              onClick={() => void probarConexion()}
+              disabled={verificar.isPending}
+            >
+              {verificar.isPending ? 'Verificando…' : 'Probar conexión'}
+            </Button>
+            {keyCargada && (
+              <button
+                type="button"
+                onClick={() => void quitarKey()}
+                disabled={update.isPending}
+                className="text-xs text-danger hover:underline font-semibold disabled:opacity-50"
+              >
+                Quitar key y desactivar
+              </button>
+            )}
+          </div>
+        </div>
+
+        {verificado && (
+          <div className="mt-4 rounded-card border border-line p-4">
+            <div className="text-xs uppercase tracking-widest text-ink-mute mb-2 font-semibold">
+              Emisor verificado
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+              <div>
+                <span className="text-ink-mute">Razón social:</span>{' '}
+                <span className="font-semibold">{config.razonSocial}</span>
+              </div>
+              <div>
+                <span className="text-ink-mute">RUT:</span>{' '}
+                <span className="font-mono">{config.rutEmisor}</span>
+              </div>
+              {config.giro && (
+                <div className="md:col-span-2">
+                  <span className="text-ink-mute">Giro:</span> {config.giro}
+                </div>
+              )}
+              {config.direccion && (
+                <div className="md:col-span-2">
+                  <span className="text-ink-mute">Dirección:</span> {config.direccion}
+                  {config.comuna ? `, ${config.comuna}` : ''}
+                </div>
+              )}
+            </div>
+            {config.verificadoAt && (
+              <div className="text-[11px] text-ink-mute font-serif italic mt-2">
+                Verificado el {formatFecha(config.verificadoAt)}
+              </div>
+            )}
+          </div>
+        )}
+
+        <label className="flex items-start gap-3 cursor-pointer mt-5">
+          <input
+            type="checkbox"
+            checked={config.activo}
+            onChange={(e) => setConfig((c) => ({ ...c, activo: e.target.checked }))}
+            className="mt-1"
+          />
+          <div className="flex-1">
+            <div className="font-semibold text-ink flex items-center gap-2">
+              <Receipt size={16} className="text-accent" /> Emitir boletas reales con mi
+              cuenta
+            </div>
+            <div className="text-xs text-ink-mute font-serif italic mt-1">
+              Cuando está activo, cada pago online aprobado emite una boleta electrónica
+              con tu cuenta de OpenFactura. El botón PDF de Finanzas → Boletas SII pasa a
+              descargar el documento real.
+            </div>
+          </div>
+        </label>
       </Card>
 
       <div className="flex items-center gap-3">

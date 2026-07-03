@@ -12,6 +12,7 @@ import type {
   JugadorGlobal,
   JugadorGlobalDetalle,
   MiembroAdmin,
+  SiiVerificacionResult,
   SponsorAdmin,
   TenantSettings,
   UpdateSponsorRequest,
@@ -1172,6 +1173,25 @@ export function useUpdateTenantSettings() {
       qc.invalidateQueries({ queryKey: ['admin', 'ajustes'] });
       qc.invalidateQueries({ queryKey: ['public'] });
       qc.invalidateQueries({ queryKey: ['admin', 'dashboard'] });
+    },
+  });
+}
+
+/**
+ * "Probar conexión" con OpenFactura: valida la API key de la liga y
+ * autocompleta el snapshot del emisor (RUT, razón social...). Invalida
+ * ajustes al éxito para refrescar el emisor verificado.
+ */
+export function useVerificarSii() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { apiKey?: string; ambiente?: 'CERTIFICACION' | 'PRODUCCION' }) =>
+      apiFetch<SiiVerificacionResult>('/admin/ajustes/sii/verificar', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: (res) => {
+      if (res.ok) qc.invalidateQueries({ queryKey: ['admin', 'ajustes'] });
     },
   });
 }

@@ -81,6 +81,22 @@ export class Tenant {
   @Column({ name: 'whatsapp_token_enc', type: 'text', nullable: true })
   whatsappTokenEnc!: string | null;
 
+  /**
+   * Config de boletas SII de la liga (BYO — cada liga emite con su propia
+   * cuenta OpenFactura). NO contiene la API key: { activo, ambiente,
+   * rutEmisor, razonSocial, giro, direccion, comuna, acteco, verificadoAt }.
+   * La key vive cifrada en sii_api_key_enc.
+   */
+  @Column({ name: 'sii_config', type: 'jsonb', default: () => "'{}'::jsonb" })
+  siiConfig!: Record<string, unknown>;
+
+  /**
+   * API key de OpenFactura de la liga cifrada con AES-256-GCM (mismo
+   * secret-box que pagos/WhatsApp). Nunca se devuelve al cliente.
+   */
+  @Column({ name: 'sii_api_key_enc', type: 'text', nullable: true })
+  siiApiKeyEnc!: string | null;
+
   // ── Sprint 23: Super Admin / planes ───────────────────────────────
   @Column({ name: 'plan_id', type: 'uuid', nullable: true })
   planId!: string | null;
