@@ -147,7 +147,7 @@ async function main(): Promise<void> {
     await AppDataSource.query(`SELECT set_config('app.current_tenant_id', '', true)`);
 
     // ─── Tenant ──────────────────────────────────────────────────────
-    let tenantId = await getOrCreateTenant(slug, nombre);
+    const tenantId = await getOrCreateTenant(slug, nombre);
     log(`Tenant: ${slug} (${tenantId})`);
 
     // ─── Admin user + rol ────────────────────────────────────────────

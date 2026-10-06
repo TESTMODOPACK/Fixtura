@@ -1,0 +1,13 @@
+{
+  "name": "@fixtura/eslint-config-config",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shim de resolución ESLint: los .eslintrc extienden '@fixtura/config/eslint.base' y la normalización de shareable configs de ESLint lo convierte en '@fixtura/eslint-config-config/eslint.base'. Este paquete reexporta la config canónica de @fixtura/config.",
+  "main": "eslint.base.js",
+  "files": [
+    "eslint.base.js"
+  ],
+  "dependencies": {
+    "@fixtura/config": "workspace:*"
+  }
+}
