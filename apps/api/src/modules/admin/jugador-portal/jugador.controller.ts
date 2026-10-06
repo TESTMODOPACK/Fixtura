@@ -105,6 +105,7 @@ export class JugadorCuentaAdminController {
   constructor(private readonly invite: JugadorInviteService) {}
 
   @Post(':jugadorId/invitar')
+  @Audited({ action: 'jugador.invitado', entityType: 'Jugador', entityIdFrom: 'params.jugadorId' })
   invitar(
     @CurrentUser() user: UserContext,
     @Param('jugadorId', ParseUUIDPipe) jugadorId: string,
@@ -127,6 +128,7 @@ export class JugadorCuentaAdminController {
    * servicio (where clubId + tenantId).
    */
   @Post('club/:clubId/invitar-masivo')
+  @Audited({ action: 'jugador.invitacion_masiva', entityType: 'Club', entityIdFrom: 'params.clubId' })
   invitarMasivo(
     @CurrentUser() user: UserContext,
     @Param('clubId', ParseUUIDPipe) clubId: string,

@@ -106,6 +106,10 @@ export class AuthService {
       throw new BadRequestException(errorPwd);
     }
 
+    // Consumo ATÓMICO antes de tocar credenciales — dos usos simultáneos
+    // del mismo token de reset no pueden aplicar ambos.
+    await this.magicLinks.consumir(token, 'RESET_PASSWORD');
+
     const hash = await bcrypt.hash(nuevaPassword, BCRYPT_COST);
     await this.users.setPasswordHash(link.userId, hash);
 
@@ -114,7 +118,6 @@ export class AuthService {
     // queda forzado a re-login.
     await this.revocarRefreshTokens(link.userId);
 
-    await this.magicLinks.marcarUsado(link.id);
     this.log.log(`Reset de password aplicado para user=${link.userId}`);
     return { ok: true };
   }

@@ -74,10 +74,11 @@ function ActivarInner(): React.ReactElement {
               </h2>
               {resultado.cuentaExistente ? (
                 <p className="text-sm text-ink-mute mb-4">
-                  Tu email ya tenía una cuenta en LigaPlus, así que mantuvimos tu
-                  contraseña de siempre (la que escribiste aquí no se usó). Si no
-                  la recuerdas, recupérala con &ldquo;¿Olvidaste tu
-                  contraseña?&rdquo; al iniciar sesión.
+                  Tu email ya tenía una cuenta en LigaPlus: la contraseña que
+                  escribiste aquí no se usó. Entra con la contraseña existente de
+                  esa cuenta — y si no la tienes o esa cuenta no la creaste tú,
+                  fija una nueva con &ldquo;¿Olvidaste tu contraseña?&rdquo; (te
+                  llega a tu email).
                 </p>
               ) : (
                 <p className="text-sm text-ink-mute mb-4">

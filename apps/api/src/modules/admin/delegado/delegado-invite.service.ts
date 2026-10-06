@@ -253,18 +253,34 @@ export class DelegadoInviteService {
     // dos requests simultáneos con el mismo token no activan dos veces).
     await this.magicLinks.consumir(token, 'INVITE_USER');
 
-    const user = await this.users.crearOObtenerPorEmail({
+    const { user, creado } = await this.users.crearOObtenerPorEmail({
       email: link.email,
       nombre,
       apellido,
     });
-    // C-1: una cuenta que ya tiene contraseña NO se pisa — la invitación
-    // solo suma el rol y la persona entra con su clave de siempre.
-    const cuentaExistente = !!user.passwordHash;
-    if (!cuentaExistente) {
+    // Solo la cuenta creada por ESTA activación recibe la contraseña
+    // tipeada; una preexistente (con o sin clave) se reclama vía reset.
+    const cuentaExistente = !creado;
+    if (creado) {
       const hash = await bcrypt.hash(password, BCRYPT_COST);
       await this.users.setPasswordHash(user.id, hash);
       await this.auth.revocarRefreshTokens(user.id);
+    } else {
+      // Aviso al buzón real: el dueño se entera y puede resetear si no
+      // reconoce la actividad.
+      await this.email.send({
+        to: link.email,
+        subject: 'Nuevos accesos en tu cuenta — LigaPlus',
+        html: `
+          <p>Tu cuenta de LigaPlus recibió nuevos accesos (delegado de club).
+          Tu contraseña <strong>no cambió</strong>.</p>
+          <p>Si no reconoces esta actividad, restablece tu contraseña desde
+          &ldquo;¿Olvidaste tu contraseña?&rdquo; al iniciar sesión.</p>`,
+        text:
+          'Tu cuenta de LigaPlus recibió nuevos accesos (delegado de club). ' +
+          'Tu contraseña no cambió. Si no reconoces esta actividad, restablece tu ' +
+          'contraseña desde "¿Olvidaste tu contraseña?" al iniciar sesión.',
+      });
     }
     await this.users.asignarRol({
       userId: user.id,

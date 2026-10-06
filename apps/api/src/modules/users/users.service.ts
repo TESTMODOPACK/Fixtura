@@ -53,14 +53,19 @@ export class UsersService {
   /**
    * Crea (o devuelve si ya existe) un usuario por email, sin contraseña.
    * Usado por flujos de invitación (el password se setea al activar).
+   *
+   * `creado` es la señal de autorización para fijar contraseña: una
+   * activación por magic link solo puede setear clave en la cuenta que
+   * ella misma creó. Una cuenta preexistente — incluso sin contraseña —
+   * se reclama únicamente vía reset (prueba de control del buzón).
    */
   async crearOObtenerPorEmail(args: {
     email: string;
     nombre: string;
     apellido: string;
-  }): Promise<User> {
+  }): Promise<{ user: User; creado: boolean }> {
     const existente = await this.findByEmail(args.email);
-    if (existente) return existente;
+    if (existente) return { user: existente, creado: false };
     const user = this.userRepo.create({
       email: args.email.toLowerCase(),
       nombre: args.nombre,
@@ -68,7 +73,7 @@ export class UsersService {
       passwordHash: null,
       isActive: true,
     });
-    return this.userRepo.save(user);
+    return { user: await this.userRepo.save(user), creado: true };
   }
 
   /**

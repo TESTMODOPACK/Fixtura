@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -44,6 +45,8 @@ const ROL_PERSONAL_TO_SYSTEM: Record<RolPersonal, Role | null> = {
 
 @Injectable()
 export class PersonalAdminService {
+  private readonly log = new Logger(PersonalAdminService.name);
+
   /** TTL del magic link de onboarding (72h por estándar de seguridad). */
   static readonly TTL_INVITACION_MIN = 72 * 60;
 
@@ -79,9 +82,13 @@ export class PersonalAdminService {
     // Validar pre-requisitos por canal antes de gastar token / enviar.
     const usaEmail = canal === 'EMAIL' || canal === 'AMBOS';
     const usaWhatsapp = canal === 'WHATSAPP' || canal === 'AMBOS';
-    if (usaEmail && !personal.email) {
+    // El email es obligatorio para TODO canal: es el usuario de login y el
+    // link queda amarrado a él. Invitar "solo WhatsApp" sin email generaba
+    // un link imposible de activar (y el admin veía "enviada").
+    if (!personal.email) {
       throw new BadRequestException(
-        'Este personal no tiene email registrado. Edita el perfil o cambia a canal WhatsApp.',
+        'Este personal no tiene email registrado (es su usuario de login). ' +
+          'Complétalo en el perfil antes de invitar, aunque el envío sea por WhatsApp.',
       );
     }
     if (usaWhatsapp && !personal.telefono) {
@@ -222,11 +229,19 @@ export class PersonalAdminService {
     // un token recibido en la casilla del atacante.
     const emailFicha = personal.email?.toLowerCase() ?? null;
     if (!link.email) {
+      this.log.warn(
+        `Link de onboarding sin email rechazado (link=${link.id}, personal=${personal.id})`,
+      );
       throw new BadRequestException(
-        'Esta invitación se emitió sin email asociado. Pide al admin que la reenvíe.',
+        'Esta invitación se emitió sin email asociado. Pide al admin que complete el email de la ficha y la reenvíe.',
       );
     }
-    if (!emailFicha || link.email !== emailFicha) {
+    if (!emailFicha || link.email.toLowerCase() !== emailFicha) {
+      // Firma del exploit C-1 (link emitido para otro email): queda en logs
+      // aunque la transacción del request se revierta.
+      this.log.warn(
+        `Link de onboarding con email desatado rechazado (link=${link.id}, personal=${personal.id})`,
+      );
       throw new BadRequestException(
         'La invitación no corresponde al email actual de la ficha. Pide al admin que la reenvíe.',
       );
@@ -281,21 +296,38 @@ export class PersonalAdminService {
     // pueden activar dos veces (el segundo falla aquí).
     await this.magicLinks.consumir(token, 'PERSONAL_ONBOARDING');
 
-    const user = await this.users.crearOObtenerPorEmail({
+    const { user, creado } = await this.users.crearOObtenerPorEmail({
       email: personal.email,
       nombre: personal.nombre,
       apellido: personal.apellido,
     });
 
-    // C-1: si el email ya tiene una cuenta con contraseña, NO se pisa —
-    // la invitación solo suma roles y la persona entra con su clave de
-    // siempre. Solo se fija contraseña en cuentas nuevas o nunca activadas.
-    const cuentaExistente = !!user.passwordHash;
-    if (!cuentaExistente) {
+    // Solo la cuenta creada por ESTA activación recibe la contraseña
+    // tipeada. Una preexistente (con o sin clave) no se toca: la invitación
+    // suma roles, y la clave se recupera vía reset — que sí prueba control
+    // del buzón.
+    const cuentaExistente = !creado;
+    if (creado) {
       const hash = await bcrypt.hash(password, BCRYPT_COST);
       await this.users.setPasswordHash(user.id, hash);
       // Credenciales recién fijadas → fuera cualquier sesión previa.
       await this.auth.revocarRefreshTokens(user.id);
+    } else {
+      // Aviso al buzón real: si alguien sembró o dirigió una invitación
+      // hacia este email, el dueño se entera y puede resetear.
+      await this.email.send({
+        to: personal.email,
+        subject: 'Nuevos accesos en tu cuenta — LigaPlus',
+        html: `
+          <p>Tu cuenta de LigaPlus recibió nuevos accesos (perfil de personal
+          de liga). Tu contraseña <strong>no cambió</strong>.</p>
+          <p>Si no reconoces esta actividad, restablece tu contraseña desde
+          &ldquo;¿Olvidaste tu contraseña?&rdquo; al iniciar sesión.</p>`,
+        text:
+          'Tu cuenta de LigaPlus recibió nuevos accesos (perfil de personal de liga). ' +
+          'Tu contraseña no cambió. Si no reconoces esta actividad, restablece tu ' +
+          'contraseña desde "¿Olvidaste tu contraseña?" al iniciar sesión.',
+      });
     }
 
     // Mapear roles operativos → roles de sistema (scope PERSONAL, scopeId =
@@ -483,15 +515,19 @@ export class PersonalAdminService {
       notas: input.notas === undefined ? p.notas : input.notas,
       activo: input.activo ?? p.activo,
     });
-    const saved = await this.repo.save(p);
-
-    // C-1: cambiar el email mata las invitaciones pendientes (se emitieron
-    // para el email anterior) y deja rastro auditable de ambos valores.
+    // Cambiar el email mata las invitaciones pendientes (se emitieron para
+    // el email anterior). Se invalida ANTES de guardar la ficha: mismo
+    // orden de locks que la activación (magic_links → personal) — el orden
+    // inverso podía deadlockear contra una activación concurrente.
     const emailCambio =
       emailNorm !== undefined &&
-      (emailAnterior ?? '').toLowerCase() !== (saved.email ?? '').toLowerCase();
+      (emailAnterior ?? '').toLowerCase() !== (emailNorm ?? '').toLowerCase();
+    let invitacionesInvalidadas = 0;
     if (emailCambio) {
-      const invalidadas = await this.magicLinks.invalidarPendientesDePersonal(saved.id);
+      invitacionesInvalidadas = await this.magicLinks.invalidarPendientesDePersonal(p.id);
+    }
+    const saved = await this.repo.save(p);
+    if (emailCambio) {
       await this.audit.record({
         action: 'personal.email_cambiado',
         tenantId,
@@ -501,7 +537,7 @@ export class PersonalAdminService {
         metadata: {
           anterior: emailAnterior,
           nuevo: saved.email,
-          invitacionesInvalidadas: invalidadas,
+          invitacionesInvalidadas,
         },
       });
     }
@@ -515,6 +551,9 @@ export class PersonalAdminService {
   async deactivate(id: string, tenantId: string): Promise<void> {
     const p = await this.repo.findOne({ where: { id, tenantId } });
     if (!p) throw new NotFoundException(`Personal ${id} no encontrado`);
+    // Una ficha dada de baja no debe conservar invitaciones activables
+    // (mismo orden de locks que la activación: magic_links → personal).
+    await this.magicLinks.invalidarPendientesDePersonal(p.id);
     p.activo = false;
     await this.repo.save(p);
   }

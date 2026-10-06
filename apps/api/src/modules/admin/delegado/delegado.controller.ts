@@ -25,6 +25,7 @@ import {
   type UserContext,
 } from '@fixtura/types';
 
+import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -111,6 +112,7 @@ export class DelegadoAdminController {
   constructor(private readonly invite: DelegadoInviteService) {}
 
   @Post(':clubId/delegado/invitar')
+  @Audited({ action: 'delegado.invitado', entityType: 'Club', entityIdFrom: 'params.clubId' })
   invitar(
     @CurrentUser() user: UserContext,
     @Param('clubId', ParseUUIDPipe) clubId: string,

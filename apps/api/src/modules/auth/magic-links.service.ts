@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'crypto';
-import { IsNull, LessThan, Repository } from 'typeorm';
+import { IsNull, LessThan, MoreThan, Repository } from 'typeorm';
 
 import { MagicLink, MagicLinkPurpose } from './entities/magic-link.entity';
 
@@ -111,7 +111,7 @@ export class MagicLinksService {
   async consumir(token: string, purpose: MagicLinkPurpose): Promise<MagicLink> {
     const link = await this.resolver(token, purpose);
     const r = await this.repo.update(
-      { id: link.id, usedAt: IsNull() },
+      { id: link.id, usedAt: IsNull(), expiresAt: MoreThan(new Date()) },
       { usedAt: new Date() },
     );
     if (!r.affected) {
