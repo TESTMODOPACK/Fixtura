@@ -27,8 +27,12 @@ set -euo pipefail
 # ── Configuración ─────────────────────────────────────────────────────
 BACKUP_ENV_FILE="${BACKUP_ENV_FILE:-/etc/ligaplus-backup.env}"
 if [ -f "$BACKUP_ENV_FILE" ]; then
+  # set -a: exporta lo sourceado — openssl lee BACKUP_ENC_KEY del ENTORNO
+  # (-pass env:...); sin export, el cifrado fallaba siempre.
+  set -a
   # shellcheck disable=SC1090
   . "$BACKUP_ENV_FILE"
+  set +a
 fi
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/fixtura}"

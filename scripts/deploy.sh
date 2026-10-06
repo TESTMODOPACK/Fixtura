@@ -73,6 +73,7 @@ echo ""
 
 # ── Pull del repo (si no se hizo ya) ─────────────────────────────────
 echo "==> Sync del repo"
+SHA_PREVIO=$(git rev-parse HEAD 2>/dev/null || echo "")
 git fetch origin main
 git reset --hard origin/main
 NEW_SHA=$(git rev-parse --short HEAD)
@@ -105,6 +106,16 @@ case "$MODO" in
     ;;
 esac
 echo ""
+
+# ── nginx: rebuild solo si cambió su config o el compose ─────────────
+# El conf está horneado en la imagen; sin esto, un cambio en nginx/
+# (p.ej. el realip del rate limit) jamás llegaba a producción.
+if [ -n "$SHA_PREVIO" ] && ! git diff --quiet "$SHA_PREVIO" HEAD -- nginx/ docker-compose.yml 2>/dev/null; then
+  echo "==> Cambios en nginx/ o docker-compose.yml → rebuild de nginx"
+  docker compose build nginx
+  docker compose up -d --no-deps nginx
+  echo ""
+fi
 
 # ── Esperar healthy ──────────────────────────────────────────────────
 echo "==> Esperando que api esté healthy"

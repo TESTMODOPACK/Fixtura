@@ -14,6 +14,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* turbo.json ./
 COPY packages/config/package.json packages/config/
 COPY packages/types/package.json packages/types/
 COPY packages/domain/package.json packages/domain/
+COPY packages/eslint-config-config/package.json packages/eslint-config-config/
 COPY apps/api/package.json apps/api/
 
 RUN pnpm install --frozen-lockfile=false

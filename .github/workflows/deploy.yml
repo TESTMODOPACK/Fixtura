@@ -23,9 +23,10 @@ jobs:
     name: Deploy to Hostinger (scripts/deploy.sh)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Nota: environment.url NO admite el contexto `secrets` (el workflow
+    # queda inválido y ni aparece ejecutable) — por eso va sin url.
     environment:
       name: production
-      url: ${{ secrets.PRODUCTION_URL }}
 
     steps:
       - name: Setup SSH agent
