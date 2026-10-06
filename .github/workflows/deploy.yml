@@ -1,32 +1,33 @@
 name: Deploy to VPS
 
-# Se dispara con push a main (después de que pase CI) o manualmente
-# desde la UI de GitHub Actions.
+# Deploy MANUAL (workflow_dispatch) — un push a main ya NO despliega.
+#
+# Por qué (hallazgo A-8, auditoría 2026-10-05):
+#   - La versión anterior corría en cada push, sin depender del CI, sin
+#     backup, y ejecutaba `pnpm migration:run` con una migración
+#     destructiva (DropModeloViejo) en la carpeta.
+#   - Este workflow delega TODO en scripts/deploy.sh — el mismo camino
+#     que el deploy manual: backup previo, build secuencial --no-cache,
+#     espera de healthy y smoke tests. Un solo camino de deploy.
+#   - Las migraciones formales NO corren acá: son operación manual
+#     documentada (docs/OPS_RUNBOOK.md y migrations-cuarentena/README.md).
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  # Cancela deploys anteriores si llega uno nuevo — el último gana.
   group: deploy-production
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy to Hostinger
+    name: Deploy to Hostinger (scripts/deploy.sh)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment:
       name: production
       url: ${{ secrets.PRODUCTION_URL }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Necesario para que git rev-parse funcione en el VPS
-
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -42,59 +43,25 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          ssh -o StrictHostKeyChecking=no $VPS_USER@$VPS_HOST << 'ENDSSH'
+          ssh $VPS_USER@$VPS_HOST << 'ENDSSH'
             set -euo pipefail
-
             cd ~/fixtura
-
-            echo "==> Pull del repo"
             git fetch origin main
             git reset --hard origin/main
-
-            echo "==> Setear GIT_SHA"
-            export GIT_SHA=$(git rev-parse --short HEAD)
-            echo "GIT_SHA=$GIT_SHA"
-
-            echo "==> Build de imágenes (api + web)"
-            docker compose build --no-cache api web
-
-            echo "==> Levantar DB y Redis (si no están)"
-            docker compose up -d db redis
-
-            # Esperar que la DB esté lista antes de migrar
-            echo "==> Esperando DB healthy"
-            timeout 60 bash -c 'until docker inspect fixtura_db --format "{{.State.Health.Status}}" 2>/dev/null | grep -q healthy; do sleep 3; done'
-
-            echo "==> Migraciones (idempotente)"
-            docker compose run --rm api \
-              sh -c "node dist/database/cleanup-orphans.js && pnpm migration:run"
-
-            echo "==> Deploy rolling de api y web"
-            docker compose up -d --no-deps api web nginx
-
-            echo "==> Esperar healthy"
-            timeout 120 bash -c 'until docker inspect fixtura_api --format "{{.State.Health.Status}}" 2>/dev/null | grep -q healthy; do echo "esperando api healthy..."; sleep 5; done'
-            timeout 120 bash -c 'until docker inspect fixtura_web --format "{{.State.Health.Status}}" 2>/dev/null | grep -q healthy; do echo "esperando web healthy..."; sleep 5; done'
-
-            echo "==> Cleanup de imágenes viejas"
-            docker image prune -f
-
-            echo "==> Smoke test"
-            curl -fsS http://localhost/api/health/live || (echo "Smoke test falló"; exit 1)
-            curl -fsS http://localhost/api/health/version
-
-            echo "==> Deploy OK (SHA: $GIT_SHA)"
+            ./scripts/deploy.sh rolling
           ENDSSH
 
       - name: Post-deploy verification
         env:
           PROD_URL: ${{ secrets.PRODUCTION_URL }}
         run: |
-          # Validación externa: ¿el deploy es visible desde afuera?
+          # Validación externa: el web responde a través de toda la cadena
+          # (Eva360 nginx → fixtura_nginx → next). /health/* no se expone
+          # públicamente, así que el check externo es la raíz del sitio.
           if [ -n "$PROD_URL" ]; then
             echo "==> Verificando $PROD_URL desde GitHub runner"
             for i in 1 2 3; do
-              if curl -fsS "$PROD_URL/api/health/live"; then
+              if curl -fsS "$PROD_URL/" > /dev/null; then
                 echo "OK"
                 exit 0
               fi

@@ -138,14 +138,22 @@ fi
 echo ""
 
 # ── Smoke tests ──────────────────────────────────────────────────────
+# Directo al contenedor: /health/* vive SIN el prefijo /api (main.ts lo
+# excluye) y el nginx propio no tiene location /health. El viejo curl a
+# localhost/api/health/live pegaba en el nginx de Eva360 y daba 404.
 echo "==> Smoke tests"
-if curl -fsS http://localhost/api/health/live > /dev/null 2>&1; then
-  echo "    /api/health/live OK"
+if docker compose exec -T api wget -qO- http://localhost:3000/health/live > /dev/null 2>&1; then
+  echo "    /health/live OK (contenedor api)"
 else
-  echo "    ⚠️  /api/health/live falló"
+  echo "    ⚠️  /health/live falló"
 fi
-VERSION=$(curl -fsS http://localhost/api/health/version 2>/dev/null || echo "?")
-echo "    /api/health/version: $VERSION"
+VERSION=$(docker compose exec -T api wget -qO- http://localhost:3000/health/version 2>/dev/null || echo "?")
+echo "    /health/version: $VERSION"
+if curl -fsS http://localhost:8080/ > /dev/null 2>&1; then
+  echo "    web vía nginx :8080 OK"
+else
+  echo "    ⚠️  web vía nginx :8080 falló"
+fi
 echo ""
 
 # ── Cleanup ──────────────────────────────────────────────────────────
