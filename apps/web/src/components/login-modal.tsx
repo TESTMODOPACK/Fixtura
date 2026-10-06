@@ -87,14 +87,26 @@ export function LoginModal({ open, onClose }: LoginModalProps): React.ReactEleme
     },
   });
 
+  // El handler de validación ya scrollea al banner; el error de API también
+  // tiene que quedar a la vista cuando el modal está scrolleado.
+  useEffect(() => {
+    if (mutation.isError) {
+      bannerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [mutation.isError]);
+
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-green-deep/60 backdrop-blur-sm p-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="w-full max-w-md bg-chalk rounded-card border border-line shadow-elev p-8 relative">
+    // Overlay scrolleable: centrado cuando cabe, scroll cuando el contenido
+    // (banner de error, zoom, pantallas bajas) supera el alto — antes el
+    // modal se recortaba por arriba y los mensajes quedaban invisibles.
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-green-deep/60 backdrop-blur-sm">
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => e.target === e.currentTarget && onClose()}
+      >
+        <div className="w-full max-w-md my-4 bg-chalk rounded-card border border-line shadow-elev p-8 relative">
         <button
           type="button"
           onClick={onClose}
@@ -156,10 +168,11 @@ export function LoginModal({ open, onClose }: LoginModalProps): React.ReactEleme
           </Button>
         </form>
 
-        <div className="mt-4 text-center">
-          <a href="/forgot-password" className="text-xs text-ink-mute hover:text-green-deep">
-            ¿Olvidaste tu contraseña?
-          </a>
+          <div className="mt-4 text-center">
+            <a href="/forgot-password" className="text-xs text-ink-mute hover:text-green-deep">
+              ¿Olvidaste tu contraseña?
+            </a>
+          </div>
         </div>
       </div>
     </div>

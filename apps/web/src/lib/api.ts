@@ -63,6 +63,12 @@ export function parseApiErrorMessage(err: unknown): string {
     }
     return err.message || 'Ocurrió un error con la solicitud.';
   }
+  // Fallo de red del fetch (API caída, sin conexión, CORS): los browsers lo
+  // reportan como TypeError con estos textos — "Failed to fetch" a secas no
+  // le dice nada a nadie.
+  if (err instanceof Error && /failed to fetch|networkerror|load failed/i.test(err.message)) {
+    return 'No pudimos conectar con el servidor. Revisa tu conexión a internet — y si estás en desarrollo, que la API esté corriendo.';
+  }
   if (err instanceof Error) return err.message || 'Ocurrió un error inesperado.';
   if (typeof err === 'string') return err;
   return 'Ocurrió un error inesperado.';
