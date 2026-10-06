@@ -1,5 +1,13 @@
 # Coexistencia LigaPlus + Eva360 en el mismo VPS
 
+> ⚠️ **DEPRECADO (2026-10-06, ADR-0012).** Este esquema —el nginx de Eva360
+> como dueño del 443 con el vhost de ligaplus.cl pegado a mano— falló en
+> producción (vhost perdido tras un redeploy de Eva360 → certificado
+> equivocado → sitio caído) y su certbot no renovaba. La arquitectura
+> vigente es el **portero neutral Caddy**: ver `infra/edge/README.md` y
+> `docs/decisions/0012-portero-neutral-caddy.md`. Este documento queda
+> como referencia histórica y para el rollback de emergencia.
+
 El VPS de Hostinger (`187.127.14.243`) corre **dos** proyectos:
 
 - **Eva360** → reverse proxy nginx en los puertos **80/443** (dominio `eva360.ascenda.cl`).

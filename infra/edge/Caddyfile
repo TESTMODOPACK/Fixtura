@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────────────────────────────
+# Portero neutral del VPS (ADR-0012) — único dueño de los puertos 80/443,
+# independiente de Eva360 y de LigaPlus. Enruta por dominio y gestiona los
+# certificados SOLO (Let's Encrypt automático, renovación incluida: se
+# acabó certbot y sus crons rotos).
+#
+# Instalación y migración paso a paso: infra/edge/README.md
+# Este archivo se copia a /etc/caddy/Caddyfile en el VPS.
+# ─────────────────────────────────────────────────────────────────────
+
+{
+    # Email de operación para avisos de Let's Encrypt — EDITAR al instalar.
+    email cambia-esto@ejemplo.cl
+}
+
+# ── LigaPlus ─────────────────────────────────────────────────────────
+# El nginx propio de LigaPlus escucha en 127.0.0.1:8080 (HTTP) y hace su
+# routing interno (/api → api, /socket.io → api con WebSocket, / → web).
+# Caddy agrega X-Forwarded-For/Proto solo; el realip de ese nginx ya
+# confía en los rangos privados, así que el rate limit ve la IP real.
+
+ligaplus.cl {
+    redir https://www.ligaplus.cl{uri} permanent
+}
+
+www.ligaplus.cl {
+    encode gzip
+    reverse_proxy 127.0.0.1:8080
+}
+
+# ── Eva360 ───────────────────────────────────────────────────────────
+# Su nginx queda INTACTO (config y certs internos como están): se le
+# habla a su listener 443 original, republicado en 127.0.0.1:8444. El
+# skip_verify es seguro acá: es loopback del propio host, y evita que el
+# cert interno vencido de Eva360 importe — el cert público lo emite Caddy.
+# Si Eva360 atiende más dominios (ver `nginx -T | grep server_name` en su
+# contenedor), agregarlos como bloques iguales a este.
+
+eva360.ascenda.cl {
+    reverse_proxy https://127.0.0.1:8444 {
+        transport http {
+            tls_insecure_skip_verify
+        }
+        header_up Host {host}
+    }
+}

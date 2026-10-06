@@ -230,12 +230,14 @@ services:
       - api
       - web
     # Puertos 8080/8443 para coexistir con otro proyecto que ya usa 80/443
-    # en este VPS. Para producción definitiva (cuando Fixtura tenga su
-    # propio VPS o un reverse proxy host-level con SNI routing), volver a
-    # 80:80 y 443:443.
+    # en este VPS. Con el portero neutral de ADR-0012 (Caddy en el host
+    # dueño de 80/443), setear NGINX_BIND=127.0.0.1 en el .env: el nginx
+    # queda solo accesible desde el host (Caddy) y se cierra el acceso
+    # directo por IP:8080 desde internet. Default 0.0.0.0 = comportamiento
+    # previo, para no romper el camino viejo antes de migrar.
     ports:
-      - "8080:80"
-      - "8443:443"
+      - "${NGINX_BIND:-0.0.0.0}:8080:80"
+      - "${NGINX_BIND:-0.0.0.0}:8443:443"
     # Sin volumes — el conf está adentro de la imagen.
     # Cuando agregues dominio y certs Let's Encrypt: descomentar este mount
     # (asegurate de que /etc/letsencrypt/live/<dominio>/ exista en el host).
