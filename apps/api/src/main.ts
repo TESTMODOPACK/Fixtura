@@ -314,4 +314,16 @@ process.on('uncaughtException', (err) => {
   });
 });
 
-void bootstrap();
+// A-9: si el arranque falla (secretos débiles, rol superuser, DB caída),
+// el proceso MUERE y el orquestador lo reinicia/alerta. Antes el rechazo
+// caía en unhandledRejection (que solo loggea) y quedaba un proceso
+// zombi vivo sin servidor — la regla 9 de CLAUDE.md en letra muerta.
+bootstrap().catch((err) => {
+  const logger = new Logger('Bootstrap');
+  logger.error(
+    `Bootstrap falló: ${err instanceof Error ? err.message : String(err)}`,
+    err instanceof Error ? err.stack : undefined,
+  );
+  Sentry.captureException(err, { tags: { source: 'bootstrap' } });
+  Sentry.close(2000).finally(() => process.exit(1));
+});
