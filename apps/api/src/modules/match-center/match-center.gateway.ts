@@ -35,9 +35,20 @@ import { MatchCenterService } from './match-center.service';
  *   - WS: solo lectura, sin auth (vista pública también la usa).
  *   - REST: mutaciones, con JWT + roles (LIGA_ADMIN / cronista).
  */
+// T7 (A-10): misma whitelist que el CORS HTTP (FRONTEND_URL, lista por
+// comas). Reflect-all solo si la env no está (dev). Los dominios custom de
+// liga no la necesitan: su página y el WS comparten origen vía nginx.
+const WS_ORIGINS = (process.env.FRONTEND_URL ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 @WebSocketGateway({
   namespace: '/match-center',
-  cors: { origin: true, credentials: true },
+  cors: {
+    origin: WS_ORIGINS.length > 0 ? WS_ORIGINS : true,
+    credentials: true,
+  },
 })
 export class MatchCenterGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy
@@ -50,7 +61,16 @@ export class MatchCenterGateway
   /** Intervalo del tick (ms). 1s coincide con la resolución del cronómetro. */
   private static readonly TICK_INTERVAL_MS = 1000;
 
+  /** T7: un socket anónimo no puede inflar el set de rooms sin límite. */
+  private static readonly MAX_ROOMS_POR_SOCKET = 20;
+
+  private static readonly UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   private tickHandle: NodeJS.Timeout | null = null;
+
+  /** T7: si un tick tarda >1s, el siguiente no se apila encima. */
+  private tickEnCurso = false;
 
   /**
    * Set de partidoIds que tienen al menos un socket suscripto.
@@ -106,23 +126,33 @@ export class MatchCenterGateway
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const partidoId = data?.partidoId;
-    if (!partidoId || typeof partidoId !== 'string') {
-      client.emit('error', { message: 'partidoId requerido.' });
+    // T7: sin validar, cualquier string entraba al set y el tick abría
+    // transacciones por basura; y el catch filtraba errores internos
+    // (hasta de Postgres) al cliente anónimo.
+    if (typeof partidoId !== 'string' || !MatchCenterGateway.UUID_RE.test(partidoId)) {
+      client.emit('error', { message: 'partidoId inválido.' });
       return;
     }
     const room = this.roomKey(partidoId);
-    await client.join(room);
-    this.partidosActivos.add(partidoId);
-    this.log.log(`[ws] socket ${client.id} suscripto a ${partidoId}`);
+    if (
+      !client.rooms.has(room) &&
+      client.rooms.size - 1 >= MatchCenterGateway.MAX_ROOMS_POR_SOCKET
+    ) {
+      client.emit('error', { message: 'Demasiadas suscripciones en esta conexión.' });
+      return;
+    }
 
-    // Snapshot inmediato al subscriber. Vía sistema: el gateway no pasa por
-    // el TenantContextInterceptor, así que necesita establecer el bypass RLS
-    // o la query devuelve 0 filas (= "Partido no encontrado") bajo RLS.
+    // Snapshot primero (vía sistema: el gateway no pasa por el
+    // TenantContextInterceptor): si el partido no existe, el socket NO se
+    // une a la room y el id NO entra al set del tick.
     try {
       const snap = await this.svc.snapshotPublicoSistema(partidoId);
+      await client.join(room);
+      this.partidosActivos.add(partidoId);
+      this.log.debug(`[ws] socket ${client.id} suscripto a ${partidoId}`);
       client.emit('snapshot', snap);
-    } catch (err) {
-      client.emit('error', { message: (err as Error).message });
+    } catch {
+      client.emit('error', { message: 'Partido no encontrado.' });
     }
   }
 
@@ -159,6 +189,16 @@ export class MatchCenterGateway
   }
 
   private async tick(): Promise<void> {
+    if (this.tickEnCurso) return;
+    this.tickEnCurso = true;
+    try {
+      await this.tickInterno();
+    } finally {
+      this.tickEnCurso = false;
+    }
+  }
+
+  private async tickInterno(): Promise<void> {
     if (this.partidosActivos.size === 0) return;
     // Snapshot por partido activo. Lo hacemos en paralelo — son N
     // queries baratas (un partido por iter). Con > 50 partidos activos
