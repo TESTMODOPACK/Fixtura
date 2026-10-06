@@ -21,6 +21,7 @@ import {
   type UserContext,
 } from '@fixtura/types';
 
+import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -67,6 +68,7 @@ export class PersonalAdminController {
   }
 
   @Post()
+  @Audited({ action: 'personal.creado', entityType: 'Personal', entityIdFrom: 'response.id' })
   create(
     @CurrentUser() user: UserContext,
     @Body() dto: CreatePersonalDto,
@@ -75,15 +77,17 @@ export class PersonalAdminController {
   }
 
   @Patch(':id')
+  @Audited({ action: 'personal.actualizado', entityType: 'Personal', entityIdFrom: 'params.id' })
   update(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdatePersonalDto,
   ): Promise<PersonalAdmin> {
-    return this.svc.update(id, ensureTenant(user), dto);
+    return this.svc.update(id, ensureTenant(user), dto, user.userId);
   }
 
   @Delete(':id')
+  @Audited({ action: 'personal.desactivado', entityType: 'Personal', entityIdFrom: 'params.id' })
   deactivate(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -93,6 +97,7 @@ export class PersonalAdminController {
 
   // ── Sprint 10/17: Magic Link onboarding (email + WhatsApp) ───────
   @Post(':id/invitar')
+  @Audited({ action: 'personal.invitado', entityType: 'Personal', entityIdFrom: 'params.id' })
   invitar(
     @CurrentUser() user: UserContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -149,7 +154,9 @@ export class PersonalPublicController {
 
   /** Activa la cuenta: el personal crea su contraseña. */
   @Post('activar')
-  activar(@Body() body: ActivarPersonalDto): Promise<{ ok: boolean }> {
+  activar(
+    @Body() body: ActivarPersonalDto,
+  ): Promise<{ ok: boolean; cuentaExistente: boolean }> {
     if (!body.token || body.token.length < 20) {
       throw new BadRequestException('Token inválido');
     }

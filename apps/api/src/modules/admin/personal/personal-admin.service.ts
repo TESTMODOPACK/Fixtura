@@ -20,6 +20,8 @@ import type {
 import { ROLE_SCOPE } from '@fixtura/types';
 import { validarPasswordSegura } from '@fixtura/domain';
 
+import { AuditLogService } from '../../audit';
+import { AuthService } from '../../auth/auth.service';
 import { MagicLink } from '../../auth/entities/magic-link.entity';
 import { MagicLinksService } from '../../auth/magic-links.service';
 import { EmailService } from '../../email/email.service';
@@ -53,6 +55,8 @@ export class PersonalAdminService {
     private readonly email: EmailService,
     private readonly whatsapp: WhatsAppService,
     private readonly users: UsersService,
+    private readonly auth: AuthService,
+    private readonly audit: AuditLogService,
   ) {}
 
   /**
@@ -211,6 +215,22 @@ export class PersonalAdminService {
         'El link no es válido para este personal (mismatch de tenant).',
       );
     }
+    // C-1: el link quedó emitido para el email que la ficha tenía al
+    // invitar. Si el email cambió después (o la invitación salió sin
+    // email), el link muere: sin este amarre, cambiar el email de la
+    // ficha permitía activar —y pisar— la cuenta de un tercero usando
+    // un token recibido en la casilla del atacante.
+    const emailFicha = personal.email?.toLowerCase() ?? null;
+    if (!link.email) {
+      throw new BadRequestException(
+        'Esta invitación se emitió sin email asociado. Pide al admin que la reenvíe.',
+      );
+    }
+    if (!emailFicha || link.email !== emailFicha) {
+      throw new BadRequestException(
+        'La invitación no corresponde al email actual de la ficha. Pide al admin que la reenvíe.',
+      );
+    }
     return { link, personal };
   }
 
@@ -236,7 +256,7 @@ export class PersonalAdminService {
   async activarConPassword(
     token: string,
     password: string,
-  ): Promise<{ ok: boolean }> {
+  ): Promise<{ ok: boolean; cuentaExistente: boolean }> {
     const { link, personal } = await this.resolverPersonalDeToken(token);
     if (!personal.email) {
       throw new BadRequestException(
@@ -256,13 +276,27 @@ export class PersonalAdminService {
       throw new BadRequestException(errorPwd);
     }
 
+    // C-1: consumir el link ANTES de tocar credenciales. El consumo es un
+    // UPDATE condicional: dos requests simultáneos con el mismo token no
+    // pueden activar dos veces (el segundo falla aquí).
+    await this.magicLinks.consumir(token, 'PERSONAL_ONBOARDING');
+
     const user = await this.users.crearOObtenerPorEmail({
       email: personal.email,
       nombre: personal.nombre,
       apellido: personal.apellido,
     });
-    const hash = await bcrypt.hash(password, BCRYPT_COST);
-    await this.users.setPasswordHash(user.id, hash);
+
+    // C-1: si el email ya tiene una cuenta con contraseña, NO se pisa —
+    // la invitación solo suma roles y la persona entra con su clave de
+    // siempre. Solo se fija contraseña en cuentas nuevas o nunca activadas.
+    const cuentaExistente = !!user.passwordHash;
+    if (!cuentaExistente) {
+      const hash = await bcrypt.hash(password, BCRYPT_COST);
+      await this.users.setPasswordHash(user.id, hash);
+      // Credenciales recién fijadas → fuera cualquier sesión previa.
+      await this.auth.revocarRefreshTokens(user.id);
+    }
 
     // Mapear roles operativos → roles de sistema (scope PERSONAL, scopeId =
     // personalId). Dedup. OTRO no mapea a un rol de sistema.
@@ -286,8 +320,15 @@ export class PersonalAdminService {
     // Vincular el user al registro de personal.
     await this.repo.update({ id: personal.id }, { userId: user.id });
 
-    await this.magicLinks.marcarUsado(link.id);
-    return { ok: true };
+    await this.audit.record({
+      action: 'personal.activado',
+      tenantId: link.tenantId,
+      userId: user.id,
+      entityType: 'Personal',
+      entityId: personal.id,
+      metadata: { cuentaExistente, linkId: link.id },
+    });
+    return { ok: true, cuentaExistente };
   }
 
   async list(tenantId: string, soloActivos = false): Promise<PersonalAdmin[]> {
@@ -387,6 +428,7 @@ export class PersonalAdminService {
     id: string,
     tenantId: string,
     input: UpdatePersonalDto,
+    actorUserId: string | null = null,
   ): Promise<PersonalAdmin> {
     const p = await this.repo.findOne({ where: { id, tenantId } });
     if (!p) throw new NotFoundException(`Personal ${id} no encontrado`);
@@ -396,6 +438,7 @@ export class PersonalAdminService {
     const emailNorm =
       input.email === undefined ? undefined : input.email?.trim() || null;
     if (emailNorm) await this.assertEmailUnico(tenantId, emailNorm, id);
+    const emailAnterior = p.email;
     Object.assign(p, {
       nombre: input.nombre ?? p.nombre,
       apellido: input.apellido ?? p.apellido,
@@ -441,6 +484,27 @@ export class PersonalAdminService {
       activo: input.activo ?? p.activo,
     });
     const saved = await this.repo.save(p);
+
+    // C-1: cambiar el email mata las invitaciones pendientes (se emitieron
+    // para el email anterior) y deja rastro auditable de ambos valores.
+    const emailCambio =
+      emailNorm !== undefined &&
+      (emailAnterior ?? '').toLowerCase() !== (saved.email ?? '').toLowerCase();
+    if (emailCambio) {
+      const invalidadas = await this.magicLinks.invalidarPendientesDePersonal(saved.id);
+      await this.audit.record({
+        action: 'personal.email_cambiado',
+        tenantId,
+        userId: actorUserId,
+        entityType: 'Personal',
+        entityId: saved.id,
+        metadata: {
+          anterior: emailAnterior,
+          nuevo: saved.email,
+          invitacionesInvalidadas: invalidadas,
+        },
+      });
+    }
     return this.toDto(saved);
   }
 

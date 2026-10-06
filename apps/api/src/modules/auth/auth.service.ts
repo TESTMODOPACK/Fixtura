@@ -112,14 +112,23 @@ export class AuthService {
     // Invalidar TODOS los refresh tokens vigentes del usuario por
     // seguridad — si alguien tenía sesión activa en otro dispositivo,
     // queda forzado a re-login.
-    await this.refreshRepo.update(
-      { userId: link.userId, revokedAt: IsNull() },
-      { revokedAt: new Date() },
-    );
+    await this.revocarRefreshTokens(link.userId);
 
     await this.magicLinks.marcarUsado(link.id);
     this.log.log(`Reset de password aplicado para user=${link.userId}`);
     return { ok: true };
+  }
+
+  /**
+   * Revoca todos los refresh tokens vigentes de un usuario. Debe llamarse
+   * en TODO flujo que fije o cambie credenciales (reset, activaciones por
+   * magic link): una sesión abierta antes del cambio no debe sobrevivirlo.
+   */
+  async revocarRefreshTokens(userId: string): Promise<void> {
+    await this.refreshRepo.update(
+      { userId, revokedAt: IsNull() },
+      { revokedAt: new Date() },
+    );
   }
 
   async login(

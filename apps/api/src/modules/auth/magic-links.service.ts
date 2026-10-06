@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'crypto';
-import { LessThan, Repository } from 'typeorm';
+import { IsNull, LessThan, Repository } from 'typeorm';
 
 import { MagicLink, MagicLinkPurpose } from './entities/magic-link.entity';
 
@@ -97,6 +97,40 @@ export class MagicLinksService {
    */
   async marcarUsado(linkId: string): Promise<void> {
     await this.repo.update({ id: linkId }, { usedAt: new Date() });
+  }
+
+  /**
+   * Consume el link de forma ATÓMICA: valida y marca usado en un único
+   * UPDATE condicional, de modo que dos requests en paralelo con el mismo
+   * token no puedan pasar ambos (el segundo ve 0 filas afectadas y falla).
+   *
+   * Usar SIEMPRE este método —antes de aplicar el efecto— cuando el link
+   * autoriza cambios de credenciales o asignación de roles. `resolver` +
+   * `marcarUsado` al final deja una ventana de reuso (check-then-act).
+   */
+  async consumir(token: string, purpose: MagicLinkPurpose): Promise<MagicLink> {
+    const link = await this.resolver(token, purpose);
+    const r = await this.repo.update(
+      { id: link.id, usedAt: IsNull() },
+      { usedAt: new Date() },
+    );
+    if (!r.affected) {
+      throw new BadRequestException('Este link ya fue usado.');
+    }
+    return link;
+  }
+
+  /**
+   * Invalida las invitaciones de onboarding PENDIENTES de un personal.
+   * Se llama al cambiar el email de la ficha: un link emitido para el
+   * email anterior no debe poder activar la cuenta del email nuevo.
+   */
+  async invalidarPendientesDePersonal(personalId: string): Promise<number> {
+    const r = await this.repo.update(
+      { personalId, purpose: 'PERSONAL_ONBOARDING', usedAt: IsNull() },
+      { usedAt: new Date() },
+    );
+    return r.affected ?? 0;
   }
 
   /**

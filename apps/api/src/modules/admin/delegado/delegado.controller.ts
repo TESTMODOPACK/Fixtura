@@ -144,7 +144,9 @@ export class DelegadoPublicController {
   }
 
   @Post('activar')
-  activar(@Body() dto: ActivarDelegadoDto): Promise<{ ok: boolean }> {
+  activar(
+    @Body() dto: ActivarDelegadoDto,
+  ): Promise<{ ok: boolean; cuentaExistente: boolean }> {
     return this.invite.activar(dto.token, dto.password);
   }
 }

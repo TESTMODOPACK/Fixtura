@@ -15,6 +15,8 @@ import type {
 } from '@fixtura/types';
 import { validarPasswordSegura } from '@fixtura/domain';
 
+import { AuditLogService } from '../../audit';
+import { AuthService } from '../../auth/auth.service';
 import { MagicLink } from '../../auth/entities/magic-link.entity';
 import { MagicLinksService } from '../../auth/magic-links.service';
 import { Club } from '../../competition/entities/club.entity';
@@ -53,6 +55,8 @@ export class DelegadoInviteService {
     private readonly users: UsersService,
     private readonly email: EmailService,
     private readonly whatsapp: WhatsAppService,
+    private readonly auth: AuthService,
+    private readonly audit: AuditLogService,
   ) {}
 
   async invitar(
@@ -204,7 +208,10 @@ export class DelegadoInviteService {
   }
 
   /** Activa la cuenta: crea el user, fija la clave y asigna el rol. */
-  async activar(token: string, password: string): Promise<{ ok: boolean }> {
+  async activar(
+    token: string,
+    password: string,
+  ): Promise<{ ok: boolean; cuentaExistente: boolean }> {
     const link = await this.magicLinks.resolver(token, 'INVITE_USER');
     const meta = (link.metadata ?? {}) as {
       role?: string;
@@ -242,13 +249,23 @@ export class DelegadoInviteService {
       throw new BadRequestException(errorPwd);
     }
 
+    // C-1: consumir el link ANTES de tocar credenciales (UPDATE condicional;
+    // dos requests simultáneos con el mismo token no activan dos veces).
+    await this.magicLinks.consumir(token, 'INVITE_USER');
+
     const user = await this.users.crearOObtenerPorEmail({
       email: link.email,
       nombre,
       apellido,
     });
-    const hash = await bcrypt.hash(password, BCRYPT_COST);
-    await this.users.setPasswordHash(user.id, hash);
+    // C-1: una cuenta que ya tiene contraseña NO se pisa — la invitación
+    // solo suma el rol y la persona entra con su clave de siempre.
+    const cuentaExistente = !!user.passwordHash;
+    if (!cuentaExistente) {
+      const hash = await bcrypt.hash(password, BCRYPT_COST);
+      await this.users.setPasswordHash(user.id, hash);
+      await this.auth.revocarRefreshTokens(user.id);
+    }
     await this.users.asignarRol({
       userId: user.id,
       tenantId: link.tenantId,
@@ -257,8 +274,15 @@ export class DelegadoInviteService {
       scopeId: meta.clubId,
       grantedBy: link.createdByUserId,
     });
-    await this.magicLinks.marcarUsado(link.id);
-    return { ok: true };
+    await this.audit.record({
+      action: 'delegado.activado',
+      tenantId: link.tenantId,
+      userId: user.id,
+      entityType: 'Club',
+      entityId: meta.clubId,
+      metadata: { cuentaExistente, linkId: link.id },
+    });
+    return { ok: true, cuentaExistente };
   }
 
   private htmlInvitacion(

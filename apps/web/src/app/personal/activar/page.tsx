@@ -22,7 +22,7 @@ import { API_URL } from '@/lib/api';
 type Estado =
   | { tipo: 'cargando' }
   | { tipo: 'form'; info: ActivarPersonalInfo }
-  | { tipo: 'listo' }
+  | { tipo: 'listo'; cuentaExistente: boolean }
   | { tipo: 'error'; mensaje: string };
 
 function ActivarContent(): React.ReactElement {
@@ -80,7 +80,8 @@ function ActivarContent(): React.ReactElement {
         const body = await r.json().catch(() => ({ message: 'Error' }));
         throw new Error(body.message ?? 'No pudimos activar la cuenta.');
       }
-      setEstado({ tipo: 'listo' });
+      const data = (await r.json().catch(() => ({}))) as { cuentaExistente?: boolean };
+      setEstado({ tipo: 'listo', cuentaExistente: !!data.cuentaExistente });
     } catch (err) {
       setLocalError((err as Error).message);
     } finally {
@@ -117,11 +118,22 @@ function ActivarContent(): React.ReactElement {
           {estado.tipo === 'listo' && (
             <div className="text-center py-4">
               <CheckCircle2 size={48} className="text-green-bright mx-auto mb-3" />
-              <h2 className="font-display text-2xl text-green-deep mb-2">¡Cuenta activada!</h2>
-              <p className="text-sm text-ink-mute mb-4">
-                Ya puedes iniciar sesión con tu email y la contraseña que creaste para ver tus
-                designaciones.
-              </p>
+              <h2 className="font-display text-2xl text-green-deep mb-2">
+                {estado.cuentaExistente ? 'Accesos asignados' : '¡Cuenta activada!'}
+              </h2>
+              {estado.cuentaExistente ? (
+                <p className="text-sm text-ink-mute mb-4">
+                  Tu email ya tenía una cuenta en LigaPlus, así que mantuvimos tu
+                  contraseña de siempre (la que escribiste aquí no se usó). Si no la
+                  recuerdas, recupérala con &ldquo;¿Olvidaste tu contraseña?&rdquo; al
+                  iniciar sesión.
+                </p>
+              ) : (
+                <p className="text-sm text-ink-mute mb-4">
+                  Ya puedes iniciar sesión con tu email y la contraseña que creaste para
+                  ver tus designaciones.
+                </p>
+              )}
               <Button variant="accent" onClick={() => router.push('/')}>
                 Ir a iniciar sesión
               </Button>

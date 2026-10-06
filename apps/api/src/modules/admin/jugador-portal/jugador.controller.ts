@@ -151,7 +151,9 @@ export class JugadorPublicController {
   }
 
   @Post('activar')
-  activar(@Body() dto: ActivarJugadorDto): Promise<{ ok: boolean }> {
+  activar(
+    @Body() dto: ActivarJugadorDto,
+  ): Promise<{ ok: boolean; cuentaExistente: boolean }> {
     return this.invite.activar(dto.token, dto.password);
   }
 }

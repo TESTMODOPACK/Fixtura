@@ -23,7 +23,7 @@ function ActivarInner(): React.ReactElement {
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
-  const [listo, setListo] = useState(false);
+  const [resultado, setResultado] = useState<{ cuentaExistente: boolean } | null>(null);
 
   const onSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
@@ -44,7 +44,7 @@ function ActivarInner(): React.ReactElement {
     activar.mutate(
       { token, password },
       {
-        onSuccess: () => setListo(true),
+        onSuccess: (r) => setResultado({ cuentaExistente: !!r.cuentaExistente }),
         onError: (err) => setLocalError(parseApiErrorMessage(err)),
       },
     );
@@ -66,20 +66,31 @@ function ActivarInner(): React.ReactElement {
             </div>
           )}
 
-          {listo && (
+          {resultado && (
             <div className="text-center">
               <CheckCircle2 size={40} className="text-green-bright mx-auto mb-3" />
-              <h2 className="font-display text-2xl text-green-deep mb-2">¡Cuenta activada!</h2>
-              <p className="text-sm text-ink-mute mb-4">
-                Ya puedes iniciar sesión con tu email y la contraseña que creaste.
-              </p>
+              <h2 className="font-display text-2xl text-green-deep mb-2">
+                {resultado.cuentaExistente ? 'Accesos asignados' : '¡Cuenta activada!'}
+              </h2>
+              {resultado.cuentaExistente ? (
+                <p className="text-sm text-ink-mute mb-4">
+                  Tu email ya tenía una cuenta en LigaPlus, así que mantuvimos tu
+                  contraseña de siempre (la que escribiste aquí no se usó). Si no
+                  la recuerdas, recupérala con &ldquo;¿Olvidaste tu
+                  contraseña?&rdquo; al iniciar sesión.
+                </p>
+              ) : (
+                <p className="text-sm text-ink-mute mb-4">
+                  Ya puedes iniciar sesión con tu email y la contraseña que creaste.
+                </p>
+              )}
               <Button variant="accent" onClick={() => router.push('/')}>
                 Ir a iniciar sesión
               </Button>
             </div>
           )}
 
-          {info && !listo && (
+          {info && !resultado && (
             <form onSubmit={onSubmit}>
               <div className="eyebrow mb-2">→ Activar cuenta de jugador</div>
               <h2 className="font-display text-2xl text-green-deep leading-tight mb-1">

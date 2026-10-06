@@ -120,7 +120,7 @@ export function useActivarJugadorInfo(token: string | null) {
 export function useActivarJugador() {
   return useMutation({
     mutationFn: (input: { token: string; password: string }) =>
-      apiFetch<{ ok: boolean }>('/public/jugador/activar', {
+      apiFetch<{ ok: boolean; cuentaExistente?: boolean }>('/public/jugador/activar', {
         method: 'POST',
         body: input,
         skipAuth: true,

@@ -137,7 +137,7 @@ export function useActivarInfo(token: string | null) {
 export function useActivarDelegado() {
   return useMutation({
     mutationFn: (input: { token: string; password: string }) =>
-      apiFetch<{ ok: boolean }>('/public/delegado/activar', {
+      apiFetch<{ ok: boolean; cuentaExistente?: boolean }>('/public/delegado/activar', {
         method: 'POST',
         body: input,
         skipAuth: true,
