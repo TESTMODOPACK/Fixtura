@@ -1,60 +1,79 @@
-# Fixtura — Backups y restore
+# LigaPlus — Backups y restore
 
-> Estado: **TODO completar en Sprint 0 antes de tener data de cliente real**.
-> Este archivo es un placeholder con la estrategia mínima.
+> Implementado en Fase 0 (T3, auditoría 2026-10-05). El script real es
+> [`scripts/backup-db.sh`](../scripts/backup-db.sh); este runbook documenta
+> la puesta en marcha, el restore y el drill mensual.
 
 ## Política
 
-- `pg_dump` diario a las 03:00 hora Chile (madrugada baja).
-- Retención: 30 días rotando (28 diarios + 2 mensuales).
-- Backups encriptados con `gpg` antes de salir del host.
-- Copia off-site cifrada en S3 / Backblaze B2.
-- Restore mensual verificado en staging — backup que no se restaura es ficción.
+- `pg_dump` diario 03:00 Chile, local + **copia externa cifrada** (rclone → B2/S3).
+- Retención local: 30 días. Retención remota: regla de lifecycle del bucket.
+- Cifrado AES-256 (openssl, passphrase) **antes** de subir; la passphrase vive
+  fuera del VPS (gestor de contraseñas) y en `/etc/ligaplus-backup.env` (root-only).
+- Heartbeat a Healthchecks.io: si el ping diario NO llega, alerta por email.
+- Restore de prueba **mensual** — backup que no se restaura es ficción.
 
-## Script de backup (esquema)
+## Puesta en marcha (una vez, en el VPS)
+
+1. Instalar rclone y configurar el remote (ej. Backblaze B2 con una key
+   **solo-escritura** sobre el bucket):
+   ```bash
+   curl https://rclone.org/install.sh | sudo bash
+   rclone config   # remote "b2" → bucket ligaplus-backups
+   ```
+2. Crear el archivo de config root-only (los valores reales los carga el
+   operador — nunca van al repo):
+   ```bash
+   sudo install -m 600 /dev/null /etc/ligaplus-backup.env
+   sudo nano /etc/ligaplus-backup.env
+   ```
+   ```bash
+   BACKUP_ENC_KEY=<passphrase larga — guardarla TAMBIÉN fuera del VPS>
+   BACKUP_RCLONE_REMOTE=b2:ligaplus-backups/db
+   BACKUP_PING_URL=https://hc-ping.com/<uuid del check "backup-db">
+   ```
+3. Crontab del host:
+   ```cron
+   0 3 * * * /home/<usuario>/fixtura/scripts/backup-db.sh >> /var/log/fixtura-backup.log 2>&1
+   ```
+4. Crear el check "backup-db" en Healthchecks.io (periodo 1 día, gracia 3 h).
+5. Correr el script a mano una vez y verificar: archivo local `.sql.gz.enc`,
+   objeto en el bucket, ping verde en Healthchecks.
+
+## Restore
 
 ```bash
-#!/bin/bash
-# /opt/fixtura/scripts/backup.sh
-set -euo pipefail
+# 1. Bajar el backup (desde el bucket o desde /var/backups/fixtura)
+rclone copy b2:ligaplus-backups/db/fixtura-2026-10-05-030000.sql.gz.enc .
 
-DATE=$(date +%Y%m%d-%H%M%S)
-DEST=/var/backups/fixtura
-mkdir -p "$DEST"
+# 2. Descifrar (pide BACKUP_ENC_KEY del gestor de contraseñas)
+export BACKUP_ENC_KEY='<passphrase>'
+openssl enc -d -aes-256-cbc -pbkdf2 -pass env:BACKUP_ENC_KEY \
+  -in fixtura-2026-10-05-030000.sql.gz.enc -out restore.sql.gz
 
-docker compose -f /home/fixtura/docker-compose.yml exec -T db \
-  pg_dump -U fixtura -Fc fixtura | \
-  gpg --batch --yes --encrypt --recipient backup@fixtura.cl > "$DEST/$DATE.dump.gpg"
-
-# Subir a S3
-aws s3 cp "$DEST/$DATE.dump.gpg" s3://fixtura-backups/daily/
-
-# Rotación local: borrar > 30 días
-find "$DEST" -name "*.dump.gpg" -mtime +30 -delete
+# 3. Restaurar (el dump es --clean --if-exists: dropea y recrea objetos)
+gunzip -c restore.sql.gz | docker compose exec -T db psql -U fixtura -d fixtura
 ```
 
-Cron del host:
-
-```cron
-0 3 * * * /opt/fixtura/scripts/backup.sh >> /var/log/fixtura-backup.log 2>&1
-```
-
-## Restore (drill)
-
+Para un restore de PRUEBA sin tocar prod, restaurar a una DB aparte:
 ```bash
-gpg --decrypt 20260601-030000.dump.gpg > restore.dump
-docker compose exec -T db \
-  pg_restore -U fixtura -d fixtura_staging --clean --if-exists < restore.dump
+docker compose exec -T db createdb -U fixtura fixtura_drill
+gunzip -c restore.sql.gz | docker compose exec -T db psql -U fixtura -d fixtura_drill
 ```
 
-Verificación post-restore: contar filas en tablas clave, login con usuario admin,
-ver tabla de posiciones de un torneo histórico.
+## Drill mensual (checklist)
 
-## Pendientes
+- [ ] Bajar el backup MÁS RECIENTE del bucket (no el local).
+- [ ] Descifrar con la passphrase del gestor (prueba que la key sirve).
+- [ ] Restaurar a `fixtura_drill`.
+- [ ] Verificar: `SELECT count(*) FROM tenants; SELECT count(*) FROM partidos;
+      SELECT count(*) FROM cobros WHERE pagado_at IS NOT NULL;`
+- [ ] Comparar contra prod (mismo orden de magnitud, fechas recientes presentes).
+- [ ] `docker compose exec -T db dropdb -U fixtura fixtura_drill`
+- [ ] Anotar fecha y resultado al final de este archivo.
 
-- [ ] Implementar el script real
-- [ ] Configurar cron + logrotate
-- [ ] Generar keypair GPG y guardar private key en lugar seguro
-- [ ] Configurar S3/B2 con bucket policy `write-only` desde el VPS
-- [ ] Documentar el procedimiento de drill mensual
-- [ ] Alertar si el cron falla (Sentry cron monitor o Healthchecks.io)
+## Registro de drills
+
+| Fecha | Backup usado | Resultado |
+|---|---|---|
+| _pendiente_ | | |
