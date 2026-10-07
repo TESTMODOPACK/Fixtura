@@ -7,7 +7,6 @@
     "tsconfig.base.json",
     "tsconfig.node.json",
     "tsconfig.next.json",
-    "eslint.base.cjs",
-    "eslint.base.js"
+    "eslint.base.cjs"
   ]
 }

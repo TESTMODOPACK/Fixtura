@@ -35,18 +35,27 @@ import { MatchCenterService } from './match-center.service';
  *   - WS: solo lectura, sin auth (vista pública también la usa).
  *   - REST: mutaciones, con JWT + roles (LIGA_ADMIN / cronista).
  */
-// T7 (A-10): misma whitelist que el CORS HTTP (FRONTEND_URL, lista por
-// comas). Reflect-all solo si la env no está (dev). Los dominios custom de
-// liga no la necesitan: su página y el WS comparten origen vía nginx.
-const WS_ORIGINS = (process.env.FRONTEND_URL ?? '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
+// Misma whitelist que el CORS HTTP (FRONTEND_URL, lista por comas).
+// Permisivo solo si la env no está. Los dominios custom de liga no la
+// necesitan: su página y el WS comparten origen vía nginx. Se evalúa por
+// handshake (no al importar el módulo): en dev el .env lo carga
+// ConfigModule DESPUÉS de este import, y una constante quedaba vacía.
+function wsOriginPermitido(
+  origin: string | undefined,
+  cb: (err: Error | null, allow?: boolean) => void,
+): void {
+  const lista = (process.env.FRONTEND_URL ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  // Sin Origin = same-origin o cliente no-browser: CORS no aplica.
+  cb(null, lista.length === 0 || !origin || lista.includes(origin));
+}
 
 @WebSocketGateway({
   namespace: '/match-center',
   cors: {
-    origin: WS_ORIGINS.length > 0 ? WS_ORIGINS : true,
+    origin: wsOriginPermitido,
     credentials: true,
   },
 })
@@ -134,13 +143,18 @@ export class MatchCenterGateway
       return;
     }
     const room = this.roomKey(partidoId);
-    if (
-      !client.rooms.has(room) &&
-      client.rooms.size - 1 >= MatchCenterGateway.MAX_ROOMS_POR_SOCKET
-    ) {
+    // El cupo se RESERVA antes del await: sin esto, una ráfaga de
+    // subscribes entraba completa porque todos pasaban el chequeo antes
+    // de que el primero hiciera join.
+    const socketData = client.data as { subsPendientes?: Set<string> };
+    const pendientes = (socketData.subsPendientes ??= new Set<string>());
+    const ocupadas = client.rooms.size - 1 + pendientes.size;
+    const yaSuscrito = client.rooms.has(room) || pendientes.has(room);
+    if (!yaSuscrito && ocupadas >= MatchCenterGateway.MAX_ROOMS_POR_SOCKET) {
       client.emit('error', { message: 'Demasiadas suscripciones en esta conexión.' });
       return;
     }
+    pendientes.add(room);
 
     // Snapshot primero (vía sistema: el gateway no pasa por el
     // TenantContextInterceptor): si el partido no existe, el socket NO se
@@ -151,8 +165,15 @@ export class MatchCenterGateway
       this.partidosActivos.add(partidoId);
       this.log.debug(`[ws] socket ${client.id} suscripto a ${partidoId}`);
       client.emit('snapshot', snap);
-    } catch {
+    } catch (err) {
+      // Respuesta genérica al cliente; el motivo real (404 vs pool/DB)
+      // queda en el log del servidor.
+      this.log.warn(
+        `[ws] subscribe ${partidoId} rechazado: ${(err as Error).message}`,
+      );
       client.emit('error', { message: 'Partido no encontrado.' });
+    } finally {
+      pendientes.delete(room);
     }
   }
 

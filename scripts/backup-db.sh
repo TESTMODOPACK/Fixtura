@@ -57,7 +57,11 @@ fail() {
 }
 
 # ── Setup ─────────────────────────────────────────────────────────────
+# El host se comparte con otro producto: los dumps (con datos de clientes)
+# no deben quedar legibles para cualquier usuario del sistema.
+umask 077
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR" 2>/dev/null || true
 TS=$(date +%Y-%m-%d-%H%M%S)
 OUT_FILE="$BACKUP_DIR/fixtura-$TS.sql.gz"
 
@@ -66,14 +70,17 @@ echo "[$(date -Iseconds)] Iniciando backup → $OUT_FILE"
 command -v docker > /dev/null 2>&1 || fail "docker no está instalado"
 
 # ── Dump ──────────────────────────────────────────────────────────────
+# Si pg_dump muere a mitad, el gzip igual queda VÁLIDO pero truncado — y
+# restaurarlo con --clean dropearía objetos sin recrearlos. Ante error se
+# borra el parcial.
 if docker compose --project-directory "$COMPOSE_DIR" ps db > /dev/null 2>&1; then
   docker compose --project-directory "$COMPOSE_DIR" exec -T db \
     pg_dump -U "$DB_USER" -d "$DB_NAME" --clean --if-exists \
-    | gzip > "$OUT_FILE" || fail "pg_dump falló (vía compose)"
+    | gzip > "$OUT_FILE" || { rm -f "$OUT_FILE"; fail "pg_dump falló (vía compose)"; }
 else
   docker exec "$DB_CONTAINER" \
     pg_dump -U "$DB_USER" -d "$DB_NAME" --clean --if-exists \
-    | gzip > "$OUT_FILE" || fail "pg_dump falló (vía docker exec $DB_CONTAINER)"
+    | gzip > "$OUT_FILE" || { rm -f "$OUT_FILE"; fail "pg_dump falló (vía docker exec $DB_CONTAINER)"; }
 fi
 
 # Verificar que el archivo tiene contenido (>1KB) — pg_dump puede salir
@@ -116,8 +123,15 @@ if [ "$DELETED" -gt 0 ]; then
 fi
 
 # ── Heartbeat + status ───────────────────────────────────────────────
+# El ping de ÉXITO solo sale con copia externa real: un backup solo-local
+# no debe dejar el check verde (iría a /log, que registra sin resetear el
+# período — Healthchecks termina alertando igual).
 TOTAL=$(find "$BACKUP_DIR" \( -name "fixtura-*.sql.gz" -o -name "fixtura-*.sql.gz.enc" \) | wc -l)
 echo "[$(date -Iseconds)] Backups locales: $TOTAL. Último: $(basename "$UPLOAD_FILE")"
 if [ -n "${BACKUP_PING_URL:-}" ]; then
-  curl -fsS -m 10 "$BACKUP_PING_URL" > /dev/null 2>&1 || true
+  if [ -n "${BACKUP_RCLONE_REMOTE:-}" ]; then
+    curl -fsS -m 10 "$BACKUP_PING_URL" > /dev/null 2>&1 || true
+  else
+    curl -fsS -m 10 "$BACKUP_PING_URL/log" --data-raw "solo copia local — sin remote configurado" > /dev/null 2>&1 || true
+  fi
 fi

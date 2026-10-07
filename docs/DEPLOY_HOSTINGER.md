@@ -1,7 +1,12 @@
 # Deploy a Hostinger — runbook completo
 
-Guía paso a paso para llevar Fixtura de cero a producción en un VPS Hostinger
-con deploy automatizado vía GitHub Actions.
+Guía paso a paso para llevar LigaPlus de cero a producción en un VPS Hostinger.
+
+> **Actualización A-8 (2026-10-06):** el push a main **ya no despliega**.
+> El deploy es manual: `scripts/deploy.sh` en el VPS, o el workflow
+> `Deploy to VPS` lanzado a mano desde la pestaña Actions (delega en el
+> mismo script). El diagrama y el paso 6 de esta guía describen el flujo
+> viejo y quedan como referencia histórica.
 
 > **Target**: VPS Hostinger KVM 2 (2 vCPU / 8 GB RAM / 100 GB SSD), Ubuntu 24.04 LTS.
 > **Tiempo total**: ~45 min la primera vez (incluyendo provisioning).
@@ -308,7 +313,10 @@ git commit -m "chore: trigger deploy"
 git push origin main
 ```
 
-En <https://github.com/TESTMODOPACK/Fixtura/actions> debería arrancar el workflow `Deploy to VPS`. Si pasa: deploy automático funcionando.
+Desde A-8 el push NO dispara el deploy. Para desplegar: en
+<https://github.com/TESTMODOPACK/Fixtura/actions> lanzar a mano el workflow
+`Deploy to VPS` (botón "Run workflow"), o directamente en el VPS:
+`cd /opt/fixtura && ./scripts/deploy.sh rolling`.
 
 ---
 

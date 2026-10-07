@@ -71,7 +71,7 @@ Pasos que ejecuta automáticamente:
 4. `docker compose up -d`
 5. Esperar `fixtura_api healthy` (timeout 120s)
 6. Verificar logs de `cleanup-orphans` (debe decir "Done.")
-7. Smoke tests `/api/health/live` + `/api/health/version`
+7. Smoke tests: `docker compose exec -T api wget -qO- http://localhost:3000/health/live` (health vive SIN prefijo `/api` y no se expone por nginx)
 8. `docker image prune -f`
 
 Impacto: requests en vuelo durante el rollover reciben 502. Aceptable para features
@@ -141,14 +141,12 @@ docker compose restart api
 ### Smoke tests post-deploy
 
 ```bash
-# Health
-curl -fsS https://fixtura.cl/api/health/live
-# Login responde 4xx, no 5xx
-curl -s -o /dev/null -w "%{http_code}\n" https://fixtura.cl/api/v1/auth/login
-# Web sirve
-curl -fsS https://fixtura.cl/login -o /dev/null && echo OK
-# Version desplegada coincide con el GIT_SHA esperado
-curl -s https://fixtura.cl/api/health/version
+# Health y versión — directo al contenedor (no se exponen por nginx)
+docker compose exec -T api wget -qO- http://localhost:3000/health/live
+docker compose exec -T api wget -qO- http://localhost:3000/health/version
+# Desde afuera: el web sirve y el API responde (login 4xx, nunca 5xx)
+curl -fsS https://www.ligaplus.cl/ -o /dev/null && echo OK
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://www.ligaplus.cl/api/v1/auth/login
 ```
 
 ### Rollback
@@ -233,19 +231,16 @@ docker image prune -af       # solo imágenes
 
 ## Backups
 
-Ver `docs/BACKUPS_RUNBOOK.md` para detalle. Setup mínimo en el VPS:
+Ver `docs/BACKUPS_RUNBOOK.md` para el detalle completo (cifrado, copia
+externa con rclone, heartbeat). El script se ejecuta DESDE el repo (no se
+copia a ningún lado — autodetecta la raíz):
 
 ```bash
-# Copiar script al lugar canónico
-sudo mkdir -p /opt/fixtura/scripts
-sudo cp /home/fixtura/fixtura/scripts/backup-db.sh /opt/fixtura/scripts/
-sudo chmod +x /opt/fixtura/scripts/backup-db.sh
-
-# Test manual
-/opt/fixtura/scripts/backup-db.sh
+# Test manual (con sudo, igual que el cron)
+sudo /opt/fixtura/scripts/backup-db.sh
 ls -lah /var/backups/fixtura/
 
-# Agendar en cron del host (no del container)
+# Agendar en cron de root del host (no del container)
 sudo crontab -e
 # Agregar:
 0 3 * * * /opt/fixtura/scripts/backup-db.sh >> /var/log/fixtura-backup.log 2>&1
