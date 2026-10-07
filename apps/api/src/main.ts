@@ -39,8 +39,8 @@ async function bootstrap(): Promise<void> {
   // typeorm-transactional usa AsyncLocalStorage para propagar la transacción
   // activa a todas las queries de TypeORM dentro del request, sin tener que
   // refactorizar cada service. Esto habilita que el TenantContextInterceptor
-  // envuelva cada request en una tx donde SET LOCAL app.current_tenant_id
-  // se propaga correctamente — pre-requisito de RLS.
+  // envuelva cada request en una tx donde el GUC de tenant (transaction-
+  // scoped, via fijarTenantLocal) se propaga correctamente — base de RLS.
   // maxHookHandlers: suspender un equipo declara walkover por cada partido
   // pendiente y cada uno registra un hook post-commit — el default (10)
   // emite MaxListenersExceededWarning con torneos grandes.

@@ -332,6 +332,7 @@ export class EquiposAdminService {
     let partidosCancelados = 0;
     const aplicarMulta = input.aplicarMultaWalkover === true;
     const ahora = new Date();
+    const fechasConCancelados = new Set<string>();
 
     for (const partido of pendientes) {
       const rivalId =
@@ -355,6 +356,7 @@ export class EquiposAdminService {
           'Ambos equipos suspendidos',
         );
         await this.partidoRepo.save(partido);
+        fechasConCancelados.add(partido.fechaId);
         partidosCancelados++;
       } else {
         try {
@@ -381,6 +383,13 @@ export class EquiposAdminService {
           throw err;
         }
       }
+    }
+
+    // T16 — la rama "ambos suspendidos" muta el estado a mano (no pasa por
+    // suspenderPartido): evaluar acá el cierre de sus fechas. La rama
+    // walkover ya evalúa dentro de declararWalkover.
+    for (const fechaId of fechasConCancelados) {
+      await this.partidosSvc.evaluarCierreDeFecha(fechaId, tenantId);
     }
 
     insc.estado = 'SUSPENDIDO';

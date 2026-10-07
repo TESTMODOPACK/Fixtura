@@ -287,8 +287,10 @@ export class TribunalAdminService {
     if (s.fechasTotales == null || input.fechasPendientes > s.fechasTotales) {
       s.fechasTotales = input.fechasPendientes;
     }
-    // Ajustar a >0 re-activa explícitamente una sanción revocada (T21).
-    if (input.fechasPendientes > 0) s.revocada = false;
+    // Ajustar a >0 re-activa explícitamente una sanción revocada; ajustar
+    // a 0 es una absolución del tribunal — marca revocada para que la
+    // reversión del ledger jamás la reviva (T21).
+    s.revocada = input.fechasPendientes === 0;
 
     const stamp = `[Ajuste tribunal] ${previas} → ${input.fechasPendientes} fecha(s): ${input.motivoAjuste}`;
     s.descripcion = (s.descripcion ? `${s.descripcion}\n\n` : '') + stamp;

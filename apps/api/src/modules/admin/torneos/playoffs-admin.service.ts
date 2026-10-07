@@ -12,7 +12,6 @@ import {
   calcularTablaPosiciones,
   cuentaParaTabla,
   ESTADOS_PARTIDO_CUENTAN_TABLA,
-  ESTADOS_PARTIDO_RESUELTO,
 } from '@fixtura/domain';
 import type {
   BracketPlayoffResponse,
@@ -273,12 +272,11 @@ export class PlayoffsAdminService {
       .where('f.torneo_id = :torneoId', { torneoId })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
       .andWhere('p.llave_id IS NULL')
-      // T16/T20 — pendiente = NO resuelto. La lista vieja omitía
-      // SUSPENDIDO/REPROGRAMADO y bloqueaba la siembra con fechas que el
-      // cierre de fecha ya da por completas.
-      .andWhere('p.estado NOT IN (:...estadosResueltos)', {
-        estadosResueltos: [...ESTADOS_PARTIDO_RESUELTO],
-      })
+      // Para la SIEMBRA "pendiente" ≠ "resuelto de fecha": un SUSPENDIDO o
+      // REPROGRAMADO suele jugarse después y sus puntos moverían la tabla,
+      // así que BLOQUEAN la siembra aunque su fecha ya se haya dado por
+      // completa (T16). Solo NO_JUGADO no aporta resultado jamás.
+      .andWhere(`p.estado NOT IN ('FINALIZADO','WALKOVER','NO_JUGADO')`)
       .getCount();
     if (pendientes > 0) {
       throw new BadRequestException(

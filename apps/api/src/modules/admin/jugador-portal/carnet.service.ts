@@ -147,26 +147,45 @@ export class CarnetService {
       ? candidatas.filter((s) => s.torneoId === input.torneoId)
       : candidatas;
 
-    // Próxima fecha no finalizada por torneo. Sin fechas pendientes no hay
-    // partido que bloquear (torneo terminado o sin fixture).
+    // Próxima fecha por torneo, a prueba de fechas colgadas: el MIN de
+    // no-finalizadas se clava en una fecha vieja SUSPENDIDA/reabierta y
+    // dejaba PASAR sanciones nuevas (fail-open). Regla:
+    // GREATEST(última FINALIZADA + 1, primera PROGRAMADA/EN_CURSO).
     const torneoIds = [...new Set(enTorneo.map((s) => s.torneoId))];
     const proximas = new Map<string, number>();
     if (torneoIds.length > 0) {
-      const filas = await this.fechaRepo
+      const filasFechas = await this.fechaRepo
         .createQueryBuilder('f')
         .select('f.torneo_id', 'torneoId')
-        .addSelect('MIN(f.numero)', 'proxima')
+        .addSelect(
+          `MAX(f.numero) FILTER (WHERE f.estado = 'FINALIZADA')`,
+          'ultimaFinalizada',
+        )
+        .addSelect(
+          `MIN(f.numero) FILTER (WHERE f.estado IN ('PROGRAMADA','EN_CURSO'))`,
+          'primeraPendiente',
+        )
         .where('f.tenant_id = :tenantId', { tenantId })
         .andWhere('f.torneo_id IN (:...torneoIds)', { torneoIds })
-        .andWhere(`f.estado != 'FINALIZADA'`)
         .groupBy('f.torneo_id')
-        .getRawMany<{ torneoId: string; proxima: string | number }>();
-      for (const fila of filas) proximas.set(fila.torneoId, Number(fila.proxima));
+        .getRawMany<{
+          torneoId: string;
+          ultimaFinalizada: string | number | null;
+          primeraPendiente: string | number | null;
+        }>();
+      for (const fila of filasFechas) {
+        const candidatas = [
+          fila.ultimaFinalizada === null ? null : Number(fila.ultimaFinalizada) + 1,
+          fila.primeraPendiente === null ? null : Number(fila.primeraPendiente),
+        ].filter((n): n is number => n !== null);
+        if (candidatas.length > 0) proximas.set(fila.torneoId, Math.max(...candidatas));
+      }
     }
 
     const sancionesScope = enTorneo.filter((s) => {
       const proxima = proximas.get(s.torneoId);
-      if (proxima === undefined) return false;
+      // Torneo sin fechas conocidas: fail-closed — bloquea si tiene pendientes.
+      if (proxima === undefined) return sancionVigente(s);
       return sancionVigente(s, proxima);
     });
     for (const s of sancionesScope) {

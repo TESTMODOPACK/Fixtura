@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
@@ -182,13 +188,32 @@ export class SIIService {
     const reclamo = await runComoSistema(this.dataSource, () =>
       this.reclamarIntento(documentoId),
     );
-    if (!reclamo.procesar) return reclamo.doc;
+    if (!reclamo.procesar) {
+      if (reclamo.reciente) {
+        // El "Reintentar" manual dentro del minuto era un no-op mudo: la UI
+        // mostraba 200 con el documento igual y nadie entendía por qué.
+        throw new ConflictException(
+          'Ya hay un intento de emisión en curso o muy reciente — reintenta en un minuto.',
+        );
+      }
+      return reclamo.doc;
+    }
+    const { doc } = reclamo;
 
-    const { doc, byo } = reclamo;
-    const provider = byo ? this.openFactura : this.provider;
     let resultado: EmitirBoletaResult | null = null;
     let fallo: string | null = null;
+    let providerNombre: string = this.provider.nombre;
+    let esByo = false;
     try {
+      // BYO fuera de la tx del reclamo y DENTRO de este try: si el
+      // descifrado de la API key revienta (PAGOS_ENC_KEY), el fallo se
+      // persiste como intento fallido — antes revertía el reclamo y el
+      // cron reintentaba para siempre sin dejar rastro. `tenants` no
+      // tiene RLS: no necesita contexto.
+      const byo = await this.byoDe(doc.tenantId);
+      const provider = byo ? this.openFactura : this.provider;
+      providerNombre = provider.nombre;
+      esByo = byo !== null;
       resultado = await provider.emitirBoleta({
         monto: doc.monto,
         rutReceptor: doc.rutReceptor,
@@ -208,7 +233,7 @@ export class SIIService {
     }
 
     return runComoSistema(this.dataSource, () =>
-      this.persistirResultado(documentoId, resultado, fallo, provider.nombre, byo !== null),
+      this.persistirResultado(documentoId, resultado, fallo, providerNombre, esByo),
     );
   }
 
@@ -217,14 +242,9 @@ export class SIIService {
    * el fire-and-forget del pago pueden llegar a la vez — solo uno procesa;
    * el otro ve el reclamo reciente y se retira sin emitir dos boletas.
    */
-  private async reclamarIntento(documentoId: string): Promise<
-    | {
-        procesar: true;
-        doc: DocumentoTributario;
-        byo: Awaited<ReturnType<SIIService['byoDe']>>;
-      }
-    | { procesar: false; doc: DocumentoTributario }
-  > {
+  private async reclamarIntento(
+    documentoId: string,
+  ): Promise<{ procesar: boolean; doc: DocumentoTributario; reciente?: boolean }> {
     const doc = await this.docRepo.findOne({
       where: { id: documentoId },
       relations: { cobro: true, transaccion: true },
@@ -256,14 +276,10 @@ export class SIIService {
       .execute();
     if ((claim.affected ?? 0) === 0) {
       this.log.log(`Documento ${doc.id}: intento en curso o muy reciente — skip.`);
-      return { procesar: false, doc };
+      return { procesar: false, doc, reciente: true };
     }
 
-    doc.intentos = (doc.intentos ?? 0) + 1;
-    // BYO: con credenciales de la liga → OpenFactura con SU cuenta.
-    // Sin ellas → provider global (mock en dev, o env de plataforma).
-    const byo = await this.byoDe(doc.tenantId);
-    return { procesar: true, doc, byo };
+    return { procesar: true, doc };
   }
 
   private async persistirResultado(

@@ -2596,19 +2596,31 @@ async function ensureDisciplinaLedger(
   client: Client,
   log: (msg: string) => void,
 ): Promise<void> {
+  // El healing corre SOLO cuando la columna recién nace: re-ejecutarlo en
+  // cada boot volvería a marcar como revocada una sanción que el tribunal
+  // revocó, luego re-activó con ajustar(>0) y ya se cumplió (el stamp
+  // queda en la descripción para siempre).
+  const yaExistiaRevocada = await client.query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'sanciones_activas'
+        AND column_name = 'revocada'`,
+  );
   await client.query(`
     ALTER TABLE sanciones_activas
       ADD COLUMN IF NOT EXISTS revocada BOOLEAN NOT NULL DEFAULT false
   `);
-  // Healing: las revocadas pre-columna solo dejaron el stamp del tribunal
-  // en la descripción — único rastro disponible para marcarlas.
-  await client.query(`
-    UPDATE sanciones_activas
-    SET revocada = true
-    WHERE revocada = false
-      AND cumplida = true
-      AND descripcion LIKE '%[Revocada por tribunal]%'
-  `);
+  if (yaExistiaRevocada.rowCount === 0) {
+    // Healing: las revocadas pre-columna solo dejaron el stamp del tribunal
+    // en la descripción — único rastro disponible para marcarlas.
+    await client.query(`
+      UPDATE sanciones_activas
+      SET revocada = true
+      WHERE revocada = false
+        AND cumplida = true
+        AND descripcion LIKE '%[Revocada por tribunal]%'
+    `);
+  }
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS sancion_cumplimientos (
@@ -2627,6 +2639,34 @@ async function ensureDisciplinaLedger(
     `CREATE INDEX IF NOT EXISTS idx_sancion_cumplimientos_fecha ON sancion_cumplimientos(fecha_id)`,
   );
   await ensureRls(client, 'sancion_cumplimientos');
+
+  // Backfill aproximado UNA sola vez (ledger recién nacido y vacío):
+  // atribuye las fechas ya cumplidas de cada sanción a las últimas
+  // FINALIZADAS de su torneo desde `desde_fecha_numero`. Sin esto, reabrir
+  // una fecha cerrada antes del ledger no revertía nada y el re-cierre
+  // descontaba por SEGUNDA vez. Aproximación: no se sabe qué fecha exacta
+  // descontó qué, pero el conteo por sanción queda correcto.
+  const ledgerVacio = await client.query(`SELECT 1 FROM sancion_cumplimientos LIMIT 1`);
+  if (ledgerVacio.rowCount === 0) {
+    const bf = await client.query(`
+      INSERT INTO sancion_cumplimientos (tenant_id, sancion_id, fecha_id)
+      SELECT s.tenant_id, s.id, f.id
+        FROM sanciones_activas s
+        JOIN LATERAL (
+          SELECT fi.id FROM fechas fi
+           WHERE fi.torneo_id = s.torneo_id
+             AND fi.estado = 'FINALIZADA'
+             AND fi.numero >= s.desde_fecha_numero
+           ORDER BY fi.numero DESC
+           LIMIT GREATEST(COALESCE(s.fechas_totales - s.fechas_pendientes, 0), 0)
+        ) f ON true
+      ON CONFLICT DO NOTHING
+    `);
+    if ((bf.rowCount ?? 0) > 0) {
+      log(`sancion_cumplimientos: backfill aproximado de ${bf.rowCount} cumplimientos históricos.`);
+    }
+  }
+
   log('sancion_cumplimientos + sanciones_activas.revocada asegurados (T21).');
 }
 

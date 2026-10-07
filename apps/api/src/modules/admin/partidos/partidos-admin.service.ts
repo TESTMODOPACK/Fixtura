@@ -12,6 +12,7 @@ import { runOnTransactionCommit, Transactional } from 'typeorm-transactional';
 import { bestEffort } from '../../../common/db/best-effort';
 import {
   calcularSancionesPostPartido,
+  esPartidoResuelto,
   fechaCompleta,
   sancionVigente,
   type IncidenciaJugador,
@@ -159,12 +160,14 @@ export class PartidosAdminService {
   }
 
   // ─── Update partido (cancha, hora, estado, observaciones, fecha) ──
+  @Transactional()
   async update(
     partidoId: string,
     tenantId: string,
     input: UpdatePartidoRequest,
   ): Promise<PartidoAdmin> {
     const partido = await this.findPartido(partidoId, tenantId);
+    const fechaOrigenId = partido.fechaId;
 
     // Cambiar de fecha (reprogramación). Validamos:
     //   1) la fecha destino existe en este tenant
@@ -301,6 +304,28 @@ export class PartidosAdminService {
     }
 
     await this.repo.save(partido);
+
+    // T16 — mover el partido de fecha cambia la completitud de AMBAS: la
+    // de origen puede quedar completa (evaluar) y una destino FINALIZADA
+    // recibe un pendiente (revertir). Los locks de fecha se toman en orden
+    // de id para no cruzarse con otro movimiento simultáneo inverso.
+    if (partido.fechaId !== fechaOrigenId) {
+      const evaluarOrigen = (): Promise<void> =>
+        this.evaluarCierreDeFecha(fechaOrigenId, tenantId);
+      const revertirDestino = async (): Promise<void> => {
+        if (!esPartidoResuelto(partido.estado)) {
+          await this.revertirCierreDeFecha(partido.fechaId, tenantId);
+        }
+      };
+      if (fechaOrigenId < partido.fechaId) {
+        await evaluarOrigen();
+        await revertirDestino();
+      } else {
+        await revertirDestino();
+        await evaluarOrigen();
+      }
+    }
+
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
@@ -901,6 +926,7 @@ export class PartidosAdminService {
     };
 
     // Para cada jugador, calcular sanciones contra historial
+    const clavesPropuestas = new Set<string>();
     for (const bucket of porJugador.values()) {
       const previas = await this.getIncidenciasPreviasEnTorneo(
         bucket.jugadorId,
@@ -914,6 +940,11 @@ export class PartidosAdminService {
         bucket.incidencias,
         configDisc,
       );
+      for (const p of propuestas) {
+        if (p.origenIncidenciaPartidoId === partido.id) {
+          clavesPropuestas.add(`${bucket.jugadorId}|${p.motivo}`);
+        }
+      }
       await this.persistirPropuestas(
         propuestas,
         tenantId,
@@ -921,6 +952,20 @@ export class PartidosAdminService {
         bucket.jugadorId,
         bucket.rut,
       );
+    }
+
+    // Reconciliación por diff (reabrir ya NO borra): una sanción automática
+    // de ESTE partido cuya tarjeta ya no existe se elimina (su ledger cae
+    // por CASCADE); las que siguen respaldadas CONSERVAN id, ledger, ajustes
+    // y revocaciones del tribunal. Una revocada huérfana se conserva como
+    // historial — jamás revive y no vuelve a sancionarse (ADR-0015 §2).
+    const existentes = await this.sancionRepo.find({
+      where: { tenantId, origenIncidenciaPartidoId: partido.id },
+    });
+    for (const s of existentes) {
+      if (s.motivo === 'TRIBUNAL' || s.revocada) continue;
+      if (clavesPropuestas.has(`${s.jugadorId ?? ''}|${s.motivo}`)) continue;
+      await this.sancionRepo.delete({ id: s.id, tenantId });
     }
   }
 
@@ -1036,15 +1081,6 @@ export class PartidosAdminService {
   }
 
   /**
-   * Decrementa en 1 el contador `fechas_pendientes` de las sanciones
-   * DEL TORNEO ESPECÍFICO cuya fecha de inicio sea ≤ a la fecha recién
-   * finalizada. Marca como cumplida cuando llega a 0.
-   *
-   * IMPORTANTE: filtrar por torneo_id evita que cerrar una fecha de un
-   * torneo decremente sanciones de otros torneos paralelos del mismo
-   * tenant.
-   */
-  /**
    * T16/T17 — Evalúa el cierre de la fecha y lo ejecuta si corresponde.
    *
    * Lock FOR UPDATE sobre la fila de `fechas` ANTES de leer los partidos
@@ -1054,8 +1090,11 @@ export class PartidosAdminService {
    *
    * Un NO_JUGADO/SUSPENDIDO/REPROGRAMADO cuenta como resuelto
    * (fechaCompleta, packages/domain): ya no se espera acta de él.
+   *
+   * Público: también lo invoca EquiposAdminService cuando suspende
+   * partidos en bloque (requiere tx activa por el lock).
    */
-  private async evaluarCierreDeFecha(fechaId: string, tenantId: string): Promise<void> {
+  async evaluarCierreDeFecha(fechaId: string, tenantId: string): Promise<void> {
     const fecha = await this.fechaRepo
       .createQueryBuilder('f')
       .setLock('pessimistic_write')
@@ -1063,6 +1102,20 @@ export class PartidosAdminService {
       .andWhere('f.tenant_id = :tenantId', { tenantId })
       .getOne();
     if (!fecha || fecha.estado === 'FINALIZADA') return;
+
+    // Una SUSPENDIDA que ya tiene bis (otra fecha con su mismo número) es
+    // historial: finalizarla descontaría el número N dos veces. La
+    // SUSPENDIDA sin bis (estrategia MANUAL) sí puede completarse.
+    if (fecha.estado === 'SUSPENDIDA') {
+      const bis = await this.fechaRepo
+        .createQueryBuilder('f')
+        .where('f.tenant_id = :tenantId', { tenantId })
+        .andWhere('f.torneo_id = :torneoId', { torneoId: fecha.torneoId })
+        .andWhere('f.numero = :numero', { numero: fecha.numero })
+        .andWhere('f.id != :fechaId', { fechaId })
+        .getOne();
+      if (bis) return;
+    }
 
     const partidosDeFecha = await this.repo.find({
       where: { fechaId, tenantId },
@@ -1172,19 +1225,11 @@ export class PartidosAdminService {
     partido.estado = 'EN_CURSO';
     await this.repo.save(partido);
 
-    // LOG-2 (auditoría) — borrar las sanciones AUTOMÁTICAS originadas por
-    // este partido (roja directa / doble amarilla / acumulación). Si el
-    // operador corrige/elimina una tarjeta mal cargada y re-cierra, se
-    // regeneran desde las incidencias actuales. Las de TRIBUNAL (manuales)
-    // nunca se tocan. Va antes del revert de contadores para no re-inflar
-    // sanciones que ya no existen.
-    await this.sancionRepo
-      .createQueryBuilder()
-      .delete()
-      .where('tenant_id = :tenantId', { tenantId })
-      .andWhere('origen_incidencia_partido_id = :partidoId', { partidoId: partido.id })
-      .andWhere(`motivo IN ('ROJA_DIRECTA', 'DOBLE_AMARILLA', 'ACUMULACION_AMARILLAS')`)
-      .execute();
+    // LOG-2 → reconciliación diferida: las sanciones automáticas de este
+    // partido YA NO se borran al reabrir (borrar+recrear perdía el ledger
+    // de fechas ya cumplidas, los ajustes y las revocaciones del tribunal).
+    // El re-cierre reconcilia por diff en aplicarSancionesAutomaticas:
+    // conserva las respaldadas por tarjetas vigentes y elimina las huérfanas.
 
     // Sprint 34D — al reabrir el acta, borrar los cobros auto del
     // partido (multas amarillas/rojas/walkover) que aun no fueron

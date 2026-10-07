@@ -5,13 +5,23 @@ import { addTransactionalDataSource } from 'typeorm-transactional';
 import { AdvancedConsoleLogger, DataSource } from 'typeorm';
 
 /**
- * El log de query lenta de TypeORM adjunta "-- PARAMETERS: [...]" — con
- * maxQueryExecutionTime activo, cualquier query lenta escribiría RUTs,
- * emails y hashes a stdout. Este logger omite los parámetros SOLO ahí.
+ * Los logs de query de TypeORM adjuntan "-- PARAMETERS: [...]" — en una
+ * query lenta (maxQueryExecutionTime) o FALLIDA eso escribe RUTs, emails y
+ * hashes bcrypt a stdout. Este logger reenvía sin los parámetros: el único
+ * error "esperado" frecuente es el 23505 de los flujos idempotentes, y los
+ * reales van a Sentry con contexto propio.
  */
-class LoggerSinParametrosLentos extends AdvancedConsoleLogger {
+class LoggerSinParametros extends AdvancedConsoleLogger {
+  override logQuery(query: string): void {
+    super.logQuery(query);
+  }
+
   override logQuerySlow(time: number, query: string): void {
     super.logQuerySlow(time, query);
+  }
+
+  override logQueryError(error: string | Error, query: string): void {
+    super.logQueryError(error instanceof Error ? error.message : error, query);
   }
 }
 
@@ -41,7 +51,7 @@ function enteroPositivo(valor: string | undefined, porDefecto: number): number {
           ssl: config.get<string>('DB_SSL') === 'true' ? { rejectUnauthorized: false } : false,
           autoLoadEntities: true,
           synchronize: false, // NUNCA true. Schema via migraciones + cleanup-orphans.
-          logger: new LoggerSinParametrosLentos(
+          logger: new LoggerSinParametros(
             isProduction ? ['error', 'warn', 'migration', 'schema'] : 'all',
           ),
           // T14 — loggea como warning toda query que supere este umbral.
