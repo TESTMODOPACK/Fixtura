@@ -12,6 +12,7 @@ import { runOnTransactionCommit, Transactional } from 'typeorm-transactional';
 import { bestEffort } from '../../../common/db/best-effort';
 import {
   calcularSancionesPostPartido,
+  cuentaParaTabla,
   esPartidoResuelto,
   fechaCompleta,
   sancionVigente,
@@ -1141,6 +1142,19 @@ export class PartidosAdminService {
       .getOne();
     if (!fecha || fecha.estado !== 'FINALIZADA') return;
 
+    // Decisión de producto (2026-10-07): si ya hay una fecha POSTERIOR del
+    // torneo FINALIZADA, esta NO se reabre — el partido suelto se juega
+    // "fuera de cuenta" y los descuentos quedan firmes. Reabrirla volvía a
+    // bloquear en roster y carnet a jugadores que ya habían cumplido.
+    const posteriorCerrada = await this.fechaRepo
+      .createQueryBuilder('f')
+      .where('f.tenant_id = :tenantId', { tenantId })
+      .andWhere('f.torneo_id = :torneoId', { torneoId: fecha.torneoId })
+      .andWhere('f.numero > :numero', { numero: fecha.numero })
+      .andWhere(`f.estado = 'FINALIZADA'`)
+      .getOne();
+    if (posteriorCerrada) return;
+
     await this.fechaRepo.update({ id: fechaId, tenantId }, { estado: 'EN_CURSO' });
     await this.revertirDecrementoSanciones(tenantId, fechaId);
   }
@@ -1167,7 +1181,45 @@ export class PartidosAdminService {
       order: { id: 'ASC' },
       lock: { mode: 'pessimistic_write' },
     });
-    const vigentes = candidatas.filter((s) => sancionVigente(s, fecha.numero));
+    let vigentes = candidatas.filter((s) => sancionVigente(s, fecha.numero));
+
+    // Decisión de producto (2026-10-07): la sanción se cumple SOLO si el
+    // equipo del jugador JUGÓ esta fecha (FINALIZADO/WALKOVER). Una fecha
+    // completada por suspensiones/no-jugados no descuenta a quien no tuvo
+    // partido real que perderse. (Las relaciones se cargan aparte: FOR
+    // UPDATE no admite joins.) Sanción sin jugador resoluble (legacy por
+    // RUT): cae al criterio de calendario para no congelarla.
+    if (vigentes.length > 0) {
+      const partidosJugados = await this.repo.find({
+        where: { fechaId: fecha.id, tenantId },
+        relations: { inscripcionLocal: true, inscripcionVisita: true },
+      });
+      const clubesQueJugaron = new Set<string>();
+      for (const p of partidosJugados) {
+        if (!cuentaParaTabla(p.estado)) continue;
+        if (p.inscripcionLocal?.clubId) clubesQueJugaron.add(p.inscripcionLocal.clubId);
+        if (p.inscripcionVisita?.clubId) clubesQueJugaron.add(p.inscripcionVisita.clubId);
+      }
+
+      const jugadorIds = vigentes
+        .map((s) => s.jugadorId)
+        .filter((id): id is string => !!id);
+      const clubPorJugador = new Map<string, string | null>();
+      if (jugadorIds.length > 0) {
+        const jugadores = await this.jugadorRepo.find({
+          where: { tenantId, id: In(jugadorIds) },
+          select: { id: true, clubId: true },
+        });
+        for (const j of jugadores) clubPorJugador.set(j.id, j.clubId ?? null);
+      }
+
+      vigentes = vigentes.filter((s) => {
+        if (!s.jugadorId) return true;
+        const clubId = clubPorJugador.get(s.jugadorId) ?? null;
+        if (!clubId) return true;
+        return clubesQueJugaron.has(clubId);
+      });
+    }
 
     for (const s of vigentes) {
       const ins = await this.cumplimientoRepo

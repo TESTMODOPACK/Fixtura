@@ -86,6 +86,23 @@ jugadores-global, decremento, y los KPI de la web). Los literales
 `ESTADOS_PARTIDO_CUENTAN_TABLA`, y los bloqueadores de "pendientes"
 (siembra de playoffs, `suspenderFecha`) usan `ESTADOS_PARTIDO_RESUELTO`.
 
+### 5. Reglas de producto (definidas con el usuario, 2026-10-07)
+
+- **El descuento exige partido del equipo**: una sanción se cumple en la
+  fecha N solo si el club del jugador JUGÓ esa fecha (FINALIZADO o
+  WALKOVER). Una fecha completada por suspensiones/no-jugados cierra el
+  calendario pero no descuenta a quien no tuvo partido que perderse.
+  Sanción legacy sin jugador resoluble (solo RUT): criterio de calendario,
+  para no congelarla.
+- **La reapertura no retrocede el reloj**: si ya existe una fecha
+  POSTERIOR del torneo FINALIZADA, reabrir/reactivar/reprogramar un
+  partido NO reabre su fecha — el partido suelto se juega "fuera de
+  cuenta" y los descuentos hechos quedan firmes (reabrirla volvía a
+  bloquear en roster y carnet a jugadores que ya habían cumplido).
+- **Fechas históricas**: las que quedaron completas antes de este deploy
+  se cierran con el one-shot `dist/database/reevaluar-fechas-completas.js`
+  (dry-run por default, `APLICAR=true` ejecuta, audit por fecha).
+
 ## Consecuencias
 
 - Reabrir/cerrar deja de ser destructivo: cerrar → reabrir → cerrar converge
