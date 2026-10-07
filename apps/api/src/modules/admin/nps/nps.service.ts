@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
+import { bestEffort } from '../../../common/db/best-effort';
+import { fijarTenantLocal } from '../../../common/rls/rls-context';
 import { DataSource, Repository } from 'typeorm';
 
 import {
@@ -105,35 +107,40 @@ export class NpsService {
 
     for (const [clubId, club] of clubesUnicos) {
       try {
-        const existente = await this.repo.findOne({ where: { tenantId, torneoId, clubId } });
-        if (existente) {
-          yaEnviadas += 1;
-          continue;
-        }
+        // bestEffort: el club que falla se revierte a su savepoint y los
+        // demás siguen — sin esto, el primer error de Postgres envenenaba
+        // la tx y morían todos los envíos restantes.
+        await bestEffort(this.dataSource, async () => {
+          const existente = await this.repo.findOne({ where: { tenantId, torneoId, clubId } });
+          if (existente) {
+            yaEnviadas += 1;
+            return;
+          }
 
-        const email = this.emailDelClub(club);
-        if (!email) {
-          sinEmail += 1;
-          continue;
-        }
+          const email = this.emailDelClub(club);
+          if (!email) {
+            sinEmail += 1;
+            return;
+          }
 
-        let encuesta = this.repo.create({
-          tenantId,
-          torneoId,
-          clubId,
-          emailDestino: email,
-          token: '',
-          estado: 'PENDIENTE',
+          let encuesta = this.repo.create({
+            tenantId,
+            torneoId,
+            clubId,
+            emailDestino: email,
+            token: '',
+            estado: 'PENDIENTE',
+          });
+          encuesta = await this.repo.save(encuesta);
+
+          const token = this.signToken({ type: 'nps_response', encuestaId: encuesta.id, tenantId });
+          encuesta.token = token;
+          encuesta.enviadaAt = new Date();
+          await this.repo.save(encuesta);
+
+          await this.enviarEmail(email, liga, club.nombre, torneo.nombre, token);
+          enviadas += 1;
         });
-        encuesta = await this.repo.save(encuesta);
-
-        const token = this.signToken({ type: 'nps_response', encuestaId: encuesta.id, tenantId });
-        encuesta.token = token;
-        encuesta.enviadaAt = new Date();
-        await this.repo.save(encuesta);
-
-        await this.enviarEmail(email, liga, club.nombre, torneo.nombre, token);
-        enviadas += 1;
       } catch (err) {
         this.log.warn(`NPS torneo ${torneoId} club ${clubId}: ${(err as Error).message}`);
       }
@@ -294,7 +301,7 @@ Responder la encuesta: ${link}
    * correcto antes de tocar la encuesta.
    */
   private async setTenant(tenantId: string): Promise<void> {
-    await this.dataSource.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+    await fijarTenantLocal(this.dataSource, tenantId);
   }
 
   async infoPorToken(token: string): Promise<EncuestaNpsInfo> {

@@ -15,6 +15,8 @@
 import 'dotenv/config';
 import { Client } from 'pg';
 
+import { RLS_V2_USING, RLS_V2_USING_GLOBAL_NULL } from '../common/rls/rls-policy';
+
 async function main(): Promise<void> {
   const log = (msg: string): void => {
     // eslint-disable-next-line no-console
@@ -66,6 +68,9 @@ async function main(): Promise<void> {
   const client = new Client({ connectionString: url });
   await client.connect();
   log('Connected to PostgreSQL');
+  // RLS v2: el owner también está sujeto a FORCE. Sin bypass de sesión,
+  // los backfills de este script verían 0 filas con la policy fail-closed.
+  await client.query(`SELECT set_config('app.rls_bypass', 'on', false)`);
 
   try {
     // ─── Extensiones requeridas ─────────────────────────────────────────
@@ -1856,24 +1861,7 @@ async function ensurePushSubscriptionsTable(
   );
   await client.query(`ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY`);
   await client.query(`ALTER TABLE push_subscriptions FORCE ROW LEVEL SECURITY`);
-  const exists = await client.query(
-    `SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='push_subscriptions' AND policyname='tenant_isolation'`,
-  );
-  if (exists.rowCount === 0) {
-    await client.query(`
-      CREATE POLICY tenant_isolation ON push_subscriptions
-        USING (
-          tenant_id IS NULL
-          OR tenant_id::text = current_setting('app.current_tenant_id', true)
-          OR current_setting('app.current_tenant_id', true) = ''
-        )
-        WITH CHECK (
-          tenant_id IS NULL
-          OR tenant_id::text = current_setting('app.current_tenant_id', true)
-          OR current_setting('app.current_tenant_id', true) = ''
-        )
-    `);
-  }
+  await ensureRlsGlobalNull(client, 'push_subscriptions');
   log('push_subscriptions asegurada (idempotente).');
 }
 
@@ -1930,24 +1918,7 @@ async function ensureMagicLinksTable(
   );
   await client.query(`ALTER TABLE magic_links ENABLE ROW LEVEL SECURITY`);
   await client.query(`ALTER TABLE magic_links FORCE ROW LEVEL SECURITY`);
-  const exists = await client.query(
-    `SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='magic_links' AND policyname='tenant_isolation'`,
-  );
-  if (exists.rowCount === 0) {
-    await client.query(`
-      CREATE POLICY tenant_isolation ON magic_links
-        USING (
-          tenant_id IS NULL
-          OR tenant_id::text = current_setting('app.current_tenant_id', true)
-          OR current_setting('app.current_tenant_id', true) = ''
-        )
-        WITH CHECK (
-          tenant_id IS NULL
-          OR tenant_id::text = current_setting('app.current_tenant_id', true)
-          OR current_setting('app.current_tenant_id', true) = ''
-        )
-    `);
-  }
+  await ensureRlsGlobalNull(client, 'magic_links');
   log('magic_links asegurada (idempotente).');
 }
 
@@ -2591,20 +2562,32 @@ async function ensureAuditLogsPolicy(
     `SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='audit_logs' AND policyname='tenant_isolation'`,
   );
   if (pol.rowCount === 0) return; // la crea la migración inicial
-  await client.query(`
-    ALTER POLICY tenant_isolation ON audit_logs
-      USING (
-        tenant_id IS NULL
-        OR tenant_id::text = current_setting('app.current_tenant_id', true)
-        OR current_setting('app.current_tenant_id', true) = ''
-      )
-      WITH CHECK (
-        tenant_id IS NULL
-        OR tenant_id::text = current_setting('app.current_tenant_id', true)
-        OR current_setting('app.current_tenant_id', true) = ''
-      )
-  `);
-  log('audit_logs policy con WITH CHECK explícito (B5).');
+  await ensureRlsGlobalNull(client, 'audit_logs');
+  await ensureRlsGlobalNull(client, 'user_roles');
+  log('audit_logs + user_roles con policy v2 global-null (T9).');
+
+  // Convergencia v2 de las tablas cuyo CREATE TABLE vive en migraciones
+  // formales (su policy v1 no pasaba por ningún ensureRls del boot).
+  const tablasMigraciones = [
+    'temporadas',
+    'torneos',
+    'fechas',
+    'partidos',
+    'incidencias_partido',
+    'sanciones_activas',
+    'horarios_torneo',
+    'observaciones_partido',
+    'facturas_plataforma',
+    'encuestas_nps',
+    'plantillas_encuesta',
+    'preguntas_encuesta',
+    'envios_encuesta',
+    'respuestas_encuesta',
+  ];
+  for (const tabla of tablasMigraciones) {
+    await ensureRls(client, tabla);
+  }
+  log(`RLS v2 convergida en ${tablasMigraciones.length} tablas de migraciones (T9).`);
 }
 
 /**
@@ -2738,26 +2721,48 @@ async function ensurePlayoffsTables(
   log('Playoffs asegurado (P1+M2: torneos.playoff_* + llaves_playoff + partidos.llave_id + fechas.es_playoffs).');
 }
 
-async function ensureRls(client: Client, table: string): Promise<void> {
+// ─── RLS v2 (T9, auditoría C-2) ─────────────────────────────────────
+// La policy v1 trataba '' como bypass — y '' es justamente el valor
+// RESIDUAL que deja set_config(...,true) en una conexión reusada del
+// pool: todo lo que corría fuera de transacción quedaba en bypass (o en
+// 0 filas en conexión nueva). v2 es fail-closed en ambos GUC:
+//   - tenant: NULLIF('')::uuid → NULL → sin filas (residuo inocuo).
+//   - bypass: GUC separado app.rls_bypass; su residuo '' ≠ 'on'.
+// Los (SELECT ...) convierten el current_setting en InitPlan: el planner
+// lo evalúa una vez y puede usar el índice de tenant_id (medido 40-100x).
+// DROP+CREATE (no IF NOT EXISTS): corrige las policies v1 existentes en
+// cada arranque — corre al boot, antes de que el contenedor esté healthy.
+// El texto de la policy vive en common/rls/rls-policy.ts (lo comparte el
+// spec de conexión tibia de T11).
+
+async function recrearPolicy(
+  client: Client,
+  table: string,
+  clause: string,
+): Promise<void> {
   await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
   await client.query(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`);
-  const exists = await client.query(
-    `SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename=$1 AND policyname='tenant_isolation'`,
-    [table],
-  );
-  if (exists.rowCount === 0) {
-    await client.query(`
-      CREATE POLICY tenant_isolation ON ${table}
-        USING (
-          tenant_id::text = current_setting('app.current_tenant_id', true)
-          OR current_setting('app.current_tenant_id', true) = ''
-        )
-        WITH CHECK (
-          tenant_id::text = current_setting('app.current_tenant_id', true)
-          OR current_setting('app.current_tenant_id', true) = ''
-        )
-    `);
-  }
+  await client.query(`DROP POLICY IF EXISTS tenant_isolation ON ${table}`);
+  await client.query(`
+    CREATE POLICY tenant_isolation ON ${table}
+      USING (${clause})
+      WITH CHECK (${clause})
+  `);
+}
+
+async function ensureRls(client: Client, table: string): Promise<void> {
+  await recrearPolicy(client, table, RLS_V2_USING);
+}
+
+/**
+ * Variante para las tablas con filas "globales" (tenant_id NULL):
+ * user_roles (roles de plataforma), audit_logs, magic_links (resets),
+ * push_subscriptions (suscripciones públicas). Mantiene la visibilidad
+ * de esas filas bajo cualquier contexto — endurecer el WITH CHECK del
+ * NULL es R-3 y queda fuera de este cambio.
+ */
+async function ensureRlsGlobalNull(client: Client, table: string): Promise<void> {
+  await recrearPolicy(client, table, RLS_V2_USING_GLOBAL_NULL);
 }
 
 async function ensureTrigger(client: Client, table: string): Promise<void> {

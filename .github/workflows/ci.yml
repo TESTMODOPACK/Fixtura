@@ -60,6 +60,23 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # T10 — el contexto RLS se fija SOLO vía los helpers de common/rls.
+      # Un set_config suelto compila y "funciona", pero deja la conexión
+      # con residuo o sin contexto — el bug C-2 nació exactamente así.
+      # Permitido: common/rls/ (helpers + spec) y database/ (scripts
+      # standalone que abren su propia conexión).
+      - name: RLS — set_config solo en common/rls y database/
+        run: |
+          VIOLACIONES=$(grep -rn "set_config('app\." apps/api/src --include='*.ts' \
+            | grep -v 'apps/api/src/common/rls/' \
+            | grep -v 'apps/api/src/database/' \
+            || true)
+          if [ -n "$VIOLACIONES" ]; then
+            echo "::error::set_config de app.* fuera de common/rls o database/. Usar fijarTenantLocal/fijarBypassLocal/runConTenant/runComoSistema (common/rls/rls-context.ts):"
+            echo "$VIOLACIONES"
+            exit 1
+          fi
+
       - name: Typecheck
         run: pnpm typecheck
 

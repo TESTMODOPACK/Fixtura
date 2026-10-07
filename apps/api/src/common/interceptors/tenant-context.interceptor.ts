@@ -9,15 +9,26 @@ import { Observable, from, lastValueFrom } from 'rxjs';
 import { DataSource } from 'typeorm';
 import { runInTransaction } from 'typeorm-transactional';
 
+import {
+  SIN_TENANT_UUID,
+  fijarBypassLocal,
+  fijarTenantLocal,
+} from '../rls/rls-context';
 import type { AuthenticatedRequest } from '../types/authenticated-request';
 
 /**
- * Setea `app.current_tenant_id` al inicio de cada request autenticado,
- * envolviéndolo en una transacción para que la session variable sobreviva
- * y todas las queries del request usen la misma conexión del pool.
+ * Envuelve cada request en UNA transacción (misma conexión del pool para
+ * todas sus queries) y fija el contexto RLS v2:
  *
- * Sin tenantId (público o super_admin sin tenant elegido): se setea ''
- * (string vacío) — las policies RLS reconocen ese marker como "bypass".
+ *   - tenant del JWT → app.current_tenant_id = uuid.
+ *   - sin usuario (público) o SUPER_ADMIN sin tenant → app.rls_bypass
+ *     (los services públicos filtran por tenant explícito).
+ *   - autenticado SIN tenant y SIN super admin (roles en 2+ ligas sin
+ *     elegir) → tenant "nadie": antes caía en bypass y veía TODO.
+ *
+ * Esperamos a que el handler COMPLETE dentro de la transacción: devolver
+ * el Observable sin await cerraba la tx y el handler corría afuera, con
+ * 0 filas intermitentes bajo RLS.
  */
 @Injectable()
 export class TenantContextInterceptor implements NestInterceptor {
@@ -25,23 +36,33 @@ export class TenantContextInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const tenantId = req.user?.tenantId ?? '';
+
+    // T14: liveness/metrics no deben abrir transacción ni depender del
+    // pool — con el pool saturado, el healthcheck también colgaba y
+    // Docker no distinguía "lento" de "muerto".
+    const path = req.path ?? '';
+    if (path.startsWith('/health') || path === '/metrics') {
+      return next.handle();
+    }
+
+    const user = req.user;
+    const esSuperAdmin = user?.roles?.some((r) => r.role === 'SUPER_ADMIN') ?? false;
 
     return from(
       runInTransaction(async () => {
-        await this.dataSource.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [
-          tenantId,
-        ]);
-        // Esperamos a que el handler COMPLETE dentro de la transacción para
-        // que TODAS sus queries usen la misma conexión con el contexto RLS
-        // seteado. Antes se devolvía `next.handle()` (un Observable) sin
-        // await: runInTransaction resolvía de inmediato y CERRABA la
-        // transacción, y el handler corría afuera. En una conexión sin el
-        // SET LOCAL, current_setting('app.current_tenant_id', true) es NULL
-        // (no ''), y la policy `tenant_id = NULL OR NULL = ''` evalúa NULL
-        // → excluye filas → conteos/listados en 0 de forma intermitente.
-        // defaultValue cubre handlers que completan sin emitir (p.ej. @Res()).
-        return lastValueFrom(next.handle(), { defaultValue: undefined });
+        if (user?.tenantId) {
+          await fijarTenantLocal(this.dataSource, user.tenantId);
+        } else if (!user || esSuperAdmin) {
+          await fijarBypassLocal(this.dataSource);
+        } else {
+          await fijarTenantLocal(this.dataSource, SIN_TENANT_UUID);
+        }
+        const res = await lastValueFrom(next.handle(), { defaultValue: undefined });
+        // T13: si un catch del handler tragó un error de Postgres, la tx
+        // quedó abortada y el COMMIT sería un ROLLBACK silencioso con
+        // respuesta 200. Este SELECT 1 la detona acá, visible, como 500.
+        await this.dataSource.query('SELECT 1');
+        return res;
       }),
     );
   }

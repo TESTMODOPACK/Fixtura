@@ -144,7 +144,7 @@ async function main(): Promise<void> {
 
   try {
     await AppDataSource.query('BEGIN');
-    await AppDataSource.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await AppDataSource.query(`SELECT set_config('app.rls_bypass', 'on', false)`);
 
     // ─── Tenant ──────────────────────────────────────────────────────
     const tenantId = await getOrCreateTenant(slug, nombre);

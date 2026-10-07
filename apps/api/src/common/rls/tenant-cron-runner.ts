@@ -1,21 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { runInTransaction } from 'typeorm-transactional';
+
+import { runComoSistema, runConTenant } from './rls-context';
 
 /**
  * Helper para cron jobs.
  *
  * Los crons no pasan por el TenantContextInterceptor (no hay request HTTP).
  * Si una tabla tiene RLS y un cron tenant-scoped no setea el contexto, las
- * queries retornarán 0 filas — falla silenciosa.
+ * queries retornan 0 filas — falla silenciosa.
  *
  *   runForEachTenant(label, cb): itera tenants activos, una tx por cada
- *     uno con app.current_tenant_id = tenantId. Errores aislados.
+ *     uno con el contexto de ESE tenant. Errores aislados por tenant.
  *
- *   runAsSystem(label, cb): una tx con app.current_tenant_id = '' (marker
- *     "sistema"); las policies reconocen ese bypass para operaciones admin
- *     legítimas (cleanups, expiración de trials, dunning).
+ *   runAsSystem(label, cb): una tx en modo sistema (app.rls_bypass) para
+ *     operaciones cross-tenant legítimas (cleanups, mora, trials).
+ *
+ * Ambos llevan la red de T13 (SELECT 1 pre-commit, dentro de los helpers
+ * de rls-context): una tx envenenada por un catch tragado falla visible.
  */
 @Injectable()
 export class TenantCronRunner {
@@ -36,15 +39,14 @@ export class TenantCronRunner {
     const results: Array<T | undefined> = [];
     for (const tenant of rows) {
       try {
-        const result = await runInTransaction(async () => {
-          await this.dataSource.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [
-            tenant.id,
-          ]);
-          return callback(tenant.id);
-        });
-        results.push(result);
+        results.push(
+          await runConTenant(this.dataSource, tenant.id, () => callback(tenant.id)),
+        );
       } catch (err) {
-        this.logger.error(`[${label}] tenant ${tenant.id} failed: ${(err as Error).message}`);
+        this.logger.error(
+          `[${label}] tenant ${tenant.id} failed: ${(err as Error).message}`,
+          err instanceof Error ? err.stack : undefined,
+        );
         results.push(undefined);
       }
     }
@@ -52,10 +54,7 @@ export class TenantCronRunner {
   }
 
   async runAsSystem<T>(label: string, callback: () => Promise<T>): Promise<T> {
-    return runInTransaction(async () => {
-      await this.dataSource.query(`SELECT set_config('app.current_tenant_id', '', true)`);
-      this.logger.log(`[${label}] running as system (bypass RLS)`);
-      return callback();
-    });
+    this.logger.log(`[${label}] running as system (bypass RLS)`);
+    return runComoSistema(this.dataSource, callback);
   }
 }

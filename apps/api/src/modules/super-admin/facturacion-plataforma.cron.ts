@@ -3,6 +3,8 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 
+import { fijarBypassLocal } from '../../common/rls/rls-context';
+import { TenantCronRunner } from '../../common/rls/tenant-cron-runner';
 import { EmailService } from '../email/email.service';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { User } from '../users/entities/user.entity';
@@ -44,6 +46,7 @@ export class FacturacionPlataformaCron {
     @InjectRepository(UserRole) private readonly userRoleRepo: Repository<UserRole>,
     private readonly facturacionSvc: FacturacionPlataformaService,
     private readonly email: EmailService,
+    private readonly runner: TenantCronRunner,
   ) {}
 
   /**
@@ -79,13 +82,18 @@ export class FacturacionPlataformaCron {
   async procesarMora(): Promise<void> {
     this.log.log('[cron] Procesando mora de facturas plataforma…');
     try {
-      const { actualizadas } = await this.facturacionSvc.marcarVencidas();
-      if (actualizadas > 0) {
-        this.log.log(`[cron] ${actualizadas} facturas marcadas VENCIDAS.`);
-      }
-      await this.enviarRecordatorios();
-      await this.suspenderTrialesVencidos();
-      await this.suspenderMorosos();
+      // RLS v2: el set_config suelto FUERA de transacción no tiene efecto
+      // (dura un statement) — este cron funcionaba por el residuo '' de
+      // conexiones recicladas. runAsSystem abre la tx con bypass real.
+      await this.runner.runAsSystem('facturacion-mora', async () => {
+        const { actualizadas } = await this.facturacionSvc.marcarVencidas();
+        if (actualizadas > 0) {
+          this.log.log(`[cron] ${actualizadas} facturas marcadas VENCIDAS.`);
+        }
+        await this.enviarRecordatorios();
+        await this.suspenderTrialesVencidos();
+        await this.suspenderMorosos();
+      });
     } catch (err) {
       this.log.error(
         `[cron] facturacion-mora FALLÓ: ${err instanceof Error ? err.message : String(err)}`,
@@ -95,8 +103,6 @@ export class FacturacionPlataformaCron {
   }
 
   private async enviarRecordatorios(): Promise<void> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
-
     // Tomar facturas VENCIDAS con días de mora EXACTOS = 1, 10, 20.
     // Trabajamos en días enteros para evitar disparar 2 veces el mismo recordatorio.
     const facturas = await this.facturaRepo
@@ -197,7 +203,9 @@ export class FacturacionPlataformaCron {
    * para cortar el acceso; el pago confirmado reactiva (ver service).
    */
   private async suspenderMorosos(): Promise<void> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    // Idempotente dentro del runAsSystem del cron; deja el método auto-
+    // suficiente si alguien lo invoca desde otro entrypoint.
+    await fijarBypassLocal(this.ds);
     const rows: Array<{ tenant_id: string; vencidas: number }> = await this.ds.query(
       `
       SELECT f.tenant_id AS tenant_id,
@@ -240,7 +248,7 @@ export class FacturacionPlataformaCron {
    * si ya tienen plan asignado, o a SUSPENDIDO si nunca contrataron.
    */
   private async suspenderTrialesVencidos(): Promise<void> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     const triales = await this.tenantRepo
       .createQueryBuilder('t')
       .where(`t.estado_suscripcion = 'TRIAL'`)

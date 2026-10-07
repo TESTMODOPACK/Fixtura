@@ -4,14 +4,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import type {
   CreateInscripcionTorneoRequest,
   InscripcionTorneo as InscripcionDto,
 } from '@fixtura/types';
 
+import { bestEffort } from '../../../common/db/best-effort';
 import { ClubCategoria } from '../../competition/entities/club-categoria.entity';
 import { Club } from '../../competition/entities/club.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
@@ -47,6 +48,7 @@ export class InscripcionesAdminService {
     private readonly planillaRepo: Repository<PlanillaTorneo>,
     @InjectRepository(Jugador)
     private readonly jugadorRepo: Repository<Jugador>,
+    @InjectDataSource() private readonly dataSource: DataSource,
     // Sprint 45 — el cobro de matrícula ya no se genera al inscribir, sino
     // al iniciar el torneo (ver TarifaAplicadorService.generarCobrosInicioTorneo).
   ) {}
@@ -205,7 +207,12 @@ export class InscripcionesAdminService {
     // confuso. Ahora se copia todo el plantel ACTIVO de la categoría;
     // el delegado puede sacar al que no va a jugar.
     try {
-      await this.precargarPlanillaDesdeClub(saved, tenantId);
+      // bestEffort: si la precarga falla, se revierte a su savepoint y la
+      // inscripción recién guardada sobrevive — sin esto, el catch dejaba
+      // la tx envenenada y el findOne final tiraba abajo todo (25P02).
+      await bestEffort(this.dataSource, () =>
+        this.precargarPlanillaDesdeClub(saved, tenantId),
+      );
     } catch (err) {
       // Si falla la pre-carga, no rompe la inscripción — el admin puede
       // cargar manualmente desde la UI o re-ejecutar el backfill.
@@ -258,25 +265,21 @@ export class InscripcionesAdminService {
 
     let copiados = 0;
     for (const jugador of jugadores) {
-      try {
-        await this.planillaRepo.insert({
+      // ON CONFLICT DO NOTHING: el duplicado no genera error de Postgres
+      // (un error, aunque se atrape, envenena la tx y mata las filas
+      // siguientes). Sin fila retornada = ya estaba en la planilla.
+      const r = await this.planillaRepo
+        .createQueryBuilder()
+        .insert()
+        .into(PlanillaTorneo)
+        .values({
           tenantId,
           inscripcionId: inscripcion.id,
           jugadorId: jugador.id,
-        });
-        copiados++;
-      } catch (err) {
-        // UNIQUE violation = ya estaba en la planilla. Ignorar.
-        if (
-          !(
-            err instanceof Error &&
-            (err.message.includes('uq_planilla_jugador') ||
-              err.message.includes('duplicate key'))
-          )
-        ) {
-          throw err;
-        }
-      }
+        })
+        .orIgnore()
+        .execute();
+      if (r.identifiers.length > 0 && r.identifiers[0]) copiados++;
     }
     return copiados;
   }

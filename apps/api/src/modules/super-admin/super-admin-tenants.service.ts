@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { fijarBypassLocal } from '../../common/rls/rls-context';
 import { DataSource, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import * as bcrypt from 'bcrypt';
@@ -52,7 +53,7 @@ export class SuperAdminTenantsService {
     // Bypass RLS: setear contexto vacío para ver todos los tenants.
     // Debe correr dentro de una transacción para que set_config con LOCAL
     // (3er param=true) afecte la misma conexión que la query siguiente.
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
 
     const qb = this.tenantRepo
       .createQueryBuilder('t')
@@ -103,7 +104,7 @@ export class SuperAdminTenantsService {
 
   @Transactional()
   async findOne(id: string): Promise<TenantPlatform> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     const t = (await this.tenantRepo
       .createQueryBuilder('t')
       .leftJoinAndMapOne('t.plan', PlanSuscripcion, 'plan', 'plan.id = t.plan_id')
@@ -129,7 +130,7 @@ export class SuperAdminTenantsService {
     actorUserId: string,
     input: CreateTenantPlatformRequest,
   ): Promise<TenantPlatform> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
 
     const slug = input.slug.toLowerCase().trim();
     const dup = await this.tenantRepo.findOne({ where: { slug } });
@@ -217,7 +218,7 @@ export class SuperAdminTenantsService {
     id: string,
     input: UpdateTenantPlatformRequest,
   ): Promise<TenantPlatform> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     const t = await this.tenantRepo.findOne({ where: { id } });
     if (!t) throw new NotFoundException(`Tenant ${id} no encontrado.`);
 
@@ -245,7 +246,7 @@ export class SuperAdminTenantsService {
 
   @Transactional()
   async suspender(id: string, motivo: string): Promise<TenantPlatform> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     const t = await this.tenantRepo.findOne({ where: { id } });
     if (!t) throw new NotFoundException(`Tenant ${id} no encontrado.`);
     if (t.estadoSuscripcion === 'SUSPENDIDO') {
@@ -261,7 +262,7 @@ export class SuperAdminTenantsService {
 
   @Transactional()
   async reactivar(id: string): Promise<TenantPlatform> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     const t = await this.tenantRepo.findOne({ where: { id } });
     if (!t) throw new NotFoundException(`Tenant ${id} no encontrado.`);
     if (t.estadoSuscripcion !== 'SUSPENDIDO') {

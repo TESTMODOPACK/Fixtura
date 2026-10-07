@@ -3,8 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 
 import {
   calcularEdadCalendario,
@@ -20,6 +20,7 @@ import {
   type BulkImportRow,
 } from '@fixtura/types';
 
+import { bestEffort } from '../../../common/db/best-effort';
 import { CategoriaJugadores } from '../../competition/entities/categoria-jugadores.entity';
 import { ClubCategoria } from '../../competition/entities/club-categoria.entity';
 import { Club } from '../../competition/entities/club.entity';
@@ -55,6 +56,7 @@ export class PlantelImportService {
     @InjectRepository(Jugador) private readonly jugadorRepo: Repository<Jugador>,
     @InjectRepository(JugadorVetado)
     private readonly vetadoRepo: Repository<JugadorVetado>,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -395,39 +397,44 @@ export class PlantelImportService {
       if (!raw) continue; // safety net
 
       try {
-        if (fila.action === 'NUEVO' || fila.action === 'EN_EXCEPCION') {
-          if (fila.jugadorId) {
-            // Era ACTUALIZAR pero por race condition no lo detectamos arriba.
-            // Mejor refetch y actualizar.
+        // bestEffort: la fila que falla se revierte a su savepoint y las
+        // siguientes se aplican igual — sin esto, el primer error de
+        // Postgres envenenaba la tx y moría todo el resto del import.
+        await bestEffort(this.dataSource, async () => {
+          if (fila.action === 'NUEVO' || fila.action === 'EN_EXCEPCION') {
+            if (fila.jugadorId) {
+              // Era ACTUALIZAR pero por race condition no lo detectamos arriba.
+              // Mejor refetch y actualizar.
+              await this.aplicarUpdate(fila.jugadorId, tenantId, raw);
+              actualizados++;
+            } else {
+              await this.jugadorRepo.insert({
+                tenantId,
+                clubId,
+                categoriaId: input.categoriaId,
+                rut: fila.rut,
+                nombres: fila.nombres,
+                apellidos: fila.apellidos,
+                fechaNac: raw.fechaNac ?? null,
+                email: raw.email?.trim() || null,
+                telefono: raw.telefono?.trim() || null,
+                numeroCamiseta: this.parseNumeroCamiseta(raw.numeroCamiseta),
+                posicion: this.parsePosicion(raw.posicion),
+                pieHabil: null,
+                apodo: null,
+                telefonoContacto: raw.telefonoContacto?.trim() || null,
+                nombreContacto: raw.nombreContacto?.trim() || null,
+                capitan: this.parseBoolean(raw.capitan),
+                estado: 'ACTIVO',
+              });
+              creados++;
+            }
+            if (fila.action === 'EN_EXCEPCION') enExcepcion++;
+          } else if (fila.action === 'ACTUALIZAR' && fila.jugadorId) {
             await this.aplicarUpdate(fila.jugadorId, tenantId, raw);
             actualizados++;
-          } else {
-            await this.jugadorRepo.insert({
-              tenantId,
-              clubId,
-              categoriaId: input.categoriaId,
-              rut: fila.rut,
-              nombres: fila.nombres,
-              apellidos: fila.apellidos,
-              fechaNac: raw.fechaNac ?? null,
-              email: raw.email?.trim() || null,
-              telefono: raw.telefono?.trim() || null,
-              numeroCamiseta: this.parseNumeroCamiseta(raw.numeroCamiseta),
-              posicion: this.parsePosicion(raw.posicion),
-              pieHabil: null,
-              apodo: null,
-              telefonoContacto: raw.telefonoContacto?.trim() || null,
-              nombreContacto: raw.nombreContacto?.trim() || null,
-              capitan: this.parseBoolean(raw.capitan),
-              estado: 'ACTIVO',
-            });
-            creados++;
           }
-          if (fila.action === 'EN_EXCEPCION') enExcepcion++;
-        } else if (fila.action === 'ACTUALIZAR' && fila.jugadorId) {
-          await this.aplicarUpdate(fila.jugadorId, tenantId, raw);
-          actualizados++;
-        }
+        });
       } catch (err) {
         errores.push({
           rut: fila.rut,

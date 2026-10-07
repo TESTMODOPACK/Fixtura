@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   try {
     await AppDataSource.query('BEGIN');
     // Bypass RLS (modo sistema) para poder leer clubes/users de cualquier tenant.
-    await AppDataSource.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await AppDataSource.query(`SELECT set_config('app.rls_bypass', 'on', false)`);
 
     // 1. Elegir el club (el indicado o el primero activo).
     const clubRows = (await AppDataSource.query(

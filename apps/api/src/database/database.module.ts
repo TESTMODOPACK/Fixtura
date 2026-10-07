@@ -24,9 +24,22 @@ import { DataSource } from 'typeorm';
           autoLoadEntities: true,
           synchronize: false, // NUNCA true. Schema via migraciones + cleanup-orphans.
           logging: !isProduction,
+          // T14 — loggea como warning toda query que supere este umbral.
+          maxQueryExecutionTime: Number(config.get('DB_SLOW_QUERY_MS', '500')),
           extra: {
             max: Number(config.get('DB_POOL_MAX', '20')),
             min: Number(config.get('DB_POOL_MIN', '2')),
+            // T14 — sin estos límites, una conexión colgada o una tx
+            // olvidada retienen el pool para siempre (el síntoma aguas
+            // arriba es "API colgada", no un error).
+            connectionTimeoutMillis: Number(config.get('DB_CONNECT_TIMEOUT_MS', '5000')),
+            idleTimeoutMillis: Number(config.get('DB_IDLE_TIMEOUT_MS', '30000')),
+            statement_timeout: Number(config.get('DB_STATEMENT_TIMEOUT_MS', '30000')),
+            idle_in_transaction_session_timeout: Number(
+              config.get('DB_IDLE_TX_TIMEOUT_MS', '120000'),
+            ),
+            application_name: 'ligaplus-api',
+            keepAlive: true,
           },
         };
       },

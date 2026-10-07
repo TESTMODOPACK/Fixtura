@@ -153,26 +153,22 @@ export class VetadosAdminService {
     });
     if (existing) return;
 
-    const veto = this.repo.create({
-      tenantId,
-      rut: limpio,
-      motivo,
-      origen: 'TRIBUNAL',
-      creadoPorUserId: null,
-    });
-    try {
-      await this.repo.save(veto);
-    } catch (err) {
-      // Race: dos tribunales al mismo tiempo. No es problema, el RUT
-      // ya quedó vetado.
-      if (
-        err instanceof Error &&
-        err.message.includes('uq_jugador_vetado_rut')
-      ) {
-        return;
-      }
-      throw err;
-    }
+    // ON CONFLICT DO NOTHING — race entre dos tribunales: el duplicado ya
+    // no genera error de Postgres (un error, aunque se atrape, envenena la
+    // tx del flujo sancionador completo).
+    await this.repo
+      .createQueryBuilder()
+      .insert()
+      .into(JugadorVetado)
+      .values({
+        tenantId,
+        rut: limpio,
+        motivo,
+        origen: 'TRIBUNAL',
+        creadoPorUserId: null,
+      })
+      .orIgnore()
+      .execute();
   }
 
   async findOne(id: string, tenantId: string): Promise<JugadorVetadoDto> {

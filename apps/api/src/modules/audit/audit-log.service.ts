@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 
+import { bestEffort } from '../../common/db/best-effort';
 import { AuditLog } from './audit-log.entity';
 
 export interface AuditRecordInput {
@@ -53,6 +54,7 @@ export class AuditLogService {
 
   constructor(
     @InjectRepository(AuditLog) private readonly repo: Repository<AuditLog>,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -72,7 +74,12 @@ export class AuditLogService {
         userAgent: input.userAgent ?? null,
         metadata: input.metadata ?? {},
       });
-      await this.repo.save(entity);
+      // Savepoint: si el INSERT falla dentro de la tx del negocio, se
+      // revierte solo él y la tx sigue sana (sin esto queda envenenada y
+      // todo statement posterior muere con 25P02).
+      await bestEffort(this.dataSource, async () => {
+        await this.repo.save(entity);
+      });
     } catch (err) {
       // Audit log que falla no debe romper el flujo del negocio.
       // Lo loggeamos al error stream para que el ops detecte si hay

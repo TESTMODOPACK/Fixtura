@@ -5,10 +5,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { Transactional } from 'typeorm-transactional';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, In, Repository } from 'typeorm';
+import { runOnTransactionCommit, Transactional } from 'typeorm-transactional';
 
+import { bestEffort } from '../../../common/db/best-effort';
 import {
   calcularSancionesPostPartido,
   type IncidenciaJugador,
@@ -75,6 +76,7 @@ export class PartidosAdminService {
     private readonly diaNoJugableRepo: Repository<DiaNoJugable>,
     @InjectRepository(Designacion)
     private readonly designacionRepo: Repository<Designacion>,
+    @InjectDataSource() private readonly dataSource: DataSource,
     private readonly push: PushService,
     private readonly matchCenter: MatchCenterGateway,
     // Sprint 34D — hooks de multas automaticas al cerrar acta y walkover.
@@ -698,14 +700,18 @@ export class PartidosAdminService {
     // corregir a AUSENTE a quien no se haya presentado. Best-effort: no
     // bloquea el cierre del acta.
     try {
-      await this.designacionRepo
-        .createQueryBuilder()
-        .update(Designacion)
-        .set({ estado: 'ASISTIO' })
-        .where('partido_id = :partidoId', { partidoId: partido.id })
-        .andWhere('tenant_id = :tenantId', { tenantId })
-        .andWhere(`estado IN ('PROPUESTA', 'CONFIRMADA')`)
-        .execute();
+      // bestEffort: el fallo se revierte a su savepoint y la tx del acta
+      // sigue sana — sin esto, el catch dejaba la tx envenenada (25P02).
+      await bestEffort(this.dataSource, () =>
+        this.designacionRepo
+          .createQueryBuilder()
+          .update(Designacion)
+          .set({ estado: 'ASISTIO' })
+          .where('partido_id = :partidoId', { partidoId: partido.id })
+          .andWhere('tenant_id = :tenantId', { tenantId })
+          .andWhere(`estado IN ('PROPUESTA', 'CONFIRMADA')`)
+          .execute(),
+      );
     } catch (err) {
       console.warn(
         `[partido] auto-ASISTIO designaciones falló partido=${partido.id}: ${(err as Error).message}`,
@@ -724,15 +730,17 @@ export class PartidosAdminService {
     // con el monto fijo del tarifario. Si no hay tarifa configurada,
     // queda audit log y no genera nada (silencioso).
     try {
-      partido.fecha = fecha;
-      const incidencias = await this.incidenciaRepo.find({
-        where: { partidoId: partido.id, tenantId },
+      await bestEffort(this.dataSource, async () => {
+        partido.fecha = fecha;
+        const incidencias = await this.incidenciaRepo.find({
+          where: { partidoId: partido.id, tenantId },
+        });
+        await this.tarifaAplicador.aplicarMultasDePartido(
+          partido,
+          incidencias,
+          tenantId,
+        );
       });
-      await this.tarifaAplicador.aplicarMultasDePartido(
-        partido,
-        incidencias,
-        tenantId,
-      );
     } catch (err) {
       // LOG-5 — No bloquear el cierre del acta si la generación de multas
       // falla, PERO dejar rastro auditable (antes solo iba a console.warn y
@@ -768,14 +776,17 @@ export class PartidosAdminService {
       await this.decrementarSancionesPendientes(partido.tenantId, fecha.torneoId, fecha.numero);
     }
 
-    // Sprint 14: push notifications best-effort fire-and-forget.
-    void this.push
-      .notifyPartidoCerrado(partido.id)
-      .catch((err) =>
-        console.warn(
-          `[push] partido ${partido.id} cerrado, error en notify: ${(err as Error).message}`,
-        ),
-      );
+    // Sprint 14: push best-effort, diferido a después del COMMIT — el push
+    // abre su propia transacción y antes del commit leería el acta sin cerrar.
+    runOnTransactionCommit(() => {
+      void this.push
+        .notifyPartidoCerrado(partido.id)
+        .catch((err) =>
+          console.warn(
+            `[push] partido ${partido.id} cerrado, error en notify: ${(err as Error).message}`,
+          ),
+        );
+    });
 
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
@@ -1118,9 +1129,8 @@ export class PartidosAdminService {
     // pagados ni cancelados manualmente. Cuando se vuelva a cerrar,
     // se regeneran con las incidencias actualizadas.
     try {
-      await this.tarifaAplicador.borrarCobrosAutoDelPartido(
-        partido.id,
-        tenantId,
+      await bestEffort(this.dataSource, () =>
+        this.tarifaAplicador.borrarCobrosAutoDelPartido(partido.id, tenantId),
       );
     } catch (err) {
       console.warn(
@@ -1404,15 +1414,17 @@ export class PartidosAdminService {
     // Sprint 44 — opt-out via input.aplicarMulta = false (default true).
     if (input.aplicarMulta !== false) {
       try {
-        const fechaWO = await this.fechaRepo.findOneOrFail({
-          where: { id: partido.fechaId },
+        await bestEffort(this.dataSource, async () => {
+          const fechaWO = await this.fechaRepo.findOneOrFail({
+            where: { id: partido.fechaId },
+          });
+          partido.fecha = fechaWO;
+          await this.tarifaAplicador.aplicarMultaWalkover(
+            partido,
+            input.equipoPerdedorId,
+            partido.tenantId,
+          );
         });
-        partido.fecha = fechaWO;
-        await this.tarifaAplicador.aplicarMultaWalkover(
-          partido,
-          input.equipoPerdedorId,
-          partido.tenantId,
-        );
       } catch (err) {
         console.warn(
           `[partido] multa walkover fallo partido=${partido.id}: ${(err as Error).message}`,
@@ -1439,14 +1451,18 @@ export class PartidosAdminService {
       }
     }
 
-    // Sprint 14: push notif también para walkover.
-    void this.push
-      .notifyPartidoCerrado(partido.id)
-      .catch((err) =>
-        console.warn(
-          `[push] walkover ${partido.id}, error en notify: ${(err as Error).message}`,
-        ),
-      );
+    // Sprint 14: push también para walkover, diferido post-COMMIT (acá los
+    // goles del W.O. se escriben recién al cierre — antes del commit el
+    // push leería 0-0).
+    runOnTransactionCommit(() => {
+      void this.push
+        .notifyPartidoCerrado(partido.id)
+        .catch((err) =>
+          console.warn(
+            `[push] walkover ${partido.id}, error en notify: ${(err as Error).message}`,
+          ),
+        );
+    });
 
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
@@ -1480,7 +1496,9 @@ export class PartidosAdminService {
     await this.repo.save(partido);
 
     try {
-      await this.tarifaAplicador.borrarCobrosAutoDelPartido(partido.id, tenantId);
+      await bestEffort(this.dataSource, () =>
+        this.tarifaAplicador.borrarCobrosAutoDelPartido(partido.id, tenantId),
+      );
     } catch (err) {
       console.warn(
         `[partido] cleanup multa walkover fallo partido=${partido.id}: ${(err as Error).message}`,

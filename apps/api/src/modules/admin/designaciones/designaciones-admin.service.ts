@@ -5,8 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { fijarTenantLocal, runConTenant } from '../../../common/rls/rls-context';
 import { DataSource, In, Repository } from 'typeorm';
-import { Transactional } from 'typeorm-transactional';
+import { runOnTransactionCommit, Transactional } from 'typeorm-transactional';
 
 import type {
   AutoAsignarResult,
@@ -336,10 +337,12 @@ export class DesignacionesAdminService {
       }),
     );
 
-    // Notificar por email — best-effort. No await crítico: si falla,
-    // el caller no se entera (la designación queda persistida igual).
-    // Cargamos relaciones necesarias para armar el contenido.
-    void this.notificarAsignacionPorEmail(created.id, tenantId);
+    // Notificar por email — best-effort, diferido a después del COMMIT:
+    // antes corría DENTRO de la tx del request (heredaba la conexión por
+    // ALS) y podía leer una designación aún no confirmada.
+    runOnTransactionCommit(() => {
+      void this.notificarAsignacionPorEmail(created.id, tenantId);
+    });
 
     return this.findOne(created.id, tenantId);
   }
@@ -354,17 +357,21 @@ export class DesignacionesAdminService {
     tenantId: string,
   ): Promise<void> {
     try {
-      const d = await this.repo.findOne({
-        where: { id: designacionId, tenantId },
-        relations: {
-          personal: true,
-          partido: {
-            inscripcionLocal: { club: true },
-            inscripcionVisita: { club: true },
-            fecha: { torneo: true },
+      // Post-commit: ya no hay tx del request — la lectura abre contexto
+      // propio acotado al tenant. El email queda fuera de la transacción.
+      const d = await runConTenant(this.dataSource, tenantId, () =>
+        this.repo.findOne({
+          where: { id: designacionId, tenantId },
+          relations: {
+            personal: true,
+            partido: {
+              inscripcionLocal: { club: true },
+              inscripcionVisita: { club: true },
+              fecha: { torneo: true },
+            },
           },
-        },
-      });
+        }),
+      );
       if (!d || !d.personal || !d.partido) return;
       if (!d.personal.email) return; // sin email no se envía
 
@@ -399,13 +406,10 @@ export class DesignacionesAdminService {
     tenantId: string,
     accion: 'CONFIRMAR' | 'RECHAZAR',
   ): Promise<{ ok: boolean; estado: string }> {
-    // Endpoint público: el TenantContextInterceptor setea tenant_id=''
-    // (bypass RLS). Re-seteamos al tenant del token firmado antes de
-    // operar — defensa en profundidad para evitar lectura/escritura
-    // cross-tenant si en el futuro se agregan filtros sólo por RLS.
-    await this.dataSource.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [
-      tenantId,
-    ]);
+    // Endpoint público (bypass del interceptor): se re-acota al tenant del
+    // token firmado antes de operar — defensa en profundidad para evitar
+    // lectura/escritura cross-tenant si algo filtrara solo por RLS.
+    await fijarTenantLocal(this.dataSource, tenantId);
 
     const d = await this.repo.findOne({ where: { id: designacionId, tenantId } });
     if (!d) return { ok: false, estado: 'NO_ENCONTRADA' };
@@ -1091,11 +1095,13 @@ export class DesignacionesAdminService {
       }
     }
 
-    // Disparar emails async — fuera del loop principal para no demorar
-    // la respuesta. Errores no propagan (best-effort).
-    for (const designacionId of nuevasParaNotificar) {
-      void this.notificarAsignacionPorEmail(designacionId, tenantId);
-    }
+    // Disparar emails después del COMMIT — fuera de la tx para no demorar
+    // la respuesta ni leer designaciones sin confirmar. Errores no propagan.
+    runOnTransactionCommit(() => {
+      for (const designacionId of nuevasParaNotificar) {
+        void this.notificarAsignacionPorEmail(designacionId, tenantId);
+      }
+    });
 
     return result;
   }

@@ -7,6 +7,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
+import { bestEffort } from '../../../common/db/best-effort';
+import { fijarTenantLocal } from '../../../common/rls/rls-context';
 import { DataSource, In, Repository } from 'typeorm';
 
 import {
@@ -87,7 +89,7 @@ export class EncuestasService {
   }
 
   private async setTenant(tenantId: string): Promise<void> {
-    await this.dataSource.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+    await fijarTenantLocal(this.dataSource, tenantId);
   }
 
   // ── Mapeo a DTO ──────────────────────────────────────────────────────
@@ -321,44 +323,49 @@ export class EncuestasService {
 
     for (const [clubId, club] of clubesUnicos) {
       try {
-        const existente = await this.envioRepo.findOne({
-          where: { tenantId, plantillaId: plantilla.id, torneoId: input.torneoId, clubId },
-        });
-        if (existente) {
-          yaEnviadas += 1;
-          continue;
-        }
-        const email = this.emailDelClub(club);
-        if (!email) {
-          sinEmail += 1;
-          continue;
-        }
-        let envio = await this.envioRepo.save(
-          this.envioRepo.create({
-            tenantId,
-            plantillaId: plantilla.id,
-            torneoId: input.torneoId,
-            clubId,
-            emailDestino: email,
-            token: '',
-            estado: 'PENDIENTE',
-          }),
-        );
-        envio.token = this.signToken({ type: 'encuesta_response', envioId: envio.id, tenantId });
-        envio.enviadaAt = new Date();
-        envio = await this.envioRepo.save(envio);
-        try {
-          await this.enviarEmail(email, liga, club.nombre, torneo.nombre, plantilla.nombre, envio.token);
-          enviadas += 1;
-        } catch (errEmail) {
-          // El email no salió: borramos el envío para que el próximo disparo lo
-          // reintente, en vez de contarlo como "ya enviado" para siempre.
-          await this.envioRepo.delete({ id: envio.id, tenantId });
-          sinEmail += 1;
-          this.log.warn(
-            `Encuesta ${plantilla.id} club ${clubId}: email no salió — ${(errEmail as Error).message}`,
+        // bestEffort: el club que falla se revierte a su savepoint y los
+        // demás siguen — sin esto, el primer error de Postgres envenenaba
+        // la tx y morían todos los envíos restantes.
+        await bestEffort(this.dataSource, async () => {
+          const existente = await this.envioRepo.findOne({
+            where: { tenantId, plantillaId: plantilla.id, torneoId: input.torneoId, clubId },
+          });
+          if (existente) {
+            yaEnviadas += 1;
+            return;
+          }
+          const email = this.emailDelClub(club);
+          if (!email) {
+            sinEmail += 1;
+            return;
+          }
+          let envio = await this.envioRepo.save(
+            this.envioRepo.create({
+              tenantId,
+              plantillaId: plantilla.id,
+              torneoId: input.torneoId,
+              clubId,
+              emailDestino: email,
+              token: '',
+              estado: 'PENDIENTE',
+            }),
           );
-        }
+          envio.token = this.signToken({ type: 'encuesta_response', envioId: envio.id, tenantId });
+          envio.enviadaAt = new Date();
+          envio = await this.envioRepo.save(envio);
+          try {
+            await this.enviarEmail(email, liga, club.nombre, torneo.nombre, plantilla.nombre, envio.token);
+            enviadas += 1;
+          } catch (errEmail) {
+            // El email no salió: borramos el envío para que el próximo disparo lo
+            // reintente, en vez de contarlo como "ya enviado" para siempre.
+            await this.envioRepo.delete({ id: envio.id, tenantId });
+            sinEmail += 1;
+            this.log.warn(
+              `Encuesta ${plantilla.id} club ${clubId}: email no salió — ${(errEmail as Error).message}`,
+            );
+          }
+        });
       } catch (err) {
         this.log.warn(`Encuesta ${plantilla.id} club ${clubId}: ${(err as Error).message}`);
       }

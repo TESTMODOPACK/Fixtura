@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { fijarBypassLocal } from '../../common/rls/rls-context';
 import { DataSource, In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
@@ -55,7 +56,7 @@ export class FacturacionPlataformaService {
     anio?: number;
     mes?: number;
   }): Promise<FacturaPlataformaDto[]> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     const qb = this.repo
       .createQueryBuilder('f')
       .leftJoinAndSelect('f.tenant', 't')
@@ -75,7 +76,7 @@ export class FacturacionPlataformaService {
 
   @Transactional()
   async findOne(id: string): Promise<FacturaPlataformaDto> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     const f = await this.repo
       .createQueryBuilder('f')
       .leftJoinAndSelect('f.tenant', 't')
@@ -110,7 +111,7 @@ export class FacturacionPlataformaService {
    */
   @Transactional()
   async estadoCuenta(tenantId: string): Promise<EstadoCuentaLiga> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     const tenant = await this.tenantRepo
       .createQueryBuilder('t')
       .leftJoinAndMapOne('t.plan', PlanSuscripcion, 'plan', 'plan.id = t.plan_id')
@@ -172,7 +173,7 @@ export class FacturacionPlataformaService {
     mes: number,
     anio: number,
   ): Promise<{ creadas: number; saltadas: number }> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     if (mes < 1 || mes > 12) throw new BadRequestException('Mes inválido');
     if (anio < 2000 || anio > 2100) throw new BadRequestException('Año inválido');
 
@@ -247,7 +248,7 @@ export class FacturacionPlataformaService {
       fechaPago?: Date;
     },
   ): Promise<FacturaPlataformaDto> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     const f = await this.repo.findOne({ where: { id: facturaId } });
     if (!f) throw new NotFoundException(`Factura ${facturaId} no encontrada.`);
     if (f.estado === 'PAGADA')
@@ -303,7 +304,7 @@ export class FacturacionPlataformaService {
     motivo: string,
     actorUserId: string,
   ): Promise<FacturaPlataformaDto> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     const f = await this.repo.findOne({ where: { id: facturaId } });
     if (!f) throw new NotFoundException(`Factura ${facturaId} no encontrada.`);
     if (f.estado === 'PAGADA')
@@ -325,7 +326,7 @@ export class FacturacionPlataformaService {
    */
   @Transactional()
   async marcarVencidas(): Promise<{ actualizadas: number }> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
     const result = await this.repo
       .createQueryBuilder()
       .update()

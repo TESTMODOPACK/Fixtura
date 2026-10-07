@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { fijarBypassLocal } from '../../common/rls/rls-context';
 import { DataSource, IsNull, Not, Repository } from 'typeorm';
 
 import { Designacion } from '../competition/entities/designacion.entity';
@@ -66,7 +67,7 @@ export class MeService {
     // limpiamos el contexto para esta operación (modo sistema).
     // SET LOCAL aplica sólo a la transacción del request — al cerrar
     // se descarta. No filtra a otros requests.
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
 
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('Usuario no encontrado.');

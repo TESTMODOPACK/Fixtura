@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
+import { fijarBypassLocal } from '../../common/rls/rls-context';
 import { DataSource, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
@@ -83,7 +84,7 @@ export class FacturacionPlataformaPagosService {
     userPagadorId: string,
     baseUrlFrontend: string,
   ): Promise<{ token: string; url: string; transaccionId: string }> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
 
     const factura = await this.facturaRepo.findOne({ where: { id: facturaId } });
     if (!factura) throw new NotFoundException('Factura no encontrada.');
@@ -169,7 +170,7 @@ export class FacturacionPlataformaPagosService {
     facturaId: string | null;
     estadoFactura: string | null;
   }> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
 
     const trans = await this.transRepo.findOne({ where: { tokenPasarela: token } });
     if (!trans) throw new NotFoundException('Transacción no encontrada.');
@@ -239,7 +240,7 @@ export class FacturacionPlataformaPagosService {
     facturaId: string,
     transaccionId: string,
   ): Promise<DocumentoTributario | null> {
-    await this.ds.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+    await fijarBypassLocal(this.ds);
 
     const factura = await this.facturaRepo
       .createQueryBuilder('f')

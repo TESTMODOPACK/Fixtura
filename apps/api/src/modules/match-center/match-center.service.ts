@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { fijarBypassLocal } from '../../common/rls/rls-context';
 import { DataSource, In, Repository } from 'typeorm';
 import { Propagation, runInTransaction } from 'typeorm-transactional';
 
@@ -139,7 +140,7 @@ export class MatchCenterService {
     // filtra el bypass a la conexión del pool.
     return runInTransaction(
       async () => {
-        await this.dataSource.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+        await fijarBypassLocal(this.dataSource);
         return this.snapshotPublico(partidoId);
       },
       { propagation: Propagation.REQUIRES_NEW },
@@ -155,7 +156,7 @@ export class MatchCenterService {
   async listarPartidosActivosSistema(): Promise<string[]> {
     return runInTransaction(
       async () => {
-        await this.dataSource.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+        await fijarBypassLocal(this.dataSource);
         const rows = await this.repo
           .createQueryBuilder('p')
           .select('p.id', 'id')
@@ -466,7 +467,7 @@ export class MatchCenterService {
   async verificarYAutoPausar(partidoId: string): Promise<boolean> {
     return runInTransaction(
       async () => {
-        await this.dataSource.query(`SELECT set_config('app.current_tenant_id', '', true)`);
+        await fijarBypassLocal(this.dataSource);
         const partido = await this.repo.findOne({ where: { id: partidoId } });
         if (!partido || partido.centroEstado !== 'EN_VIVO') return false;
         if (this.calcularTranscurrido(partido) < this.objetivoSegundos(partido)) {

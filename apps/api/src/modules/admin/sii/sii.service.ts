@@ -1,10 +1,11 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import type { DocumentoTributarioAdmin, SiiTenantConfig } from '@fixtura/types';
 
 import { descifrarSecreto } from '../../../common/crypto/secret-box';
+import { runComoSistema } from '../../../common/rls/rls-context';
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { DocumentoTributario } from '../../competition/entities/documento-tributario.entity';
 import { Transaccion } from '../../competition/entities/transaccion.entity';
@@ -54,6 +55,8 @@ export class SIIService {
     @Inject(SII_PROVIDER)
     private readonly provider: SIIProvider,
     private readonly openFactura: OpenFacturaProvider,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -104,6 +107,23 @@ export class SIIService {
    * no crea uno nuevo (idempotente).
    */
   async crearYEmitirAsync(transaccionId: string): Promise<DocumentoTributario | null> {
+    // Llamado post-commit (sin request activo): el contexto RLS se abre
+    // acá, en transacción propia. La emisión se dispara recién DESPUÉS del
+    // commit del documento — emitir() abre otra tx y no lo vería antes.
+    const doc = await runComoSistema(this.dataSource, () =>
+      this.crearDocumentoInterno(transaccionId),
+    );
+    if (doc?.estado === 'PENDIENTE_EMISION') {
+      void this.emitir(doc.id).catch((err) =>
+        this.log.warn(`Emisión async falló: ${(err as Error).message}`),
+      );
+    }
+    return doc;
+  }
+
+  private async crearDocumentoInterno(
+    transaccionId: string,
+  ): Promise<DocumentoTributario | null> {
     const tx = await this.txRepo.findOne({
       where: { id: transaccionId },
       relations: { cobro: true },
@@ -118,12 +138,7 @@ export class SIIService {
       this.log.log(
         `Documento ya existe para tx=${tx.id} (estado=${existente.estado}); skip creación.`,
       );
-      // Si está en PENDIENTE_EMISION, igual disparamos retry async.
-      if (existente.estado === 'PENDIENTE_EMISION') {
-        void this.emitir(existente.id).catch((err) =>
-          this.log.warn(`Retry async falló: ${(err as Error).message}`),
-        );
-      }
+      // Si sigue PENDIENTE_EMISION, el wrapper re-dispara la emisión.
       return existente;
     }
 
@@ -138,12 +153,6 @@ export class SIIService {
     });
     const saved = await this.docRepo.save(doc);
     this.log.log(`Documento creado PENDIENTE_EMISION: ${saved.id} (tx=${tx.id})`);
-
-    // Disparar emisión sin await — no bloquea el flujo de pago.
-    void this.emitir(saved.id).catch((err) =>
-      this.log.warn(`Emisión inicial falló: ${(err as Error).message}`),
-    );
-
     return saved;
   }
 
@@ -154,6 +163,13 @@ export class SIIService {
    *   - Manualmente desde admin UI (botón "Reintentar")
    */
   async emitir(documentoId: string): Promise<DocumentoTributario> {
+    // Transacción propia por documento: el estado (EMITIDO/intentos/error)
+    // se persiste aunque el caller venga sin contexto (fire-and-forget) o
+    // su transacción muera después — una boleta emitida jamás se "des-emite".
+    return runComoSistema(this.dataSource, () => this.emitirInterno(documentoId));
+  }
+
+  private async emitirInterno(documentoId: string): Promise<DocumentoTributario> {
     const doc = await this.docRepo.findOne({
       where: { id: documentoId },
       relations: { cobro: true, transaccion: true },
