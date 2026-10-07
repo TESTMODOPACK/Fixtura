@@ -9,7 +9,10 @@ import { ActasAdminController } from './actas/actas-admin.controller';
 import { ActasAdminService } from './actas/actas-admin.service';
 import { AnalyticsAdminController } from './analytics/analytics-admin.controller';
 import { AnalyticsAdminService } from './analytics/analytics-admin.service';
-import { AjustesAdminController } from './ajustes/ajustes-admin.controller';
+import {
+  AjustesAdminController,
+  AjustesInvitacionPublicController,
+} from './ajustes/ajustes-admin.controller';
 import { AjustesAdminService } from './ajustes/ajustes-admin.service';
 import { CanchasAdminController } from './canchas/canchas-admin.controller';
 import { CanchasAdminService } from './canchas/canchas-admin.service';
@@ -189,6 +192,7 @@ import { EncuestasService } from './encuestas/encuestas.service';
     DashboardAdminController,
     AnalyticsAdminController,
     AjustesAdminController,
+    AjustesInvitacionPublicController,
     SponsorsAdminController,
     TarifasAdminController,
     CanchasAdminController,

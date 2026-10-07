@@ -541,146 +541,58 @@ function BrandingTab({ settings }: { settings: TenantSettings }): React.ReactEle
 }
 
 // ─── Tab: Dominio ────────────────────────────────────────────────────
-const DOMINIO_LABEL_MAP: Record<string, string> = {
-  customDomain: 'Dominio propio',
-};
-
 function DominioTab({ settings }: { settings: TenantSettings }): React.ReactElement {
-  const update = useUpdateTenantSettings();
-  const [saved, setSaved] = useState(false);
-  const bannerRef = useRef<HTMLDivElement>(null);
-
-  const Schema = z.object({
-    customDomain: z.union([
-      z.literal(''),
-      z
-        .string()
-        .min(4)
-        .max(255)
-        .regex(/^([a-z0-9-]+\.)+[a-z]{2,}$/i, 'Dominio inválido (ej. liganunoa.cl)'),
-    ]),
-  });
-  type Form = z.infer<typeof Schema>;
-
-  const form = useForm<Form>({
-    resolver: zodResolver(Schema),
-    defaultValues: { customDomain: settings.customDomain ?? '' },
-  });
-
-  useEffect(() => {
-    form.reset({ customDomain: settings.customDomain ?? '' });
-  }, [settings, form]);
-
-  const onSubmit = async (vals: Form): Promise<void> => {
-    await update.mutateAsync({ customDomain: vals.customDomain });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
-  };
-
-  const error = update.error as ApiError | undefined;
-  const dominioActual = form.watch('customDomain');
-
-  const fieldErrors = rhfErrorsToBanner(
-    form.formState.errors as Record<string, unknown>,
-    DOMINIO_LABEL_MAP,
-  );
+  // T28 — el dominio custom entra a la whitelist de CORS y a la resolución
+  // de tenant por host: lo configura solo el equipo LigaPlus (super admin),
+  // con verificación DNS. Acá queda la vista informativa.
+  const dominioActual = settings.customDomain;
 
   return (
-    <form
-      onSubmit={form.handleSubmit(
-        onSubmit,
-        makeRhfErrorHandler({
-          formName: 'ajustes-dominio',
-          labelMap: DOMINIO_LABEL_MAP,
-          bannerRef,
-        }),
-      )}
-      className="max-w-2xl space-y-5"
-    >
+    <div className="max-w-2xl space-y-5">
       <Card padding="roomy">
         <div className="flex items-center gap-2 mb-3">
           <Globe size={18} className="text-accent" />
           <CardLabel>Dominio propio</CardLabel>
         </div>
 
-        <p className="text-sm text-ink-mute font-serif italic mb-4">
-          Cuando registres un dominio (ej. <code className="font-mono">liganunoa.cl</code>) y
-          apuntes su A record a la IP del VPS, ingrésalo aquí. El portal público de la liga va a
-          servirse desde ese dominio automáticamente.
-        </p>
-
-        <FormErrorBanner
-          ref={bannerRef}
-          fieldErrors={fieldErrors}
-          apiError={error}
-          validationTitle="Revisa estos datos:"
-          apiTitle="No se pudo guardar el dominio"
-        />
-
-        <Input
-          label="Dominio propio (sin http://)"
-          placeholder="liganunoa.cl"
-          {...form.register('customDomain')}
-          error={form.formState.errors.customDomain?.message}
-        />
-
-        {dominioActual && (
-          <div className="mt-4 p-3 bg-paper rounded-card border border-line text-sm">
+        {dominioActual ? (
+          <div className="p-3 bg-paper rounded-card border border-line text-sm">
             <div className="text-[10px] uppercase tracking-wider text-ink-mute font-semibold mb-1">
-              → Tu portal va a vivir en
+              → Tu portal vive en
             </div>
             <div className="font-mono text-green-deep font-semibold">
               https://{dominioActual}/
             </div>
           </div>
-        )}
-
-        {!dominioActual && (
-          <div className="mt-4 p-3 bg-orange-700/5 border border-orange-700/20 rounded-card text-sm flex items-start gap-2">
+        ) : (
+          <div className="p-3 bg-orange-700/5 border border-orange-700/20 rounded-card text-sm flex items-start gap-2">
             <AlertTriangle size={16} className="text-orange-700 mt-0.5 flex-shrink-0" />
             <span className="text-orange-700">
-              Sin dominio configurado, el portal se accede por IP. Compatible para staging, no
-              recomendado para producción.
+              Esta liga todavía no tiene dominio propio: el portal se accede por el
+              dominio de LigaPlus.
             </span>
           </div>
         )}
 
-        <div className="mt-4">
-          {error && (
-            <div className="text-sm text-danger bg-danger/10 px-3 py-2 rounded-card mb-3">
-              {error.message}
-            </div>
-          )}
-          {saved && !error && (
-            <div className="text-sm text-green-bright bg-green-bright/10 px-3 py-2 rounded-card mb-3 flex items-center gap-2">
-              <CheckCircle2 size={14} /> Dominio actualizado
-            </div>
-          )}
-          <Button type="submit" variant="accent" loading={update.isPending}>
-            Guardar dominio
-          </Button>
-        </div>
+        <p className="text-sm text-ink-mute font-serif italic mt-4">
+          Por seguridad, el dominio personalizado lo configura el equipo LigaPlus:
+          escríbenos con el dominio que compraste y te guiamos con la verificación
+          DNS (un registro TXT que prueba que el dominio es tuyo) y el certificado
+          SSL. No tiene costo adicional.
+        </p>
       </Card>
 
       <Card padding="comfortable" variant="lime">
-        <CardLabel tone="mute">¿Cómo apunto un dominio?</CardLabel>
+        <CardLabel tone="mute">¿Cómo funciona?</CardLabel>
         <ol className="text-sm text-green-deep mt-3 space-y-2 list-decimal list-inside font-serif">
           <li>
             Compra el dominio (NIC Chile, Namecheap, GoDaddy — ~10k CLP/año en .cl).
           </li>
-          <li>
-            En la zona DNS del proveedor, crea un <code className="font-mono">A record</code>{' '}
-            apuntando a la IP del VPS.
-          </li>
-          <li>Espera 5-30 minutos para que propague.</li>
-          <li>Vuelve aquí y guarda el dominio.</li>
-          <li>
-            Genera certificado Let&apos;s Encrypt en el VPS (ver{' '}
-            <code className="font-mono">docs/DEPLOY_HOSTINGER.md</code> paso 7).
-          </li>
+          <li>Avísanos: te pasamos un registro TXT de verificación y la IP del A record.</li>
+          <li>Los cargas en la zona DNS de tu proveedor y nosotros activamos el dominio.</li>
         </ol>
       </Card>
-    </form>
+    </div>
   );
 }
 
@@ -1889,7 +1801,17 @@ function InvitarMiembroForm({ onDone }: { onDone: () => void }): React.ReactElem
   });
 
   const onSubmit = async (vals: Form): Promise<void> => {
-    await mutation.mutateAsync(vals);
+    const res = await mutation.mutateAsync(vals);
+    if (res.tipo === 'INVITACION_ENVIADA') {
+      // T25 — el email ya tiene cuenta: el rol queda pendiente hasta que el
+      // dueño acepte el link; todavía no aparece en la lista de miembros.
+      toastSuccess(
+        `Ese email ya tiene cuenta en LigaPlus: le enviamos una invitación a ${res.email}. ` +
+          'El rol se activará cuando la acepte.',
+      );
+    } else {
+      toastSuccess('Miembro invitado: le enviamos un email para crear su contraseña.');
+    }
     form.reset();
     onDone();
   };

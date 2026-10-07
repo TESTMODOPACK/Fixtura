@@ -15,6 +15,8 @@ import type {
 } from '@fixtura/types';
 import { validarPasswordSegura } from '@fixtura/domain';
 
+import { esc } from '../../../common/utils/esc';
+import { linkConToken } from '../../../common/utils/frontend-url';
 import { AuditLogService } from '../../audit';
 import { AuthService } from '../../auth/auth.service';
 import { MagicLink } from '../../auth/entities/magic-link.entity';
@@ -98,8 +100,7 @@ export class DelegadoInviteService {
       createdByUserId: actorUserId,
     });
 
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    const link = `${frontendUrl}/club/activar?token=${encodeURIComponent(token)}`;
+    const link = linkConToken('/club/activar', token);
 
     let emailEnviado = false;
     let whatsappEnviado = false;
@@ -301,6 +302,58 @@ export class DelegadoInviteService {
     return { ok: true, cuentaExistente };
   }
 
+  /**
+   * T24 — Offboarding del delegado: revoca su rol DELEGADO_EQUIPO sobre el
+   * club, invalida invitaciones pendientes de ese email y mata sus
+   * sesiones. La directiva del club (datos de contacto) no se toca.
+   */
+  async revocarAcceso(
+    clubId: string,
+    tenantId: string,
+    actorUserId: string | null,
+    emailInput: string,
+  ): Promise<{ revocado: boolean }> {
+    const club = await this.clubRepo.findOne({ where: { id: clubId, tenantId } });
+    if (!club) throw new NotFoundException(`Club ${clubId} no encontrado`);
+    const email = emailInput.trim().toLowerCase();
+
+    // Invitaciones pendientes de ese email para este club también mueren.
+    await this.magicLinkRepo
+      .createQueryBuilder()
+      .update()
+      .set({ usedAt: () => 'NOW()' })
+      .where('tenant_id = :tenantId', { tenantId })
+      .andWhere(`purpose = 'INVITE_USER'`)
+      .andWhere('used_at IS NULL')
+      .andWhere('email = :email', { email })
+      .andWhere(`metadata->>'clubId' = :clubId`, { clubId })
+      .execute();
+
+    const user = await this.users.findByEmail(email);
+    let userIds: string[] = [];
+    if (user) {
+      userIds = await this.users.revocarRolesDeScope({
+        tenantId,
+        scopeId: clubId,
+        roles: ['DELEGADO_EQUIPO'],
+        userId: user.id,
+      });
+      for (const uid of userIds) {
+        await this.auth.revocarRefreshTokens(uid);
+      }
+    }
+
+    await this.audit.record({
+      action: 'delegado.acceso_revocado',
+      tenantId,
+      userId: actorUserId,
+      entityType: 'Club',
+      entityId: clubId,
+      metadata: { email, teniaCuenta: !!user, rolesRevocados: userIds.length },
+    });
+    return { revocado: userIds.length > 0 };
+  }
+
   private htmlInvitacion(
     nombre: string,
     clubNombre: string,
@@ -309,9 +362,9 @@ export class DelegadoInviteService {
   ): string {
     return `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-        <h2>Hola ${nombre},</h2>
-        <p>Te invitaron como <strong>delegado de ${clubNombre}</strong> en
-        <strong>${ligaNombre}</strong> a través de LigaPlus.</p>
+        <h2>Hola ${esc(nombre)},</h2>
+        <p>Te invitaron como <strong>delegado de ${esc(clubNombre)}</strong> en
+        <strong>${esc(ligaNombre)}</strong> a través de LigaPlus.</p>
         <p>Vas a poder ver la información de tu club: plantel, resultados,
         tarjetas, sanciones y tus deudas — y pagar en línea.</p>
         <p style="margin:24px 0">

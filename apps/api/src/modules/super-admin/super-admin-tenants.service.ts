@@ -7,7 +7,12 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { fijarBypassLocal } from '../../common/rls/rls-context';
-import { DataSource, Repository } from 'typeorm';
+import {
+  normalizarCustomDomain,
+  registroTxtEsperado,
+  verificarTxtDominio,
+} from '../../common/utils/custom-domain';
+import { DataSource, Not, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import * as bcrypt from 'bcrypt';
 
@@ -223,7 +228,25 @@ export class SuperAdminTenantsService {
     if (!t) throw new NotFoundException(`Tenant ${id} no encontrado.`);
 
     if (input.nombre !== undefined) t.nombre = input.nombre;
-    if (input.customDomain !== undefined) t.customDomain = input.customDomain;
+    if (input.customDomain !== undefined) {
+      // T28 — hostname válido + no reservado + único + TXT de verificación
+      // en DNS. Quitar el dominio (null/'') no exige verificación.
+      const nuevo = normalizarCustomDomain(input.customDomain);
+      if (nuevo !== t.customDomain) {
+        if (nuevo) {
+          const conflicto = await this.tenantRepo.findOne({
+            where: { customDomain: nuevo, id: Not(id) },
+          });
+          if (conflicto) {
+            throw new ConflictException(
+              `El dominio "${nuevo}" ya está en uso por otra liga.`,
+            );
+          }
+          await verificarTxtDominio(nuevo, id);
+        }
+        t.customDomain = nuevo;
+      }
+    }
     if (input.planId !== undefined) {
       if (input.planId) {
         const plan = await this.planRepo.findOne({ where: { id: input.planId } });
@@ -242,6 +265,25 @@ export class SuperAdminTenantsService {
 
     await this.tenantRepo.save(t);
     return this.findOne(id);
+  }
+
+  /**
+   * T28 — registro TXT que el dueño del dominio debe crear antes de que
+   * el PATCH con customDomain pase la verificación DNS.
+   */
+  @Transactional()
+  async dominioVerificacion(
+    id: string,
+    dominio: string,
+  ): Promise<{ host: string; valor: string }> {
+    await fijarBypassLocal(this.ds);
+    const t = await this.tenantRepo.findOne({ where: { id } });
+    if (!t) throw new NotFoundException(`Tenant ${id} no encontrado.`);
+    const normalizado = normalizarCustomDomain(dominio);
+    if (!normalizado) {
+      throw new BadRequestException('Indica el dominio a verificar.');
+    }
+    return registroTxtEsperado(normalizado, id);
   }
 
   @Transactional()

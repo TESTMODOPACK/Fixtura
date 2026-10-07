@@ -16,6 +16,7 @@ import { NpsService } from './nps.service';
 export class NpsPublicoController {
   constructor(private readonly svc: NpsService) {}
 
+  /** Deprecado T27 (token en query queda en logs/SW): usar POST /info. */
   @Get('info')
   info(@Query('token') token?: string): Promise<EncuestaNpsInfo> {
     if (!token || token.length < 10) {
@@ -24,11 +25,24 @@ export class NpsPublicoController {
     return this.svc.infoPorToken(token);
   }
 
+  /** T27 — el token viaja en el body, nunca en la URL. */
+  @Post('info')
+  infoPost(@Body('token') token?: string): Promise<EncuestaNpsInfo> {
+    if (!token || typeof token !== 'string' || token.length < 10) {
+      throw new BadRequestException('Token faltante o inválido.');
+    }
+    return this.svc.infoPorToken(token);
+  }
+
   @Post('responder')
   responder(
-    @Query('token') token: string | undefined,
+    @Query('token') tokenQuery: string | undefined,
     @Body() body: unknown,
   ): Promise<{ ok: boolean; yaRespondida: boolean }> {
+    // T27 — token en el body; el de query queda como fallback deprecado
+    // para links/páginas viejas en vuelo.
+    const tokenBody = (body as { token?: unknown } | null)?.token;
+    const token = typeof tokenBody === 'string' ? tokenBody : tokenQuery;
     if (!token || token.length < 10) {
       throw new BadRequestException('Token faltante o inválido.');
     }

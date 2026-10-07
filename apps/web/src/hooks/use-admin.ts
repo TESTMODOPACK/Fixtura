@@ -9,6 +9,7 @@ import type {
   CreateSponsorRequest,
   DashboardAdmin,
   InvitarMiembroRequest,
+  InvitarMiembroResultado,
   JugadorGlobal,
   JugadorGlobalDetalle,
   MiembroAdmin,
@@ -1207,7 +1208,7 @@ export function useInvitarMiembro() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: InvitarMiembroRequest) =>
-      apiFetch<MiembroAdmin>('/admin/ajustes/miembros', {
+      apiFetch<InvitarMiembroResultado>('/admin/ajustes/miembros', {
         method: 'POST',
         body: input,
       }),
@@ -1225,6 +1226,33 @@ export function useRemoveMiembro() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'ajustes', 'miembros'] });
     },
+  });
+}
+
+// ─── Aceptación pública de invitación a miembro (T25, sin auth) ────────
+// El token viaja en el body (no en la URL del fetch) para que no quede en
+// logs ni en el cache del service worker.
+export function useInvitacionMiembroInfo(token: string | null) {
+  return useQuery({
+    queryKey: ['invitacion-miembro', token],
+    enabled: !!token,
+    retry: false,
+    queryFn: () =>
+      apiFetch<{ liga: string; rol: string; email: string }>(
+        '/public/ajustes/invitacion/info',
+        { method: 'POST', body: { token }, skipAuth: true },
+      ),
+  });
+}
+
+export function useAceptarInvitacionMiembro() {
+  return useMutation({
+    mutationFn: (token: string) =>
+      apiFetch<{ ok: boolean; liga: string }>('/public/ajustes/invitacion/aceptar', {
+        method: 'POST',
+        body: { token },
+        skipAuth: true,
+      }),
   });
 }
 
@@ -2008,6 +2036,16 @@ export function useUpdateTenantPlataforma(id: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['super-admin', 'tenants'] });
     },
+  });
+}
+
+/** T28 — TXT que debe existir en el DNS del dominio antes de guardarlo. */
+export function useDominioVerificacion(id: string) {
+  return useMutation({
+    mutationFn: (dominio: string) =>
+      apiFetch<{ host: string; valor: string }>(
+        `/super-admin/tenants/${id}/dominio-verificacion?dominio=${encodeURIComponent(dominio)}`,
+      ),
   });
 }
 

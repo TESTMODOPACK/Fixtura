@@ -2,9 +2,9 @@
 
 import { zodResolver } from '@/lib/zod-resolver';
 import { useMutation } from '@tanstack/react-query';
-import { X } from 'lucide-react';
+import { ChevronRight, Trophy, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -53,8 +53,18 @@ export function LoginModal({ open, onClose }: LoginModalProps): React.ReactEleme
     LABEL_MAP,
   );
 
+  // T25 — multi-liga: si el login no trae tenant por defecto, el backend
+  // devuelve las ligas del usuario y acá se elige una explícitamente.
+  const [seleccionLiga, setSeleccionLiga] = useState<{
+    tokens: AuthTokens;
+    opciones: Array<{ id: string; nombre: string }>;
+  } | null>(null);
+
   useEffect(() => {
-    if (!open) form.reset();
+    if (!open) {
+      form.reset();
+      setSeleccionLiga(null);
+    }
   }, [open, form]);
 
   useEffect(() => {
@@ -71,6 +81,40 @@ export function LoginModal({ open, onClose }: LoginModalProps): React.ReactEleme
       const tokens = await apiFetch<AuthTokens>('/auth/login', {
         method: 'POST',
         body: vals,
+        skipAuth: true,
+      });
+      if (tokens.tenantsDisponibles && tokens.tenantsDisponibles.length > 0) {
+        return { tokens, me: null };
+      }
+      const me = await apiFetch<UserContext>('/auth/me', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokens.accessToken}` },
+        skipAuth: true,
+      });
+      return { tokens, me };
+    },
+    onSuccess: ({ tokens, me }) => {
+      if (!me) {
+        setSeleccionLiga({
+          tokens,
+          opciones: tokens.tenantsDisponibles ?? [],
+        });
+        return;
+      }
+      setTokens(tokens);
+      onClose();
+      router.push(resolveLandingByRole(me));
+    },
+  });
+
+  const switchMutation = useMutation({
+    mutationFn: async (tenantId: string) => {
+      const base = seleccionLiga?.tokens;
+      if (!base) throw new Error('No hay sesión pendiente de selección.');
+      const tokens = await apiFetch<AuthTokens>('/auth/switch-tenant', {
+        method: 'POST',
+        body: { tenantId },
+        headers: { Authorization: `Bearer ${base.accessToken}` },
         skipAuth: true,
       });
       const me = await apiFetch<UserContext>('/auth/me', {
@@ -116,6 +160,40 @@ export function LoginModal({ open, onClose }: LoginModalProps): React.ReactEleme
           <X size={18} />
         </button>
 
+        {seleccionLiga ? (
+          <div>
+            <CardLabel>Acceso · Panel de liga</CardLabel>
+            <h2 className="font-display text-3xl text-green-deep tracking-display leading-none mb-2">
+              ELIGE TU LIGA
+            </h2>
+            <p className="font-serif italic text-ink-mute mb-6 text-sm">
+              Tu cuenta participa en más de una liga. ¿Cuál quieres gestionar?
+            </p>
+            {switchMutation.isError && (
+              <p className="text-sm text-danger font-semibold mb-3">
+                No se pudo entrar a esa liga. Intenta de nuevo.
+              </p>
+            )}
+            <div className="space-y-2">
+              {seleccionLiga.opciones.map((liga) => (
+                <button
+                  key={liga.id}
+                  type="button"
+                  disabled={switchMutation.isPending}
+                  onClick={() => switchMutation.mutate(liga.id)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-card border border-line bg-paper hover:bg-paper-dark hover:border-green-deep/40 text-left transition-colors disabled:opacity-60"
+                >
+                  <span className="flex items-center gap-2 font-semibold text-ink">
+                    <Trophy size={16} className="text-accent shrink-0" />
+                    {liga.nombre}
+                  </span>
+                  <ChevronRight size={16} className="text-ink-mute shrink-0" />
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
         <CardLabel>Acceso · Panel de liga</CardLabel>
         <h2 className="font-display text-3xl text-green-deep tracking-display leading-none mb-2">
           BIENVENIDO
@@ -173,6 +251,8 @@ export function LoginModal({ open, onClose }: LoginModalProps): React.ReactEleme
               ¿Olvidaste tu contraseña?
             </a>
           </div>
+          </>
+        )}
         </div>
       </div>
     </div>

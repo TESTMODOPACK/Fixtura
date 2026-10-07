@@ -55,19 +55,27 @@ export class ImpersonationService {
     if (!target) {
       throw new NotFoundException(`Usuario ${targetUserId} no encontrado.`);
     }
+    if (!target.isActive) {
+      throw new BadRequestException('El usuario está desactivado — no se puede impersonar.');
+    }
 
     const roles = await this.userRoles.find({ where: { userId: targetUserId } });
 
-    // Bloqueo de privesc: no impersonar a otro super admin.
+    // Bloqueo de privesc: no impersonar a otro super admin. Se mira sobre
+    // TODOS los roles (incluso revocados) a propósito — conservador.
     if (roles.some((r) => r.role === 'SUPER_ADMIN')) {
       throw new ForbiddenException(
         'No puedes impersonar a otro super admin (privilege escalation bloqueado).',
       );
     }
 
+    // T24 — el contexto emitido lleva SOLO roles activos: impersonar con un
+    // rol revocado resucitaba accesos que el offboarding ya había cortado.
+    const rolesActivos = roles.filter((r) => !r.revokedAt);
+
     // Tenant primario del target. Si tiene varios, tomamos el primero
     // con scope TENANT — el frontend luego puede pedir cambiar.
-    const tenantRole = roles.find(
+    const tenantRole = rolesActivos.find(
       (r) => r.scopeType === 'TENANT' && r.scopeId !== null,
     );
 
@@ -75,7 +83,7 @@ export class ImpersonationService {
       userId: target.id,
       email: target.email,
       tenantId: tenantRole?.scopeId ?? null,
-      roles: roles.map((r) => ({
+      roles: rolesActivos.map((r) => ({
         role: r.role,
         scope: r.scopeType,
         scopeId: r.scopeId,

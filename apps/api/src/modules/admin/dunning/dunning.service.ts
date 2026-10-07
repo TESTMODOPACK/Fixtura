@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 
 import type { EstadoDunning } from '@fixtura/types';
 
+import { esc } from '../../../common/utils/esc';
 import { EmailService } from '../../email/email.service';
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
@@ -300,6 +301,12 @@ export class DunningService {
     const montoStr = `$${cobro.monto.toLocaleString('es-CL')}`;
     const concepto = cobro.concepto;
     const equipoNombre = cobro.inscripcion?.club?.nombre ?? 'Equipo';
+    // T26 — el html escapa lo que origina el tenant; subject/text son planos.
+    const safe = {
+      concepto: esc(concepto),
+      equipo: esc(equipoNombre),
+      tenant: esc(tenantName),
+    };
 
     if (umbral >= 30) {
       // Aviso de suspensión
@@ -307,13 +314,13 @@ export class DunningService {
         subject: `[${tenantName}] SUSPENSIÓN: ${concepto} con ${dias} días de mora`,
         html: `
           <h2 style="color:#b91c1c">Aviso de suspensión</h2>
-          <p>Hola, equipo <strong>${equipoNombre}</strong>.</p>
-          <p>El cobro <strong>${concepto}</strong> por <strong>${montoStr}</strong>
+          <p>Hola, equipo <strong>${safe.equipo}</strong>.</p>
+          <p>El cobro <strong>${safe.concepto}</strong> por <strong>${montoStr}</strong>
           tiene <strong>${dias} días</strong> de mora. Según el reglamento de la
           liga, el equipo queda <strong>SUSPENDIDO</strong> hasta regularizar.</p>
           <p>Para regularizar y reactivar al equipo, ingresa al portal y completa
           el pago.</p>
-          <p>Saludos,<br/>${tenantName}</p>
+          <p>Saludos,<br/>${safe.tenant}</p>
         `,
         text: `[${tenantName}] SUSPENSIÓN: ${concepto} ${montoStr} con ${dias} días de mora. El equipo ${equipoNombre} queda suspendido hasta regularizar.`,
       };
@@ -323,12 +330,12 @@ export class DunningService {
         subject: `[${tenantName}] Mora: ${concepto} con ${dias} días vencido`,
         html: `
           <h2 style="color:#b45309">Aviso de mora</h2>
-          <p>Hola, equipo <strong>${equipoNombre}</strong>.</p>
-          <p>El cobro <strong>${concepto}</strong> por <strong>${montoStr}</strong>
+          <p>Hola, equipo <strong>${safe.equipo}</strong>.</p>
+          <p>El cobro <strong>${safe.concepto}</strong> por <strong>${montoStr}</strong>
           venció hace <strong>${dias} días</strong>.</p>
           <p>Por favor regulariza lo antes posible. Si pasas los 30 días el
           equipo va a quedar suspendido en el torneo.</p>
-          <p>Saludos,<br/>${tenantName}</p>
+          <p>Saludos,<br/>${safe.tenant}</p>
         `,
         text: `[${tenantName}] Aviso de mora: ${concepto} ${montoStr} con ${dias} días vencido. Regulariza antes de los 30 días.`,
       };
@@ -338,12 +345,12 @@ export class DunningService {
       subject: `[${tenantName}] Recordatorio: ${concepto} venció`,
       html: `
         <h2 style="color:#15803d">Recordatorio amistoso</h2>
-        <p>Hola, equipo <strong>${equipoNombre}</strong>.</p>
-        <p>Queríamos avisarte que el cobro <strong>${concepto}</strong> por
+        <p>Hola, equipo <strong>${safe.equipo}</strong>.</p>
+        <p>Queríamos avisarte que el cobro <strong>${safe.concepto}</strong> por
         <strong>${montoStr}</strong> venció hace ${dias} día${dias === 1 ? '' : 's'}.</p>
         <p>Si ya pagaste, ignora este aviso. Si todavía no, puedes regularizar
         cuando puedas.</p>
-        <p>Saludos,<br/>${tenantName}</p>
+        <p>Saludos,<br/>${safe.tenant}</p>
       `,
       text: `[${tenantName}] Recordatorio: ${concepto} ${montoStr} venció hace ${dias} día(s).`,
     };

@@ -1,7 +1,7 @@
 'use client';
 
 import { AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
 import type { ActivarPersonalInfo } from '@fixtura/types';
@@ -13,6 +13,7 @@ import { LigaPlusLockup } from '@/components/ui/logo';
 import { PasswordInput } from '@/components/ui/password-input';
 import { PasswordStrengthMeter } from '@/components/ui/password-strength';
 import { API_URL } from '@/lib/api';
+import { useTokenDeUrl } from '@/lib/token-url';
 
 /**
  * Activación de cuenta del personal (árbitros / planilleros). Valida el
@@ -26,9 +27,9 @@ type Estado =
   | { tipo: 'error'; mensaje: string };
 
 function ActivarContent(): React.ReactElement {
-  const sp = useSearchParams();
   const router = useRouter();
-  const token = sp.get('token');
+  // T27 — token desde el fragment (#token=…), con fallback a ?token= viejo.
+  const { token, listo } = useTokenDeUrl();
   const [estado, setEstado] = useState<Estado>({ tipo: 'cargando' });
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
@@ -36,11 +37,17 @@ function ActivarContent(): React.ReactElement {
   const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
+    if (!listo) return;
     if (!token) {
       setEstado({ tipo: 'error', mensaje: 'Falta el token en la URL.' });
       return;
     }
-    fetch(`${API_URL}/public/personal/activacion-info?token=${encodeURIComponent(token)}`)
+    // T27 — el token va en el body, no en la query (logs/SW/Referer).
+    fetch(`${API_URL}/public/personal/activacion-info`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
       .then(async (r) => {
         if (!r.ok) {
           const body = await r.json().catch(() => ({ message: 'Error' }));
@@ -50,7 +57,7 @@ function ActivarContent(): React.ReactElement {
       })
       .then((info) => setEstado({ tipo: 'form', info }))
       .catch((err) => setEstado({ tipo: 'error', mensaje: (err as Error).message }));
-  }, [token]);
+  }, [token, listo]);
 
   const onSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();

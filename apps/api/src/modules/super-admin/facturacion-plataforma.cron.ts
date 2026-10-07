@@ -5,6 +5,8 @@ import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 
 import { bestEffort } from '../../common/db/best-effort';
 import { fijarBypassLocal } from '../../common/rls/rls-context';
+import { esc } from '../../common/utils/esc';
+import { frontendBase } from '../../common/utils/frontend-url';
 import { TenantCronRunner } from '../../common/rls/tenant-cron-runner';
 import { EmailService } from '../email/email.service';
 import { Tenant } from '../tenants/entities/tenant.entity';
@@ -182,13 +184,12 @@ export class FacturacionPlataformaCron {
       urgencia = 'urgente';
     }
 
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    const linkPago = `${frontendUrl}/admin/mi-suscripcion`;
+    const linkPago = `${frontendBase()}/admin/mi-suscripcion`;
 
     const html = `
       <h2 style="color:#15803d">Recordatorio de pago</h2>
       <p>Hola,</p>
-      <p>Tu factura del plan <strong>${planNombre}</strong> correspondiente al
+      <p>Tu factura del plan <strong>${esc(planNombre)}</strong> correspondiente al
       período <strong>${periodo}</strong> está vencida hace
       <strong>${dias} día${dias === 1 ? '' : 's'}</strong>.</p>
       <p>Monto: <strong>$${monto} CLP</strong></p>

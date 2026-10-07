@@ -4,7 +4,6 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { bestEffort } from '../../../common/db/best-effort';
@@ -35,6 +34,8 @@ import { PreguntaEncuesta } from '../../competition/entities/pregunta-encuesta.e
 import { RespuestaEncuesta } from '../../competition/entities/respuesta-encuesta.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
+import { esc } from '../../../common/utils/esc';
+import { linkConToken } from '../../../common/utils/frontend-url';
 import { EmailService } from '../../email/email.service';
 
 interface EncuestaTokenPayload {
@@ -69,7 +70,6 @@ export class EncuestasService {
     private readonly dataSource: DataSource,
     private readonly jwt: JwtService,
     private readonly email: EmailService,
-    private readonly config: ConfigService,
   ) {}
 
   // ── Token + RLS ──────────────────────────────────────────────────────
@@ -383,10 +383,7 @@ export class EncuestasService {
     encuesta: string,
     token: string,
   ): Promise<void> {
-    const frontUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001';
-    const link = `${frontUrl}/nps/responder?token=${token}`;
-    const esc = (s: string): string =>
-      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const link = linkConToken('/nps/responder', token);
     const safe = { liga: esc(liga), club: esc(club), torneo: esc(torneo), encuesta: esc(encuesta) };
     const subject = `${encuesta} — ${torneo}`;
     const html = `

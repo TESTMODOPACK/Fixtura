@@ -2,7 +2,6 @@
 
 import { AlertTriangle, CheckCircle2, KeyRound, Lock } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 
 import { validarPasswordSegura } from '@fixtura/domain';
@@ -12,21 +11,27 @@ import { Card, CardLabel } from '@/components/ui/card';
 import { PasswordInput } from '@/components/ui/password-input';
 import { PasswordStrengthMeter } from '@/components/ui/password-strength';
 import { API_URL } from '@/lib/api';
+import { useTokenDeUrl } from '@/lib/token-url';
 
 /**
- * Página de reset de contraseña. Recibe ?token=... y permite al usuario
- * crear una nueva contraseña. Después de aplicar el reset, todos los
- * refresh tokens del user quedan invalidados (forzando re-login en
+ * Página de reset de contraseña. Recibe el token en el fragment
+ * (#token=…, T27; con fallback a ?token= para links viejos) y permite al
+ * usuario crear una nueva contraseña. Después de aplicar el reset, todos
+ * los refresh tokens del user quedan invalidados (forzando re-login en
  * todos los dispositivos).
  */
 function ResetContent(): React.ReactElement {
-  const sp = useSearchParams();
-  const token = sp.get('token') ?? '';
+  const { token: tokenUrl, listo } = useTokenDeUrl();
+  const token = tokenUrl ?? '';
   const [pwd, setPwd] = useState('');
   const [pwd2, setPwd2] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [exito, setExito] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (!listo) {
+    return <div className="max-w-md w-full" />;
+  }
 
   if (!token) {
     return (

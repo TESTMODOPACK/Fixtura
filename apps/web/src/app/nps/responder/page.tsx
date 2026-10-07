@@ -2,7 +2,6 @@
 
 import { AlertTriangle, CheckCircle2, Star } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { EncuestaPublica, PreguntaEncuesta, RespuestaItem } from '@fixtura/types';
@@ -13,6 +12,7 @@ import { LigaPlusLockup } from '@/components/ui/logo';
 import { apiFetch, ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { toastWarning } from '@/lib/toast';
+import { useTokenDeUrl } from '@/lib/token-url';
 
 type Estado =
   | { kind: 'loading' }
@@ -67,8 +67,8 @@ function aRespuestaItem(pregunta: PreguntaEncuesta, valor: ValorRespuesta): Resp
 }
 
 function ResponderContent(): React.ReactElement {
-  const params = useSearchParams();
-  const token = params.get('token');
+  // T27 — token desde el fragment (#token=…), con fallback a ?token= viejo.
+  const { token, listo } = useTokenDeUrl();
   const [estado, setEstado] = useState<Estado>({ kind: 'loading' });
 
   const [valores, setValores] = useState<ValoresMap>({});
@@ -77,11 +77,17 @@ function ResponderContent(): React.ReactElement {
   const bannerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (!listo) return;
     if (!token) {
       setEstado({ kind: 'error', mensaje: 'El enlace no tiene un token válido.' });
       return;
     }
-    apiFetch<EncuestaPublica>(`/public/encuestas/info?token=${encodeURIComponent(token)}`)
+    // T27 — token en el body, no en la query.
+    apiFetch<EncuestaPublica>('/public/encuestas/info', {
+      method: 'POST',
+      body: { token },
+      skipAuth: true,
+    })
       .then((info) => {
         setEstado(info.yaRespondida ? { kind: 'ya' } : { kind: 'form', info });
       })
@@ -89,7 +95,7 @@ function ResponderContent(): React.ReactElement {
         const apiErr = err as ApiError;
         setEstado({ kind: 'error', mensaje: apiErr.message ?? 'No pudimos abrir la encuesta.' });
       });
-  }, [token]);
+  }, [token, listo]);
 
   const preguntas = useMemo(
     () => (estado.kind === 'form' ? [...estado.info.preguntas].sort((a, b) => a.orden - b.orden) : []),
@@ -128,10 +134,12 @@ function ResponderContent(): React.ReactElement {
       .map((p) => aRespuestaItem(p, valores[p.id] ?? null))
       .filter((r): r is RespuestaItem => r !== null);
 
-    apiFetch<{ ok: boolean; yaRespondida: boolean }>(
-      `/public/encuestas/responder?token=${encodeURIComponent(token)}`,
-      { method: 'POST', body: { respuestas } },
-    )
+    // T27 — token dentro del body, no en la query.
+    apiFetch<{ ok: boolean; yaRespondida: boolean }>('/public/encuestas/responder', {
+      method: 'POST',
+      body: { token, respuestas },
+      skipAuth: true,
+    })
       .then((res) => {
         setEstado(res.yaRespondida ? { kind: 'ya' } : { kind: 'gracias' });
       })

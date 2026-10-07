@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
+import { esc } from '../../../common/utils/esc';
+import { linkConToken } from '../../../common/utils/frontend-url';
 import { Designacion } from '../../competition/entities/designacion.entity';
 import { EmailService } from '../../email/email.service';
 
@@ -40,7 +41,6 @@ export class DesignacionesEmailService {
   constructor(
     private readonly email: EmailService,
     private readonly jwt: JwtService,
-    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -97,10 +97,8 @@ export class DesignacionesEmailService {
       tenantId: input.designacion.tenantId,
     });
 
-    const frontUrl =
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001';
-    const linkConfirmar = `${frontUrl}/designaciones/respuesta?token=${tokenConfirmar}`;
-    const linkRechazar = `${frontUrl}/designaciones/respuesta?token=${tokenRechazar}`;
+    const linkConfirmar = linkConToken('/designaciones/respuesta', tokenConfirmar);
+    const linkRechazar = linkConToken('/designaciones/respuesta', tokenRechazar);
 
     const rol = ROL_LABEL[input.designacion.rolAsignado] ?? input.designacion.rolAsignado;
     const cuandoStr = input.fechaHora
@@ -119,11 +117,6 @@ export class DesignacionesEmailService {
         ? `$${input.designacion.montoPago.toLocaleString('es-CL')} CLP`
         : 'Por confirmar';
 
-    // Escape HTML básico para los valores que vienen de la DB (nombre del
-    // equipo, cancha, etc.) — defensa contra XSS en plantilla aunque el
-    // contenido sea inerte para la mayoría de clientes de email.
-    const esc = (s: string): string =>
-      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const safe = {
       nombre: esc(input.personalNombre),
       rol: esc(rol),
@@ -140,7 +133,7 @@ export class DesignacionesEmailService {
     const html = `
       <!DOCTYPE html>
       <html lang="es">
-      <head><meta charset="utf-8"><title>${subject}</title></head>
+      <head><meta charset="utf-8"><title>${esc(subject)}</title></head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f1ece2; padding:24px; margin:0;">
         <div style="max-width:560px; margin:0 auto; background:white; border-radius:8px; padding:32px; border:1px solid #e5e0d3;">
           <div style="font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#0F2A1F; font-weight:bold; margin-bottom:8px;">→ ${safe.torneo.toUpperCase()}</div>

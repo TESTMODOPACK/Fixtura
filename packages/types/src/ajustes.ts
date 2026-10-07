@@ -241,6 +241,21 @@ export const ROLES_ADMIN_INVITABLES = [
 ] as const;
 export type RolAdminInvitable = (typeof ROLES_ADMIN_INVITABLES)[number];
 
+/**
+ * T25 (M-9) — resultado del invitar: si el email ya tiene cuenta, el rol NO
+ * se asigna directo — queda una invitación que el dueño acepta por link, y
+ * no se devuelven datos de esa cuenta ajena.
+ */
+export const InvitarMiembroResultadoSchema = z.union([
+  z.object({ tipo: z.literal('ASIGNADO'), miembro: MiembroAdminSchema }),
+  z.object({
+    tipo: z.literal('INVITACION_ENVIADA'),
+    email: z.string(),
+    rol: z.enum(ROLES_ADMIN_INVITABLES),
+  }),
+]);
+export type InvitarMiembroResultado = z.infer<typeof InvitarMiembroResultadoSchema>;
+
 export const InvitarMiembroSchema = z.object({
   email: z.string().email().max(150),
   nombre: z.string().min(2).max(100),

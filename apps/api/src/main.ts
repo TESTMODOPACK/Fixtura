@@ -244,10 +244,9 @@ async function bootstrap(): Promise<void> {
     const rows = (await dataSource.query(
       `SELECT custom_domain FROM tenants WHERE is_active = true AND custom_domain IS NOT NULL`,
     )) as Array<{ custom_domain: string }>;
-    tenantOrigins = rows.flatMap((r) => [
-      `https://${r.custom_domain}`,
-      `http://${r.custom_domain}`,
-    ]);
+    // T28 — dominios custom SOLO https: un origin http en la whitelist
+    // dejaba pasar credenciales desde una página degradada/MITM.
+    tenantOrigins = rows.map((r) => `https://${r.custom_domain}`);
   } catch (err) {
     logger.warn(`Cargando tenant origins: ${(err as Error).message}`);
   }

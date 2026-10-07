@@ -17,6 +17,8 @@ import type {
 } from '@fixtura/types';
 import { validarPasswordSegura } from '@fixtura/domain';
 
+import { esc } from '../../../common/utils/esc';
+import { linkConToken } from '../../../common/utils/frontend-url';
 import { AuditLogService } from '../../audit';
 import { AuthService } from '../../auth/auth.service';
 import { MagicLink } from '../../auth/entities/magic-link.entity';
@@ -110,8 +112,7 @@ export class JugadorInviteService {
       createdByUserId: actorUserId,
     });
 
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    const link = `${frontendUrl}/jugador/activar?token=${encodeURIComponent(token)}`;
+    const link = linkConToken('/jugador/activar', token);
 
     // El email siempre se envía (es el identificador de login).
     const emailEnviado = await this.email.send({
@@ -185,7 +186,6 @@ export class JugadorInviteService {
     const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
     const ligaNombre = tenant?.nombre ?? 'tu liga';
     const clubNombre = jugadores[0]?.club?.nombre ?? 'tu club';
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
 
     for (const j of jugadores) {
       if (cuentaActiva.has(j.id)) {
@@ -212,7 +212,7 @@ export class JugadorInviteService {
           ttlMinutos: TTL_INVITACION_MIN,
           createdByUserId: actorUserId,
         });
-        const link = `${frontendUrl}/jugador/activar?token=${encodeURIComponent(token)}`;
+        const link = linkConToken('/jugador/activar', token);
         const enviado = await this.email.send({
           to: email,
           subject: `Tu acceso de jugador — ${clubNombre} (${ligaNombre})`,
@@ -232,6 +232,51 @@ export class JugadorInviteService {
   }
 
   /** Estado de la cuenta del jugador (para la ficha del plantel). */
+  /**
+   * T24 — Offboarding: corta el acceso del jugador al portal. Revoca su rol
+   * JUGADOR (scope PERSONAL), invalida invitaciones pendientes y mata las
+   * sesiones del usuario. La ficha deportiva NO se toca (sigue en planillas
+   * y estadísticas).
+   */
+  async revocarAcceso(
+    jugadorId: string,
+    tenantId: string,
+    actorUserId: string | null,
+  ): Promise<{ revocado: boolean }> {
+    const jugador = await this.jugadorRepo.findOne({ where: { id: jugadorId, tenantId } });
+    if (!jugador) throw new NotFoundException(`Jugador ${jugadorId} no encontrado`);
+
+    // Invitaciones pendientes (cuenta aún no creada) también mueren.
+    await this.magicLinkRepo
+      .createQueryBuilder()
+      .update()
+      .set({ usedAt: () => 'NOW()' })
+      .where('tenant_id = :tenantId', { tenantId })
+      .andWhere(`purpose = 'INVITE_USER'`)
+      .andWhere('used_at IS NULL')
+      .andWhere(`metadata->>'jugadorId' = :jugadorId`, { jugadorId })
+      .execute();
+
+    const userIds = await this.users.revocarRolesDeScope({
+      tenantId,
+      scopeId: jugadorId,
+      roles: ['JUGADOR'],
+    });
+    for (const uid of userIds) {
+      await this.auth.revocarRefreshTokens(uid);
+    }
+
+    await this.audit.record({
+      action: 'jugador.acceso_revocado',
+      tenantId,
+      userId: actorUserId,
+      entityType: 'Jugador',
+      entityId: jugadorId,
+      metadata: { usuariosAfectados: userIds.length },
+    });
+    return { revocado: userIds.length > 0 };
+  }
+
   async estadoCuenta(jugadorId: string, tenantId: string): Promise<JugadorCuenta> {
     await this.jugadorRepo.findOneOrFail({ where: { id: jugadorId, tenantId } });
 
@@ -412,9 +457,9 @@ export class JugadorInviteService {
   ): string {
     return `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-        <h2>Hola ${nombre},</h2>
-        <p>Te invitaron a tu perfil de <strong>jugador de ${clubNombre}</strong> en
-        <strong>${ligaNombre}</strong> a través de LigaPlus.</p>
+        <h2>Hola ${esc(nombre)},</h2>
+        <p>Te invitaron a tu perfil de <strong>jugador de ${esc(clubNombre)}</strong> en
+        <strong>${esc(ligaNombre)}</strong> a través de LigaPlus.</p>
         <p>Vas a poder ver tus estadísticas (goles, tarjetas, MVP), tus próximos
         partidos y el estado de tus sanciones.</p>
         <p style="margin:24px 0">

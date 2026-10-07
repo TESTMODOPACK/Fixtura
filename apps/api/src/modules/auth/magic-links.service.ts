@@ -1,9 +1,24 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'crypto';
-import { IsNull, LessThan, MoreThan, Repository } from 'typeorm';
+import { In, IsNull, LessThan, MoreThan, Repository } from 'typeorm';
 
 import { MagicLink, MagicLinkPurpose } from './entities/magic-link.entity';
+
+/**
+ * T26 — cuota de invitaciones por tenant (ventana móvil de 24 h). Frena el
+ * abuso de un admin comprometido como cañón de spam; el límite por defecto
+ * tolera el onboarding masivo real (plantillas completas de una liga).
+ */
+const PURPOSES_CON_CUOTA: MagicLinkPurpose[] = ['INVITE_USER', 'PERSONAL_ONBOARDING'];
+const CUOTA_DEFAULT_24H = 500;
 
 /**
  * Servicio centralizado de magic links. Usado por:
@@ -42,6 +57,10 @@ export class MagicLinksService {
     ttlMinutos: number;
     createdByUserId?: string | null;
   }): Promise<{ id: string; token: string }> {
+    if (args.tenantId && PURPOSES_CON_CUOTA.includes(args.purpose)) {
+      await this.verificarCuotaTenant(args.tenantId);
+    }
+
     // Token: 32 bytes random URL-safe → 43 caracteres base64url.
     const token = randomBytes(32).toString('base64url');
     const tokenHash = this.hash(token);
@@ -141,6 +160,30 @@ export class MagicLinksService {
     const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const r = await this.repo.delete({ expiresAt: LessThan(cutoff) });
     return { deleted: r.affected ?? 0 };
+  }
+
+  private async verificarCuotaTenant(tenantId: string): Promise<void> {
+    const limite = Number(
+      process.env.INVITACIONES_TENANT_DIA_MAX ?? CUOTA_DEFAULT_24H,
+    );
+    if (!Number.isFinite(limite) || limite <= 0) return;
+    const desde = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const enviadas = await this.repo.count({
+      where: {
+        tenantId,
+        purpose: In(PURPOSES_CON_CUOTA),
+        createdAt: MoreThan(desde),
+      },
+    });
+    if (enviadas >= limite) {
+      this.log.warn(
+        `Cuota de invitaciones alcanzada tenant=${tenantId} (${enviadas}/${limite} en 24h)`,
+      );
+      throw new HttpException(
+        `La liga alcanzó el máximo de ${limite} invitaciones en 24 horas. Intenta más tarde.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
   }
 
   private hash(token: string): string {

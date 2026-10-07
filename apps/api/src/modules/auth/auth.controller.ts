@@ -8,12 +8,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import type { Request, Response } from 'express';
 
 import type { AuthTokens, UserContext } from '@fixtura/types';
 
 import { Audited } from '../audit';
+import { NoImpersonation } from '../impersonation';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { AuthService } from './auth.service';
@@ -53,6 +54,11 @@ function clearRefreshCookie(res: Response): void {
 
 function readRefreshCookie(req: Request): string | undefined {
   return (req.cookies as Record<string, string> | undefined)?.[REFRESH_COOKIE];
+}
+
+class SwitchTenantDto {
+  @IsUUID()
+  tenantId!: string;
 }
 
 class ForgotPasswordDto {
@@ -99,6 +105,9 @@ export class AuthController {
     return {
       accessToken: tokens.accessToken,
       accessTokenExpiresIn: tokens.accessTokenExpiresIn,
+      ...(tokens.tenantsDisponibles
+        ? { tenantsDisponibles: tokens.tenantsDisponibles }
+        : {}),
     };
   }
 
@@ -119,11 +128,17 @@ export class AuthController {
     if (!fromCookie) {
       throw new UnauthorizedException('No hay sesión activa.');
     }
-    const tokens = await this.auth.refresh(fromCookie);
+    const tokens = await this.auth.refresh(fromCookie, {
+      userAgent: req.headers['user-agent'],
+      ipAddress: req.ip,
+    });
     setRefreshCookie(res, tokens.refreshToken!);
     return {
       accessToken: tokens.accessToken,
       accessTokenExpiresIn: tokens.accessTokenExpiresIn,
+      ...(tokens.tenantsDisponibles
+        ? { tenantsDisponibles: tokens.tenantsDisponibles }
+        : {}),
     };
   }
 
@@ -143,6 +158,34 @@ export class AuthController {
   @HttpCode(200)
   me(@CurrentUser() user: UserContext): UserContext {
     return user;
+  }
+
+  /**
+   * T25 — Cambio explícito de liga (usuarios multi-tenant). Rota también el
+   * refresh: la sesión anterior muere con el cambio. Bloqueado durante una
+   * impersonación: acuñaría tokens REALES (con refresh) del target.
+   */
+  @Post('switch-tenant')
+  @HttpCode(200)
+  @NoImpersonation()
+  @Audited('auth.switch_tenant')
+  async switchTenant(
+    @CurrentUser() user: UserContext,
+    @Body() dto: SwitchTenantDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthTokens> {
+    const anterior = readRefreshCookie(req);
+    if (anterior) await this.auth.logout(anterior);
+    const tokens = await this.auth.switchTenant(user.userId, dto.tenantId, {
+      userAgent: req.headers['user-agent'],
+      ipAddress: req.ip,
+    });
+    setRefreshCookie(res, tokens.refreshToken!);
+    return {
+      accessToken: tokens.accessToken,
+      accessTokenExpiresIn: tokens.accessTokenExpiresIn,
+    };
   }
 
   // ── Sprint 11: Recuperación de contraseña (RF-03) ──────────────────

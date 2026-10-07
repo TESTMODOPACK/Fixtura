@@ -122,6 +122,20 @@ export class JugadorCuentaAdminController {
     return this.invite.estadoCuenta(jugadorId, ensureTenant(user));
   }
 
+  /** T24 — offboarding: corta el acceso al portal sin tocar la ficha. */
+  @Post(':jugadorId/revocar-acceso')
+  @Audited({
+    action: 'jugador.acceso_revocado',
+    entityType: 'Jugador',
+    entityIdFrom: 'params.jugadorId',
+  })
+  revocarAcceso(
+    @CurrentUser() user: UserContext,
+    @Param('jugadorId', ParseUUIDPipe) jugadorId: string,
+  ): Promise<{ revocado: boolean }> {
+    return this.invite.revocarAcceso(jugadorId, ensureTenant(user), user.userId);
+  }
+
   /**
    * Invitación masiva: todo el plantel activo del club (todas las categorías),
    * solo por email. clubId por parámetro; el scope de tenant lo valida el
@@ -146,9 +160,19 @@ export class JugadorCuentaAdminController {
 export class JugadorPublicController {
   constructor(private readonly invite: JugadorInviteService) {}
 
+  /** Deprecado T27 (token en query queda en logs/SW): usar POST /info. */
   @Get('activar')
   info(@Query('token') token?: string): Promise<ActivarJugadorInfo> {
     if (!token) throw new BadRequestException('Falta el token.');
+    return this.invite.infoActivacion(token);
+  }
+
+  /** T27 — datos para la pantalla de activación; token en el body. */
+  @Post('info')
+  infoPost(@Body('token') token?: string): Promise<ActivarJugadorInfo> {
+    if (!token || typeof token !== 'string') {
+      throw new BadRequestException('Falta el token.');
+    }
     return this.invite.infoActivacion(token);
   }
 

@@ -2,13 +2,13 @@
 
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { LigaPlusLockup } from '@/components/ui/logo';
 import { apiFetch, ApiError } from '@/lib/api';
+import { useTokenDeUrl } from '@/lib/token-url';
 
 interface RespuestaResult {
   ok: boolean;
@@ -16,20 +16,24 @@ interface RespuestaResult {
 }
 
 function RespuestaContent(): React.ReactElement {
-  const params = useSearchParams();
-  const token = params.get('token');
+  // T27 — token desde el fragment (#token=…), con fallback a ?token= viejo.
+  const { token, listo } = useTokenDeUrl();
   const [state, setState] = useState<
     { kind: 'loading' } | { kind: 'ok'; estado: string } | { kind: 'error'; mensaje: string }
   >({ kind: 'loading' });
 
   useEffect(() => {
+    if (!listo) return;
     if (!token) {
       setState({ kind: 'error', mensaje: 'El enlace no tiene un token válido.' });
       return;
     }
-    apiFetch<RespuestaResult>(
-      `/public/designaciones/respuesta?token=${encodeURIComponent(token)}`,
-    )
+    // T27 — POST con el token en el body (antes era un GET que escribía).
+    apiFetch<RespuestaResult>('/public/designaciones/respuesta', {
+      method: 'POST',
+      body: { token },
+      skipAuth: true,
+    })
       .then((res) => {
         if (!res.ok) {
           setState({
@@ -47,7 +51,7 @@ function RespuestaContent(): React.ReactElement {
           mensaje: apiErr.message ?? 'Error al procesar el enlace.',
         });
       });
-  }, [token]);
+  }, [token, listo]);
 
   return (
     <div className="min-h-screen bg-paper flex items-center justify-center px-4 py-12">

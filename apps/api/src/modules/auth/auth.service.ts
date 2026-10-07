@@ -5,11 +5,12 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { IsNull, MoreThan, Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 
 import type { AuthTokens, UserContext } from '@fixtura/types';
 import { validarPasswordSegura } from '@fixtura/domain';
 
+import { linkConToken } from '../../common/utils/frontend-url';
 import { EmailService } from '../email/email.service';
 import { UsersService } from '../users/users.service';
 import { MagicLinksService } from './magic-links.service';
@@ -56,8 +57,7 @@ export class AuthService {
       ttlMinutos: AuthService.TTL_RESET_PASSWORD_MIN,
     });
 
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    const link = `${frontendUrl}/reset-password?token=${encodeURIComponent(token)}`;
+    const link = linkConToken('/reset-password', token);
 
     await this.email.send({
       to: normalizado,
@@ -166,7 +166,7 @@ export class AuthService {
         ? (tenantRoles[0]!.scopeId ?? null)
         : await this.users.getSoleTenantId(user.id);
 
-    return this.issueTokens(
+    const tokens = await this.issueTokens(
       {
         userId: user.id,
         email: user.email,
@@ -176,23 +176,87 @@ export class AuthService {
       },
       meta,
     );
+    // T25 — multi-liga sin tenant por defecto: devolver las opciones para
+    // que el frontend elija vía /auth/switch-tenant (antes el usuario
+    // quedaba con tenantId=null y RLS lo dejaba viendo 0 filas).
+    if (!defaultTenantId) {
+      const tenants = await this.users.getTenantsDisponibles(user.id);
+      if (tenants.length > 0) tokens.tenantsDisponibles = tenants;
+    }
+    return tokens;
   }
 
-  async refresh(refreshToken: string): Promise<AuthTokens> {
+  /**
+   * T25 — Cambio explícito de liga para usuarios multi-tenant. Valida la
+   * membresía activa y emite un par de tokens nuevo acotado a ese tenant.
+   */
+  async switchTenant(
+    userId: string,
+    tenantId: string,
+    meta: { userAgent?: string; ipAddress?: string } = {},
+  ): Promise<AuthTokens> {
+    const user = await this.users.findByIdOrFail(userId);
+    if (!user.isActive) {
+      throw new UnauthorizedException('Usuario desactivado');
+    }
+    const disponibles = await this.users.getTenantsDisponibles(userId);
+    if (!disponibles.some((t) => t.id === tenantId)) {
+      throw new UnauthorizedException('No tienes acceso a esa liga.');
+    }
+    const roles = await this.users.getActiveRoles(userId);
+    return this.issueTokens(
+      { userId, email: user.email, tenantId, roles, impersonatorId: null },
+      meta,
+    );
+  }
+
+  async refresh(
+    refreshToken: string,
+    meta: { userAgent?: string; ipAddress?: string } = {},
+  ): Promise<AuthTokens> {
     const tokenHash = sha256(refreshToken);
-    const row = await this.refreshRepo.findOne({
-      where: {
-        tokenHash,
-        revokedAt: IsNull(),
-        expiresAt: MoreThan(new Date()),
-      },
-    });
+    // Lookup SIN filtrar revocado/expirado: distinguir las causas es lo que
+    // habilita la detección de reuso.
+    const row = await this.refreshRepo.findOne({ where: { tokenHash } });
     if (!row) {
       throw new UnauthorizedException('Refresh token inválido o expirado');
     }
-    // Rotación: revocamos el viejo y emitimos uno nuevo.
-    await this.refreshRepo.update({ id: row.id }, { revokedAt: new Date() });
+
+    // REUSO: un token ya rotado que vuelve a presentarse es la firma de un
+    // robo (el ladrón o la víctima llegan segundos tarde con la copia
+    // vieja). Respuesta: revocar TODAS las sesiones del usuario.
+    if (row.revokedAt) {
+      await this.revocarRefreshTokens(row.userId);
+      this.log.warn(
+        `[auth] REUSO de refresh token detectado user=${row.userId} ip=${meta.ipAddress ?? '-'} — todas sus sesiones fueron revocadas.`,
+      );
+      throw new UnauthorizedException('Sesión inválida — vuelve a iniciar sesión.');
+    }
+    if (row.expiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException('Refresh token inválido o expirado');
+    }
+
+    // Rotación ATÓMICA: solo un request concurrente gana el UPDATE. El
+    // perdedor se trata como reuso (mismo riesgo: dos portadores del
+    // mismo token) — el frontend debe single-flightear su refresh.
+    const rotacion = await this.refreshRepo.update(
+      { id: row.id, revokedAt: IsNull() },
+      { revokedAt: new Date() },
+    );
+    if ((rotacion.affected ?? 0) === 0) {
+      await this.revocarRefreshTokens(row.userId);
+      this.log.warn(
+        `[auth] Rotación concurrente del mismo refresh user=${row.userId} — todas sus sesiones fueron revocadas.`,
+      );
+      throw new UnauthorizedException('Sesión inválida — vuelve a iniciar sesión.');
+    }
+
     const user = await this.users.findByIdOrFail(row.userId);
+    if (!user.isActive) {
+      // Offboarding real: una cuenta desactivada no renueva sesión aunque
+      // conserve un refresh vigente.
+      throw new UnauthorizedException('Usuario desactivado');
+    }
     const roles = await this.users.getActiveRoles(user.id);
     // Re-resolver tenantId default igual que al login. Sin esto, el
     // refresh perdía el tenantId y dejaba al usuario sin contexto —
@@ -206,13 +270,19 @@ export class AuthService {
       tenantRoles.length === 1
         ? (tenantRoles[0]!.scopeId ?? null)
         : await this.users.getSoleTenantId(user.id);
-    return this.issueTokens({
+    const tokens = await this.issueTokens({
       userId: user.id,
       email: user.email,
       tenantId: defaultTenantId,
       roles,
       impersonatorId: null,
-    });
+    }, meta);
+    // T25 — igual que en login: multi-liga sin default → opciones al front.
+    if (!defaultTenantId) {
+      const tenants = await this.users.getTenantsDisponibles(user.id);
+      if (tenants.length > 0) tokens.tenantsDisponibles = tenants;
+    }
+    return tokens;
   }
 
   async logout(refreshToken: string): Promise<void> {

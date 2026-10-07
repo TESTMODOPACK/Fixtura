@@ -85,6 +85,15 @@ export class SuperAdminTenantsController {
     return this.svc.update(id, dto);
   }
 
+  /** T28 — TXT que debe existir en el DNS del dominio antes del PATCH. */
+  @Get(':id/dominio-verificacion')
+  dominioVerificacion(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('dominio') dominio?: string,
+  ): Promise<{ host: string; valor: string }> {
+    return this.svc.dominioVerificacion(id, dominio ?? '');
+  }
+
   @Post(':id/suspender')
   @HttpCode(200)
   @Audited({ action: 'platform.tenant_suspended', entityType: 'Tenant', entityIdFrom: 'params.id' })

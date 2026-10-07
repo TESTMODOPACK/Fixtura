@@ -1,7 +1,7 @@
 'use client';
 
 import { CheckCircle2 } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Suspense, useState } from 'react';
 
 import { validarPasswordSegura } from '@fixtura/domain';
@@ -13,11 +13,12 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { PasswordStrengthMeter } from '@/components/ui/password-strength';
 import { useActivarJugador, useActivarJugadorInfo } from '@/hooks/use-jugador';
 import { parseApiErrorMessage } from '@/lib/api';
+import { useTokenDeUrl } from '@/lib/token-url';
 
 function ActivarInner(): React.ReactElement {
-  const sp = useSearchParams();
   const router = useRouter();
-  const token = sp.get('token');
+  // T27 — token desde el fragment (#token=…), con fallback a ?token= viejo.
+  const { token } = useTokenDeUrl();
   const { data: info, isLoading, error } = useActivarJugadorInfo(token);
   const activar = useActivarJugador();
   const [password, setPassword] = useState('');

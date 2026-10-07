@@ -32,7 +32,7 @@ import { Roles } from '../../../common/decorators/roles.decorator';
 import { resolveClubId, resolveTenantId } from './delegado-context';
 import { DelegadoInviteService } from './delegado-invite.service';
 import { DelegadoPortalService } from './delegado-portal.service';
-import { ActivarDelegadoDto, InvitarDelegadoDto } from './dto';
+import { ActivarDelegadoDto, InvitarDelegadoDto, RevocarDelegadoDto } from './dto';
 
 function ensureTenant(user: UserContext): string {
   if (!user.tenantId) throw new BadRequestException('No hay tenant en el contexto');
@@ -121,6 +121,21 @@ export class DelegadoAdminController {
     return this.invite.invitar(clubId, ensureTenant(user), user.userId, dto);
   }
 
+  /** T24 — offboarding: corta el acceso del delegado sin tocar la directiva. */
+  @Post(':clubId/delegado/revocar-acceso')
+  @Audited({
+    action: 'delegado.acceso_revocado',
+    entityType: 'Club',
+    entityIdFrom: 'params.clubId',
+  })
+  revocarAcceso(
+    @CurrentUser() user: UserContext,
+    @Param('clubId', ParseUUIDPipe) clubId: string,
+    @Body() dto: RevocarDelegadoDto,
+  ): Promise<{ revocado: boolean }> {
+    return this.invite.revocarAcceso(clubId, ensureTenant(user), user.userId, dto.email);
+  }
+
   @Get(':clubId/delegado')
   estado(
     @CurrentUser() user: UserContext,
@@ -139,9 +154,19 @@ export class DelegadoAdminController {
 export class DelegadoPublicController {
   constructor(private readonly invite: DelegadoInviteService) {}
 
+  /** Deprecado T27 (token en query queda en logs/SW): usar POST /info. */
   @Get('activar')
   info(@Query('token') token?: string): Promise<ActivarDelegadoInfo> {
     if (!token) throw new BadRequestException('Falta el token.');
+    return this.invite.infoActivacion(token);
+  }
+
+  /** T27 — datos para la pantalla de activación; token en el body. */
+  @Post('info')
+  infoPost(@Body('token') token?: string): Promise<ActivarDelegadoInfo> {
+    if (!token || typeof token !== 'string') {
+      throw new BadRequestException('Falta el token.');
+    }
     return this.invite.infoActivacion(token);
   }
 

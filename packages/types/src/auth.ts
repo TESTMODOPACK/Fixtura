@@ -15,6 +15,12 @@ export const AuthTokensSchema = z.object({
   // (issueTokens lo devuelve para setear la cookie).
   refreshToken: z.string().optional(),
   accessTokenExpiresIn: z.number().int().positive(),
+  // T25 — usuario con roles en VARIAS ligas y sin tenant por defecto: el
+  // login devuelve las opciones y el frontend elige vía /auth/switch-tenant
+  // (antes quedaba con tenantId=null → RLS lo dejaba viendo 0 filas).
+  tenantsDisponibles: z
+    .array(z.object({ id: z.uuid(), nombre: z.string() }))
+    .optional(),
 });
 export type AuthTokens = z.infer<typeof AuthTokensSchema>;
 

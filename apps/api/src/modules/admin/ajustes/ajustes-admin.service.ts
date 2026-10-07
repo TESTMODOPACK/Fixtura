@@ -7,17 +7,19 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { hash } from 'bcrypt';
 import { randomBytes } from 'crypto';
-import { In, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 
 import {
   ROLE,
   ROLE_SCOPE,
   type Branding,
   type CategoriaUsuario,
+  type InvitarMiembroResultado,
   type MiembroAdmin,
   type PagosConfig,
   type ProveedorPasarela,
   type Role,
+  type RolAdminInvitable,
   type SiiTenantConfig,
   type SiiVerificacionResult,
   type TenantSettings,
@@ -27,7 +29,11 @@ import {
 import { validarPasswordSegura } from '@fixtura/domain';
 
 import { cifrarSecreto, descifrarSecreto } from '../../../common/crypto/secret-box';
+import { esc } from '../../../common/utils/esc';
+import { linkConToken } from '../../../common/utils/frontend-url';
+import { AuditLogService } from '../../audit';
 import { OpenFacturaProvider } from '../sii/sii-provider';
+import { AuthService } from '../../auth/auth.service';
 import { MagicLinksService } from '../../auth/magic-links.service';
 import { Club } from '../../competition/entities/club.entity';
 import { EmailService } from '../../email/email.service';
@@ -60,6 +66,8 @@ export class AjustesAdminService {
     private readonly magicLinks: MagicLinksService,
     private readonly email: EmailService,
     private readonly openFactura: OpenFacturaProvider,
+    private readonly audit: AuditLogService,
+    private readonly auth: AuthService,
   ) {}
 
   /**
@@ -159,20 +167,14 @@ export class AjustesAdminService {
     if (input.nombre !== undefined) t.nombre = input.nombre;
 
     if (input.customDomain !== undefined) {
+      // T28 — el dominio entra a la whitelist de CORS y a la resolución de
+      // tenant por host: lo gestiona SOLO el super admin (con verificación
+      // DNS). Un PATCH que lo repite sin cambiarlo sigue siendo válido.
       const nuevoDominio = input.customDomain.trim().toLowerCase() || null;
       if (nuevoDominio !== t.customDomain) {
-        // Verificar unicidad — un dominio no puede estar en 2 tenants
-        if (nuevoDominio) {
-          const conflict = await this.tenantRepo.findOne({
-            where: { customDomain: nuevoDominio, id: Not(tenantId) },
-          });
-          if (conflict) {
-            throw new ConflictException(
-              `El dominio "${nuevoDominio}" ya está en uso por otra liga`,
-            );
-          }
-        }
-        t.customDomain = nuevoDominio;
+        throw new BadRequestException(
+          'El dominio personalizado lo configura el equipo LigaPlus. Escríbenos para activarlo.',
+        );
       }
     }
 
@@ -415,7 +417,7 @@ export class AjustesAdminService {
     tenantId: string,
     grantedBy: string,
     input: InvitarMiembroDto,
-  ): Promise<MiembroAdmin> {
+  ): Promise<InvitarMiembroResultado> {
     const emailNorm = input.email.toLowerCase().trim();
     if (ROLE_SCOPE[input.rol] !== 'TENANT') {
       throw new BadRequestException(
@@ -423,91 +425,197 @@ export class AjustesAdminService {
       );
     }
 
-    let user = await this.userRepo.findOne({ where: { email: emailNorm } });
-    const esNuevo = !user;
-    if (!user) {
-      // Por defecto se invita por magic link: el miembro crea su contraseña vía
-      // email. Si el admin envió passwordTemporal, se respeta (fallback).
-      let passwordHash: string;
-      if (input.passwordTemporal) {
-        const errorPwd = validarPasswordSegura(input.passwordTemporal, {
-          email: emailNorm,
-          nombre: input.nombre,
-          apellido: input.apellido,
-        });
-        if (errorPwd) {
-          throw new BadRequestException(errorPwd);
-        }
-        passwordHash = await hash(input.passwordTemporal, 12);
-      } else {
-        // Password aleatoria no comunicada: el miembro la define vía el link.
-        passwordHash = await hash(randomBytes(24).toString('base64url'), 12);
+    const existente = await this.userRepo.findOne({ where: { email: emailNorm } });
+
+    if (existente) {
+      // T25 (M-9) — la cuenta YA existe y es de otra persona: el rol no se
+      // asigna directo (cualquier admin podía colgarle roles a un email
+      // conocido) ni se devuelven datos de esa cuenta. El dueño recibe un
+      // link de aceptación — o lo ignora y nada cambia.
+      if (!existente.isActive) {
+        throw new ConflictException(
+          'Ese email pertenece a un usuario desactivado. Reactiva antes de asignar rol.',
+        );
       }
-      user = this.userRepo.create({
+      const rolActual = await this.userRoleRepo.findOne({
+        where: {
+          tenantId,
+          userId: existente.id,
+          role: input.rol,
+          scopeType: 'TENANT',
+        },
+      });
+      if (rolActual && !rolActual.revokedAt) {
+        throw new ConflictException(
+          `Ese usuario ya tiene el rol ${input.rol} en esta liga`,
+        );
+      }
+      await this.enviarInvitacionAceptacion(existente, tenantId, input.rol, grantedBy);
+      return { tipo: 'INVITACION_ENVIADA', email: emailNorm, rol: input.rol };
+    }
+
+    // Cuenta NUEVA: se crea acá y el rol se asigna directo (no hay dueño
+    // previo a quien pedirle consentimiento). Por defecto define su
+    // contraseña vía magic link; passwordTemporal es el fallback manual.
+    let passwordHash: string;
+    if (input.passwordTemporal) {
+      const errorPwd = validarPasswordSegura(input.passwordTemporal, {
+        email: emailNorm,
+        nombre: input.nombre,
+        apellido: input.apellido,
+      });
+      if (errorPwd) {
+        throw new BadRequestException(errorPwd);
+      }
+      passwordHash = await hash(input.passwordTemporal, 12);
+    } else {
+      // Password aleatoria no comunicada: el miembro la define vía el link.
+      passwordHash = await hash(randomBytes(24).toString('base64url'), 12);
+    }
+    const user = await this.userRepo.save(
+      this.userRepo.create({
         email: emailNorm,
         passwordHash,
         nombre: input.nombre,
         apellido: input.apellido,
         idiomaPref: 'es',
         isActive: true,
-      });
-      user = await this.userRepo.save(user);
-    } else if (!user.isActive) {
-      throw new ConflictException(
-        'Ese email pertenece a un usuario desactivado. Reactiva antes de asignar rol.',
-      );
-    }
+      }),
+    );
 
-    // Chequeo de duplicado de rol
-    const existing = await this.userRoleRepo.findOne({
-      where: {
+    const role = await this.userRoleRepo.save(
+      this.userRoleRepo.create({
         tenantId,
         userId: user.id,
         role: input.rol,
         scopeType: 'TENANT',
-      },
-    });
-    if (existing && !existing.revokedAt) {
-      throw new ConflictException(
-        `Ese usuario ya tiene el rol ${input.rol} en esta liga`,
-      );
-    }
+        scopeId: tenantId,
+        grantedBy,
+      }),
+    );
 
-    let role: UserRole;
-    if (existing && existing.revokedAt) {
-      // Re-activar el rol previamente revocado
-      existing.revokedAt = null;
-      existing.grantedBy = grantedBy;
-      role = await this.userRoleRepo.save(existing);
-    } else {
-      role = await this.userRoleRepo.save(
-        this.userRoleRepo.create({
-          tenantId,
-          userId: user.id,
-          role: input.rol,
-          scopeType: 'TENANT',
-          scopeId: tenantId,
-          grantedBy,
-        }),
-      );
-    }
-
-    // Miembro nuevo invitado por magic link (sin password explícito): le
-    // mandamos el email para que cree su contraseña.
-    if (esNuevo && !input.passwordTemporal) {
+    if (!input.passwordTemporal) {
       await this.enviarInvitacionMagicLink(user);
     }
 
     return {
-      userRoleId: role.id,
-      userId: user.id,
-      email: user.email,
-      nombre: user.nombre,
-      apellido: user.apellido,
-      rol: input.rol as MiembroAdmin['rol'],
-      ultimoLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
-      grantedAt: role.grantedAt.toISOString(),
+      tipo: 'ASIGNADO',
+      miembro: {
+        userRoleId: role.id,
+        userId: user.id,
+        email: user.email,
+        nombre: user.nombre,
+        apellido: user.apellido,
+        rol: input.rol as MiembroAdmin['rol'],
+        ultimoLoginAt: null,
+        grantedAt: role.grantedAt.toISOString(),
+      },
     };
+  }
+
+  /**
+   * T25 (M-9) — invitación con aceptación: el rol se otorga recién cuando
+   * el dueño de la cuenta consume el link (purpose INVITE_USER con
+   * metadata.tipo = MIEMBRO_ADMIN).
+   */
+  private async enviarInvitacionAceptacion(
+    user: User,
+    tenantId: string,
+    rol: RolAdminInvitable,
+    grantedBy: string,
+  ): Promise<void> {
+    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    const liga = tenant?.nombre ?? 'una liga';
+    const { token } = await this.magicLinks.crear({
+      purpose: 'INVITE_USER',
+      tenantId,
+      email: user.email,
+      userId: user.id,
+      metadata: { tipo: 'MIEMBRO_ADMIN', rol },
+      ttlMinutos: 72 * 60,
+      createdByUserId: grantedBy,
+    });
+    const link = linkConToken('/invitacion', token);
+    await this.email.send({
+      to: user.email,
+      subject: `Te invitaron a administrar ${liga} en LigaPlus`,
+      html: `
+        <h2 style="color:#15803d">Invitación a ${esc(liga)}</h2>
+        <p>Hola,</p>
+        <p>Te invitaron como <strong>${esc(rol)}</strong> de
+        <strong>${esc(liga)}</strong> en LigaPlus. Tu cuenta y tu contraseña
+        no cambian: el acceso se agrega solo si aceptas.</p>
+        <p style="margin:20px 0">
+          <a href="${link}"
+             style="background:#15803d;color:#fff;padding:12px 24px;
+                    border-radius:6px;text-decoration:none;font-weight:bold">
+            Aceptar invitación
+          </a>
+        </p>
+        <p style="color:#666;font-size:13px">El link expira en 72 horas. Si
+        no esperabas esta invitación, ignora este correo — no se agregará
+        ningún acceso a tu cuenta.</p>
+        <p>Saludos,<br/>LigaPlus</p>
+      `,
+      text: `Te invitaron como ${rol} de ${liga} en LigaPlus. Acepta (expira en 72h): ${link}`,
+    });
+  }
+
+  /** Datos para la página pública de aceptación (sin consumir el link). */
+  async infoInvitacionMiembro(
+    token: string,
+  ): Promise<{ liga: string; rol: string; email: string }> {
+    const link = await this.magicLinks.resolver(token, 'INVITE_USER');
+    const meta = (link.metadata ?? {}) as { tipo?: string; rol?: string };
+    if (meta.tipo !== 'MIEMBRO_ADMIN' || !link.userId || !link.tenantId || !meta.rol) {
+      throw new BadRequestException('El link no corresponde a una invitación de miembro.');
+    }
+    const tenant = await this.tenantRepo.findOne({ where: { id: link.tenantId } });
+    return { liga: tenant?.nombre ?? 'LigaPlus', rol: meta.rol, email: link.email ?? '' };
+  }
+
+  /** T25 (M-9) — el dueño de la cuenta acepta: recién acá se otorga el rol. */
+  async aceptarInvitacionMiembro(token: string): Promise<{ ok: boolean; liga: string }> {
+    const link = await this.magicLinks.resolver(token, 'INVITE_USER');
+    const meta = (link.metadata ?? {}) as { tipo?: string; rol?: string };
+    if (meta.tipo !== 'MIEMBRO_ADMIN' || !link.userId || !link.tenantId || !meta.rol) {
+      throw new BadRequestException('El link no corresponde a una invitación de miembro.');
+    }
+    // Consumo atómico ANTES de otorgar — dos clicks simultáneos no asignan dos veces.
+    await this.magicLinks.consumir(token, 'INVITE_USER');
+
+    const rol = meta.rol as UserRole['role'];
+    const existente = await this.userRoleRepo.findOne({
+      where: { tenantId: link.tenantId, userId: link.userId, role: rol, scopeType: 'TENANT' },
+    });
+    if (existente) {
+      if (existente.revokedAt) {
+        existente.revokedAt = null;
+        existente.grantedBy = link.createdByUserId;
+        await this.userRoleRepo.save(existente);
+      }
+    } else {
+      await this.userRoleRepo.save(
+        this.userRoleRepo.create({
+          tenantId: link.tenantId,
+          userId: link.userId,
+          role: rol,
+          scopeType: 'TENANT',
+          scopeId: link.tenantId,
+          grantedBy: link.createdByUserId,
+        }),
+      );
+    }
+
+    await this.audit.record({
+      action: 'ajustes.miembro_invitacion_aceptada',
+      tenantId: link.tenantId,
+      userId: link.userId,
+      entityType: 'UserRole',
+      metadata: { rol: meta.rol, linkId: link.id },
+    });
+    const tenant = await this.tenantRepo.findOne({ where: { id: link.tenantId } });
+    return { ok: true, liga: tenant?.nombre ?? 'LigaPlus' };
   }
 
   /**
@@ -525,14 +633,13 @@ export class AjustesAdminService {
         userId: user.id,
         ttlMinutos: 72 * 60,
       });
-      const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-      const link = `${frontendUrl}/reset-password?token=${encodeURIComponent(token)}`;
+      const link = linkConToken('/reset-password', token);
       await this.email.send({
         to: user.email,
         subject: 'Te invitaron a administrar una liga en LigaPlus',
         html: `
           <h2 style="color:#15803d">Bienvenido a LigaPlus</h2>
-          <p>Hola ${user.nombre},</p>
+          <p>Hola ${esc(user.nombre)},</p>
           <p>Te invitaron a administrar una liga en LigaPlus. Crea tu contraseña
           para entrar:</p>
           <p style="margin:20px 0">
@@ -563,8 +670,10 @@ export class AjustesAdminService {
       where: { id: userRoleId, tenantId },
     });
     if (!role) throw new NotFoundException(`Rol ${userRoleId} no encontrado`);
+    if (role.revokedAt) return;
 
-    // Evitar lock-out: no permitir borrar el último LIGA_ADMIN del tenant
+    // Evitar lock-out: no permitir borrar el último LIGA_ADMIN VIGENTE del
+    // tenant (un rol revocado no cuenta como admin).
     if (role.role === ROLE.LIGA_ADMIN) {
       const otrosAdmins = await this.userRoleRepo.count({
         where: {
@@ -572,6 +681,7 @@ export class AjustesAdminService {
           role: ROLE.LIGA_ADMIN,
           scopeType: 'TENANT',
           id: Not(userRoleId),
+          revokedAt: IsNull(),
         },
       });
       if (otrosAdmins === 0) {
@@ -590,6 +700,9 @@ export class AjustesAdminService {
 
     role.revokedAt = new Date();
     await this.userRoleRepo.save(role);
+    // T24 — mismo offboarding que delegado/jugador/personal: se matan las
+    // sesiones y el próximo login emite tokens ya sin el rol revocado.
+    await this.auth.revocarRefreshTokens(role.userId);
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────

@@ -143,10 +143,19 @@ export class PersonalAdminController {
 export class PersonalPublicController {
   constructor(private readonly svc: PersonalAdminService) {}
 
-  /** Datos para la pantalla de activación (no consume el token). */
+  /** Deprecado T27 (token en query queda en logs/SW): usar POST. */
   @Get('activacion-info')
   infoActivacion(@Query('token') token?: string): Promise<ActivarPersonalInfo> {
     if (!token || token.length < 20) {
+      throw new BadRequestException('Token inválido');
+    }
+    return this.svc.infoActivacion(token);
+  }
+
+  /** T27 — datos para la pantalla de activación; token en el body. */
+  @Post('activacion-info')
+  infoActivacionPost(@Body('token') token?: string): Promise<ActivarPersonalInfo> {
+    if (!token || typeof token !== 'string' || token.length < 20) {
       throw new BadRequestException('Token inválido');
     }
     return this.svc.infoActivacion(token);

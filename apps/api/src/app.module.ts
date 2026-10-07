@@ -40,10 +40,12 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
             : undefined,
         autoLogging: { ignore: (req) => req.url === '/health/live' },
         serializers: {
+          // T27 — la URL se loguea SIN query string: ahí viajan tokens de
+          // links viejos (?token=) y de pasarelas (?token_ws=).
           req: (req) => ({
             id: req.id,
             method: req.method,
-            url: req.url,
+            url: typeof req.url === 'string' ? req.url.split('?')[0] : req.url,
           }),
           res: (res) => ({ statusCode: res.statusCode }),
         },

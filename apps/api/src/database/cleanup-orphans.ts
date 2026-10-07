@@ -234,6 +234,12 @@ async function main(): Promise<void> {
     // Sprint 10: tabla magic_links (onboarding personal + reset password).
     await ensureMagicLinksTable(client, log);
 
+    // T23 — el lookup de refresh/reuso busca por token_hash solo (incluye
+    // filas revocadas); el UNIQUE (user_id, token_hash) no lo cubre.
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash)`,
+    );
+
     // Sprint 12: tiebreakers configurables por torneo.
     await client.query(`
       ALTER TABLE torneos

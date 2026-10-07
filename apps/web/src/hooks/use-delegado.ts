@@ -126,11 +126,13 @@ export function useActivarInfo(token: string | null) {
     queryKey: ['delegado-activar', token],
     enabled: !!token,
     retry: false,
+    // T27 — el token viaja en el body (nunca en la URL: logs/SW/Referer).
     queryFn: () =>
-      apiFetch<ActivarDelegadoInfo>(
-        `/public/delegado/activar?token=${encodeURIComponent(token ?? '')}`,
-        { skipAuth: true },
-      ),
+      apiFetch<ActivarDelegadoInfo>('/public/delegado/info', {
+        method: 'POST',
+        body: { token },
+        skipAuth: true,
+      }),
   });
 }
 

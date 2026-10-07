@@ -2,6 +2,9 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique
 
 @Entity({ name: 'refresh_tokens' })
 @Index('idx_refresh_tokens_user_active', ['userId'], { where: 'revoked_at IS NULL' })
+// T23 — el lookup de refresh/reuso busca por hash SOLO (incluye filas ya
+// revocadas); el UNIQUE (user_id, token_hash) no cubre esa búsqueda.
+@Index('idx_refresh_tokens_hash', ['tokenHash'])
 @Unique(['userId', 'tokenHash'])
 export class RefreshToken {
   @PrimaryGeneratedColumn('uuid')

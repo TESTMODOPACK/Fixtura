@@ -8,6 +8,7 @@ import {
   ESTADOS_PARTIDO_CUENTAN_TABLA,
 } from '@fixtura/domain';
 
+import { esc } from '../../../common/utils/esc';
 import { Club } from '../../competition/entities/club.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
@@ -428,15 +429,15 @@ export class FlyerDelegadosService {
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1f2937">
         <div style="background:#0F2A1F;color:#fff;padding:18px 22px;border-radius:8px 8px 0 0">
           <div style="font-size:18px;font-weight:600">LigaPlus</div>
-          <div style="color:#84CCA8;font-size:12px">${ligaNombre}</div>
+          <div style="color:#84CCA8;font-size:12px">${esc(ligaNombre)}</div>
         </div>
         <div style="border:1px solid #ece9e0;border-top:0;padding:20px 22px;border-radius:0 0 8px 8px">
-          <p>Hola, delegado de <strong>${clubNombre}</strong>.</p>
+          <p>Hola, delegado de <strong>${esc(clubNombre)}</strong>.</p>
           <p>Te adjuntamos el <strong>flyer de la semana</strong> en PDF con la
           próxima fecha, los resultados de la última jornada y la tabla de
           posiciones del torneo. Ideal para compartir con el equipo.</p>
           <p style="color:#6b7280;font-size:13px;margin-top:18px">
-            Recibís este correo porque sos delegado de un club en ${ligaNombre}.
+            Recibes este correo porque eres delegado de un club en ${esc(ligaNombre)}.
           </p>
         </div>
       </div>

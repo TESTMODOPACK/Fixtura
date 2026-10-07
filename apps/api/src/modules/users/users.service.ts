@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 
 import type { Role, Scope } from '@fixtura/types';
 
@@ -112,6 +112,56 @@ export class UsersService {
       grantedBy: args.grantedBy ?? null,
     });
     await this.roleRepo.save(row);
+  }
+
+  /**
+   * T24 — Offboarding: revoca TODOS los roles activos anclados a un scope
+   * (ficha de personal, jugador o club del delegado) y devuelve los
+   * userIds afectados para que el caller mate también sus sesiones
+   * (revocarRefreshTokens). `roles` acota a roles específicos; `userId`
+   * acota a un usuario puntual (p.ej. revocar a UN delegado del club).
+   */
+  async revocarRolesDeScope(args: {
+    tenantId: string;
+    scopeId: string;
+    roles?: Role[];
+    userId?: string;
+  }): Promise<string[]> {
+    const base = {
+      tenantId: args.tenantId,
+      scopeId: args.scopeId,
+      revokedAt: IsNull(),
+      ...(args.userId ? { userId: args.userId } : {}),
+    };
+    const activos = await this.roleRepo.find({
+      where: args.roles ? args.roles.map((role) => ({ ...base, role })) : base,
+    });
+    if (activos.length === 0) return [];
+    await this.roleRepo.update(
+      { id: In(activos.map((r) => r.id)) },
+      { revokedAt: new Date() },
+    );
+    return [...new Set(activos.map((r) => r.userId))];
+  }
+
+  /**
+   * T25 — Ligas (id + nombre) donde el usuario tiene algún rol activo con
+   * tenant. Alimenta el selector del login multi-liga.
+   */
+  async getTenantsDisponibles(
+    userId: string,
+  ): Promise<Array<{ id: string; nombre: string }>> {
+    return this.roleRepo
+      .createQueryBuilder('r')
+      .innerJoin('tenants', 't', 't.id = r.tenant_id')
+      .select('r.tenant_id', 'id')
+      .addSelect('t.nombre', 'nombre')
+      .distinct(true)
+      .where('r.user_id = :userId', { userId })
+      .andWhere('r.revoked_at IS NULL')
+      .andWhere('r.tenant_id IS NOT NULL')
+      .orderBy('t.nombre', 'ASC')
+      .getRawMany<{ id: string; nombre: string }>();
   }
 
   async updateLastLogin(userId: string): Promise<void> {

@@ -27,6 +27,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { PageHead } from '@/components/ui/page-head';
 import {
+  useDominioVerificacion,
   usePlanesSuscripcion,
   useReactivarTenant,
   useSuspenderTenant,
@@ -142,6 +143,7 @@ export default function DetalleTenantPage({
   const update = useUpdateTenantPlataforma(id);
   const suspender = useSuspenderTenant(id);
   const reactivar = useReactivarTenant(id);
+  const verif = useDominioVerificacion(id);
   const apiError = error as ApiError | undefined;
   const bannerRef = useRef<HTMLDivElement>(null);
 
@@ -395,9 +397,36 @@ export default function DetalleTenantPage({
                 {...form.register('customDomain')}
               />
               <p className="text-xs text-ink-mute italic mt-1">
-                Debe apuntar al servidor via CNAME. Vacío = solo subdominio
-                fixtura.cl/{safe(tenant.slug)}.
+                T28: para guardarlo, el DNS del dominio debe tener el TXT de
+                verificación y el A record apuntando al VPS. Vacío = solo el
+                dominio de LigaPlus.
               </p>
+              <button
+                type="button"
+                className="text-xs text-green-deep underline mt-1"
+                onClick={() => {
+                  const dominio = form.getValues('customDomain');
+                  if (dominio) verif.mutate(dominio);
+                }}
+                disabled={verif.isPending}
+              >
+                Ver TXT de verificación
+              </button>
+              {verif.data && (
+                <div className="mt-2 p-2 bg-paper rounded-card border border-line text-xs font-mono break-all">
+                  <div>
+                    <span className="text-ink-mute">Host:</span> {verif.data.host}
+                  </div>
+                  <div>
+                    <span className="text-ink-mute">Valor:</span> {verif.data.valor}
+                  </div>
+                </div>
+              )}
+              {verif.isError && (
+                <p className="text-xs text-danger mt-1">
+                  {(verif.error as ApiError).message}
+                </p>
+              )}
             </div>
             <div>
               <label className="label">Plan</label>

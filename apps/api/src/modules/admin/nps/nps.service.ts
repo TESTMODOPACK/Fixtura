@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { bestEffort } from '../../../common/db/best-effort';
@@ -18,6 +17,8 @@ import { EncuestaNps } from '../../competition/entities/encuesta-nps.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { esc } from '../../../common/utils/esc';
+import { linkConToken } from '../../../common/utils/frontend-url';
 import { EmailService } from '../../email/email.service';
 
 /** Payload del token firmado que viaja en el link del email. */
@@ -48,7 +49,6 @@ export class NpsService {
     private readonly dataSource: DataSource,
     private readonly jwt: JwtService,
     private readonly email: EmailService,
-    private readonly config: ConfigService,
   ) {}
 
   // ── Token ────────────────────────────────────────────────────────────
@@ -158,11 +158,8 @@ export class NpsService {
     torneo: string,
     token: string,
   ): Promise<void> {
-    const frontUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001';
-    const link = `${frontUrl}/nps/responder?token=${token}`;
+    const link = linkConToken('/nps/responder', token);
 
-    const esc = (s: string): string =>
-      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const safe = { liga: esc(liga), club: esc(club), torneo: esc(torneo) };
 
     const subject = `¿Cómo viviste ${torneo}? — Tu opinión cuenta`;

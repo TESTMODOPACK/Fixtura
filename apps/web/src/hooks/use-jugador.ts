@@ -109,11 +109,13 @@ export function useActivarJugadorInfo(token: string | null) {
     queryKey: ['jugador-activar', token],
     enabled: !!token,
     retry: false,
+    // T27 — el token viaja en el body (nunca en la URL: logs/SW/Referer).
     queryFn: () =>
-      apiFetch<ActivarJugadorInfo>(
-        `/public/jugador/activar?token=${encodeURIComponent(token ?? '')}`,
-        { skipAuth: true },
-      ),
+      apiFetch<ActivarJugadorInfo>('/public/jugador/info', {
+        method: 'POST',
+        body: { token },
+        skipAuth: true,
+      }),
   });
 }
 

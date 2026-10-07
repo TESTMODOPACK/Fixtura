@@ -41,6 +41,12 @@ export class ActivarDelegadoDto {
   password!: string;
 }
 
+export class RevocarDelegadoDto {
+  @IsEmail()
+  @MaxLength(150)
+  email!: string;
+}
+
 export class ActivarInfoDto {
   @IsString()
   @MinLength(10)

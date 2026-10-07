@@ -9,9 +9,11 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { IsString, MaxLength, MinLength } from 'class-validator';
 
 import {
   ROLE,
+  type InvitarMiembroResultado,
   type MiembroAdmin,
   type SiiVerificacionResult,
   type TenantSettings,
@@ -21,6 +23,7 @@ import {
 
 import { Audited } from '../../audit';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { AjustesAdminService } from './ajustes-admin.service';
 import {
@@ -28,6 +31,13 @@ import {
   UpdateTenantSettingsDto,
   VerificarSiiDto,
 } from './dto';
+
+class InvitacionTokenDto {
+  @IsString()
+  @MinLength(20)
+  @MaxLength(200)
+  token!: string;
+}
 
 function ensureTenant(user: UserContext): string {
   if (!user.tenantId) {
@@ -90,7 +100,7 @@ export class AjustesAdminController {
   invitarMiembro(
     @CurrentUser() user: UserContext,
     @Body() dto: InvitarMiembroDto,
-  ): Promise<MiembroAdmin> {
+  ): Promise<InvitarMiembroResultado> {
     return this.svc.invitarMiembro(ensureTenant(user), user.userId, dto);
   }
 
@@ -101,5 +111,29 @@ export class AjustesAdminController {
     @Param('userRoleId', new ParseUUIDPipe()) userRoleId: string,
   ): Promise<void> {
     return this.svc.removeMiembro(ensureTenant(user), userRoleId, user.userId);
+  }
+}
+
+/**
+ * T25 (M-9) — aceptación pública de la invitación a miembro admin cuando el
+ * email ya tenía cuenta: el rol se otorga recién cuando el dueño consume el
+ * link. El token viaja en el BODY (no en query) para que no quede en logs
+ * de acceso ni en el cache del service worker (T27).
+ */
+@Controller('public/ajustes/invitacion')
+@Public()
+export class AjustesInvitacionPublicController {
+  constructor(private readonly svc: AjustesAdminService) {}
+
+  @Post('info')
+  info(
+    @Body() dto: InvitacionTokenDto,
+  ): Promise<{ liga: string; rol: string; email: string }> {
+    return this.svc.infoInvitacionMiembro(dto.token);
+  }
+
+  @Post('aceptar')
+  aceptar(@Body() dto: InvitacionTokenDto): Promise<{ ok: boolean; liga: string }> {
+    return this.svc.aceptarInvitacionMiembro(dto.token);
   }
 }

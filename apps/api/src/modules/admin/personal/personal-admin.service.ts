@@ -21,6 +21,8 @@ import type {
 import { ROLE_SCOPE } from '@fixtura/types';
 import { validarPasswordSegura } from '@fixtura/domain';
 
+import { esc } from '../../../common/utils/esc';
+import { linkConToken } from '../../../common/utils/frontend-url';
 import { AuditLogService } from '../../audit';
 import { AuthService } from '../../auth/auth.service';
 import { MagicLink } from '../../auth/entities/magic-link.entity';
@@ -114,8 +116,7 @@ export class PersonalAdminService {
       },
     });
 
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    const link = `${frontendUrl}/personal/activar?token=${encodeURIComponent(token)}`;
+    const link = linkConToken('/personal/activar', token);
     const rolHumano = personal.rol.replace('_', ' ').toLowerCase();
     const errores: string[] = [];
     let algunEnviado = false;
@@ -126,9 +127,9 @@ export class PersonalAdminService {
           to: personal.email,
           subject: `[${tenantName}] Activación de cuenta — LigaPlus`,
           html: `
-            <h2 style="color:#15803d">¡Hola, ${personal.nombre}!</h2>
-            <p><strong>${tenantName}</strong> te dio de alta como
-            <strong>${rolHumano}</strong> en LigaPlus.</p>
+            <h2 style="color:#15803d">¡Hola, ${esc(personal.nombre)}!</h2>
+            <p><strong>${esc(tenantName)}</strong> te dio de alta como
+            <strong>${esc(rolHumano)}</strong> en LigaPlus.</p>
             <p>Para activar tu cuenta y poder ver tus designaciones, haz click en este
             botón:</p>
             <p style="margin: 20px 0">
@@ -141,7 +142,7 @@ export class PersonalAdminService {
             <p style="color:#666;font-size:13px">
               Este link expira en 72 horas. Si no fuiste tú, ignora este email.
             </p>
-            <p>Saludos,<br/>${tenantName}</p>
+            <p>Saludos,<br/>${esc(tenantName)}</p>
           `,
           text: `Hola ${personal.nombre}, ${tenantName} te invitó a LigaPlus. Activa tu cuenta en: ${link} (expira en 72h).`,
         });
@@ -556,6 +557,14 @@ export class PersonalAdminService {
     await this.magicLinks.invalidarPendientesDePersonal(p.id);
     p.activo = false;
     await this.repo.save(p);
+
+    // T24 — offboarding real: la baja también revoca los roles del sistema
+    // anclados a esta ficha y mata las sesiones (antes la cuenta seguía
+    // entrando al portal con la ficha inactiva).
+    const userIds = await this.users.revocarRolesDeScope({ tenantId, scopeId: p.id });
+    for (const uid of userIds) {
+      await this.auth.revocarRefreshTokens(uid);
+    }
   }
 
   private toDto(p: Personal, cuentaEstado?: CuentaEstado): PersonalAdmin {
