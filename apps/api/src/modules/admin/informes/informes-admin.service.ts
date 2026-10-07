@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { calcularTablaPosiciones } from '@fixtura/domain';
+import { calcularTablaPosiciones, ESTADOS_PARTIDO_CUENTAN_TABLA } from '@fixtura/domain';
 import {
   AMARILLAS_PARA_SUSPENSION,
   type CoberturaPartido,
@@ -561,7 +561,9 @@ export class InformesAdminService {
       .createQueryBuilder('p')
       .innerJoin('p.fecha', 'f')
       .where('f.torneo_id = :torneoId', { torneoId })
-      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .andWhere('p.estado IN (:...estadosTabla)', {
+        estadosTabla: [...ESTADOS_PARTIDO_CUENTAN_TABLA],
+      })
       .getMany();
     const partidos = partidosRaw.map((p) => ({
       equipoLocalId: p.inscripcionLocalId ?? '',

@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { sancionVigente } from '@fixtura/domain';
 import type {
   AjustarSancionRequest,
   CreateSancionTribunalRequest,
@@ -281,6 +282,13 @@ export class TribunalAdminService {
       s.desdeFechaNumero = input.desdeFechaNumero;
     }
     s.cumplida = input.fechasPendientes === 0;
+    // T18 — el total acompaña al agravamiento: sin esto, el LEAST de la
+    // reversión recortaba una sanción ajustada a 4 fechas de vuelta a 1.
+    if (s.fechasTotales == null || input.fechasPendientes > s.fechasTotales) {
+      s.fechasTotales = input.fechasPendientes;
+    }
+    // Ajustar a >0 re-activa explícitamente una sanción revocada (T21).
+    if (input.fechasPendientes > 0) s.revocada = false;
 
     const stamp = `[Ajuste tribunal] ${previas} → ${input.fechasPendientes} fecha(s): ${input.motivoAjuste}`;
     s.descripcion = (s.descripcion ? `${s.descripcion}\n\n` : '') + stamp;
@@ -316,6 +324,8 @@ export class TribunalAdminService {
     // Mejor marcar como cumplida que borrar (audit trail)
     s.fechasPendientes = 0;
     s.cumplida = true;
+    // T21 — flag explícito: la reversión del ledger jamás la revive.
+    s.revocada = true;
     s.descripcion =
       (s.descripcion ? `${s.descripcion}\n\n` : '') + '[Revocada por tribunal]';
     await this.repo.save(s);
@@ -331,25 +341,13 @@ export class TribunalAdminService {
     tenantId: string,
     fechaNumero: number,
   ): Promise<Array<{ jugadorInscritoId: string; rut: string | null; motivo: string }>> {
-    const rows = (await this.repo
-      .createQueryBuilder('s')
-      .select('s.jugador_id', 'jugadorId')
-      .addSelect('s.rut', 'rut')
-      .addSelect('s.motivo', 'motivo')
-      .where('s.torneo_id = :torneoId', { torneoId })
-      .andWhere('s.tenant_id = :tenantId', { tenantId })
-      .andWhere('s.cumplida = false')
-      .andWhere('s.fechas_pendientes > 0')
-      .andWhere('s.desde_fecha_numero <= :fechaNumero', { fechaNumero })
-      .getRawMany()) as Array<{
-      jugadorId: string | null;
-      rut: string | null;
-      motivo: string;
-    }>;
-
-    return rows
-      .filter((r): r is { jugadorId: string; rut: string | null; motivo: string } => !!r.jugadorId)
-      .map((r) => ({ jugadorInscritoId: r.jugadorId, rut: r.rut, motivo: r.motivo }));
+    // T20 — criterio único de vigencia (packages/domain); el volumen de
+    // sanciones por torneo es chico, se filtra en TS.
+    const sanciones = await this.repo.find({ where: { torneoId, tenantId } });
+    return sanciones
+      .filter((s) => sancionVigente(s, fechaNumero))
+      .filter((s): s is SancionActiva & { jugadorId: string } => !!s.jugadorId)
+      .map((s) => ({ jugadorInscritoId: s.jugadorId, rut: s.rut, motivo: s.motivo }));
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────
@@ -384,6 +382,7 @@ export class TribunalAdminService {
       desdeFechaNumero: s.desdeFechaNumero,
       descripcion: s.descripcion,
       cumplida: s.cumplida,
+      revocada: s.revocada,
       origenIncidenciaPartidoId: s.origenIncidenciaPartidoId,
       createdAt: s.createdAt.toISOString(),
     };

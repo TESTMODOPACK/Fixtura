@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { calcularEdad, calcularEdadCalendario } from '@fixtura/domain';
+import { calcularEdad, calcularEdadCalendario, sancionVigente } from '@fixtura/domain';
 import type {
   JugadorGlobal,
   JugadorGlobalDetalle,
@@ -155,6 +155,7 @@ export class JugadoresGlobalService {
         .andWhere('s.rut IN (:...ruts)', { ruts })
         .andWhere('s.cumplida = false')
         .andWhere('s.fechas_pendientes > 0')
+        .andWhere('s.revocada = false')
         .getRawMany<{ rut: string }>();
       rutsSancionados = new Set(sancionesActivas.map((r) => r.rut));
     }
@@ -318,7 +319,7 @@ export class JugadoresGlobalService {
       order: { createdAt: 'DESC' },
     });
     const sanciones: JugadorSancionDetalle[] = sancionEnts
-      .filter((s) => s.fechasPendientes > 0)
+      .filter((s) => sancionVigente(s))
       .map((s) => ({
         id: s.id,
         torneoId: s.torneoId,

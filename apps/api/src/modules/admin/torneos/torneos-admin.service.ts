@@ -12,7 +12,7 @@ import { Transactional } from 'typeorm-transactional';
 
 import { In } from 'typeorm';
 
-import { calcularTablaPosiciones } from '@fixtura/domain';
+import { calcularTablaPosiciones, ESTADOS_PARTIDO_CUENTAN_TABLA } from '@fixtura/domain';
 
 import type {
   CreateTorneoRequest,
@@ -208,7 +208,9 @@ export class TorneosAdminService {
       .innerJoin('p.fecha', 'f')
       .where('f.torneo_id = :id', { id })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
-      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .andWhere('p.estado IN (:...estadosTabla)', {
+        estadosTabla: [...ESTADOS_PARTIDO_CUENTAN_TABLA],
+      })
       // La tabla refleja la fase regular: los partidos de playoffs (con llave)
       // no suman a las posiciones (en Mixto la eliminatoria no altera la tabla).
       .andWhere('p.llave_id IS NULL')

@@ -16,6 +16,8 @@ import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import { sancionVigente } from '@fixtura/domain';
+
 import {
   ROL_AUTOR_OBSERVACION_LABEL,
   type ObservacionTribunalItem,
@@ -74,8 +76,8 @@ export default function TribunalPage({
   const { data: sancionesEquipo } = useSancionesEquipo(torneoId);
   const [adding, setAdding] = useState(false);
 
-  const activas = sanciones?.filter((s) => !s.cumplida && s.fechasPendientes > 0) ?? [];
-  const cumplidas = sanciones?.filter((s) => s.cumplida || s.fechasPendientes === 0) ?? [];
+  const activas = sanciones?.filter((s) => sancionVigente(s)) ?? [];
+  const cumplidas = sanciones?.filter((s) => !sancionVigente(s)) ?? [];
 
   // Gate por estado del torneo:
   //   DRAFT   → sin tribunal (no se ingresa nada).
@@ -311,8 +313,8 @@ function TribunalPorFecha({
         const sancionesFecha = sanciones.filter((s) => s.desdeFechaNumero === fecha);
         const informesFecha = observaciones.filter((o) => o.fechaNumero === fecha);
         const ordenadas = [
-          ...sancionesFecha.filter((s) => !s.cumplida && s.fechasPendientes > 0),
-          ...sancionesFecha.filter((s) => s.cumplida || s.fechasPendientes === 0),
+          ...sancionesFecha.filter((s) => sancionVigente(s)),
+          ...sancionesFecha.filter((s) => !sancionVigente(s)),
         ];
         const abierta = abiertas.has(fecha);
         return (
@@ -348,7 +350,7 @@ function TribunalPorFecha({
                         key={s.id}
                         sancion={s}
                         torneoId={torneoId}
-                        historico={s.cumplida || s.fechasPendientes === 0}
+                        historico={!sancionVigente(s)}
                       />
                     ))}
                   </div>

@@ -3,12 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { Repository } from 'typeorm';
 
+import { sancionVigente } from '@fixtura/domain';
 import type {
   CarnetJugador,
   CarnetJugadorDatos,
   VerificacionCarnet,
 } from '@fixtura/types';
 
+import { Fecha } from '../../competition/entities/fecha.entity';
 import { Jugador } from '../../competition/entities/jugador.entity';
 import { JugadorVetado } from '../../competition/entities/jugador-vetado.entity';
 import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entity';
@@ -49,6 +51,7 @@ export class CarnetService {
     @InjectRepository(PlanillaTorneo)
     private readonly planillaRepo: Repository<PlanillaTorneo>,
     @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
+    @InjectRepository(Fecha) private readonly fechaRepo: Repository<Fecha>,
   ) {}
 
   // ─── Emisión (portal del jugador) ────────────────────────────────────
@@ -127,9 +130,11 @@ export class CarnetService {
       motivos.push(`VETADO de la liga${veto.motivo ? `: ${veto.motivo}` : ''}.`);
     }
 
-    // Sanciones vigentes — por jugador_id (modelo nuevo) o rut (legacy),
-    // igual criterio que delegado/jugadores-global.
-    const sanciones = await this.sancionRepo
+    // Sanciones — por jugador_id (modelo nuevo) o rut (legacy).
+    // T19/T20: criterio único de vigencia contra la PRÓXIMA fecha a jugar
+    // del torneo — una sanción que recién arranca en una fecha futura no
+    // bloquea el semáforo hoy (A-4).
+    const candidatas = await this.sancionRepo
       .createQueryBuilder('s')
       .leftJoinAndSelect('s.torneo', 't')
       .where('s.tenant_id = :tenantId', { tenantId })
@@ -137,12 +142,33 @@ export class CarnetService {
         jid: jugador.id,
         rut: jugador.rut,
       })
-      .andWhere('s.cumplida = false')
-      .andWhere('s.fechas_pendientes > 0')
       .getMany();
-    const sancionesScope = input.torneoId
-      ? sanciones.filter((s) => s.torneoId === input.torneoId)
-      : sanciones;
+    const enTorneo = input.torneoId
+      ? candidatas.filter((s) => s.torneoId === input.torneoId)
+      : candidatas;
+
+    // Próxima fecha no finalizada por torneo. Sin fechas pendientes no hay
+    // partido que bloquear (torneo terminado o sin fixture).
+    const torneoIds = [...new Set(enTorneo.map((s) => s.torneoId))];
+    const proximas = new Map<string, number>();
+    if (torneoIds.length > 0) {
+      const filas = await this.fechaRepo
+        .createQueryBuilder('f')
+        .select('f.torneo_id', 'torneoId')
+        .addSelect('MIN(f.numero)', 'proxima')
+        .where('f.tenant_id = :tenantId', { tenantId })
+        .andWhere('f.torneo_id IN (:...torneoIds)', { torneoIds })
+        .andWhere(`f.estado != 'FINALIZADA'`)
+        .groupBy('f.torneo_id')
+        .getRawMany<{ torneoId: string; proxima: string | number }>();
+      for (const fila of filas) proximas.set(fila.torneoId, Number(fila.proxima));
+    }
+
+    const sancionesScope = enTorneo.filter((s) => {
+      const proxima = proximas.get(s.torneoId);
+      if (proxima === undefined) return false;
+      return sancionVigente(s, proxima);
+    });
     for (const s of sancionesScope) {
       motivos.push(
         `Sanción vigente: ${s.fechasPendientes} fecha(s) pendiente(s)${

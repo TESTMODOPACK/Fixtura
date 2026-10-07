@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
+import { ESTADOS_PARTIDO_RESUELTO } from '@fixtura/domain';
 import type {
   EstrategiaSuspensionFecha,
   MotivoSuspension,
@@ -131,8 +132,10 @@ export class FechasAdminService {
       .where('tenant_id = :tenantId', { tenantId })
       .andWhere('fecha_id = :fechaId', { fechaId })
       .andWhere('acta_cerrada_at IS NULL')
-      // Un partido ya marcado NO_JUGADO está resuelto; no lo re-suspendemos.
-      .andWhere(`estado NOT IN ('FINALIZADO','WALKOVER','SUSPENDIDO_FUERZA_MAYOR','NO_JUGADO')`)
+      // T20 — se suspende solo lo NO resuelto (lista central del dominio).
+      .andWhere('estado NOT IN (:...estadosResueltos)', {
+        estadosResueltos: [...ESTADOS_PARTIDO_RESUELTO],
+      })
       .execute();
 
     // Sanear input: el frontend manda "" si el campo opcional está vacío

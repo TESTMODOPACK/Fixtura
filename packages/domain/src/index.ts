@@ -1,4 +1,5 @@
 export * from './fixture';
+export * from './partidos';
 export * from './sanciones';
 export * from './permissions';
 export * from './edad';

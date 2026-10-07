@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
-import { calcularTablaPosiciones } from '@fixtura/domain';
+import { calcularTablaPosiciones, ESTADOS_PARTIDO_CUENTAN_TABLA } from '@fixtura/domain';
 
 import type {
   EnVivoPublico,
@@ -221,7 +221,9 @@ export class PublicService {
       .addSelect('p.fecha_hora', 'fechaHora')
       .distinctOn(['f.torneo_id'])
       .where('f.torneo_id IN (:...ids)', { ids })
-      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .andWhere('p.estado IN (:...estadosTabla)', {
+        estadosTabla: [...ESTADOS_PARTIDO_CUENTAN_TABLA],
+      })
       .andWhere('p.fecha_hora IS NOT NULL')
       .orderBy('f.torneo_id')
       .addOrderBy('p.fecha_hora', 'DESC')
@@ -420,7 +422,9 @@ export class PublicService {
       .createQueryBuilder('p')
       .innerJoin('p.fecha', 'f')
       .where('f.torneo_id = :torneoId', { torneoId: torneo.id })
-      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .andWhere('p.estado IN (:...estadosTabla)', {
+        estadosTabla: [...ESTADOS_PARTIDO_CUENTAN_TABLA],
+      })
       // La tabla es de la fase regular: los partidos de playoffs (con llave)
       // no alteran las posiciones.
       .andWhere('p.llave_id IS NULL')

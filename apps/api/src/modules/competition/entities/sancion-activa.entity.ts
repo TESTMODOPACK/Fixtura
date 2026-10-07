@@ -85,6 +85,11 @@ export class SancionActiva {
   @Column({ type: 'boolean', default: false })
   cumplida!: boolean;
 
+  // T21 — revocada por el tribunal: jamás revive. La reversión del ledger
+  // la saltea, y solo un ajuste explícito con fechas > 0 la des-revoca.
+  @Column({ type: 'boolean', default: false })
+  revocada!: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

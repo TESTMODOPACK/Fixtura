@@ -49,6 +49,7 @@ export { Personal } from './personal.entity';
 export type { RolPersonal, TipoCuentaBancaria } from './personal.entity';
 export { SancionActiva } from './sancion-activa.entity';
 export type { MotivoSancion } from './sancion-activa.entity';
+export { SancionCumplimiento } from './sancion-cumplimiento.entity';
 export { Sponsor } from './sponsor.entity';
 export type { PosicionSponsor } from './sponsor.entity';
 export { TarifaTorneo } from './tarifa-torneo.entity';

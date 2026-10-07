@@ -12,6 +12,8 @@ import { runOnTransactionCommit, Transactional } from 'typeorm-transactional';
 import { bestEffort } from '../../../common/db/best-effort';
 import {
   calcularSancionesPostPartido,
+  fechaCompleta,
+  sancionVigente,
   type IncidenciaJugador,
   type SancionPropuesta,
 } from '@fixtura/domain';
@@ -46,6 +48,7 @@ import { PlanillaTorneo } from '../../competition/entities/planilla-torneo.entit
 import { Partido } from '../../competition/entities/partido.entity';
 import { PartidoJugador } from '../../competition/entities/partido-jugador.entity';
 import { SancionActiva } from '../../competition/entities/sancion-activa.entity';
+import { SancionCumplimiento } from '../../competition/entities/sancion-cumplimiento.entity';
 import { Torneo } from '../../competition/entities/torneo.entity';
 import { assertPartidoEstadoOperable } from '../../competition/partido-estado.util';
 import { saveIncidenciaIdempotente } from '../../competition/incidencia-idempotente.util';
@@ -71,6 +74,8 @@ export class PartidosAdminService {
     private readonly vetadoRepo: Repository<JugadorVetado>,
     @InjectRepository(SancionActiva)
     private readonly sancionRepo: Repository<SancionActiva>,
+    @InjectRepository(SancionCumplimiento)
+    private readonly cumplimientoRepo: Repository<SancionCumplimiento>,
     @InjectRepository(Cancha) private readonly canchaRepo: Repository<Cancha>,
     @InjectRepository(DiaNoJugable)
     private readonly diaNoJugableRepo: Repository<DiaNoJugable>,
@@ -759,22 +764,10 @@ export class PartidosAdminService {
       });
     }
 
-    // 2. Si todos los partidos de la fecha están FINALIZADO/WALKOVER,
-    //    marcar la fecha como FINALIZADA + decrementar sanciones
-    //    pendientes (regla "el jugador cumple su fecha de suspensión
-    //    cuando la fecha completa termina").
-    const partidosDeFecha = await this.repo.find({ where: { fechaId: partido.fechaId } });
-    const todosFinalizados = partidosDeFecha.every(
-      (p) => p.estado === 'FINALIZADO' || p.estado === 'WALKOVER',
-    );
-    if (todosFinalizados) {
-      await this.fechaRepo.update({ id: partido.fechaId }, { estado: 'FINALIZADA' });
-      // Pasamos torneoId para que el decremento NO afecte sanciones de
-      // OTROS torneos del mismo tenant. Si un tenant tiene dos torneos
-      // activos en paralelo, no queremos que cerrar fecha 3 del torneo A
-      // decremente sanciones del torneo B.
-      await this.decrementarSancionesPendientes(partido.tenantId, fecha.torneoId, fecha.numero);
-    }
+    // 2. T16/T17 — evaluar el cierre de la fecha con lock sobre `fechas`:
+    //    un NO_JUGADO/SUSPENDIDO cuenta como resuelto, y dos actas
+    //    cerrándose en paralelo se serializan en el lock (write skew A-4).
+    await this.evaluarCierreDeFecha(partido.fechaId, tenantId);
 
     // Sprint 14: push best-effort, diferido a después del COMMIT — el push
     // abre su propia transacción y antes del commit leería el acta sin cerrar.
@@ -1051,21 +1044,91 @@ export class PartidosAdminService {
    * torneo decremente sanciones de otros torneos paralelos del mismo
    * tenant.
    */
+  /**
+   * T16/T17 — Evalúa el cierre de la fecha y lo ejecuta si corresponde.
+   *
+   * Lock FOR UPDATE sobre la fila de `fechas` ANTES de leer los partidos
+   * hermanos: dos actas cerrándose en paralelo se serializan acá y la
+   * segunda ve el estado final de la primera (write skew de A-4). Orden
+   * canónico de locks: partido (update del caller) → fecha.
+   *
+   * Un NO_JUGADO/SUSPENDIDO/REPROGRAMADO cuenta como resuelto
+   * (fechaCompleta, packages/domain): ya no se espera acta de él.
+   */
+  private async evaluarCierreDeFecha(fechaId: string, tenantId: string): Promise<void> {
+    const fecha = await this.fechaRepo
+      .createQueryBuilder('f')
+      .setLock('pessimistic_write')
+      .where('f.id = :fechaId', { fechaId })
+      .andWhere('f.tenant_id = :tenantId', { tenantId })
+      .getOne();
+    if (!fecha || fecha.estado === 'FINALIZADA') return;
+
+    const partidosDeFecha = await this.repo.find({
+      where: { fechaId, tenantId },
+      select: { id: true, estado: true },
+    });
+    if (!fechaCompleta(partidosDeFecha.map((p) => p.estado))) return;
+
+    await this.fechaRepo.update({ id: fechaId, tenantId }, { estado: 'FINALIZADA' });
+    await this.decrementarSancionesPendientes(tenantId, fecha);
+  }
+
+  /**
+   * Simétrico: la fecha estaba FINALIZADA y un partido volvió a quedar
+   * pendiente (reabrir acta, anular walkover, reactivar, reprogramar).
+   * Reabre la fecha y revierte EXACTAMENTE lo que su cierre descontó.
+   */
+  private async revertirCierreDeFecha(fechaId: string, tenantId: string): Promise<void> {
+    const fecha = await this.fechaRepo
+      .createQueryBuilder('f')
+      .setLock('pessimistic_write')
+      .where('f.id = :fechaId', { fechaId })
+      .andWhere('f.tenant_id = :tenantId', { tenantId })
+      .getOne();
+    if (!fecha || fecha.estado !== 'FINALIZADA') return;
+
+    await this.fechaRepo.update({ id: fechaId, tenantId }, { estado: 'EN_CURSO' });
+    await this.revertirDecrementoSanciones(tenantId, fechaId);
+  }
+
+  /**
+   * T21 (ADR-0015) — descuento contra el libro mayor: por cada sanción
+   * vigente del torneo se registra (sancion, fecha) en sancion_cumplimientos
+   * con ON CONFLICT DO NOTHING; solo si la fila entró se descuenta. Eso
+   * hace el descuento idempotente por fecha: re-finalizar la misma fecha
+   * no descuenta dos veces.
+   *
+   * El torneoId de la fecha acota el descuento: cerrar la fecha 3 del
+   * torneo A no toca sanciones del torneo B del mismo tenant.
+   */
   private async decrementarSancionesPendientes(
     tenantId: string,
-    torneoId: string,
-    fechaNumeroFinalizada: number,
+    fecha: Fecha,
   ): Promise<void> {
-    await this.sancionRepo
-      .createQueryBuilder()
-      .update()
-      .set({ fechasPendientes: () => 'fechas_pendientes - 1' })
-      .where('tenant_id = :tenantId', { tenantId })
-      .andWhere('torneo_id = :torneoId', { torneoId })
-      .andWhere('cumplida = false')
-      .andWhere('fechas_pendientes > 0')
-      .andWhere('desde_fecha_numero <= :fechaNumero', { fechaNumero: fechaNumeroFinalizada })
-      .execute();
+    const candidatas = await this.sancionRepo.find({
+      where: { tenantId, torneoId: fecha.torneoId },
+    });
+    const vigentes = candidatas.filter((s) => sancionVigente(s, fecha.numero));
+
+    for (const s of vigentes) {
+      const ins = await this.cumplimientoRepo
+        .createQueryBuilder()
+        .insert()
+        .into(SancionCumplimiento)
+        .values({ tenantId, sancionId: s.id, fechaId: fecha.id })
+        .orIgnore()
+        .execute();
+      if (ins.identifiers.length === 0 || !ins.identifiers[0]) continue;
+
+      await this.sancionRepo
+        .createQueryBuilder()
+        .update()
+        .set({ fechasPendientes: () => 'GREATEST(fechas_pendientes - 1, 0)' })
+        .where('id = :id', { id: s.id })
+        .andWhere('tenant_id = :tenantId', { tenantId })
+        .execute();
+    }
 
     // Marcar cumplida las que llegaron a 0 (de este torneo)
     await this.sancionRepo
@@ -1073,7 +1136,7 @@ export class PartidosAdminService {
       .update()
       .set({ cumplida: true })
       .where('tenant_id = :tenantId', { tenantId })
-      .andWhere('torneo_id = :torneoId', { torneoId })
+      .andWhere('torneo_id = :torneoId', { torneoId: fecha.torneoId })
       .andWhere('cumplida = false')
       .andWhere('fechas_pendientes <= 0')
       .execute();
@@ -1103,7 +1166,6 @@ export class PartidosAdminService {
     }
 
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
-    const eraFechaFinalizada = fecha.estado === 'FINALIZADA';
 
     partido.actaCerradaAt = null;
     partido.actaCerradaBy = null;
@@ -1138,37 +1200,32 @@ export class PartidosAdminService {
       );
     }
 
-    // Solo cambiar fecha a EN_CURSO si estaba FINALIZADA. Si estaba
-    // PROGRAMADA / EN_CURSO, dejarla como estaba.
-    if (eraFechaFinalizada) {
-      await this.fechaRepo.update({ id: partido.fechaId }, { estado: 'EN_CURSO' });
-      fecha.estado = 'EN_CURSO';
-    }
-
-    // AUDIT-9 + LOG-3 (auditoría): la fecha vuelve a EN_CURSO, así que hay
-    // que revertir el decremento de sanciones que había disparado su
-    // cierre. El helper cappea contra fechas_totales para no inflar el
-    // contador (fechas_pendientes > fechas_totales).
-    if (eraFechaFinalizada) {
-      await this.revertirDecrementoSanciones(tenantId, fecha.torneoId, fecha.numero);
-    }
+    // AUDIT-9 + T16/T21 — si la fecha estaba FINALIZADA vuelve a EN_CURSO
+    // y se revierte EXACTAMENTE lo que su cierre descontó (ledger). Va
+    // DESPUÉS del borrado de sanciones automáticas: sus filas del ledger
+    // caen por CASCADE y no se re-infla lo que ya no existe.
+    await this.revertirCierreDeFecha(partido.fechaId, tenantId);
 
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
 
   /**
-   * Revierte el decremento de `fechas_pendientes` disparado al finalizar
-   * una fecha (al reabrir un acta o anular un walkover). Suma +1 a las
-   * sanciones del torneo que bajaban hasta esa fecha, **capeando contra
-   * fechas_totales** (LOG-3) para no dejar `fechas_pendientes` por encima
-   * del total original, y re-marca como no cumplidas las que vuelven a
-   * tener pendientes. COALESCE cubre sanciones legacy sin fechas_totales.
+   * T21 (ADR-0015) — reversión contra el libro mayor: devuelve +1 SOLO a
+   * las sanciones que ESTA fecha descontó y borra sus filas del ledger.
+   * Nunca toca revocadas (jamás reviven) ni sanciones que descontaron
+   * otras fechas — el +1 ciego a todo el torneo revivía cumplidas ajenas.
+   * El LEAST contra fechas_totales queda como cinturón para datos legacy.
+   * Una fecha finalizada ANTES del ledger no tiene filas: su reapertura
+   * no revierte nada (conservador, documentado en el ADR).
    */
   private async revertirDecrementoSanciones(
     tenantId: string,
-    torneoId: string,
-    fechaNumero: number,
+    fechaId: string,
   ): Promise<void> {
+    const descuentos = await this.cumplimientoRepo.find({ where: { tenantId, fechaId } });
+    if (descuentos.length === 0) return;
+
+    const sancionIds = descuentos.map((d) => d.sancionId);
     await this.sancionRepo
       .createQueryBuilder()
       .update()
@@ -1177,18 +1234,20 @@ export class PartidosAdminService {
           'LEAST(COALESCE(fechas_totales, fechas_pendientes + 1), fechas_pendientes + 1)',
       })
       .where('tenant_id = :tenantId', { tenantId })
-      .andWhere('torneo_id = :torneoId', { torneoId })
-      .andWhere('desde_fecha_numero <= :fechaNumero', { fechaNumero })
+      .andWhere('id IN (:...sancionIds)', { sancionIds })
+      .andWhere('revocada = false')
       .execute();
     await this.sancionRepo
       .createQueryBuilder()
       .update()
       .set({ cumplida: false })
       .where('tenant_id = :tenantId', { tenantId })
-      .andWhere('torneo_id = :torneoId', { torneoId })
-      .andWhere('cumplida = true')
+      .andWhere('id IN (:...sancionIds)', { sancionIds })
+      .andWhere('revocada = false')
       .andWhere('fechas_pendientes > 0')
       .execute();
+
+    await this.cumplimientoRepo.delete({ tenantId, fechaId });
   }
 
   // ─── Sprint 8: Suspensión y reprogramación ─────────────────────────
@@ -1196,6 +1255,7 @@ export class PartidosAdminService {
    * Suspende un partido individual. No puede tener acta cerrada — para
    * eso primero se reabre.
    */
+  @Transactional()
   async suspenderPartido(
     partidoId: string,
     tenantId: string,
@@ -1226,6 +1286,11 @@ export class PartidosAdminService {
     partido.centroEstado = 'IDLE';
     partido.centroArrancadoAt = null;
     await this.repo.save(partido);
+
+    // T16 — un suspendido queda RESUELTO: si era el último pendiente, la
+    // fecha se cierra (y descuenta sanciones) sin esperar un acta imposible.
+    await this.evaluarCierreDeFecha(partido.fechaId, tenantId);
+
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
@@ -1236,6 +1301,7 @@ export class PartidosAdminService {
    * ni cuenta como acta pendiente. Es reversible (reactivarPartido); la
    * reprogramación o el walkover los gestiona el admin por separado.
    */
+  @Transactional()
   async marcarNoJugado(
     partidoId: string,
     tenantId: string,
@@ -1261,6 +1327,12 @@ export class PartidosAdminService {
     partido.centroEstado = 'IDLE';
     partido.centroArrancadoAt = null;
     await this.repo.save(partido);
+
+    // T16 — el NO_JUGADO es el caso central de A-4: queda resuelto y la
+    // fecha puede finalizar (antes quedaba abierta para siempre y las
+    // suspensiones no se descontaban nunca).
+    await this.evaluarCierreDeFecha(partido.fechaId, tenantId);
+
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
@@ -1273,6 +1345,7 @@ export class PartidosAdminService {
    * Si el partido NO estaba suspendido, igual permite cambiar
    * fecha/cancha (sirve para reprogramaciones rutinarias).
    */
+  @Transactional()
   async reprogramarPartido(
     partidoId: string,
     tenantId: string,
@@ -1321,6 +1394,10 @@ export class PartidosAdminService {
     await this.validarChoqueCancha(partido);
     await this.repo.save(partido);
 
+    // T16 — el partido vuelve a PROGRAMADO: si su fecha se había cerrado
+    // contándolo como SUSPENDIDO/NO_JUGADO resuelto, se reabre y revierte.
+    await this.revertirCierreDeFecha(partido.fechaId, tenantId);
+
     // Limpieza opcional de designaciones (la idea es que las
     // designaciones viejas pueden no aplicar al nuevo horario).
     if (input.mantieneDesignaciones === false) {
@@ -1345,6 +1422,7 @@ export class PartidosAdminService {
    * Si ya estaba con acta cerrada o ya era WALKOVER, error 409. Si
    * estaba SUSPENDIDO, primero reactivar.
    */
+  @Transactional()
   async declararWalkover(
     partidoId: string,
     tenantId: string,
@@ -1432,24 +1510,9 @@ export class PartidosAdminService {
       }
     }
 
-    // Si todos los partidos de la fecha quedaron FINALIZADO/WALKOVER,
-    // marcamos la fecha como FINALIZADA y disparamos decremento de
-    // sanciones (igual que en cerrarActa).
-    const partidosDeFecha = await this.repo.find({ where: { fechaId: partido.fechaId } });
-    const todosCerrados = partidosDeFecha.every(
-      (p) => p.estado === 'FINALIZADO' || p.estado === 'WALKOVER',
-    );
-    if (todosCerrados) {
-      const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
-      if (fecha.estado !== 'FINALIZADA') {
-        await this.fechaRepo.update({ id: partido.fechaId }, { estado: 'FINALIZADA' });
-        await this.decrementarSancionesPendientes(
-          partido.tenantId,
-          fecha.torneoId,
-          fecha.numero,
-        );
-      }
-    }
+    // T16/T17 — evaluar el cierre de la fecha (lock + estados resueltos),
+    // igual que en cerrarActa.
+    await this.evaluarCierreDeFecha(partido.fechaId, tenantId);
 
     // Sprint 14: push también para walkover, diferido post-COMMIT (acá los
     // goles del W.O. se escriben recién al cierre — antes del commit el
@@ -1485,7 +1548,6 @@ export class PartidosAdminService {
     }
 
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
-    const eraFechaFinalizada = fecha.estado === 'FINALIZADA';
 
     partido.estado = 'PROGRAMADO';
     partido.golesLocal = null;
@@ -1505,10 +1567,9 @@ export class PartidosAdminService {
       );
     }
 
-    if (eraFechaFinalizada) {
-      await this.fechaRepo.update({ id: partido.fechaId }, { estado: 'EN_CURSO' });
-      await this.revertirDecrementoSanciones(tenantId, fecha.torneoId, fecha.numero);
-    }
+    // T16/T21 — reabre la fecha si estaba FINALIZADA y revierte su
+    // descuento exacto (ledger).
+    await this.revertirCierreDeFecha(partido.fechaId, tenantId);
 
     return this.toDto(
       partido,
@@ -1522,6 +1583,7 @@ export class PartidosAdminService {
    * Reactiva un partido SUSPENDIDO sin cambiar fecha/hora — útil cuando
    * la suspensión se canceló (mejoró el clima 2hs antes).
    */
+  @Transactional()
   async reactivarPartido(partidoId: string, tenantId: string): Promise<PartidoAdmin> {
     const partido = await this.findPartido(partidoId, tenantId);
     if (
@@ -1538,6 +1600,11 @@ export class PartidosAdminService {
     partido.suspendidoByUserId = null;
     partido.observacionesSuspension = null;
     await this.repo.save(partido);
+
+    // T16 — vuelve a haber un partido pendiente: si la fecha se había
+    // cerrado contándolo como resuelto, se reabre y revierte su descuento.
+    await this.revertirCierreDeFecha(partido.fechaId, tenantId);
+
     const fecha = await this.fechaRepo.findOneOrFail({ where: { id: partido.fechaId } });
     return this.toDto(partido, fecha.numero, fecha.etiqueta, fecha.tipoReprogramacion === 'REPROGRAMADA');
   }
@@ -1626,15 +1693,11 @@ export class PartidosAdminService {
     sancionadosRuts: Set<string>;
     vetadosRuts: Set<string>;
   }> {
-    const sanc = await this.sancionRepo
-      .createQueryBuilder('s')
-      .select(['s.jugador_id AS "jugadorId"', 's.rut AS "rut"'])
-      .where('s.tenant_id = :tenantId', { tenantId })
-      .andWhere('s.torneo_id = :torneoId', { torneoId })
-      .andWhere('s.cumplida = false')
-      .andWhere('s.fechas_pendientes > 0')
-      .andWhere('s.desde_fecha_numero <= :n', { n: fechaNumero })
-      .getRawMany<{ jugadorId: string | null; rut: string | null }>();
+    // T20 — criterio único de vigencia (incluye desde/revocada) en
+    // packages/domain; el volumen por torneo es chico, filtrar en TS.
+    const sanc = (
+      await this.sancionRepo.find({ where: { tenantId, torneoId } })
+    ).filter((s) => sancionVigente(s, fechaNumero));
 
     const vet = await this.vetadoRepo.find({
       where: { tenantId },

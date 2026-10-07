@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
+import { ESTADOS_PARTIDO_CUENTAN_TABLA } from '@fixtura/domain';
+
 import { fijarBypassLocal } from '../../common/rls/rls-context';
 import { DataSource } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
@@ -63,7 +65,7 @@ export class SuperAdminMetricsService {
       SELECT
         (SELECT COUNT(*)::int FROM torneos WHERE estado = 'ACTIVO') AS torneos_activos,
         (SELECT COUNT(*)::int FROM partidos
-          WHERE estado IN ('FINALIZADO','WALKOVER')
+          WHERE estado IN (${ESTADOS_PARTIDO_CUENTAN_TABLA.map((e) => `'${e}'`).join(',')})
             AND updated_at > NOW() - INTERVAL '30 days') AS partidos_30d,
         (SELECT COUNT(*)::int FROM partidos
           WHERE acta_cerrada_at > NOW() - INTERVAL '30 days') AS actas_30d

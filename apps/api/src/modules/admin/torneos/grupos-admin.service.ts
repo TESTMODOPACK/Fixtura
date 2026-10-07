@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
-import { calcularTablaPosiciones } from '@fixtura/domain';
+import { calcularTablaPosiciones, ESTADOS_PARTIDO_CUENTAN_TABLA } from '@fixtura/domain';
 import type {
   GrupoInscripcionItem,
   GruposTorneoResponse,
@@ -129,7 +129,9 @@ export class GruposAdminService {
       .innerJoin('p.fecha', 'f')
       .where('f.torneo_id = :torneoId', { torneoId })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
-      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .andWhere('p.estado IN (:...estadosTabla)', {
+        estadosTabla: [...ESTADOS_PARTIDO_CUENTAN_TABLA],
+      })
       .andWhere('p.grupo_id IS NOT NULL')
       .getMany();
     const partidosPorGrupo = new Map<string, Partido[]>();

@@ -8,7 +8,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
-import { calcularTablaPosiciones } from '@fixtura/domain';
+import {
+  calcularTablaPosiciones,
+  cuentaParaTabla,
+  ESTADOS_PARTIDO_CUENTAN_TABLA,
+  ESTADOS_PARTIDO_RESUELTO,
+} from '@fixtura/domain';
 import type {
   BracketPlayoffResponse,
   GrupoInscripcionItem,
@@ -268,9 +273,12 @@ export class PlayoffsAdminService {
       .where('f.torneo_id = :torneoId', { torneoId })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
       .andWhere('p.llave_id IS NULL')
-      // NO_JUGADO está resuelto (el admin decidió que no se juega): no cuenta
-      // como pendiente y no bloquea la siembra de playoffs.
-      .andWhere(`p.estado NOT IN ('FINALIZADO','WALKOVER','NO_JUGADO')`)
+      // T16/T20 — pendiente = NO resuelto. La lista vieja omitía
+      // SUSPENDIDO/REPROGRAMADO y bloqueaba la siembra con fechas que el
+      // cierre de fecha ya da por completas.
+      .andWhere('p.estado NOT IN (:...estadosResueltos)', {
+        estadosResueltos: [...ESTADOS_PARTIDO_RESUELTO],
+      })
       .getCount();
     if (pendientes > 0) {
       throw new BadRequestException(
@@ -630,7 +638,9 @@ export class PlayoffsAdminService {
       .innerJoin('p.fecha', 'f')
       .where('f.torneo_id = :torneoId', { torneoId })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
-      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .andWhere('p.estado IN (:...estadosTabla)', {
+        estadosTabla: [...ESTADOS_PARTIDO_CUENTAN_TABLA],
+      })
       .andWhere('p.llave_id IS NULL')
       .getMany();
     const partidos = partidosRaw.map((p) => ({
@@ -695,9 +705,7 @@ export class PlayoffsAdminService {
     idaVuelta: boolean,
   ): string | null {
     if (!llave.inscripcionLocalId || !llave.inscripcionVisitaId) return null;
-    const jugados = partidos.filter(
-      (p) => p.estado === 'FINALIZADO' || p.estado === 'WALKOVER',
-    );
+    const jugados = partidos.filter((p) => cuentaParaTabla(p.estado));
 
     if (!idaVuelta) {
       const p = jugados[0];

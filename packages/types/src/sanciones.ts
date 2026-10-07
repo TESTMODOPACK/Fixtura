@@ -31,6 +31,8 @@ export const SancionAdminSchema = z.object({
   desdeFechaNumero: z.number().int().min(1),
   descripcion: z.string().nullable(),
   cumplida: z.boolean(),
+  // T21 — revocada por el tribunal: no vigente y jamás revive.
+  revocada: z.boolean(),
   origenIncidenciaPartidoId: z.uuid().nullable(),
   createdAt: z.iso.datetime(),
 });

@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { cuentaParaTabla } from '@fixtura/domain';
 import type {
   EstadisticasDelegado,
   EstadisticasInscripcion,
@@ -26,9 +27,6 @@ import { Tenant } from '../../tenants/entities/tenant.entity';
 import { CobrosAdminService } from '../cobros/cobros-admin.service';
 import { InformesAdminService } from '../informes/informes-admin.service';
 import { PagosService } from '../pagos/pagos.service';
-
-/** Estados de partido que cuentan como "jugado" para estadísticas. */
-const ESTADOS_JUGADOS = ['FINALIZADO', 'WALKOVER'];
 
 @Injectable()
 export class DelegadoPortalService {
@@ -169,7 +167,7 @@ export class DelegadoPortalService {
 
     let resultado: PartidoDelegado['resultado'] = null;
     if (
-      ESTADOS_JUGADOS.includes(p.estado) &&
+      cuentaParaTabla(p.estado) &&
       golesFavor !== null &&
       golesContra !== null
     ) {
@@ -253,7 +251,7 @@ export class DelegadoPortalService {
       .getMany();
 
     for (const p of partidosRaw) {
-      if (!ESTADOS_JUGADOS.includes(p.estado)) continue;
+      if (!cuentaParaTabla(p.estado)) continue;
       const esLocal = !!p.inscripcionLocalId && ids.includes(p.inscripcionLocalId);
       const inscId = esLocal ? p.inscripcionLocalId : p.inscripcionVisitaId;
       if (!inscId) continue;
@@ -305,7 +303,10 @@ export class DelegadoPortalService {
       )
       .leftJoin('torneos', 't', 't.id = s.torneo_id')
       .where('s.tenant_id = :tenantId', { tenantId })
+      // T20 — criterio único: activa = no cumplida, con pendientes, no revocada.
       .andWhere('s.cumplida = false')
+      .andWhere('s.fechas_pendientes > 0')
+      .andWhere('s.revocada = false')
       .select('s.id', 'id')
       .addSelect('s.rut', 'rut')
       .addSelect('s.motivo', 'motivo')

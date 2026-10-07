@@ -281,6 +281,7 @@ export class DesignacionesAdminService {
     return designaciones.map((d) => this.toDto(d, partido, porPersonal, hoy, treintaDias));
   }
 
+  @Transactional()
   async asignar(
     tenantId: string,
     input: AsignarDesignacionDto,
@@ -406,9 +407,9 @@ export class DesignacionesAdminService {
     tenantId: string,
     accion: 'CONFIRMAR' | 'RECHAZAR',
   ): Promise<{ ok: boolean; estado: string }> {
-    // Endpoint público (bypass del interceptor): se re-acota al tenant del
-    // token firmado antes de operar — defensa en profundidad para evitar
-    // lectura/escritura cross-tenant si algo filtrara solo por RLS.
+    // Endpoint público (el interceptor dejó rls_bypass='on'): se re-acota
+    // al tenant del token firmado — fijarTenantLocal apaga el bypass y fija
+    // el tenant en el mismo statement (defensa en profundidad real).
     await fijarTenantLocal(this.dataSource, tenantId);
 
     const d = await this.repo.findOne({ where: { id: designacionId, tenantId } });

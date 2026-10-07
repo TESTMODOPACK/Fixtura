@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { ESTADOS_PARTIDO_CUENTAN_TABLA } from '@fixtura/domain';
 import type { AnalyticsAdmin, DisciplinaTorneo, SeriePunto } from '@fixtura/types';
 
 import { Club } from '../../competition/entities/club.entity';
@@ -45,7 +46,9 @@ export class AnalyticsAdminService {
       this.partidoRepo
         .createQueryBuilder('p')
         .where('p.tenant_id = :tenantId', { tenantId })
-        .andWhere(`p.estado IN ('FINALIZADO', 'WALKOVER')`)
+        .andWhere('p.estado IN (:...estadosTabla)', {
+          estadosTabla: [...ESTADOS_PARTIDO_CUENTAN_TABLA],
+        })
         .getCount(),
       this.incidenciaRepo
         .createQueryBuilder('i')

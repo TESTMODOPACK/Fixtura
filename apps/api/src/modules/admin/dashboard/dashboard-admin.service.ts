@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { ESTADOS_PARTIDO_CUENTAN_TABLA } from '@fixtura/domain';
 import type { DashboardAdmin } from '@fixtura/types';
 
 import { Club } from '../../competition/entities/club.entity';
@@ -156,6 +157,7 @@ export class DashboardAdminService {
       .where('s.tenant_id = :tenantId', { tenantId })
       .andWhere('s.cumplida = false')
       .andWhere('s.fechas_pendientes > 0')
+      .andWhere('s.revocada = false')
       .getCount();
   }
 
@@ -318,7 +320,9 @@ export class DashboardAdminService {
     const inscripcionIds = inscripciones.map((i) => i.inscripcion_id);
     const partidos = await this.partidoRepo
       .createQueryBuilder('p')
-      .where(`p.estado IN ('FINALIZADO', 'WALKOVER')`)
+      .where('p.estado IN (:...estadosTabla)', {
+        estadosTabla: [...ESTADOS_PARTIDO_CUENTAN_TABLA],
+      })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
       .andWhere(
         '(p.inscripcion_local_id IN (:...ids) OR p.inscripcion_visita_id IN (:...ids))',

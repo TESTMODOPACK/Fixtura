@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 
-import { calcularTablaPosiciones } from '@fixtura/domain';
+import { calcularTablaPosiciones, ESTADOS_PARTIDO_CUENTAN_TABLA } from '@fixtura/domain';
 
 import { Club } from '../../competition/entities/club.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
@@ -314,7 +314,9 @@ export class FlyerDelegadosService {
       .innerJoin('p.fecha', 'f')
       .where('f.torneo_id = :id', { id: torneo.id })
       .andWhere('p.tenant_id = :tenantId', { tenantId })
-      .andWhere(`p.estado IN ('FINALIZADO','WALKOVER')`)
+      .andWhere('p.estado IN (:...estadosTabla)', {
+        estadosTabla: [...ESTADOS_PARTIDO_CUENTAN_TABLA],
+      })
       .andWhere('p.llave_id IS NULL')
       .getMany();
     const partidos = partidosRaw.map((p) => ({
