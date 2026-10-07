@@ -1159,8 +1159,13 @@ export class PartidosAdminService {
     tenantId: string,
     fecha: Fecha,
   ): Promise<void> {
+    // Lock ordenado de las sanciones: sin él, un DELETE concurrente (la
+    // reconciliación de reabrirActa) entre el find y el INSERT del ledger
+    // rompía la FK con 23503 y el cierre de la fecha devolvía 500.
     const candidatas = await this.sancionRepo.find({
       where: { tenantId, torneoId: fecha.torneoId },
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
     });
     const vigentes = candidatas.filter((s) => sancionVigente(s, fecha.numero));
 
@@ -1180,6 +1185,8 @@ export class PartidosAdminService {
         .set({ fechasPendientes: () => 'GREATEST(fechas_pendientes - 1, 0)' })
         .where('id = :id', { id: s.id })
         .andWhere('tenant_id = :tenantId', { tenantId })
+        .andWhere('revocada = false')
+        .andWhere('cumplida = false')
         .execute();
     }
 
@@ -1271,6 +1278,12 @@ export class PartidosAdminService {
     if (descuentos.length === 0) return;
 
     const sancionIds = descuentos.map((d) => d.sancionId);
+    // Lock ordenado (mismo orden que el decremento) antes de los updates.
+    await this.sancionRepo.find({
+      where: { tenantId, id: In(sancionIds) },
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
     await this.sancionRepo
       .createQueryBuilder()
       .update()

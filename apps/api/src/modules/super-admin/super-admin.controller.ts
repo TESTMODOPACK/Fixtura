@@ -234,7 +234,7 @@ export class SuperAdminFacturasController {
   @Post('generar-mes')
   @HttpCode(200)
   @Audited({ action: 'platform.facturas_generadas_manual' })
-  generarMesActual(): Promise<{ creadas: number; saltadas: number }> {
+  generarMesActual(): Promise<{ creadas: number; saltadas: number; fallidas: number }> {
     const hoy = new Date();
     return this.svc.generarFacturasMes(hoy.getMonth() + 1, hoy.getFullYear());
   }

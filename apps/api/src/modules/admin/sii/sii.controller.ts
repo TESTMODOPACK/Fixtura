@@ -77,7 +77,9 @@ export class SiiAdminController {
         `Documento ${id} está FALLIDO tras ${doc.intentos} intentos. Resetea manualmente en DB si quieres reintentar.`,
       );
     }
-    await this.svc.emitir(id);
+    // lanzarSiReciente: el reintento manual dentro del minuto devuelve 409
+    // explícito en vez de un no-op mudo que confundía al admin.
+    await this.svc.emitir(id, { lanzarSiReciente: true });
     return this.svc.findOne(id, tenantId);
   }
 }

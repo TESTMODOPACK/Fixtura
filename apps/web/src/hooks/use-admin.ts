@@ -2304,7 +2304,7 @@ export function useGenerarFacturasMes() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      apiFetch<{ creadas: number; saltadas: number }>(
+      apiFetch<{ creadas: number; saltadas: number; fallidas: number }>(
         `/super-admin/facturas/generar-mes`,
         { method: 'POST' },
       ),

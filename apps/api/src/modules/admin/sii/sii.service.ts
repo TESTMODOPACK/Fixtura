@@ -177,7 +177,10 @@ export class SIIService {
    *   - SiiCron (reintentos posteriores)
    *   - Manualmente desde admin UI (botón "Reintentar")
    */
-  async emitir(documentoId: string): Promise<DocumentoTributario> {
+  async emitir(
+    documentoId: string,
+    opts?: { lanzarSiReciente?: boolean },
+  ): Promise<DocumentoTributario> {
     // Tres pasos para NO retener una conexión durante el HTTP al provider
     // (hasta 30s por emisión; una ráfaga de pagos agotaba el pool):
     //   1) tx corta: reclamar el intento;
@@ -189,9 +192,10 @@ export class SIIService {
       this.reclamarIntento(documentoId),
     );
     if (!reclamo.procesar) {
-      if (reclamo.reciente) {
-        // El "Reintentar" manual dentro del minuto era un no-op mudo: la UI
-        // mostraba 200 con el documento igual y nadie entendía por qué.
+      // Solo el "Reintentar" manual del admin recibe el 409 (antes era un
+      // no-op mudo); el cron y el fire-and-forget del pago se retiran en
+      // silencio — para ellos el reclamo ajeno no es un error.
+      if (reclamo.reciente && opts?.lanzarSiReciente) {
         throw new ConflictException(
           'Ya hay un intento de emisión en curso o muy reciente — reintenta en un minuto.',
         );
@@ -232,9 +236,54 @@ export class SIIService {
       fallo = (err as Error).message;
     }
 
-    return runComoSistema(this.dataSource, () =>
-      this.persistirResultado(documentoId, resultado, fallo, providerNombre, esByo),
+    // Persistir con reintentos: si esto falla DESPUÉS de que el proveedor
+    // emitió, el cron re-emitiría a los 5 min una SEGUNDA boleta con folio
+    // nuevo. Si los 3 intentos agotan, log.error con doc y folio para
+    // reconciliar a mano.
+    let errorPersistencia: unknown = null;
+    for (let intento = 1; intento <= 3; intento++) {
+      try {
+        return await runComoSistema(this.dataSource, () =>
+          this.persistirResultado(documentoId, resultado, fallo, providerNombre, esByo),
+        );
+      } catch (err) {
+        errorPersistencia = err;
+        await new Promise((resolve) => setTimeout(resolve, 500 * intento));
+      }
+    }
+    this.log.error(
+      `NO se pudo persistir el resultado de emisión doc=${documentoId} folio=${
+        resultado?.folio ?? '-'
+      }: ${(errorPersistencia as Error).message} — reconciliar a mano (riesgo de doble emisión).`,
     );
+    throw errorPersistencia;
+  }
+
+  /**
+   * Barrido del cron: un documento con los intentos agotados que quedó
+   * PENDIENTE_EMISION (proceso muerto entre el reclamo y la persistencia)
+   * pasa a FALLIDO — `intentos >= MAX` lo excluía del reintento y nadie
+   * lo sacaba del limbo.
+   */
+  async marcarFallidosAgotados(tenantId: string): Promise<void> {
+    const r = await this.docRepo
+      .createQueryBuilder()
+      .update()
+      .set({
+        estado: 'FALLIDO',
+        ultimoError: () =>
+          `COALESCE(ultimo_error, 'intentos agotados sin resultado persistido')`,
+      })
+      .where('tenant_id = :tenantId', { tenantId })
+      .andWhere(`estado = 'PENDIENTE_EMISION'`)
+      .andWhere('intentos >= :max', { max: SIIService.MAX_INTENTOS })
+      .andWhere(`ultimo_intento_at < NOW() - INTERVAL '10 minutes'`)
+      .execute();
+    if ((r.affected ?? 0) > 0) {
+      this.log.warn(
+        `${r.affected} documento(s) con intentos agotados marcados FALLIDO (tenant ${tenantId}).`,
+      );
+    }
   }
 
   /**

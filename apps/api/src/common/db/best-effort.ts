@@ -23,7 +23,10 @@ export async function bestEffort<T>(ds: DataSource, fn: () => Promise<T>): Promi
     // SOLO "no hay transacción activa" (25P01) habilita ejecutar directo.
     // Cualquier otro fallo (tx ya abortada 25P02, conexión caída) debe
     // subir: correr fn() sin red daría un error críptico río abajo.
-    if ((err as { code?: string }).code === '25P01') return fn();
+    // El código vive en err.code (QueryFailedError copia las propiedades
+    // del driverError) — driverError queda de respaldo ante un upgrade.
+    const e = err as { code?: string; driverError?: { code?: string } };
+    if ((e.code ?? e.driverError?.code) === '25P01') return fn();
     throw err;
   }
   try {

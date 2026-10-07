@@ -61,15 +61,18 @@ export class SuperAdminMetricsService {
       torneos_activos: number;
       partidos_30d: number;
       actas_30d: number;
-    }> = await this.ds.query(`
+    }> = await this.ds.query(
+      `
       SELECT
         (SELECT COUNT(*)::int FROM torneos WHERE estado = 'ACTIVO') AS torneos_activos,
         (SELECT COUNT(*)::int FROM partidos
-          WHERE estado IN (${ESTADOS_PARTIDO_CUENTAN_TABLA.map((e) => `'${e}'`).join(',')})
+          WHERE estado = ANY($1)
             AND updated_at > NOW() - INTERVAL '30 days') AS partidos_30d,
         (SELECT COUNT(*)::int FROM partidos
           WHERE acta_cerrada_at > NOW() - INTERVAL '30 days') AS actas_30d
-    `);
+    `,
+      [[...ESTADOS_PARTIDO_CUENTAN_TABLA]],
+    );
     const competicion = competicionRows[0] ?? {
       torneos_activos: 0,
       partidos_30d: 0,

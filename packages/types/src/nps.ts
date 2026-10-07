@@ -42,6 +42,8 @@ export const DispararNpsResultadoSchema = z.object({
   enviadas: z.number().int().nonnegative(),
   sinEmail: z.number().int().nonnegative(),
   yaEnviadas: z.number().int().nonnegative(),
+  // Envíos que fallaron (proveedor caído): antes no se contaban en nada.
+  fallidas: z.number().int().nonnegative(),
 });
 export type DispararNpsResultado = z.infer<typeof DispararNpsResultadoSchema>;
 

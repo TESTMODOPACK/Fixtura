@@ -146,7 +146,9 @@ export class AuditedInterceptor implements NestInterceptor {
       );
     } catch (e) {
       this.log.warn(
-        `No se pudo auditar el fallo de ${opts.action}: ${(e as Error).message}`,
+        `No se pudo auditar el fallo de ${opts.action}: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
       );
     }
   }

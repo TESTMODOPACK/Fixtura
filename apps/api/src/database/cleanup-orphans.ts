@@ -186,11 +186,26 @@ async function main(): Promise<void> {
     `);
     log('tenants.sii_config / sii_api_key_enc aseguradas.');
 
+    // Gate "schema desde cero" (revisión F2): categorías/clubes/jugadores/
+    // inscripciones nacen ACÁ, antes de canchas/cobros/tarifas y de
+    // partido_jugadores — las FKs de esos bloques (jugadores,
+    // inscripciones_torneo) reventaban con 42P01/42703 en una base vacía.
+    // En una base ya migrada ambos son no-op idempotentes.
+    await ensureCategoriasYSeriesTables(client, log);
+    await ensureClubesTables(client, log);
+
     // Sprint 6: tabla canchas.
     await ensureCanchasTable(client, log);
 
     // Sprint 6B: tabla cobros (finanzas MVP).
     await ensureCobrosTable(client, log);
+
+    // La FK cobros.inscripcion_id la referencia el índice único de cuotas
+    // que crea ensureTarifasTorneoTable más abajo — debe existir antes.
+    await client.query(`
+      ALTER TABLE cobros
+        ADD COLUMN IF NOT EXISTS inscripcion_id UUID REFERENCES inscripciones_torneo(id) ON DELETE SET NULL
+    `);
 
     // Sprint 34A: tarifario configurable por torneo + FKs en cobros.
     // Tiene que correr DESPUES de ensureCobrosTable porque suma columnas
@@ -419,10 +434,8 @@ async function main(): Promise<void> {
     // se crea más arriba pero la tabla destino se crea recién aquí.
     await ensureFkTransaccionesFacturaPlataforma(client, log);
 
-    // Sprint 25 (Categorías): categorias_jugadores + series. Soporte para
-    // ligas con divisiones por edad (Senior, Super Senior, Dorados, etc.)
-    // con cupo de excepciones configurable.
-    await ensureCategoriasYSeriesTables(client, log);
+    // Sprint 25 (Categorías): categorias_jugadores + series — movido al
+    // inicio del main() por el gate "schema desde cero" (ver arriba).
 
     // Sprint 25 Paso 3: vincular torneos a una categoría. FK ON DELETE SET
     // NULL: si borran una categoría, los torneos referenciados quedan sin
@@ -445,7 +458,7 @@ async function main(): Promise<void> {
     //   inscripciones_torneo    — club inscrito a (torneo, categoría, serie)
     //   planilla_torneo         — subset del plantel que juega ese torneo
     //   jugadores_vetados       — lista negra por RUT a nivel tenant
-    await ensureClubesTables(client, log);
+    // (la llamada vive al inicio del main() — gate "schema desde cero")
     await ensureGruposTorneo(client, log);
     await ensurePlayoffsTables(client, log);
 
@@ -2560,14 +2573,19 @@ async function convergerPoliciesV2(
     log(`AVISO: tablas con tenant_id y RLS deshabilitado: ${sinRls.join(', ')}.`);
   }
 
-  // Loud failure: ninguna tabla con RLS puede quedar con una policy que no
-  // sea la v2. Mejor no arrancar que arrancar fail-open.
+  // Loud failure: ninguna tabla con RLS ACTIVO puede quedar con una policy
+  // que no sea la v2. Mejor no arrancar que arrancar fail-open. Una policy
+  // v1 sobre una tabla con RLS deshabilitado es inerte (no fail-open): se
+  // reporta arriba como AVISO, sin tumbar el boot.
   const v1 = await client.query<{ tablename: string }>(`
     SELECT p.tablename
     FROM pg_policies p
+    JOIN pg_class c ON c.relname = p.tablename
+     AND c.relnamespace = 'public'::regnamespace
     WHERE p.schemaname = 'public'
       AND p.policyname = 'tenant_isolation'
       AND p.qual NOT LIKE '%rls_bypass%'
+      AND c.relrowsecurity
   `);
   if ((v1.rowCount ?? 0) > 0) {
     throw new Error(
@@ -2622,6 +2640,14 @@ async function ensureDisciplinaLedger(
     `);
   }
 
+  // El backfill de abajo corre SOLO cuando la tabla recién nace — no cada
+  // vez que esté vacía (un torneo nuevo sin descuentos la deja vacía y el
+  // backfill reaparecería en cada boot).
+  const ledgerExistia = await client.query(
+    `SELECT to_regclass('public.sancion_cumplimientos') AS t`,
+  );
+  const ledgerRecienNacido = !ledgerExistia.rows[0]?.t;
+
   await client.query(`
     CREATE TABLE IF NOT EXISTS sancion_cumplimientos (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2646,8 +2672,11 @@ async function ensureDisciplinaLedger(
   // una fecha cerrada antes del ledger no revertía nada y el re-cierre
   // descontaba por SEGUNDA vez. Aproximación: no se sabe qué fecha exacta
   // descontó qué, pero el conteo por sanción queda correcto.
-  const ledgerVacio = await client.query(`SELECT 1 FROM sancion_cumplimientos LIMIT 1`);
-  if (ledgerVacio.rowCount === 0) {
+  if (ledgerRecienNacido) {
+    // ASC: el descuento real ocurrió en las PRIMERAS fechas finalizadas
+    // desde `desde` — atribuirlo a las últimas (DESC) hacía que reabrir
+    // una fecha reciente "devolviera" un cumplimiento que pertenecía a
+    // una fecha vieja y re-suspendiera al jugador.
     const bf = await client.query(`
       INSERT INTO sancion_cumplimientos (tenant_id, sancion_id, fecha_id)
       SELECT s.tenant_id, s.id, f.id
@@ -2657,7 +2686,7 @@ async function ensureDisciplinaLedger(
            WHERE fi.torneo_id = s.torneo_id
              AND fi.estado = 'FINALIZADA'
              AND fi.numero >= s.desde_fecha_numero
-           ORDER BY fi.numero DESC
+           ORDER BY fi.numero ASC, fi.created_at ASC
            LIMIT GREATEST(COALESCE(s.fechas_totales - s.fechas_pendientes, 0), 0)
         ) f ON true
       ON CONFLICT DO NOTHING
@@ -2825,6 +2854,31 @@ async function recrearPolicy(
     // La tabla no existe todavía en esta base (se crea más abajo en el
     // script): la convergencia final del main() la cubre.
     return;
+  }
+  // Skip si ya es la policy canónica: sin esto, cada boot re-creaba ~40
+  // policies tomando ACCESS EXCLUSIVE por tabla — con un pg_dump nocturno
+  // solapado, el lock_timeout de 15s tumbaba el arranque en crash-loop.
+  const actual = await client.query<{ qual: string | null; force: boolean }>(
+    `SELECT p.qual, c.relforcerowsecurity AS force
+       FROM pg_policies p
+       JOIN pg_class c ON c.relname = p.tablename
+        AND c.relnamespace = 'public'::regnamespace
+      WHERE p.schemaname = 'public'
+        AND p.tablename = $1
+        AND p.policyname = 'tenant_isolation'`,
+    [table],
+  );
+  const fila = actual.rows[0];
+  if (fila) {
+    const qual = fila.qual ?? '';
+    const esGlobalNull = clause.includes('tenant_id IS NULL');
+    if (
+      fila.force &&
+      qual.includes('rls_bypass') &&
+      qual.includes('tenant_id IS NULL') === esGlobalNull
+    ) {
+      return;
+    }
   }
   // Atómico: un crash entre DROP y CREATE dejaría la tabla con FORCE y sin
   // policy (deny-all hasta el próximo boot). En tx queda la vieja o la nueva.

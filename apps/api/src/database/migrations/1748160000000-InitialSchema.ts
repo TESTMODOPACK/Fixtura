@@ -114,25 +114,10 @@ export class InitialSchema1748160000000 implements MigrationInterface {
       `CREATE INDEX idx_refresh_tokens_user_active ON refresh_tokens(user_id) WHERE revoked_at IS NULL`,
     );
 
-    // ─── magic_links (onboarding personal RF-04b) ─────────────────────
-    await queryRunner.query(`
-      CREATE TABLE magic_links (
-        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        tenant_id       UUID REFERENCES tenants(id) ON DELETE CASCADE,
-        email           VARCHAR(255),
-        phone           VARCHAR(30),
-        token_hash      VARCHAR(255) NOT NULL UNIQUE,
-        role_to_grant   VARCHAR(50) NOT NULL,
-        scope_id        UUID,
-        metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,
-        expires_at      TIMESTAMPTZ NOT NULL,
-        consumed_at     TIMESTAMPTZ,
-        created_by      UUID REFERENCES users(id),
-        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        CHECK (email IS NOT NULL OR phone IS NOT NULL)
-      )
-    `);
-    await queryRunner.query(`CREATE INDEX idx_magic_links_token ON magic_links(token_hash)`);
+    // magic_links la crea su migración dedicada (1748380000000-MagicLinks):
+    // el CREATE duplicado que vivía acá reventaba con 42P07 el replay en
+    // una base vacía (gate de CI "schema desde cero"). En prod ambas
+    // migraciones ya corrieron — este texto no se re-ejecuta.
 
     // ─── audit_logs ────────────────────────────────────────────────────
     await queryRunner.query(`

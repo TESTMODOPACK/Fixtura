@@ -2,7 +2,11 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 
-import { calcularTablaPosiciones, ESTADOS_PARTIDO_CUENTAN_TABLA } from '@fixtura/domain';
+import {
+  calcularTablaPosiciones,
+  cuentaParaTabla,
+  ESTADOS_PARTIDO_CUENTAN_TABLA,
+} from '@fixtura/domain';
 
 import { Club } from '../../competition/entities/club.entity';
 import { Fecha } from '../../competition/entities/fecha.entity';
@@ -239,8 +243,12 @@ export class FlyerDelegadosService {
     const proximaPartidos = proximaFecha
       ? await this.partidosDeFecha(proximaFecha.id, tenantId)
       : [];
+    // Solo partidos con resultado real: un NO_JUGADO/SUSPENDIDO dentro de
+    // una fecha finalizada salía como "A vs B" bajo el título "Resultados".
     const ultimaPartidos = ultimaFecha
-      ? await this.partidosDeFecha(ultimaFecha.id, tenantId)
+      ? (await this.partidosDeFecha(ultimaFecha.id, tenantId)).filter((p) =>
+          cuentaParaTabla(p.estado),
+        )
       : [];
 
     const { filas, inscToClub } = await this.computeTablaFilas(

@@ -1009,11 +1009,19 @@ function DispararEncuesta({
       </div>
 
       {resultado && (
-        <div className="mt-3 rounded-lg bg-green-bright/10 border border-green-bright/30 px-3 py-2 text-sm text-green-deep">
+        <div
+          className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+            resultado.fallidas > 0
+              ? 'bg-danger/10 border border-danger/30 text-danger'
+              : 'bg-green-bright/10 border border-green-bright/30 text-green-deep'
+          }`}
+        >
           Se enviaron <strong>{resultado.enviadas}</strong> encuesta(s).
           {resultado.yaEnviadas > 0 && ` ${resultado.yaEnviadas} club(es) ya tenían encuesta.`}
           {resultado.sinEmail > 0 &&
             ` ${resultado.sinEmail} club(es) sin email de contacto — cárgalo en la directiva del club.`}
+          {resultado.fallidas > 0 &&
+            ` ${resultado.fallidas} envío(s) FALLARON (proveedor de email) — revisa la configuración y reintenta.`}
         </div>
       )}
     </div>

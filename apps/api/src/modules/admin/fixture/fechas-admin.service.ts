@@ -107,6 +107,18 @@ export class FechasAdminService {
     // tras el assignment y rompe las validaciones que vienen abajo).
     const tipoAntes: 'ORIGINAL' | 'REPROGRAMADA' = fecha.tipoReprogramacion;
 
+    // Orden canónico de locks (ADR-0015): partido → fecha. Lockear primero
+    // los partidos evita el deadlock 40P01 contra un cierre de acta
+    // concurrente, que toma el partido y después la fecha.
+    await this.partidoRepo
+      .createQueryBuilder('p')
+      .setLock('pessimistic_write')
+      .select('p.id')
+      .where('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('p.fecha_id = :fechaId', { fechaId })
+      .orderBy('p.id', 'ASC')
+      .getMany();
+
     // 1. Marcar la fecha original como SUSPENDIDA. NO tocamos
     // tipoReprogramacion — si era REPROGRAMADA queda REPROGRAMADA
     // suspendida (caso de cancelar la reprogramación misma).
@@ -276,6 +288,16 @@ export class FechasAdminService {
       }
     }
 
+    // Orden canónico de locks: partido → fecha (ver suspenderFecha).
+    await this.partidoRepo
+      .createQueryBuilder('p')
+      .setLock('pessimistic_write')
+      .select('p.id')
+      .where('p.tenant_id = :tenantId', { tenantId })
+      .andWhere('p.fecha_id = :fechaId', { fechaId })
+      .orderBy('p.id', 'ASC')
+      .getMany();
+
     fecha.estado = 'PROGRAMADA';
     fecha.motivoSuspension = null;
     fecha.suspendidoAt = null;
@@ -386,9 +408,21 @@ export class FechasAdminService {
         f.tipoReprogramacion = 'REPROGRAMADA';
       }
     }
+    const fechaIds = posteriores.map((f) => f.id);
+    if (fechaIds.length > 0) {
+      // Orden canónico de locks: partidos de las fechas a correr ANTES del
+      // save de esas fechas (ver suspenderFecha).
+      await this.partidoRepo
+        .createQueryBuilder('p')
+        .setLock('pessimistic_write')
+        .select('p.id')
+        .where('p.tenant_id = :tenantId', { tenantId })
+        .andWhere('p.fecha_id IN (:...fechaIds)', { fechaIds })
+        .orderBy('p.id', 'ASC')
+        .getMany();
+    }
     if (posteriores.length > 0) await this.fechaRepo.save(posteriores);
 
-    const fechaIds = posteriores.map((f) => f.id);
     if (fechaIds.length > 0) {
       await this.partidoRepo
         .createQueryBuilder()

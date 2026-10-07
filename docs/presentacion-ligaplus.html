@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LigaPlus — Presentación a comité de inversión</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+  :root{
+    --ink:#171511; --paper:#F4F0E7; --paper2:#EAE3D4; --chalk:#F9F6EF;
+    --g900:#0b2a1f; --g800:#103D2B; --g700:#15543A; --g:#1F7A4D; --glow:#2FA066;
+    --lime:#C6DC4D; --orange:#E07D34; --orange2:#C45F1E; --muted:#6E695C; --line:rgba(20,16,8,.10);
+    --disp:'Space Grotesk', system-ui, -apple-system, Segoe UI, sans-serif;
+    --body:'Inter', system-ui, -apple-system, Segoe UI, sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{background:#0a0f0c; color:var(--ink); font-family:var(--body); -webkit-font-smoothing:antialiased; overflow:hidden}
+
+  .stage{height:100vh; width:100vw; display:grid; place-items:center; padding:2vh 2vw}
+  .canvas{position:relative; width:min(94vw, 1320px); aspect-ratio:16/9; max-height:96vh;
+    background:var(--paper); border-radius:14px; overflow:hidden; container-type:size;
+    box-shadow:0 24px 80px rgba(0,0,0,.5)}
+
+  .slide{position:absolute; inset:0; padding:7cqh 7.5cqw 8.5cqh; display:flex; flex-direction:column;
+    opacity:0; visibility:hidden; transform:translateY(1.2cqh); transition:opacity .4s ease, transform .4s ease}
+  .slide.on{opacity:1; visibility:visible; transform:none}
+
+  .eyebrow{font-family:var(--disp); font-weight:600; letter-spacing:.16em; text-transform:uppercase;
+    font-size:1.9cqh; color:var(--orange2); display:flex; align-items:center; gap:1cqw; margin-bottom:2.4cqh}
+  .eyebrow::before{content:""; width:3.2cqw; height:.45cqh; background:var(--orange); border-radius:2px}
+  .h1{font-family:var(--disp); font-weight:700; font-size:7cqh; line-height:1.04; color:var(--g800); letter-spacing:-.01em; max-width:78%}
+  .h1.sm{font-size:5.6cqh}
+  .lead{font-size:2.85cqh; line-height:1.45; color:var(--ink); max-width:74%; margin-top:2.6cqh}
+  .muted{color:var(--muted)}
+  .accent{color:var(--orange2)}
+  .spacer{flex:1}
+
+  .grid{display:grid; gap:2.2cqh 2.4cqw; margin-top:auto}
+  .g3{grid-template-columns:repeat(3,1fr)} .g2{grid-template-columns:repeat(2,1fr)}
+  .card{background:var(--chalk); border:1px solid var(--line); border-radius:11px; padding:2.6cqh 2cqw}
+  .card .ico{display:flex; align-items:center; justify-content:center; width:6cqh; height:6cqh; border-radius:9px;
+    background:rgba(31,122,77,.10); color:var(--g); margin-bottom:1.6cqh}
+  .card h3{font-family:var(--disp); font-weight:600; font-size:2.5cqh; color:var(--g800); margin-bottom:.9cqh}
+  .card p{font-size:2cqh; line-height:1.4; color:var(--muted)}
+  .ic{width:3.4cqh; height:3.4cqh; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round}
+
+  ul.points{list-style:none; margin-top:auto; display:grid; gap:1.7cqh}
+  ul.points li{position:relative; padding-left:4cqw; font-size:2.5cqh; line-height:1.4}
+  ul.points li::before{content:""; position:absolute; left:0; top:.65cqh; width:1.8cqh; height:1.8cqh;
+    border-radius:50%; background:var(--lime); box-shadow:0 0 0 .5cqh rgba(198,220,77,.25)}
+  ul.points li b{font-weight:600; color:var(--g800)}
+
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:2.4cqw; margin-top:auto}
+  .kpi{background:var(--chalk); border:1px solid var(--line); border-radius:11px; padding:2.6cqh 1.6cqw}
+  .kpi .n{font-family:var(--disp); font-weight:700; font-size:5.4cqh; color:var(--g)}
+  .kpi .l{font-size:1.9cqh; color:var(--muted); margin-top:.5cqh; line-height:1.3}
+
+  .foot{position:absolute; left:7.5cqw; right:7.5cqw; bottom:3cqh; display:flex; align-items:center; justify-content:space-between}
+  .mark{font-family:var(--disp); font-weight:700; font-size:2.1cqh; letter-spacing:-.01em; color:var(--g800); display:flex; align-items:center; gap:.8cqw}
+  .mark .dot{width:1.5cqh; height:1.5cqh; border-radius:50%; background:var(--orange)}
+  .mark .p{color:var(--orange2)}
+  .pg{font-size:1.8cqh; color:var(--muted); font-variant-numeric:tabular-nums}
+
+  .ph{display:inline-block; font-family:var(--disp); font-weight:600; font-size:1.7cqh; letter-spacing:.06em;
+    color:var(--orange2); background:rgba(224,125,52,.12); border:1px dashed var(--orange); border-radius:6px;
+    padding:.4cqh 1.1cqw; text-transform:uppercase}
+
+  .dark{background:var(--g800); color:var(--chalk)}
+  .dark .h1{color:#fff} .dark .lead{color:rgba(255,255,255,.86)}
+  .dark .eyebrow{color:var(--lime)} .dark .eyebrow::before{background:var(--lime)}
+  .dark .mark{color:#fff} .dark .pg{color:rgba(255,255,255,.55)}
+  .dark .card{background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.12)}
+  .dark .card .ico{background:rgba(198,220,77,.14); color:var(--lime)}
+  .dark .card h3{color:#fff} .dark .card p{color:rgba(255,255,255,.7)}
+  .dark .kpi{background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.12)}
+  .dark .kpi .n{color:var(--lime)} .dark .kpi .l{color:rgba(255,255,255,.7)}
+  .dark ul.points li b{color:var(--lime)}
+  .pitch-lines{position:absolute; inset:0; opacity:.12; pointer-events:none}
+
+  .cover-badge{font-family:var(--disp); font-weight:600; letter-spacing:.18em; text-transform:uppercase;
+    font-size:1.9cqh; color:var(--lime); display:inline-flex; align-items:center; gap:1.1cqw}
+  .cover-badge .d{width:1.1cqh; height:1.1cqh; border-radius:50%; background:var(--orange)}
+  .logo{font-family:var(--disp); font-weight:700; font-size:13cqh; letter-spacing:-.02em; line-height:.95; color:#fff; margin:3cqh 0}
+  .logo .p{color:var(--orange)}
+  .logo .b{display:inline-block; width:2.2cqh; height:2.2cqh; border-radius:50%; background:var(--lime); margin-left:1cqw; vertical-align:.4cqh}
+
+  /* controls */
+  .bar{position:fixed; left:0; bottom:0; height:4px; width:100%; background:transparent; z-index:5}
+  .bar > i{display:block; height:100%; background:var(--orange); width:0; transition:width .35s ease}
+  .nav{position:fixed; bottom:16px; right:18px; display:flex; gap:8px; z-index:6}
+  .nav button{font-family:var(--body); font-size:13px; color:#fff; background:rgba(255,255,255,.10);
+    border:1px solid rgba(255,255,255,.22); border-radius:8px; padding:7px 11px; cursor:pointer; backdrop-filter:blur(4px)}
+  .nav button:hover{background:rgba(255,255,255,.2)}
+  .hint{position:fixed; bottom:18px; left:18px; color:rgba(255,255,255,.55); font-size:12.5px; z-index:6; transition:opacity .6s}
+  .zone{position:fixed; top:0; bottom:0; width:22vw; z-index:4; cursor:pointer}
+  .zone.l{left:0} .zone.r{right:0}
+  @media (max-width:640px){ .h1{font-size:6cqh} .lead{max-width:92%} }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="9.5" x2="21" y2="9.5"/><line x1="8" y1="3" x2="8" y2="6"/><line x1="16" y1="3" x2="16" y2="6"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="21"/><path d="M6 4h11l-2.2 4L17 12H6z"/></symbol>
+<symbol id="i-scale" viewBox="0 0 24 24"><line x1="12" y1="4" x2="12" y2="20"/><line x1="7" y1="20" x2="17" y2="20"/><line x1="5" y1="7" x2="19" y2="7"/><polyline points="3 12.5 5 7 7 12.5"/><polyline points="17 12.5 19 7 21 12.5"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.3"/><path d="M16 14.2a5 5 0 0 1 5.5 5.8"/></symbol>
+<symbol id="i-wallet" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2.2"/><path d="M21 9.5h-5a2.5 2.5 0 0 0 0 5h5"/><circle cx="16.5" cy="12" r="1"/></symbol>
+<symbol id="i-mega" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L16 19V5L7.5 9.5z"/><line x1="19" y1="9.5" x2="19" y2="14.5"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="11" width="2.6" height="7"/><rect x="10.7" y="7" width="2.6" height="11"/><rect x="15.4" y="13.5" width="2.6" height="4.5"/></symbol>
+<symbol id="i-server" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="6" rx="1.4"/><rect x="4" y="14" width="16" height="6" rx="1.4"/><circle cx="8" cy="7" r=".7"/><circle cx="8" cy="17" r=".7"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v5.2c0 4.8-3.4 8.4-8 9.8-4.6-1.4-8-5-8-9.8V6z"/><polyline points="8.5 12 11 14.5 15.8 9.6"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></symbol>
+<symbol id="i-rocket" viewBox="0 0 24 24"><path d="M12 3c3 1.4 4.8 4.4 4.8 8.2L15 16H9l-1.8-4.8C7.2 7.4 9 4.4 12 3z"/><circle cx="12" cy="10" r="1.6"/><path d="M7.3 16.2 5 20.5l4.2-1.2M16.7 16.2 19 20.5l-4.2-1.2"/></symbol>
+<symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polygon points="12 8 15 10.2 13.8 13.8 10.2 13.8 9 10.2"/></symbol>
+<symbol id="i-bag" viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></symbol>
+</defs></svg>
+
+<div class="stage">
+<div class="canvas" id="canvas">
+
+  <!-- 1 PORTADA -->
+  <section class="slide dark on">
+    <svg class="pitch-lines" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice"><g fill="none" stroke="#C6DC4D" stroke-width="1">
+      <rect x="8" y="8" width="304" height="164"/><line x1="160" y1="8" x2="160" y2="172"/><circle cx="160" cy="90" r="26"/>
+      <rect x="8" y="54" width="40" height="72"/><rect x="272" y="54" width="40" height="72"/></g></svg>
+    <div class="spacer"></div>
+    <div class="cover-badge"><span class="d"></span> Plataforma SaaS · Gestión de ligas deportivas</div>
+    <div class="logo">Liga<span class="p">Plus</span><span class="b"></span></div>
+    <div class="lead" style="max-width:70%">La operación completa de una liga amateur —
+      competición, disciplina, finanzas, personal y comunidad— en un solo sistema.</div>
+    <div class="spacer"></div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span>
+      <span class="pg">Presentación a comité de inversión · 2026</span></div>
+  </section>
+
+  <!-- 2 PROBLEMA -->
+  <section class="slide">
+    <div class="eyebrow">El problema</div>
+    <div class="h1 sm">Las ligas amateur se gestionan con herramientas que no conversan entre sí</div>
+    <ul class="points">
+      <li><b>WhatsApp</b> para coordinar fechas, árbitros y reprogramaciones.</li>
+      <li><b>Excel y papel</b> para el fixture, las planillas y las actas del partido.</li>
+      <li><b>Transferencias sueltas</b> para pagar a árbitros y personal, sin control ni respaldo.</li>
+      <li>Resultado: errores, retrabajo, cero transparencia para clubes e hinchas y <b>nula trazabilidad financiera</b>.</li>
+    </ul>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">02</span></div>
+  </section>
+
+  <!-- 3 SOLUCION -->
+  <section class="slide dark">
+    <div class="eyebrow">La solución</div>
+    <div class="h1">LigaPlus digitaliza la operación completa de la liga</div>
+    <div class="lead">Una sola plataforma, multi-liga y en tiempo real, que conecta los cinco frentes de
+      una liga deportiva —y funciona desde el celular, incluso sin señal en la cancha.</div>
+    <div class="grid g3" style="margin-top:6cqh">
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-ball"/></svg></div><h3>Competición</h3><p>Torneos, fixture, actas y resultados en vivo.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-wallet"/></svg></div><h3>Finanzas</h3><p>Cobros, pagos y boletas, todo conciliado.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-mega"/></svg></div><h3>Comunidad</h3><p>Portal público y portales por rol.</p></div>
+    </div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">03</span></div>
+  </section>
+
+  <!-- 4 ROLES -->
+  <section class="slide">
+    <div class="eyebrow">Una plataforma, seis roles</div>
+    <div class="h1 sm">Cada actor de la liga, en su propia vista —con sus datos aislados</div>
+    <div class="grid g3">
+      <div class="card"><h3>Super admin</h3><p>El equipo LigaPlus administra todas las ligas, planes y facturación.</p></div>
+      <div class="card"><h3>Admin de liga</h3><p>Opera su liga: torneos, fixture, designaciones y finanzas.</p></div>
+      <div class="card"><h3>Delegado / club</h3><p>Gestiona su plantel y paga sus cuotas en línea.</p></div>
+      <div class="card"><h3>Árbitro / personal</h3><p>Ve sus designaciones, confirma asistencia y revisa sus pagos.</p></div>
+      <div class="card"><h3>Jugador</h3><p>Su ficha, calendario y estadísticas personales.</p></div>
+      <div class="card"><h3>Hincha</h3><p>Sigue a su club en el portal público de la liga.</p></div>
+    </div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">04</span></div>
+  </section>
+
+  <!-- 5 COMPETICION -->
+  <section class="slide">
+    <div class="eyebrow">Módulo · Competición</div>
+    <div class="h1 sm">Del fixture a la tabla de posiciones, sin planillas</div>
+    <div class="grid g3">
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-cal"/></svg></div><h3>Fixture inteligente</h3><p>Genera el calendario respetando horarios, canchas, feriados y días no jugables. Una o dos ruedas.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-flag"/></svg></div><h3>Reprogramaciones</h3><p>Suspende y reprograma fechas o partidos arrastrando y soltando, sin perder el historial.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-chart"/></svg></div><h3>Tabla de posiciones</h3><p>Multi-categoría y series, con criterios de desempate configurables por torneo.</p></div>
+    </div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">05</span></div>
+  </section>
+
+  <!-- 6 ACTA / MATCH CENTER -->
+  <section class="slide">
+    <div class="eyebrow">Módulo · Acta digital & Match Center</div>
+    <div class="h1 sm">El partido, en vivo y desde la cancha</div>
+    <ul class="points">
+      <li><b>Acta digital:</b> certificación de planteles presentes e incidencias (goles, tarjetas) con el marcador derivado automáticamente.</li>
+      <li><b>Cronómetro en vivo</b> por WebSocket y <b>vista pública embeddable</b> para que el hincha siga el resultado al instante.</li>
+      <li><b>Funciona sin señal</b> (PWA): el planillero carga el acta offline y se sincroniza al recuperar conexión.</li>
+    </ul>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">06</span></div>
+  </section>
+
+  <!-- 7 TRIBUNAL -->
+  <section class="slide">
+    <div class="eyebrow">Módulo · Tribunal & disciplina</div>
+    <div class="h1 sm">Las sanciones se aplican solas al cerrar el acta</div>
+    <div class="grid g3">
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-scale"/></svg></div><h3>Sanciones automáticas</h3><p>Acumulación de amarillas (umbral configurable), rojas, dobles amarillas y walkovers.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-flag"/></svg></div><h3>Jugadores vetados</h3><p>Lista negra que bloquea inscripciones y avisa en el acta.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-shield"/></svg></div><h3>Trazabilidad total</h3><p>Cada decisión disciplinaria queda registrada y auditada.</p></div>
+    </div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">07</span></div>
+  </section>
+
+  <!-- 8 PERSONAL -->
+  <section class="slide">
+    <div class="eyebrow">Módulo · Personal & designaciones</div>
+    <div class="h1 sm">Designar árbitros y personal deja de ser un dolor de cabeza</div>
+    <ul class="points">
+      <li><b>Catálogo de personal:</b> árbitros, planilleros, paramédicos y seguridad, con sus tarifas y disponibilidad.</li>
+      <li><b>Auto-asignación</b> con balance de carga, control de ausencias y <b>detección de doble reserva</b>.</li>
+      <li><b>Cobertura del recinto por jornada:</b> una persona puede cubrir varios torneos del mismo día, con pago único.</li>
+    </ul>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">08</span></div>
+  </section>
+
+  <!-- 9 FINANZAS -->
+  <section class="slide dark">
+    <div class="eyebrow">Módulo · Finanzas & pagos</div>
+    <div class="h1 sm">El dinero entra y sale conciliado —no por WhatsApp</div>
+    <div class="grid g2">
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-wallet"/></svg></div><h3>Cobros a clubes</h3><p>Tarifario por torneo (matrícula y cuotas), cobranza automática con recordatorios, pasarela de pago integrada y boleta electrónica (SII).</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-users"/></svg></div><h3>Pagos a personal</h3><p>Cuentas por pagar que se devengan al cerrar el acta, liquidaciones, nóminas y exportación bancaria.</p></div>
+    </div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">09</span></div>
+  </section>
+
+  <!-- 10 COMUNIDAD -->
+  <section class="slide">
+    <div class="eyebrow">Módulo · Comunidad & portales</div>
+    <div class="h1 sm">Cada liga, con su propia casa digital</div>
+    <div class="grid g3">
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-globe"/></svg></div><h3>Portal público</h3><p>Fixture, posiciones, rankings y estadísticas para los hinchas, por liga.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-users"/></svg></div><h3>Portales por rol</h3><p>Espacios dedicados para clubes, personal y jugadores.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-mega"/></svg></div><h3>Sponsors & banners</h3><p>Espacios publicitarios monetizables dentro de cada liga.</p></div>
+    </div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">10</span></div>
+  </section>
+
+  <!-- 11 REPORTES -->
+  <section class="slide">
+    <div class="eyebrow">Inteligencia · Reportería</div>
+    <div class="h1 sm">Decisiones con datos, no con intuición</div>
+    <ul class="points">
+      <li>Informes de <b>disciplina, finanzas, competición y arbitraje</b>, exportables a Excel y PDF.</li>
+      <li>Visión consolidada de toda la operación: morosidad, cobertura de personal, productividad de jugadores.</li>
+      <li>Base lista para <b>analytics y NPS</b> en el roadmap inmediato.</li>
+    </ul>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">11</span></div>
+  </section>
+
+  <!-- 12 TECNOLOGIA -->
+  <section class="slide dark">
+    <div class="eyebrow">Tecnología que escala</div>
+    <div class="h1 sm">Una arquitectura pensada para crecer liga por liga</div>
+    <div class="grid g3">
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-server"/></svg></div><h3>Multi-tenant real</h3><p>Aislamiento entre ligas a nivel del motor de base de datos (RLS). Una liga nunca ve datos de otra.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-clock"/></svg></div><h3>Tiempo real & offline</h3><p>WebSockets para el vivo; PWA con cola local para operar sin señal en la cancha.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-chart"/></svg></div><h3>Observabilidad</h3><p>Monitoreo de errores, métricas y health checks. Infraestructura contenedorizada.</p></div>
+    </div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">12</span></div>
+  </section>
+
+  <!-- 13 SEGURIDAD -->
+  <section class="slide">
+    <div class="eyebrow">Seguridad & cumplimiento</div>
+    <div class="h1 sm">Diseñado para manejar dinero y datos personales</div>
+    <ul class="points">
+      <li><b>Aislamiento estricto</b> entre ligas; autenticación con tokens rotativos y contraseñas robustas.</li>
+      <li><b>Registro de auditoría</b> de toda acción crítica y soporte con impersonación auditada.</li>
+      <li>Límites anti-fuerza-bruta y <b>cumplimiento de la Ley 19.628</b> de protección de datos personales (Chile).</li>
+    </ul>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">13</span></div>
+  </section>
+
+  <!-- 14 MODELO DE NEGOCIO -->
+  <section class="slide dark">
+    <div class="eyebrow">Modelo de negocio</div>
+    <div class="h1 sm">Tres fuentes de ingreso recurrente</div>
+    <div class="grid g3">
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-bag"/></svg></div><h3>1 · Suscripción SaaS</h3><p>Plan mensual por liga. Sistema de planes y facturación ya operativo.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-wallet"/></svg></div><h3>2 · Procesamiento de pagos</h3><p>La plataforma procesa cobros de clubes y jugadores: comisión por transacción.</p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-mega"/></svg></div><h3>3 · Sponsors</h3><p>Espacios publicitarios dentro de cada liga.</p></div>
+    </div>
+    <div style="margin-top:3cqh"><span class="ph">Precios y márgenes: completar con cifras reales</span></div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">14</span></div>
+  </section>
+
+  <!-- 15 MERCADO -->
+  <section class="slide">
+    <div class="eyebrow">Mercado & expansión</div>
+    <div class="h1 sm">Un mercado masivo y desatendido</div>
+    <div class="lead">El fútbol amateur mueve a millones de personas en Chile y Latinoamérica, hoy gestionadas
+      de forma manual. LigaPlus ya soporta <b>multi-idioma (es / en / pt)</b>, lo que habilita la expansión regional.</div>
+    <div class="kpis" style="margin-top:5cqh">
+      <div class="kpi"><div class="n">TAM</div><div class="l">Ligas amateur — total<br><span class="ph" style="font-size:1.5cqh">completar</span></div></div>
+      <div class="kpi"><div class="n">SAM</div><div class="l">Mercado alcanzable<br><span class="ph" style="font-size:1.5cqh">completar</span></div></div>
+      <div class="kpi"><div class="n">SOM</div><div class="l">Objetivo 12–24 meses<br><span class="ph" style="font-size:1.5cqh">completar</span></div></div>
+      <div class="kpi"><div class="n">3</div><div class="l">Idiomas listos para escalar</div></div>
+    </div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">15</span></div>
+  </section>
+
+  <!-- 16 ESTADO / TRACCION -->
+  <section class="slide dark">
+    <div class="eyebrow">Estado del producto</div>
+    <div class="h1 sm">No es un prototipo: está en producción</div>
+    <div class="kpis">
+      <div class="kpi"><div class="n">10+</div><div class="l">Módulos operativos end-to-end</div></div>
+      <div class="kpi"><div class="n">Multi</div><div class="l">Arquitectura multi-liga en vivo</div></div>
+      <div class="kpi"><div class="n">PWA</div><div class="l">App instalable y offline</div></div>
+      <div class="kpi"><div class="n">2026</div><div class="l">Desplegado en infraestructura propia</div></div>
+    </div>
+    <div class="lead" style="font-size:2.4cqh; margin-top:4cqh">Roadmap inmediato: analytics & NPS, app móvil avanzada e integraciones.
+      <span class="ph">Métricas de tracción (ligas, usuarios, GMV): completar</span></div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">16</span></div>
+  </section>
+
+  <!-- 17 ASK -->
+  <section class="slide">
+    <div class="eyebrow">La oportunidad</div>
+    <div class="h1 sm">Producto probado + mercado desatendido + ingresos recurrentes</div>
+    <div class="grid g3">
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-rocket"/></svg></div><h3>Buscamos</h3><p><span class="ph">Monto: completar</span></p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-target"/></svg></div><h3>Uso de fondos</h3><p><span class="ph">Comercial · producto · equipo</span></p></div>
+      <div class="card"><div class="ico"><svg class="ic"><use href="#i-chart"/></svg></div><h3>Hitos a 18 meses</h3><p><span class="ph">Ligas activas · ARR · margen</span></p></div>
+    </div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">17</span></div>
+  </section>
+
+  <!-- 18 CIERRE -->
+  <section class="slide dark">
+    <svg class="pitch-lines" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice"><g fill="none" stroke="#C6DC4D" stroke-width="1">
+      <rect x="8" y="8" width="304" height="164"/><circle cx="160" cy="90" r="26"/></g></svg>
+    <div class="spacer"></div>
+    <div class="logo" style="font-size:10cqh">Liga<span class="p">Plus</span><span class="b"></span></div>
+    <div class="lead" style="font-size:3.4cqh; max-width:70%">Profesionaliza la gestión de tu liga.</div>
+    <div style="margin-top:3cqh"><span class="ph">Contacto · sitio · correo: completar</span></div>
+    <div class="spacer"></div>
+    <div class="foot"><span class="mark"><span class="dot"></span>Liga<span class="p">Plus</span></span><span class="pg">Gracias</span></div>
+  </section>
+
+</div>
+</div>
+
+<div class="zone l" id="zl" aria-label="Anterior"></div>
+<div class="zone r" id="zr" aria-label="Siguiente"></div>
+<div class="bar"><i id="prog"></i></div>
+<div class="hint" id="hint">← →  navegar  ·  F  pantalla completa</div>
+<div class="nav">
+  <button id="bprev" aria-label="Anterior">‹</button>
+  <button id="bfull" aria-label="Pantalla completa">⛶</button>
+  <button id="bnext" aria-label="Siguiente">›</button>
+</div>
+
+<script>
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var i = 0, n = slides.length;
+  var prog = document.getElementById('prog');
+  function show(k){
+    i = Math.max(0, Math.min(n-1, k));
+    slides.forEach(function(s,idx){ s.classList.toggle('on', idx===i); });
+    prog.style.width = ((i+1)/n*100) + '%';
+  }
+  function next(){ show(i+1); } function prev(){ show(i-1); }
+  document.addEventListener('keydown', function(e){
+    if(['ArrowRight','PageDown',' ','Enter'].indexOf(e.key)>-1){ e.preventDefault(); next(); }
+    else if(['ArrowLeft','PageUp','Backspace'].indexOf(e.key)>-1){ e.preventDefault(); prev(); }
+    else if(e.key==='Home'){ show(0); } else if(e.key==='End'){ show(n-1); }
+    else if(e.key==='f'||e.key==='F'){ toggleFull(); }
+  });
+  document.getElementById('zr').onclick = next;
+  document.getElementById('zl').onclick = prev;
+  document.getElementById('bnext').onclick = next;
+  document.getElementById('bprev').onclick = prev;
+  function toggleFull(){ if(!document.fullscreenElement){ document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); } else { document.exitFullscreen(); } }
+  document.getElementById('bfull').onclick = toggleFull;
+  setTimeout(function(){ var h=document.getElementById('hint'); if(h) h.style.opacity='0'; }, 4500);
+  show(0);
+</script>
+</body>
+</html>

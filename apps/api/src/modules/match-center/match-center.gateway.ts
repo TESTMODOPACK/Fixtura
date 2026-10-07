@@ -1,4 +1,4 @@
-import { Logger, OnModuleDestroy } from '@nestjs/common';
+import { Logger, NotFoundException, OnModuleDestroy } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -238,9 +238,14 @@ export class MatchCenterGateway
             this.partidosActivos.delete(id);
           }
         } catch (err) {
-          // Error transitorio (pool saturado, timeout): el partido SIGUE en
-          // el set — sacarlo acá lo dejaba sin auto-pausa ni refresco para
+          // Partido BORRADO: fuera del set — si no, el tick le dedica 2 tx
+          // y un warn por segundo hasta el reinicio. Cualquier OTRO error
+          // es transitorio (pool saturado, timeout) y el partido SIGUE en
+          // el set: sacarlo lo dejaba sin auto-pausa ni refresco para
           // siempre, porque nada lo re-agrega hasta otra suscripción.
+          if (err instanceof NotFoundException) {
+            this.partidosActivos.delete(id);
+          }
           this.log.warn(`[ws] tick partido=${id} error: ${(err as Error).message}.`);
         }
       }),

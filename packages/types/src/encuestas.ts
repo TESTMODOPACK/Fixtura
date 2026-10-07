@@ -106,6 +106,9 @@ export const DispararEncuestaResultadoSchema = z.object({
   enviadas: z.number().int().nonnegative(),
   sinEmail: z.number().int().nonnegative(),
   yaEnviadas: z.number().int().nonnegative(),
+  // Envíos que fallaron (proveedor de email caído / error de datos): antes
+  // se contaban como "sin email" y el diagnóstico de la UI mentía.
+  fallidas: z.number().int().nonnegative(),
 });
 export type DispararEncuestaResultado = z.infer<typeof DispararEncuestaResultadoSchema>;
 

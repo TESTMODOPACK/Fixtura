@@ -120,13 +120,17 @@ export class FacturacionPlataformaCron {
       .andWhere(`CURRENT_DATE - f.fecha_vencimiento IN (1, 10, 20)`)
       .getMany();
 
+    let enviadosOk = 0;
     for (const factura of facturas) {
       const dias = this.diasDeMora(factura.fechaVencimiento);
       try {
         // bestEffort: un fallo (DB o email) no envenena la tx del cron —
         // sin savepoint, el resto de la corrida moría con 25P02 y el
         // SELECT 1 final revertía TODO el pipeline de mora.
-        await bestEffort(this.ds, () => this.enviarEmailRecordatorio(factura, dias));
+        const ok = await bestEffort(this.ds, () =>
+          this.enviarEmailRecordatorio(factura, dias),
+        );
+        if (ok) enviadosOk++;
       } catch (err) {
         this.log.warn(
           `Error enviando recordatorio factura=${factura.id}: ${
@@ -136,24 +140,29 @@ export class FacturacionPlataformaCron {
       }
     }
     if (facturas.length > 0) {
-      this.log.log(`[cron] ${facturas.length} recordatorios enviados.`);
+      // Conteo REAL: antes se logueaba facturas.length como "enviados"
+      // aunque no hubiera admins con email o el proveedor rechazara todo.
+      this.log.log(
+        `[cron] recordatorios de mora: ${enviadosOk}/${facturas.length} enviados.`,
+      );
     }
   }
 
+  /** @returns true si al menos un email salió aceptado por el proveedor. */
   private async enviarEmailRecordatorio(
     factura: FacturaPlataforma,
     dias: number,
-  ): Promise<void> {
+  ): Promise<boolean> {
     // Buscar admins del tenant para enviar el email.
     const adminRoles = await this.userRoleRepo.find({
       where: { scopeId: factura.tenantId, role: 'LIGA_ADMIN', userId: Not(IsNull()) },
     });
-    if (adminRoles.length === 0) return;
+    if (adminRoles.length === 0) return false;
     const userIds = adminRoles.map((r) => r.userId).filter((x): x is string => !!x);
-    if (userIds.length === 0) return;
+    if (userIds.length === 0) return false;
     const users = await this.userRepo.find({ where: { id: In(userIds) } });
     const emails = users.map((u) => u.email).filter(Boolean);
-    if (emails.length === 0) return;
+    if (emails.length === 0) return false;
 
     const ligaNombre = factura.tenant?.nombre ?? 'tu liga';
     const planNombre = factura.plan?.nombre ?? 'tu plan';
@@ -202,9 +211,12 @@ export class FacturacionPlataformaCron {
     `;
     const text = `Tu factura ${periodo} de LigaPlus tiene ${dias} días de mora. Monto $${monto} CLP. Paga en ${linkPago}.`;
 
+    let algunoOk = false;
     for (const email of emails) {
-      await this.email.send({ to: email, subject: asunto, html, text });
+      const ok = await this.email.send({ to: email, subject: asunto, html, text });
+      if (ok) algunoOk = true;
     }
+    return algunoOk;
   }
 
   /**

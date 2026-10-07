@@ -320,6 +320,7 @@ export class EncuestasService {
     let enviadas = 0;
     let sinEmail = 0;
     let yaEnviadas = 0;
+    let fallidas = 0;
 
     for (const [clubId, club] of clubesUnicos) {
       try {
@@ -360,17 +361,18 @@ export class EncuestasService {
             // El email no salió: borramos el envío para que el próximo disparo lo
             // reintente, en vez de contarlo como "ya enviado" para siempre.
             await this.envioRepo.delete({ id: envio.id, tenantId });
-            sinEmail += 1;
+            fallidas += 1;
             this.log.warn(
               `Encuesta ${plantilla.id} club ${clubId}: email no salió — ${(errEmail as Error).message}`,
             );
           }
         });
       } catch (err) {
+        fallidas += 1;
         this.log.warn(`Encuesta ${plantilla.id} club ${clubId}: ${(err as Error).message}`);
       }
     }
-    return { enviadas, sinEmail, yaEnviadas };
+    return { enviadas, sinEmail, yaEnviadas, fallidas };
   }
 
   private async enviarEmail(

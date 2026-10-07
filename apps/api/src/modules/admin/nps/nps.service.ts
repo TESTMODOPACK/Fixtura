@@ -104,6 +104,7 @@ export class NpsService {
     let enviadas = 0;
     let sinEmail = 0;
     let yaEnviadas = 0;
+    let fallidas = 0;
 
     for (const [clubId, club] of clubesUnicos) {
       try {
@@ -142,11 +143,12 @@ export class NpsService {
           enviadas += 1;
         });
       } catch (err) {
+        fallidas += 1;
         this.log.warn(`NPS torneo ${torneoId} club ${clubId}: ${(err as Error).message}`);
       }
     }
 
-    return { enviadas, sinEmail, yaEnviadas };
+    return { enviadas, sinEmail, yaEnviadas, fallidas };
   }
 
   private async enviarEmail(

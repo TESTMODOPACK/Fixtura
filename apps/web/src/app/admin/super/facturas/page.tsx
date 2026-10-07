@@ -98,7 +98,12 @@ export default function FacturasPlataformaPage(): React.ReactElement {
             ) {
               generar.mutate(undefined, {
                 onSuccess: (r) =>
-                  alert(`${r.creadas} facturas creadas, ${r.saltadas} saltadas.`),
+                  alert(
+                    `${r.creadas} facturas creadas, ${r.saltadas} saltadas` +
+                      (r.fallidas > 0
+                        ? `, ${r.fallidas} FALLIDAS — revisa los logs del cron.`
+                        : '.'),
+                  ),
                 onError: (e) => alert(`Error: ${(e as Error).message}`),
               });
             }
