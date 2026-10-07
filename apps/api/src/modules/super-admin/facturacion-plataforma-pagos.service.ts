@@ -10,7 +10,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { fijarBypassLocal } from '../../common/rls/rls-context';
 import { DataSource, Repository } from 'typeorm';
-import { Transactional } from 'typeorm-transactional';
+import { runOnTransactionCommit, Transactional } from 'typeorm-transactional';
 
 import {
   SII_PROVIDER,
@@ -212,14 +212,22 @@ export class FacturacionPlataformaPagosService {
     // Reactivar tenant si estaba SUSPENDIDO solo por mora
     await this.intentarReactivarTenant(trans.tenantId);
 
-    // Emisión de boleta SII (best-effort, no bloquea respuesta al usuario)
-    this.emitirBoletaPlataforma(trans.facturaPlataformaId, trans.id).catch((err) => {
-      this.log.error(
-        `Boleta SII falló factura=${trans.facturaPlataformaId}: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    });
+    // Emisión de boleta SII (best-effort) DESPUÉS del COMMIT: en medio de
+    // la tx, la emisión (tx propia) leía la factura sin marcar pagada.
+    // Const locales: el narrowing de null no sobrevive dentro del closure.
+    const facturaId = trans.facturaPlataformaId;
+    const transId = trans.id;
+    if (facturaId) {
+      runOnTransactionCommit(() => {
+        void this.emitirBoletaPlataforma(facturaId, transId).catch((err) => {
+          this.log.error(
+            `Boleta SII falló factura=${facturaId}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        });
+      });
+    }
 
     this.log.log(
       `retornoWebpay APROBADO token=${token.slice(0, 12)}… factura=${trans.facturaPlataformaId}`,

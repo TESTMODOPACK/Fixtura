@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { bestEffort } from '../../common/db/best-effort';
 import { fijarBypassLocal } from '../../common/rls/rls-context';
 import { DataSource, In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
@@ -172,7 +173,7 @@ export class FacturacionPlataformaService {
   async generarFacturasMes(
     mes: number,
     anio: number,
-  ): Promise<{ creadas: number; saltadas: number }> {
+  ): Promise<{ creadas: number; saltadas: number; fallidas: number }> {
     await fijarBypassLocal(this.ds);
     if (mes < 1 || mes > 12) throw new BadRequestException('Mes inválido');
     if (anio < 2000 || anio > 2100) throw new BadRequestException('Año inválido');
@@ -186,6 +187,7 @@ export class FacturacionPlataformaService {
 
     let creadas = 0;
     let saltadas = 0;
+    let fallidas = 0;
     const fechaEmision = new Date(anio, mes - 1, 1).toISOString().slice(0, 10);
     const fechaVencimiento = new Date(
       anio,
@@ -197,40 +199,46 @@ export class FacturacionPlataformaService {
 
     for (const tenant of tenants) {
       if (!tenant.plan) continue;
+      const plan = tenant.plan;
       try {
-        const yaExiste = await this.repo.findOne({
-          where: { tenantId: tenant.id, periodoMes: mes, periodoAnio: anio },
+        // bestEffort: el tenant que falla se revierte a su savepoint y los
+        // demás facturan igual — sin esto, un error de Postgres envenenaba
+        // la tx y el COMMIT final era un ROLLBACK silencioso de TODO el mes.
+        await bestEffort(this.ds, async () => {
+          const yaExiste = await this.repo.findOne({
+            where: { tenantId: tenant.id, periodoMes: mes, periodoAnio: anio },
+          });
+          if (yaExiste) {
+            saltadas++;
+            return;
+          }
+          const factura = this.repo.create({
+            tenantId: tenant.id,
+            planId: plan.id,
+            periodoMes: mes,
+            periodoAnio: anio,
+            monto: plan.precioMensualClp,
+            fechaEmision,
+            fechaVencimiento,
+            estado: 'PENDIENTE',
+          });
+          await this.repo.save(factura);
+          creadas++;
         });
-        if (yaExiste) {
-          saltadas++;
-          continue;
-        }
-        const factura = this.repo.create({
-          tenantId: tenant.id,
-          planId: tenant.plan.id,
-          periodoMes: mes,
-          periodoAnio: anio,
-          monto: tenant.plan.precioMensualClp,
-          fechaEmision,
-          fechaVencimiento,
-          estado: 'PENDIENTE',
-        });
-        await this.repo.save(factura);
-        creadas++;
       } catch (err) {
-        this.log.warn(
+        this.log.error(
           `Error generando factura tenant=${tenant.id} ${mes}/${anio}: ${
             err instanceof Error ? err.message : String(err)
           }`,
         );
-        saltadas++;
+        fallidas++;
       }
     }
 
     this.log.log(
-      `[facturacion-cron] ${mes}/${anio}: ${creadas} creadas, ${saltadas} saltadas, total tenants=${tenants.length}`,
+      `[facturacion-cron] ${mes}/${anio}: ${creadas} creadas, ${saltadas} saltadas, ${fallidas} fallidas, total tenants=${tenants.length}`,
     );
-    return { creadas, saltadas };
+    return { creadas, saltadas, fallidas };
   }
 
   /**

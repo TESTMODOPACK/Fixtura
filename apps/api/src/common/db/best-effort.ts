@@ -19,8 +19,12 @@ export async function bestEffort<T>(ds: DataSource, fn: () => Promise<T>): Promi
   const sp = `sp_${randomUUID().replace(/-/g, '')}`;
   try {
     await ds.query(`SAVEPOINT ${sp}`);
-  } catch {
-    return fn();
+  } catch (err) {
+    // SOLO "no hay transacción activa" (25P01) habilita ejecutar directo.
+    // Cualquier otro fallo (tx ya abortada 25P02, conexión caída) debe
+    // subir: correr fn() sin red daría un error críptico río abajo.
+    if ((err as { code?: string }).code === '25P01') return fn();
+    throw err;
   }
   try {
     const resultado = await fn();

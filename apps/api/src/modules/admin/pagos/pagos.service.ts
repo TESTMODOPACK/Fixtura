@@ -9,7 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
-import { Transactional } from 'typeorm-transactional';
+import { runOnTransactionCommit, Transactional } from 'typeorm-transactional';
 
 import type {
   ConfirmarPagoResponse,
@@ -347,15 +347,19 @@ export class PagosService {
           }
         }
 
-        // Disparar emisión SII en background. NO await — si el proveedor
-        // está caído, el cron lo reintenta. El user no espera por esto.
-        void this.sii
-          .crearYEmitirAsync(tx.id)
-          .catch((err) =>
-            this.log.warn(
-              `Emisión SII inicial falló para tx=${tx.id}: ${(err as Error).message}`,
-            ),
-          );
+        // Disparar emisión SII DESPUÉS del COMMIT — la emisión abre su
+        // propia transacción y antes del commit leía la tx sin APROBAR:
+        // devolvía null y la boleta no se creaba nunca (hallazgo F1).
+        // Sigue sin await: si el proveedor está caído, el cron reintenta.
+        runOnTransactionCommit(() => {
+          void this.sii
+            .crearYEmitirAsync(tx.id)
+            .catch((err) =>
+              this.log.warn(
+                `Emisión SII inicial falló para tx=${tx.id}: ${(err as Error).message}`,
+              ),
+            );
+        });
       } else {
         tx.estado = 'RECHAZADO';
         await this.txRepo.save(tx);

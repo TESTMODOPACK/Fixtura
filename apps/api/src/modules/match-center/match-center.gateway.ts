@@ -238,10 +238,10 @@ export class MatchCenterGateway
             this.partidosActivos.delete(id);
           }
         } catch (err) {
-          this.log.warn(
-            `[ws] tick partido=${id} error: ${(err as Error).message}. Removiendo del set.`,
-          );
-          this.partidosActivos.delete(id);
+          // Error transitorio (pool saturado, timeout): el partido SIGUE en
+          // el set — sacarlo acá lo dejaba sin auto-pausa ni refresco para
+          // siempre, porque nada lo re-agrega hasta otra suscripción.
+          this.log.warn(`[ws] tick partido=${id} error: ${(err as Error).message}.`);
         }
       }),
     );

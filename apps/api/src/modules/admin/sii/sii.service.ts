@@ -14,6 +14,7 @@ import {
   OpenFacturaProvider,
   SII_PROVIDER,
   SIIProvider,
+  type EmitirBoletaResult,
   type SiiCredenciales,
   type SiiEmisor,
 } from './sii-provider';
@@ -128,7 +129,15 @@ export class SIIService {
       where: { id: transaccionId },
       relations: { cobro: true },
     });
-    if (!tx || tx.estado !== 'APROBADO') return null;
+    if (!tx || tx.estado !== 'APROBADO') {
+      // Un null mudo acá fue el síntoma del hallazgo F1 (lectura pre-commit).
+      this.log.warn(
+        `Documento NO creado para tx=${transaccionId}: ${
+          tx ? `estado=${tx.estado}` : 'transacción no encontrada'
+        }.`,
+      );
+      return null;
+    }
 
     // Idempotencia: no crear duplicado si ya hay uno para esta tx.
     const existente = await this.docRepo.findOne({
@@ -163,38 +172,24 @@ export class SIIService {
    *   - Manualmente desde admin UI (botón "Reintentar")
    */
   async emitir(documentoId: string): Promise<DocumentoTributario> {
-    // Transacción propia por documento: el estado (EMITIDO/intentos/error)
-    // se persiste aunque el caller venga sin contexto (fire-and-forget) o
-    // su transacción muera después — una boleta emitida jamás se "des-emite".
-    return runComoSistema(this.dataSource, () => this.emitirInterno(documentoId));
-  }
+    // Tres pasos para NO retener una conexión durante el HTTP al provider
+    // (hasta 30s por emisión; una ráfaga de pagos agotaba el pool):
+    //   1) tx corta: reclamar el intento;
+    //   2) HTTP al provider SIN transacción;
+    //   3) tx corta: persistir el resultado.
+    // El resultado OK se persiste en su propia tx — una boleta emitida
+    // jamás se "des-emite" aunque el caller muera después.
+    const reclamo = await runComoSistema(this.dataSource, () =>
+      this.reclamarIntento(documentoId),
+    );
+    if (!reclamo.procesar) return reclamo.doc;
 
-  private async emitirInterno(documentoId: string): Promise<DocumentoTributario> {
-    const doc = await this.docRepo.findOne({
-      where: { id: documentoId },
-      relations: { cobro: true, transaccion: true },
-    });
-    if (!doc) throw new NotFoundException(`Documento ${documentoId} no encontrado`);
-
-    if (doc.estado === 'EMITIDO') {
-      this.log.log(`Documento ${doc.id} ya emitido, skip.`);
-      return doc;
-    }
-    if (doc.estado === 'FALLIDO') {
-      throw new Error(
-        `Documento ${doc.id} marcado FALLIDO tras ${doc.intentos} intentos — revisión manual requerida.`,
-      );
-    }
-
-    doc.intentos = (doc.intentos ?? 0) + 1;
-    doc.ultimoIntentoAt = new Date();
-
+    const { doc, byo } = reclamo;
+    const provider = byo ? this.openFactura : this.provider;
+    let resultado: EmitirBoletaResult | null = null;
+    let fallo: string | null = null;
     try {
-      // BYO: con credenciales de la liga → OpenFactura con SU cuenta.
-      // Sin ellas → provider global (mock en dev, o env de plataforma).
-      const byo = await this.byoDe(doc.tenantId);
-      const provider = byo ? this.openFactura : this.provider;
-      const result = await provider.emitirBoleta({
+      resultado = await provider.emitirBoleta({
         monto: doc.monto,
         rutReceptor: doc.rutReceptor,
         razonSocial: doc.razonSocial,
@@ -208,21 +203,94 @@ export class SIIService {
         externalReference: `doc-${doc.id}`,
         ...(byo ?? {}),
       });
+    } catch (err) {
+      fallo = (err as Error).message;
+    }
 
+    return runComoSistema(this.dataSource, () =>
+      this.persistirResultado(documentoId, resultado, fallo, provider.nombre, byo !== null),
+    );
+  }
+
+  /**
+   * Reclama el intento con un UPDATE condicionado (lock lógico): el cron y
+   * el fire-and-forget del pago pueden llegar a la vez — solo uno procesa;
+   * el otro ve el reclamo reciente y se retira sin emitir dos boletas.
+   */
+  private async reclamarIntento(documentoId: string): Promise<
+    | {
+        procesar: true;
+        doc: DocumentoTributario;
+        byo: Awaited<ReturnType<SIIService['byoDe']>>;
+      }
+    | { procesar: false; doc: DocumentoTributario }
+  > {
+    const doc = await this.docRepo.findOne({
+      where: { id: documentoId },
+      relations: { cobro: true, transaccion: true },
+    });
+    if (!doc) throw new NotFoundException(`Documento ${documentoId} no encontrado`);
+
+    if (doc.estado === 'EMITIDO') {
+      this.log.log(`Documento ${doc.id} ya emitido, skip.`);
+      return { procesar: false, doc };
+    }
+    if (doc.estado === 'FALLIDO') {
+      throw new Error(
+        `Documento ${doc.id} marcado FALLIDO tras ${doc.intentos} intentos — revisión manual requerida.`,
+      );
+    }
+
+    const claim = await this.docRepo
+      .createQueryBuilder()
+      .update()
+      .set({
+        intentos: () => 'COALESCE(intentos, 0) + 1',
+        ultimoIntentoAt: () => 'NOW()',
+      })
+      .where('id = :id', { id: doc.id })
+      .andWhere(`estado IN ('PENDIENTE_EMISION','RECHAZADO_SII')`)
+      .andWhere(
+        `(ultimo_intento_at IS NULL OR ultimo_intento_at < NOW() - INTERVAL '1 minute')`,
+      )
+      .execute();
+    if ((claim.affected ?? 0) === 0) {
+      this.log.log(`Documento ${doc.id}: intento en curso o muy reciente — skip.`);
+      return { procesar: false, doc };
+    }
+
+    doc.intentos = (doc.intentos ?? 0) + 1;
+    // BYO: con credenciales de la liga → OpenFactura con SU cuenta.
+    // Sin ellas → provider global (mock en dev, o env de plataforma).
+    const byo = await this.byoDe(doc.tenantId);
+    return { procesar: true, doc, byo };
+  }
+
+  private async persistirResultado(
+    documentoId: string,
+    resultado: EmitirBoletaResult | null,
+    fallo: string | null,
+    providerNombre: string,
+    esByo: boolean,
+  ): Promise<DocumentoTributario> {
+    const doc = await this.docRepo.findOne({ where: { id: documentoId } });
+    if (!doc) throw new NotFoundException(`Documento ${documentoId} no encontrado`);
+
+    if (resultado) {
       doc.estado = 'EMITIDO';
-      doc.folioSii = String(result.folio);
-      doc.urlPdf = result.urlPdf;
-      doc.urlXml = result.urlXml;
-      doc.respuestaSii = result.raw;
+      doc.folioSii = String(resultado.folio);
+      doc.urlPdf = resultado.urlPdf;
+      doc.urlXml = resultado.urlXml;
+      doc.respuestaSii = resultado.raw;
       doc.emitidoAt = new Date();
       doc.ultimoError = null;
       this.log.log(
-        `Documento ${doc.id} EMITIDO: folio=${result.folio} provider=${provider.nombre}${byo ? ' (BYO liga)' : ''}`,
+        `Documento ${doc.id} EMITIDO: folio=${resultado.folio} provider=${providerNombre}${esByo ? ' (BYO liga)' : ''}`,
       );
-    } catch (err) {
-      const msg = (err as Error).message;
+    } else {
+      const msg = fallo ?? 'error desconocido';
       doc.ultimoError = msg;
-      if (doc.intentos >= SIIService.MAX_INTENTOS) {
+      if ((doc.intentos ?? 0) >= SIIService.MAX_INTENTOS) {
         doc.estado = 'FALLIDO';
         this.log.error(
           `Documento ${doc.id} marcado FALLIDO tras ${doc.intentos} intentos: ${msg}`,

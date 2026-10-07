@@ -119,6 +119,9 @@ export class PushWebPushProvider extends PushProvider {
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         JSON.stringify(payload),
+        // Sin timeout, un endpoint colgado dejaba el dispatch del partido
+        // pendiente para siempre (y sin persistir lastUsedAt/revocaciones).
+        { timeout: 10_000 },
       );
       return { enviado: true, endpointInvalido: false };
     } catch (err) {

@@ -14,8 +14,9 @@
 
 BEGIN;
 
--- Bypass de RLS para escrituras cross-tenant.
-SELECT set_config('app.current_tenant_id', '', true);
+-- Bypass de RLS para escrituras cross-tenant (v2, ADR-0013): el GUC
+-- dedicado — el viejo tenant='' ya no es bypass, es "sin contexto".
+SELECT set_config('app.rls_bypass', 'on', true);
 
 DO $$
 DECLARE

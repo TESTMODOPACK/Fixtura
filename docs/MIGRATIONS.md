@@ -93,17 +93,24 @@ Toda tabla tenant-scoped DEBE incluir en la misma migración:
 ```sql
 ALTER TABLE foo ENABLE ROW LEVEL SECURITY;
 ALTER TABLE foo FORCE ROW LEVEL SECURITY;
+-- Policy v2 fail-closed (ADR-0013). El texto canónico vive en
+-- apps/api/src/common/rls/rls-policy.ts; si la tabla la crea
+-- cleanup-orphans, usar ensureRls(client, 'foo') en vez de SQL a mano.
 CREATE POLICY tenant_isolation ON foo
   USING (
-    tenant_id::text = current_setting('app.current_tenant_id', true)
-    OR current_setting('app.current_tenant_id', true) = ''
+    tenant_id = (SELECT NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
+    OR (SELECT current_setting('app.rls_bypass', true) = 'on')
   )
   WITH CHECK (
-    tenant_id::text = current_setting('app.current_tenant_id', true)
-    OR current_setting('app.current_tenant_id', true) = ''
+    tenant_id = (SELECT NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
+    OR (SELECT current_setting('app.rls_bypass', true) = 'on')
   );
 CREATE INDEX idx_foo_tenant ON foo(tenant_id);
 ```
+
+> La convergencia final de cleanup-orphans corrige policies v1 olvidadas en
+> cada boot, y aborta el arranque si detecta alguna — pero la migración debe
+> nacer en v2 igual.
 
 El `FORCE` es crítico — sin él, el owner de la tabla (el usuario superuser) bypassea
 las policies. Por eso el API conecta como `fixtura_app` (no superuser).

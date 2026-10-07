@@ -84,17 +84,23 @@ CREATE INDEX idx_jugadores_tenant ON jugadores(tenant_id);
 ALTER TABLE jugadores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE jugadores FORCE ROW LEVEL SECURITY;  -- FORCE: aplica también al owner
 
+-- Policy v2 fail-closed (ADR-0013): dos GUC con residuo inocuo. El residuo
+-- '' de una conexión reciclada del pool da 0 filas (en la v1 era bypass).
 CREATE POLICY tenant_isolation ON jugadores
   USING (
-    tenant_id::text = current_setting('app.current_tenant_id', true)
-    OR current_setting('app.current_tenant_id', true) = ''  -- bypass super_admin / sistema
+    tenant_id = (SELECT NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
+    OR (SELECT current_setting('app.rls_bypass', true) = 'on')
+  )
+  WITH CHECK (
+    tenant_id = (SELECT NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
+    OR (SELECT current_setting('app.rls_bypass', true) = 'on')
   );
 ```
 
 **Reglas duras**:
-- Toda tabla con datos de cliente DEBE tener `tenant_id`, RLS habilitado con `FORCE`, e índice en `tenant_id`.
+- Toda tabla con datos de cliente DEBE tener `tenant_id`, RLS habilitado con `FORCE`, e índice en `tenant_id`. En la práctica: `ensureRls(client, 'tabla')` en cleanup-orphans — la convergencia final del boot verifica que ninguna policy quede en v1.
 - Tablas de plataforma (`tenants`, `super_admins`, `migrations`) NO tienen RLS.
-- Para queries cross-tenant legítimas (super admin reports, crons globales) → setear `app.current_tenant_id = ''` (vacío) y la policy permite el bypass.
+- El contexto se fija SOLO vía los helpers de `apps/api/src/common/rls/rls-context.ts` (`fijarTenantLocal`, `fijarBypassLocal`, `runConTenant`, `runComoSistema`). Nunca `set_config` a mano — hay un check de CI que lo bloquea. Cross-tenant legítimo (super admin, crons globales) = `runComoSistema`/`fijarBypassLocal` (GUC `app.rls_bypass='on'`), nunca `tenant_id = ''`.
 - El API conecta a la DB con un usuario **NO superuser** (`fixtura_app`). El usuario superuser (`fixtura`) queda para backups y migraciones. Esto es lo que hace que `FORCE` muerda — un superuser ignoraría RLS.
 
 ### 2.2 Propagación de contexto: AsyncLocalStorage + typeorm-transactional

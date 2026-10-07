@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
+import { bestEffort } from '../../../common/db/best-effort';
 import { AuditLogService } from '../../audit';
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { IncidenciaPartido } from '../../competition/entities/incidencia-partido.entity';
@@ -39,6 +40,7 @@ export class TarifaAplicadorService {
   private readonly log = new Logger(TarifaAplicadorService.name);
 
   constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(TarifaTorneo)
     private readonly tarifaRepo: Repository<TarifaTorneo>,
     @InjectRepository(Cobro)
@@ -527,18 +529,23 @@ export class TarifaAplicadorService {
       if (yaExiste) continue;
 
       try {
-        await this.crearCobro({
-          tenantId: insc.tenantId,
-          torneoId: insc.torneoId,
-          inscripcionId: insc.id,
-          tarifa,
-          concepto: this.conceptoCuota(insc, tarifa.frecuencia, p),
-          monto: tarifa.monto,
-          vencimiento: this.calcularVencimientoCuota(tarifa, p),
-          periodoAnio: p.anio,
-          periodoMes: p.mes,
-          periodoSemana: p.semana,
-        });
+        // bestEffort: la cuota que falla se revierte a su savepoint y las
+        // siguientes se generan igual (sin esto, el primer error de PG
+        // envenenaba la tx del cron y moría el resto del lote con 25P02).
+        await bestEffort(this.dataSource, () =>
+          this.crearCobro({
+            tenantId: insc.tenantId,
+            torneoId: insc.torneoId,
+            inscripcionId: insc.id,
+            tarifa,
+            concepto: this.conceptoCuota(insc, tarifa.frecuencia, p),
+            monto: tarifa.monto,
+            vencimiento: this.calcularVencimientoCuota(tarifa, p),
+            periodoAnio: p.anio,
+            periodoMes: p.mes,
+            periodoSemana: p.semana,
+          }),
+        );
         creadas++;
       } catch (err) {
         // El UNIQUE INDEX puede saltar aquí si hay una race con otro
@@ -703,9 +710,12 @@ export class TarifaAplicadorService {
 
     // Cuotas — N mensuales según cantidadCuotas.
     if (tarifaCuota && tarifaCuota.cantidadCuotas && tarifaCuota.cantidadCuotas > 0) {
+      // Const local: el narrowing de la propiedad no sobrevive al closure
+      // del bestEffort de abajo.
+      const cantidadCuotas = tarifaCuota.cantidadCuotas;
       const vencimientos = this.vencimientosCuotasInicio(
         tarifaCuota,
-        tarifaCuota.cantidadCuotas,
+        cantidadCuotas,
         fechaBase,
       );
       for (const v of vencimientos) {
@@ -720,23 +730,27 @@ export class TarifaAplicadorService {
         });
         if (yaExiste) continue;
         try {
-          await this.crearCobro({
-            tenantId: insc.tenantId,
-            torneoId: torneo.id,
-            inscripcionId: insc.id,
-            tarifa: tarifaCuota,
-            concepto: this.conceptoCuotaEquipo(
-              nombreClub,
-              torneo,
-              v.indice,
-              tarifaCuota.cantidadCuotas,
-            ),
-            monto: tarifaCuota.monto,
-            vencimiento: v.vencimiento,
-            periodoAnio: v.anio,
-            periodoMes: v.mes,
-            periodoSemana: null,
-          });
+          // bestEffort: idem generación recurrente — una cuota fallida no
+          // envenena la tx del inicio de torneo.
+          await bestEffort(this.dataSource, () =>
+            this.crearCobro({
+              tenantId: insc.tenantId,
+              torneoId: torneo.id,
+              inscripcionId: insc.id,
+              tarifa: tarifaCuota,
+              concepto: this.conceptoCuotaEquipo(
+                nombreClub,
+                torneo,
+                v.indice,
+                cantidadCuotas,
+              ),
+              monto: tarifaCuota.monto,
+              vencimiento: v.vencimiento,
+              periodoAnio: v.anio,
+              periodoMes: v.mes,
+              periodoSemana: null,
+            }),
+          );
           cuotasCreadas++;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);

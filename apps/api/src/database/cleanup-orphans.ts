@@ -71,6 +71,9 @@ async function main(): Promise<void> {
   // RLS v2: el owner también está sujeto a FORCE. Sin bypass de sesión,
   // los backfills de este script verían 0 filas con la policy fail-closed.
   await client.query(`SELECT set_config('app.rls_bypass', 'on', false)`);
+  // El DDL de policies toma ACCESS EXCLUSIVE: mejor fallar a los 15s (el
+  // contenedor reintenta) que colgar el boot detrás de un pg_dump.
+  await client.query(`SET lock_timeout = '15s'`);
 
   try {
     // ─── Extensiones requeridas ─────────────────────────────────────────
@@ -446,6 +449,9 @@ async function main(): Promise<void> {
     await ensureGruposTorneo(client, log);
     await ensurePlayoffsTables(client, log);
 
+    // T21 (A-4) — libro mayor de cumplimiento de sanciones + flag revocada.
+    await ensureDisciplinaLedger(client, log);
+
     // Sprint 32 — directiva por categoría. Un club que participa en
     // varias categorías puede tener distinta directiva en cada una
     // (caso típico: presidente Senior ≠ presidente Super Senior).
@@ -515,22 +521,7 @@ async function main(): Promise<void> {
     await client.query(
       `CREATE INDEX IF NOT EXISTS idx_encuestas_nps_torneo ON encuestas_nps(torneo_id)`,
     );
-    await client.query(`ALTER TABLE encuestas_nps ENABLE ROW LEVEL SECURITY`);
-    await client.query(`ALTER TABLE encuestas_nps FORCE ROW LEVEL SECURITY`);
-    await client.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_policies
-          WHERE tablename = 'encuestas_nps' AND policyname = 'tenant_isolation'
-        ) THEN
-          CREATE POLICY tenant_isolation ON encuestas_nps
-            USING (
-              tenant_id::text = current_setting('app.current_tenant_id', true)
-              OR current_setting('app.current_tenant_id', true) = ''
-            );
-        END IF;
-      END $$;
-    `);
+    await ensureRls(client, 'encuestas_nps');
     log('encuestas_nps asegurada (módulo M5 etapa 2).');
 
     // ── Sprint ENC (ADR-0011) — encuestas configurables ──────────────────
@@ -604,22 +595,7 @@ async function main(): Promise<void> {
       'envios_encuesta',
       'respuestas_encuesta',
     ]) {
-      await client.query(`ALTER TABLE ${tabla} ENABLE ROW LEVEL SECURITY`);
-      await client.query(`ALTER TABLE ${tabla} FORCE ROW LEVEL SECURITY`);
-      await client.query(`
-        DO $$ BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_policies
-            WHERE tablename = '${tabla}' AND policyname = 'tenant_isolation'
-          ) THEN
-            CREATE POLICY tenant_isolation ON ${tabla}
-              USING (
-                tenant_id::text = current_setting('app.current_tenant_id', true)
-                OR current_setting('app.current_tenant_id', true) = ''
-              );
-          END IF;
-        END $$;
-      `);
+      await ensureRls(client, tabla);
     }
     log('encuestas configurables (ENC) aseguradas: plantillas/preguntas/envios/respuestas.');
 
@@ -645,22 +621,7 @@ async function main(): Promise<void> {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_obs_partido_tenant ON observaciones_partido(tenant_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_obs_partido_partido ON observaciones_partido(partido_id)`);
-    await client.query(`ALTER TABLE observaciones_partido ENABLE ROW LEVEL SECURITY`);
-    await client.query(`ALTER TABLE observaciones_partido FORCE ROW LEVEL SECURITY`);
-    await client.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_policies
-          WHERE tablename = 'observaciones_partido' AND policyname = 'tenant_isolation'
-        ) THEN
-          CREATE POLICY tenant_isolation ON observaciones_partido
-            USING (
-              tenant_id::text = current_setting('app.current_tenant_id', true)
-              OR current_setting('app.current_tenant_id', true) = ''
-            );
-        END IF;
-      END $$;
-    `);
+    await ensureRls(client, 'observaciones_partido');
     log('observaciones_partido asegurada (informe disciplinario del partido).');
 
     // Sprint 26D — campos nuevos en torneos para soportar el modelo nuevo.
@@ -941,26 +902,7 @@ async function main(): Promise<void> {
       END $$
     `);
     // RLS estandar.
-    await client.query(`ALTER TABLE horarios_torneo ENABLE ROW LEVEL SECURITY`);
-    await client.query(`ALTER TABLE horarios_torneo FORCE ROW LEVEL SECURITY`);
-    await client.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_policies
-          WHERE tablename = 'horarios_torneo' AND policyname = 'tenant_isolation'
-        ) THEN
-          CREATE POLICY tenant_isolation ON horarios_torneo
-            USING (
-              tenant_id::text = current_setting('app.current_tenant_id', true)
-              OR current_setting('app.current_tenant_id', true) = ''
-            )
-            WITH CHECK (
-              tenant_id::text = current_setting('app.current_tenant_id', true)
-              OR current_setting('app.current_tenant_id', true) = ''
-            );
-        END IF;
-      END $$
-    `);
+    await ensureRls(client, 'horarios_torneo');
     await client.query(`
       DO $$ BEGIN
         IF NOT EXISTS (
@@ -1178,6 +1120,10 @@ async function main(): Promise<void> {
         AND s.jugador_id IS NULL
     `);
     log(`ADR-0005: backfill sanciones — ${(bfSanc.rowCount ?? 0)} con jugador.`);
+
+    // T9 — convergencia FINAL de policies: a esta altura ya existen todas
+    // las tablas que este script crea.
+    await convergerPoliciesV2(client, log);
 
     log('Done.');
   } finally {
@@ -2244,26 +2190,7 @@ async function ensureFacturasPlataformaTable(
   );
   await ensureTrigger(client, 'facturas_plataforma');
   // SEG-3 / M7 (auditoría) — RLS en la tabla de facturación de plataforma.
-  // Aditivo y seguro: todos los paths ya setean app.current_tenant_id — los
-  // de sistema/cron/webhook/super-admin a '' (bypass) y el path de liga
-  // (listPorTenant) corre bajo el contexto del request + filtra tenant_id
-  // explícito. La policy es la misma de siempre: match por tenant o bypass ''.
-  await client.query(`ALTER TABLE facturas_plataforma ENABLE ROW LEVEL SECURITY`);
-  await client.query(`ALTER TABLE facturas_plataforma FORCE ROW LEVEL SECURITY`);
-  await client.query(`
-    DO $$ BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE tablename = 'facturas_plataforma' AND policyname = 'tenant_isolation'
-      ) THEN
-        CREATE POLICY tenant_isolation ON facturas_plataforma
-          USING (
-            tenant_id::text = current_setting('app.current_tenant_id', true)
-            OR current_setting('app.current_tenant_id', true) = ''
-          );
-      END IF;
-    END $$;
-  `);
+  await ensureRls(client, 'facturas_plataforma');
   log('facturas_plataforma asegurada (Sprint 24A + RLS SEG-3).');
 }
 
@@ -2557,37 +2484,150 @@ async function ensureAuditLogsPolicy(
   log: (msg: string) => void,
 ): Promise<void> {
   const tabla = await client.query(`SELECT to_regclass('public.audit_logs') AS t`);
-  if (!tabla.rows[0]?.t) return; // aún no existe (migración inicial no corrió)
-  const pol = await client.query(
-    `SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='audit_logs' AND policyname='tenant_isolation'`,
-  );
-  if (pol.rowCount === 0) return; // la crea la migración inicial
+  if (!tabla.rows[0]?.t) {
+    log('audit_logs aún no existe — su policy v2 la instala la convergencia final.');
+    return;
+  }
   await ensureRlsGlobalNull(client, 'audit_logs');
   await ensureRlsGlobalNull(client, 'user_roles');
   log('audit_logs + user_roles con policy v2 global-null (T9).');
+}
 
-  // Convergencia v2 de las tablas cuyo CREATE TABLE vive en migraciones
-  // formales (su policy v1 no pasaba por ningún ensureRls del boot).
-  const tablasMigraciones = [
-    'temporadas',
-    'torneos',
-    'fechas',
-    'partidos',
-    'incidencias_partido',
-    'sanciones_activas',
-    'horarios_torneo',
-    'observaciones_partido',
-    'facturas_plataforma',
-    'encuestas_nps',
-    'plantillas_encuesta',
-    'preguntas_encuesta',
-    'envios_encuesta',
-    'respuestas_encuesta',
-  ];
-  for (const tabla of tablasMigraciones) {
-    await ensureRls(client, tabla);
+/**
+ * T9 — Convergencia FINAL a la policy v2 (fail-closed), derivada del
+ * catálogo: toda tabla de `public` con tenant_id uuid y RLS habilitado.
+ *
+ * Corre al FINAL de main(), cuando ya existen todas las tablas que este
+ * script crea. La versión anterior corría al principio sobre una lista a
+ * mano que incluía 8 tablas creadas MÁS ABAJO: en una base sin ellas, el
+ * 42P01 dejaba el contenedor en crash-loop (hallazgo de la revisión F1).
+ * Derivarla del catálogo cubre además las tablas de migraciones futuras:
+ * una policy v1 olvidada converge sola en el siguiente arranque.
+ */
+async function convergerPoliciesV2(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  const GLOBAL_NULL = new Set([
+    'user_roles',
+    'audit_logs',
+    'magic_links',
+    'push_subscriptions',
+  ]);
+
+  const { rows } = await client.query<{ tabla: string; rls: boolean }>(`
+    SELECT c.relname AS tabla, c.relrowsecurity AS rls
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+    JOIN information_schema.columns col
+      ON col.table_schema = 'public'
+     AND col.table_name = c.relname
+     AND col.column_name = 'tenant_id'
+     AND col.data_type = 'uuid'
+    WHERE c.relkind = 'r'
+    ORDER BY c.relname
+  `);
+
+  let convergidas = 0;
+  const sinRls: string[] = [];
+  for (const { tabla, rls } of rows) {
+    // Solo convergemos tablas que YA tienen RLS: esto es v1→v2, no un
+    // cambio de postura para tablas que nunca lo activaron (esas se
+    // reportan abajo — son una violación de la regla de oro 1).
+    if (!rls) {
+      sinRls.push(tabla);
+      continue;
+    }
+    // Si la policy ya es v2 (menciona rls_bypass), nada que hacer: evita
+    // repetir DDL con ACCESS EXCLUSIVE en cada boot.
+    const pol = await client.query(
+      `SELECT qual FROM pg_policies
+       WHERE schemaname = 'public' AND tablename = $1 AND policyname = 'tenant_isolation'`,
+      [tabla],
+    );
+    if (pol.rowCount === 1 && String(pol.rows[0].qual ?? '').includes('rls_bypass')) {
+      continue;
+    }
+    if (GLOBAL_NULL.has(tabla)) {
+      await ensureRlsGlobalNull(client, tabla);
+    } else {
+      await ensureRls(client, tabla);
+    }
+    convergidas++;
   }
-  log(`RLS v2 convergida en ${tablasMigraciones.length} tablas de migraciones (T9).`);
+
+  if (sinRls.length > 0) {
+    log(`AVISO: tablas con tenant_id y RLS deshabilitado: ${sinRls.join(', ')}.`);
+  }
+
+  // Loud failure: ninguna tabla con RLS puede quedar con una policy que no
+  // sea la v2. Mejor no arrancar que arrancar fail-open.
+  const v1 = await client.query<{ tablename: string }>(`
+    SELECT p.tablename
+    FROM pg_policies p
+    WHERE p.schemaname = 'public'
+      AND p.policyname = 'tenant_isolation'
+      AND p.qual NOT LIKE '%rls_bypass%'
+  `);
+  if ((v1.rowCount ?? 0) > 0) {
+    throw new Error(
+      `Policies RLS v1 (fail-open) remanentes en: ${v1.rows
+        .map((r) => r.tablename)
+        .join(', ')}`,
+    );
+  }
+
+  log(
+    `RLS v2: ${convergidas} policies convergidas; ${rows.length} tablas con tenant_id verificadas (T9).`,
+  );
+}
+
+/**
+ * T21 (A-4, ADR-0015) — Libro mayor de cumplimiento de sanciones.
+ * Cada fila registra que una fecha FINALIZADA descontó 1 a una sanción; la
+ * reversión al reabrir devuelve exactamente eso (nunca más el +1 ciego a
+ * todo el torneo, que revivía sanciones cumplidas o revocadas).
+ *
+ * Sin backfill histórico a propósito: no existe registro de qué fecha
+ * descontó qué, así que reabrir una fecha finalizada ANTES de este deploy
+ * no revierte descuentos (conservador: el bug viejo sobre-revertía).
+ */
+async function ensureDisciplinaLedger(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<void> {
+  await client.query(`
+    ALTER TABLE sanciones_activas
+      ADD COLUMN IF NOT EXISTS revocada BOOLEAN NOT NULL DEFAULT false
+  `);
+  // Healing: las revocadas pre-columna solo dejaron el stamp del tribunal
+  // en la descripción — único rastro disponible para marcarlas.
+  await client.query(`
+    UPDATE sanciones_activas
+    SET revocada = true
+    WHERE revocada = false
+      AND cumplida = true
+      AND descripcion LIKE '%[Revocada por tribunal]%'
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS sancion_cumplimientos (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      sancion_id  UUID NOT NULL REFERENCES sanciones_activas(id) ON DELETE CASCADE,
+      fecha_id    UUID NOT NULL REFERENCES fechas(id) ON DELETE CASCADE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_sancion_cumplimiento UNIQUE (sancion_id, fecha_id)
+    )
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_sancion_cumplimientos_tenant ON sancion_cumplimientos(tenant_id)`,
+  );
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_sancion_cumplimientos_fecha ON sancion_cumplimientos(fecha_id)`,
+  );
+  await ensureRls(client, 'sancion_cumplimientos');
+  log('sancion_cumplimientos + sanciones_activas.revocada asegurados (T21).');
 }
 
 /**
@@ -2740,14 +2780,29 @@ async function recrearPolicy(
   table: string,
   clause: string,
 ): Promise<void> {
-  await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
-  await client.query(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`);
-  await client.query(`DROP POLICY IF EXISTS tenant_isolation ON ${table}`);
-  await client.query(`
-    CREATE POLICY tenant_isolation ON ${table}
-      USING (${clause})
-      WITH CHECK (${clause})
-  `);
+  const existe = await client.query(`SELECT to_regclass($1) AS t`, [`public.${table}`]);
+  if (!existe.rows[0]?.t) {
+    // La tabla no existe todavía en esta base (se crea más abajo en el
+    // script): la convergencia final del main() la cubre.
+    return;
+  }
+  // Atómico: un crash entre DROP y CREATE dejaría la tabla con FORCE y sin
+  // policy (deny-all hasta el próximo boot). En tx queda la vieja o la nueva.
+  await client.query('BEGIN');
+  try {
+    await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+    await client.query(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`);
+    await client.query(`DROP POLICY IF EXISTS tenant_isolation ON ${table}`);
+    await client.query(`
+      CREATE POLICY tenant_isolation ON ${table}
+        USING (${clause})
+        WITH CHECK (${clause})
+    `);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  }
 }
 
 async function ensureRls(client: Client, table: string): Promise<void> {

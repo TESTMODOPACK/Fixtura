@@ -179,4 +179,36 @@ d('Policy RLS v2 — conexión tibia (T11)', () => {
     expect(r.rowCount).toBe(1);
     expect(r.rows[0].tenant_id).toBeNull();
   });
+
+  it('global-null: con contexto de tenant se ven las propias MÁS las globales', async () => {
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [TENANT_A]);
+    const r = await client.query(`SELECT tenant_id FROM ${TABLA_NULL}`);
+    await client.query('COMMIT');
+    expect(r.rowCount).toBe(2);
+  });
+
+  it("fijarTenantLocal apaga el bypass: tenant A sobre bypass 'on' ve SOLO A (fix F1)", async () => {
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('app.rls_bypass', 'on', true)`);
+    // El statement exacto del helper tras el fix: tenant + bypass off juntos.
+    await client.query(
+      `SELECT set_config('app.current_tenant_id', $1, true),
+              set_config('app.rls_bypass', '', true)`,
+      [TENANT_A],
+    );
+    const r = await client.query(`SELECT dato FROM ${TABLA}`);
+    await client.query('COMMIT');
+    expect(r.rowCount).toBe(1);
+    expect(r.rows[0].dato).toBe('de-a');
+  });
+
+  it('un GUC basura (no-uuid) revienta con 22P02 — por eso fijarTenantLocal valida', async () => {
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('app.current_tenant_id', 'basura', true)`);
+    await expect(client.query(`SELECT 1 FROM ${TABLA}`)).rejects.toMatchObject({
+      code: '22P02',
+    });
+    await client.query('ROLLBACK');
+  });
 });

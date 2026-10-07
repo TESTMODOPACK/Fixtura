@@ -207,7 +207,10 @@ Responder la encuesta: ${link}
 (El enlace es personal y expira en 30 días.)
 `;
 
-    await this.email.send({ to, subject, html, text });
+    const ok = await this.email.send({ to, subject, html, text });
+    // send() nunca lanza (devuelve false): sin esto, el catch del caller
+    // era código muerto y se contaba "enviada" una encuesta que no salió.
+    if (!ok) throw new Error('El proveedor de email no aceptó el envío.');
   }
 
   // ── Resumen (admin) ──────────────────────────────────────────────────
@@ -296,9 +299,9 @@ Responder la encuesta: ${link}
   // ── Flujo público (token, sin login) ─────────────────────────────────
 
   /**
-   * Re-setea el contexto RLS al tenant del token firmado. En endpoints
-   * @Public el interceptor dejó tenant_id='' (bypass); acotamos al tenant
-   * correcto antes de tocar la encuesta.
+   * Re-acota el contexto RLS al tenant del token firmado. En endpoints
+   * @Public el interceptor dejó rls_bypass='on'; fijarTenantLocal lo apaga
+   * y fija el tenant en el mismo statement (ver rls-context.ts).
    */
   private async setTenant(tenantId: string): Promise<void> {
     await fijarTenantLocal(this.dataSource, tenantId);

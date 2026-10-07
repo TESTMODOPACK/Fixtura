@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import type { CategoriaCobro, CobroAdmin } from '@fixtura/types';
 
+import { bestEffort } from '../../../common/db/best-effort';
 import { AuditLogService } from '../../audit';
 import { Cobro } from '../../competition/entities/cobro.entity';
 import { InscripcionTorneo } from '../../competition/entities/inscripcion-torneo.entity';
@@ -12,7 +13,10 @@ import type { CreateCobroDto, MarcarPagadoDto, UpdateCobroDto } from './dto';
 
 @Injectable()
 export class CobrosAdminService {
+  private readonly log = new Logger(CobrosAdminService.name);
+
   constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(Cobro) private readonly repo: Repository<Cobro>,
     // ADR-0005 — el "equipoId" del DTO transporta el inscripcionId.
     @InjectRepository(InscripcionTorneo)
@@ -27,9 +31,16 @@ export class CobrosAdminService {
    */
   private async syncDunning(cobroId: string, tenantId: string): Promise<void> {
     try {
-      await this.dunning.actualizarEstadoCobro(cobroId, tenantId);
-    } catch {
-      // best-effort: el cron diario va a corregirlo si esto falla.
+      // bestEffort: un fallo de Postgres acá envenenaba la tx del request
+      // que marcó pagado/cancelado — el savepoint lo aísla.
+      await bestEffort(this.dataSource, () =>
+        this.dunning.actualizarEstadoCobro(cobroId, tenantId),
+      );
+    } catch (err) {
+      // El cron diario va a corregirlo; el log evita que sea invisible.
+      this.log.warn(
+        `syncDunning falló cobro=${cobroId}: ${(err as Error).message}`,
+      );
     }
   }
 

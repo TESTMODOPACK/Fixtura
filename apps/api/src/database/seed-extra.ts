@@ -84,7 +84,8 @@ async function main(): Promise<void> {
 
   try {
     await AppDataSource.query('BEGIN');
-    await AppDataSource.query(`SELECT set_config('app.rls_bypass', 'on', false)`);
+    // is_local=true: el bypass muere con el COMMIT/ROLLBACK (sin residuo).
+    await AppDataSource.query(`SELECT set_config('app.rls_bypass', 'on', true)`);
 
     const rows = (await AppDataSource.query(`SELECT id FROM tenants WHERE slug = $1`, [
       slug,

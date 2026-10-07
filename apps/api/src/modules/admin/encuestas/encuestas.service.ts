@@ -403,7 +403,10 @@ export class EncuestasService {
         </div>
       </body></html>`;
     const text = `${club}, ${encuesta}\n\nEn ${liga} queremos tu opinión. Responder: ${link}\n\n(El enlace expira en 30 días.)`;
-    await this.email.send({ to, subject, html, text });
+    const ok = await this.email.send({ to, subject, html, text });
+    // send() nunca lanza (devuelve false): sin esto, el catch que borra el
+    // envío para reintentar era código muerto y quedaba "ya enviada".
+    if (!ok) throw new Error('El proveedor de email no aceptó el envío.');
   }
 
   // ── Público (token, sin login) ───────────────────────────────────────

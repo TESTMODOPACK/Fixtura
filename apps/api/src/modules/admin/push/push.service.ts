@@ -127,6 +127,10 @@ export class PushService {
         );
         if (r.enviado) usados.push(sub.id);
         if (r.endpointInvalido) aRevocar.push(sub.id);
+        if (!r.enviado && !r.endpointInvalido) {
+          // VAPID mal configurado, 401/413/429… — antes era invisible.
+          this.log.warn(`Push no enviado sub=${sub.id}: ${r.error ?? 'sin detalle'}`);
+        }
       } catch (err) {
         this.log.warn(
           `Push falló para sub=${sub.id}: ${(err as Error).message}`,

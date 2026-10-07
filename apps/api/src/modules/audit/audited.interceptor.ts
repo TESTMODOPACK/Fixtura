@@ -8,8 +8,9 @@ import {
 import { Reflector } from '@nestjs/core';
 import { InjectDataSource } from '@nestjs/typeorm';
 import type { Request } from 'express';
-import { Observable, catchError, concatMap, from, throwError } from 'rxjs';
+import { Observable, catchError, concatMap, throwError } from 'rxjs';
 import { DataSource } from 'typeorm';
+import { runOnTransactionRollback } from 'typeorm-transactional';
 
 import { runComoSistema } from '../../common/rls/rls-context';
 import { AuditLogService } from './audit-log.service';
@@ -94,9 +95,19 @@ export class AuditedInterceptor implements NestInterceptor {
         if (opts.onlyOnSuccess !== false) {
           return throwError(() => err);
         }
-        return from(this.registrarFallo(opts, req, user, err)).pipe(
-          concatMap(() => throwError(() => err)),
-        );
+        // El registro corre DESPUÉS del rollback, con la conexión del
+        // request ya devuelta al pool. Esperarlo acá adentro pedía una 2ª
+        // conexión reteniendo la 1ª: con el pool lleno de logins fallidos
+        // nadie avanza hasta el connectionTimeout (hallazgo F1).
+        try {
+          runOnTransactionRollback(() => {
+            void this.registrarFallo(opts, req, user, err);
+          });
+        } catch {
+          // Sin tx activa (caller fuera de HTTP): registrar directo.
+          void this.registrarFallo(opts, req, user, err);
+        }
+        return throwError(() => err);
       }),
     );
   }

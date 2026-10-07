@@ -102,7 +102,9 @@ export type BulkImportPreview = z.infer<typeof BulkImportPreviewSchema>;
 
 export const BulkImportConfirmRequestSchema = z.object({
   categoriaId: z.uuid(),
-  rows: z.array(BulkImportRowSchema),
+  // Tope duro: el apply usa un savepoint por fila y sin límite un payload
+  // gigante degrada la visibilidad MVCC de todo el cluster (>64 subxids).
+  rows: z.array(BulkImportRowSchema).max(2000),
   // Si true, los jugadores actuales que no vienen en el archivo se marcan INACTIVOS.
   // Si false, se ignora ese paso (admin puede haber dicho 'cancelar' a las bajas).
   inactivarFaltantes: z.boolean().default(true),

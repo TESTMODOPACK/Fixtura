@@ -1,5 +1,6 @@
 import { DeepPartial, QueryFailedError, Repository } from 'typeorm';
 
+import { bestEffort } from '../../common/db/best-effort';
 import { IncidenciaPartido } from './entities/incidencia-partido.entity';
 
 /** Código SQLSTATE de violación de UNIQUE en PostgreSQL. */
@@ -40,7 +41,12 @@ export async function saveIncidenciaIdempotente(
   }
 
   try {
-    return await repo.save(repo.create(data));
+    // bestEffort (savepoint): sin él, el 23505 del race dejaba la tx
+    // abortada y el findOne de recuperación moría con 25P02 — el replay
+    // "idempotente" nunca llegaba a devolver la incidencia existente.
+    return await bestEffort(repo.manager.connection, () =>
+      repo.save(repo.create(data)),
+    );
   } catch (err) {
     if (clientKey && isPgUniqueViolation(err)) {
       const existente = await repo.findOne({ where: { partidoId, clientKey } });

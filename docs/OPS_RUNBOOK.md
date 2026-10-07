@@ -167,6 +167,14 @@ docker compose exec api pnpm migration:revert
 
 Luego rollback del código.
 
+> **⚠️ RLS v2 (ADR-0013): no retroceder a un SHA anterior a la Fase 1.**
+> El cleanup-orphans de esta fase instala la policy v2 (bypass vía
+> `app.rls_bypass`) y el cleanup viejo NO la revierte (usa `IF NOT EXISTS`).
+> Un código pre-v2 contra policies v2 deja los flujos autenticados en
+> 0 filas (apagón de login/portal). El rollback de la Fase 1 es **revert
+> hacia adelante** (`git revert` + deploy), nunca `git reset` a antes de
+> `7e7ce2d`.
+
 ## Migraciones en prod
 
 ```bash
@@ -278,8 +286,10 @@ haber crasheado en bootstrap, así que revisar logs de arranque.
    `app.current_tenant_id`).
 2. Verificar que el usuario tiene el rol correcto en el tenant correcto
    (`SELECT * FROM user_roles WHERE user_id = '...'`).
-3. Para queries cross-tenant (super admin), confirmar que se setea
-   `app.current_tenant_id = ''`.
+3. Para queries cross-tenant (super admin, crons), confirmar que el flujo pasa
+   por `runComoSistema`/`fijarBypassLocal` (GUC `app.rls_bypass = 'on'`,
+   ADR-0013). El viejo bypass `app.current_tenant_id = ''` YA NO existe:
+   con la policy v2, `''` significa "sin contexto" → 0 filas.
 
 ### "Webhook de pago devuelve 502"
 

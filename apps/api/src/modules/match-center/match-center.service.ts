@@ -121,8 +121,8 @@ export class MatchCenterService {
   }
 
   /**
-   * Igual que snapshotPublico, pero estableciendo el contexto RLS de
-   * "sistema" (app.current_tenant_id = '') dentro de una transacción.
+   * Igual que snapshotPublico, pero en modo sistema (RLS v2:
+   * app.rls_bypass = 'on' vía fijarBypassLocal) dentro de una transacción.
    *
    * Lo usa el GATEWAY WebSocket: el gateway NO pasa por el
    * TenantContextInterceptor (no hay request HTTP), así que la conexión del

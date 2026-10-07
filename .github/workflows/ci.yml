@@ -67,7 +67,8 @@ jobs:
       # standalone que abren su propia conexión).
       - name: RLS — set_config solo en common/rls y database/
         run: |
-          VIOLACIONES=$(grep -rn "set_config('app\." apps/api/src --include='*.ts' \
+          PATRON="set_config[[:space:]]*\([[:space:]]*['\"]app\.|SET[[:space:]]+(LOCAL[[:space:]]+)?app\."
+          VIOLACIONES=$(grep -rnE "$PATRON" apps/api/src packages --include='*.ts' \
             | grep -v 'apps/api/src/common/rls/' \
             | grep -v 'apps/api/src/database/' \
             || true)
@@ -93,6 +94,27 @@ jobs:
         run: pnpm build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:3000
+
+      # Gate T29 (adelantado por el hallazgo F1-A): el schema debe poder
+      # levantarse DESDE CERO — migraciones + cleanup-orphans DOS veces
+      # (idempotencia) contra una base vacía. Habría detectado el 42P01 de
+      # la convergencia RLS corriendo antes de crear sus tablas.
+      - name: Schema desde cero (migraciones + cleanup-orphans ×2)
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgres://fixtura:fixtura@localhost:5432/fixtura_schema_gate
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_NAME: fixtura_schema_gate
+          DB_USER: fixtura
+          DB_PASSWORD: fixtura
+          NODE_ENV: test
+        run: |
+          PGPASSWORD=fixtura psql -h localhost -U fixtura -d fixtura_test \
+            -c 'CREATE DATABASE fixtura_schema_gate'
+          pnpm migration:run
+          node dist/database/cleanup-orphans.js
+          node dist/database/cleanup-orphans.js
 
   # Visibilidad de CVEs en dependencias. `continue-on-error` mientras Next 14
   # arrastre advisories sin parche en la 14.x (T53 lo sube a 15 y este job

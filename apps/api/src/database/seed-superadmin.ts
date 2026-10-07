@@ -29,8 +29,9 @@ async function main(): Promise<void> {
   await AppDataSource.initialize();
   try {
     await AppDataSource.query('BEGIN');
-    // user_roles tiene RLS; '' = bypass para operaciones de plataforma.
-    await AppDataSource.query(`SELECT set_config('app.rls_bypass', 'on', false)`);
+    // user_roles tiene RLS; bypass de sistema para operaciones de
+    // plataforma. is_local=true: muere con el COMMIT (sin residuo).
+    await AppDataSource.query(`SELECT set_config('app.rls_bypass', 'on', true)`);
 
     // ─── Upsert del usuario ───────────────────────────────────────────
     const existing = (await AppDataSource.query(`SELECT id FROM users WHERE email = $1`, [

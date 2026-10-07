@@ -68,14 +68,16 @@ DO $$ BEGIN
     SELECT 1 FROM pg_policies
      WHERE schemaname='public' AND tablename='canchas' AND policyname='tenant_isolation'
   ) THEN
+    -- Policy v2 fail-closed (ADR-0013); la convergencia del boot la
+    -- corregiría igual, pero el script no debe sembrar v1.
     CREATE POLICY tenant_isolation ON canchas
       USING (
-        tenant_id::text = current_setting('app.current_tenant_id', true)
-        OR current_setting('app.current_tenant_id', true) = ''
+        tenant_id = (SELECT NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
+        OR (SELECT current_setting('app.rls_bypass', true) = 'on')
       )
       WITH CHECK (
-        tenant_id::text = current_setting('app.current_tenant_id', true)
-        OR current_setting('app.current_tenant_id', true) = ''
+        tenant_id = (SELECT NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
+        OR (SELECT current_setting('app.rls_bypass', true) = 'on')
       );
   END IF;
 END $$;
@@ -130,12 +132,12 @@ DO $$ BEGIN
   ) THEN
     CREATE POLICY tenant_isolation ON cobros
       USING (
-        tenant_id::text = current_setting('app.current_tenant_id', true)
-        OR current_setting('app.current_tenant_id', true) = ''
+        tenant_id = (SELECT NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
+        OR (SELECT current_setting('app.rls_bypass', true) = 'on')
       )
       WITH CHECK (
-        tenant_id::text = current_setting('app.current_tenant_id', true)
-        OR current_setting('app.current_tenant_id', true) = ''
+        tenant_id = (SELECT NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
+        OR (SELECT current_setting('app.rls_bypass', true) = 'on')
       );
   END IF;
 END $$;

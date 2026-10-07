@@ -41,7 +41,10 @@ async function bootstrap(): Promise<void> {
   // refactorizar cada service. Esto habilita que el TenantContextInterceptor
   // envuelva cada request en una tx donde SET LOCAL app.current_tenant_id
   // se propaga correctamente — pre-requisito de RLS.
-  initializeTransactionalContext();
+  // maxHookHandlers: suspender un equipo declara walkover por cada partido
+  // pendiente y cada uno registra un hook post-commit — el default (10)
+  // emite MaxListenersExceededWarning con torneos grandes.
+  initializeTransactionalContext({ maxHookHandlers: 100 });
   trace('2/8 transactional context initialized');
 
   // bufferLogs: false — los logs van a stdout desde el momento 0. Si fuera

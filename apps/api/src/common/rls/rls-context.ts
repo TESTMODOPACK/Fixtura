@@ -14,9 +14,27 @@ import { Propagation, runInTransaction } from 'typeorm-transactional';
 /** Tenant "nadie": usuario autenticado sin liga elegida — ve 0 filas. */
 export const SIN_TENANT_UUID = '00000000-0000-0000-0000-000000000000';
 
-/** Fija el tenant DENTRO de la transacción actual (is_local). */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Fija el tenant DENTRO de la transacción actual (is_local) y APAGA el
+ * bypass en el mismo statement. Sin eso, el "re-acotado al tenant del
+ * token" de los endpoints públicos era un no-op: el interceptor deja
+ * rls_bypass='on' para requests sin usuario y la policy es
+ * `tenant = X OR bypass` — el bypass seguía ganando (hallazgo F1).
+ *
+ * Un tenantId no-uuid se rechaza acá con mensaje claro: dentro de la
+ * policy, el cast ::uuid reventaría cada query con un 22P02 críptico.
+ */
 export async function fijarTenantLocal(ds: DataSource, tenantId: string): Promise<void> {
-  await ds.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+  if (!UUID_RE.test(tenantId)) {
+    throw new Error(`fijarTenantLocal: tenantId no es un uuid: "${tenantId}"`);
+  }
+  await ds.query(
+    `SELECT set_config('app.current_tenant_id', $1, true),
+            set_config('app.rls_bypass', '', true)`,
+    [tenantId],
+  );
 }
 
 /** Activa el modo sistema DENTRO de la transacción actual (is_local). */

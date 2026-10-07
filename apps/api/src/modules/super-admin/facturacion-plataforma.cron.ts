@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 
+import { bestEffort } from '../../common/db/best-effort';
 import { fijarBypassLocal } from '../../common/rls/rls-context';
 import { TenantCronRunner } from '../../common/rls/tenant-cron-runner';
 import { EmailService } from '../email/email.service';
@@ -60,9 +61,15 @@ export class FacturacionPlataformaCron {
     const anio = hoy.getFullYear();
     this.log.log(`[cron] Generando facturas ${mes}/${anio}…`);
     try {
-      const r = await this.facturacionSvc.generarFacturasMes(mes, anio);
+      // runAsSystem y no el @Transactional pelado del service: fuera de
+      // HTTP nadie más corre el SELECT 1 pre-commit (T13) — sin él, una tx
+      // envenenada commitea como ROLLBACK silencioso y el log diría
+      // "N creadas" sin haber persistido ninguna (hallazgo F1).
+      const r = await this.runner.runAsSystem('facturacion-mensual', () =>
+        this.facturacionSvc.generarFacturasMes(mes, anio),
+      );
       this.log.log(
-        `[cron] facturacion-mensual ${mes}/${anio}: ${r.creadas} creadas, ${r.saltadas} saltadas.`,
+        `[cron] facturacion-mensual ${mes}/${anio}: ${r.creadas} creadas, ${r.saltadas} saltadas, ${r.fallidas} fallidas.`,
       );
     } catch (err) {
       this.log.error(
@@ -116,7 +123,10 @@ export class FacturacionPlataformaCron {
     for (const factura of facturas) {
       const dias = this.diasDeMora(factura.fechaVencimiento);
       try {
-        await this.enviarEmailRecordatorio(factura, dias);
+        // bestEffort: un fallo (DB o email) no envenena la tx del cron —
+        // sin savepoint, el resto de la corrida moría con 25P02 y el
+        // SELECT 1 final revertía TODO el pipeline de mora.
+        await bestEffort(this.ds, () => this.enviarEmailRecordatorio(factura, dias));
       } catch (err) {
         this.log.warn(
           `Error enviando recordatorio factura=${factura.id}: ${
@@ -222,17 +232,19 @@ export class FacturacionPlataformaCron {
 
     for (const row of rows) {
       try {
-        const t = await this.tenantRepo.findOne({ where: { id: row.tenant_id } });
-        if (!t || t.estadoSuscripcion === 'SUSPENDIDO' || t.estadoSuscripcion === 'CANCELADO')
-          continue;
-        t.estadoSuscripcion = 'SUSPENDIDO';
-        t.suspendidoAt = new Date();
-        t.suspendidoMotivo = `${row.vencidas} facturas vencidas (≥2 meses de suscripción impagos)`;
-        t.isActive = false;
-        await this.tenantRepo.save(t);
-        this.log.warn(
-          `[cron] Tenant ${t.slug} (${t.id}) SUSPENDIDO por ${row.vencidas} facturas vencidas.`,
-        );
+        await bestEffort(this.ds, async () => {
+          const t = await this.tenantRepo.findOne({ where: { id: row.tenant_id } });
+          if (!t || t.estadoSuscripcion === 'SUSPENDIDO' || t.estadoSuscripcion === 'CANCELADO')
+            return;
+          t.estadoSuscripcion = 'SUSPENDIDO';
+          t.suspendidoAt = new Date();
+          t.suspendidoMotivo = `${row.vencidas} facturas vencidas (≥2 meses de suscripción impagos)`;
+          t.isActive = false;
+          await this.tenantRepo.save(t);
+          this.log.warn(
+            `[cron] Tenant ${t.slug} (${t.id}) SUSPENDIDO por ${row.vencidas} facturas vencidas.`,
+          );
+        });
       } catch (err) {
         this.log.error(
           `[cron] Error suspendiendo tenant=${row.tenant_id}: ${
@@ -258,16 +270,18 @@ export class FacturacionPlataformaCron {
 
     for (const t of triales) {
       try {
-        if (t.planId) {
-          t.estadoSuscripcion = 'ACTIVO';
-        } else {
-          t.estadoSuscripcion = 'SUSPENDIDO';
-          t.suspendidoAt = new Date();
-          t.suspendidoMotivo = 'Período de prueba vencido sin plan contratado';
-          t.isActive = false;
-        }
-        await this.tenantRepo.save(t);
-        this.log.warn(`[cron] Trial vencido tenant ${t.slug} → ${t.estadoSuscripcion}.`);
+        await bestEffort(this.ds, async () => {
+          if (t.planId) {
+            t.estadoSuscripcion = 'ACTIVO';
+          } else {
+            t.estadoSuscripcion = 'SUSPENDIDO';
+            t.suspendidoAt = new Date();
+            t.suspendidoMotivo = 'Período de prueba vencido sin plan contratado';
+            t.isActive = false;
+          }
+          await this.tenantRepo.save(t);
+          this.log.warn(`[cron] Trial vencido tenant ${t.slug} → ${t.estadoSuscripcion}.`);
+        });
       } catch (err) {
         this.log.error(
           `[cron] Error cerrando trial tenant=${t.id}: ${

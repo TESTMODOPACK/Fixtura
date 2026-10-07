@@ -86,8 +86,9 @@ async function main(): Promise<void> {
 
   try {
     await AppDataSource.query('BEGIN');
-    // Bypass RLS (script de mantenimiento).
-    await AppDataSource.query(`SELECT set_config('app.rls_bypass', 'on', false)`);
+    // Bypass RLS (script de mantenimiento). is_local=true: muere con el
+    // COMMIT/ROLLBACK — sin residuo de bypass en la conexión.
+    await AppDataSource.query(`SELECT set_config('app.rls_bypass', 'on', true)`);
 
     // ─── Buscar tenant + torneo ────────────────────────────────────────
     const tenantRows = (await AppDataSource.query(
