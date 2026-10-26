@@ -16,8 +16,11 @@
  *
  * Versión cache — bumpear cuando cambien las estrategias O tras un lote
  * grande de deploys (fuerza a los clientes PWA a soltar caches viejas).
+ * v8: purga post-deploy del acumulado F0-F3 — clientes con el shell viejo
+ * (modal de login recortado, bundles antiguos) quedaban pegados porque v7
+ * sobrevivió varios deploys. (T38 derivará esto de GIT_SHA.)
  */
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v8';
 const STATIC_CACHE = `fixtura-static-${CACHE_VERSION}`;
 const API_CACHE = `fixtura-api-${CACHE_VERSION}`;
 const ACTA_CACHE = `fixtura-acta-${CACHE_VERSION}`;

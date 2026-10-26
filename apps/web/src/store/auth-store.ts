@@ -17,6 +17,14 @@ interface AuthState {
   /** Access token del super admin, guardado mientras impersona. */
   originalAccessToken: string | null;
   impersonationTarget: { userId: string; email: string } | null;
+  /**
+   * T39 — true recién cuando persist terminó de leer sessionStorage. Las
+   * páginas que redirigen "si no hay sesión" DEBEN esperar este flag: en una
+   * navegación dura el primer render llega con accessToken=null y el
+   * redirect echaba a usuarios logueados (p. ej. /suscripcion → landing).
+   */
+  hydrated: boolean;
+  setHydrated: () => void;
   setTokens: (tokens: { accessToken: string }) => void;
   clearTokens: () => void;
   startImpersonation: (
@@ -32,6 +40,8 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       originalAccessToken: null,
       impersonationTarget: null,
+      hydrated: false,
+      setHydrated: () => set({ hydrated: true }),
       setTokens: (tokens) => set({ accessToken: tokens.accessToken }),
       clearTokens: () =>
         set({
@@ -77,6 +87,18 @@ export const useAuthStore = create<AuthState>()(
       storage: createJSONStorage(() =>
         typeof window !== 'undefined' ? window.sessionStorage : (undefined as never),
       ),
+      // T39 — marca el fin de la rehidratación (con o sin estado guardado).
+      onRehydrateStorage: () => (state) => {
+        state?.setHydrated();
+      },
     },
   ),
 );
+
+/**
+ * T39 — gate compartido de hidratación: esperar este flag antes de redirigir
+ * por falta de sesión. En SSR siempre es false (no hay storage que leer).
+ */
+export function useAuthHydrated(): boolean {
+  return useAuthStore((s) => s.hydrated);
+}

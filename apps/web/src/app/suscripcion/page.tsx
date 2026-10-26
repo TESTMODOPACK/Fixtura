@@ -13,10 +13,11 @@ import {
   usePagarFacturaWebpay,
 } from '@/hooks/use-admin';
 import { useLogout } from '@/hooks/use-logout';
+import { ApiError } from '@/lib/api';
 import { formatFecha } from '@/lib/format';
 import { redirectToPasarela } from '@/lib/pasarela';
 import { toastError } from '@/lib/toast';
-import { useAuthStore } from '@/store/auth-store';
+import { useAuthHydrated, useAuthStore } from '@/store/auth-store';
 
 function clp(n: number): string {
   return `$${n.toLocaleString('es-CL')}`;
@@ -29,16 +30,20 @@ function clp(n: number): string {
  */
 export default function SuscripcionSuspendidaPage(): React.ReactElement | null {
   const router = useRouter();
+  const hydrated = useAuthHydrated();
   const accessToken = useAuthStore((s) => s.accessToken);
   const logout = useLogout();
 
-  const { data: cuenta, isLoading } = useMiSuscripcion();
+  const { data: cuenta, isLoading, error } = useMiSuscripcion();
   const { data: facturas } = useMisFacturas();
   const pagar = usePagarFacturaWebpay();
 
+  // T39 — esperar la hidratación del store: llegamos acá por una navegación
+  // DURA (redirect 402) y el primer render trae accessToken=null aunque haya
+  // sesión; redirigir ahí echaba al landing a usuarios logueados.
   useEffect(() => {
-    if (!accessToken) router.replace('/');
-  }, [accessToken, router]);
+    if (hydrated && !accessToken) router.replace('/');
+  }, [hydrated, accessToken, router]);
 
   // Si la liga NO está suspendida (reactivada, trial o activa), no tiene
   // sentido esta pantalla → al panel.
@@ -48,7 +53,54 @@ export default function SuscripcionSuspendidaPage(): React.ReactElement | null {
     }
   }, [cuenta, router]);
 
-  if (!accessToken) return null;
+  if (!hydrated || !accessToken) return null;
+
+  // Delegados/jugadores/personal no pueden ver ni pagar la suscripción
+  // (mi-suscripcion es LIGA_ADMIN/LIGA_CONTADOR → responde 403): explicar
+  // qué pasa y a quién recurrir, en vez de una pantalla vacía.
+  const sinPermisoPago =
+    error instanceof ApiError && (error.statusCode === 403 || error.statusCode === 401);
+  if (sinPermisoPago) {
+    return (
+      <div className="min-h-screen bg-paper flex items-start md:items-center justify-center px-4 py-10">
+        <div className="w-full max-w-xl">
+          <div className="flex justify-center mb-6">
+            <LigaPlusLockup showTag={false} />
+          </div>
+          <Card padding="roomy">
+            <div className="flex items-start gap-3 mb-4">
+              <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-card bg-danger/10 text-danger">
+                <AlertOctagon size={22} />
+              </span>
+              <div>
+                <h1 className="font-display text-2xl text-green-deep tracking-display leading-none">
+                  LIGA SUSPENDIDA
+                </h1>
+                <p className="text-sm text-ink-mute mt-1.5">
+                  El acceso de tu liga está bloqueado porque su suscripción a
+                  LigaPlus tiene pagos pendientes. Solo el administrador de la
+                  liga puede regularizarla — avísale para que reactive el
+                  acceso. Tus datos están a salvo.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={logout}
+                className="inline-flex items-center gap-1.5 text-xs text-ink-mute hover:text-green-deep"
+              >
+                <LogOut size={14} /> Cerrar sesión
+              </button>
+              <Button variant="ghost" size="sm" onClick={() => router.replace('/')}>
+                Volver al inicio
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   const impagas = (facturas ?? [])
     .filter((f) => f.estado === 'VENCIDA' || f.estado === 'PENDIENTE')
@@ -150,7 +202,7 @@ export default function SuscripcionSuspendidaPage(): React.ReactElement | null {
               ) : (
                 <p className="font-serif italic text-ink-mute text-sm">
                   No encontramos facturas pendientes. Si ya pagaste por
-                  transferencia, escribinos para que registremos el pago y
+                  transferencia, escríbenos para que registremos el pago y
                   reactivemos tu liga.
                 </p>
               )}
@@ -159,7 +211,7 @@ export default function SuscripcionSuspendidaPage(): React.ReactElement | null {
                 <div className="font-semibold text-green-deep mb-1">
                   ¿Pagaste por transferencia o tienes dudas?
                 </div>
-                Escribinos a{' '}
+                Escríbenos a{' '}
                 <a href="mailto:contacto@ligaplus.cl" className="text-accent font-semibold">
                   contacto@ligaplus.cl
                 </a>{' '}
