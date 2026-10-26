@@ -44,3 +44,22 @@ eva360.ascenda.cl {
         header_up Host {host}
     }
 }
+
+# eva360.cl también responde en este VPS (verificado 2026-10-07 desde
+# afuera con su propio certificado, aunque el nginx.conf del repo de Eva360
+# solo declara eva360.ascenda.cl — vhost agregado a mano en prod). Si
+# `nginx -T | grep server_name` dentro del contenedor lo confirma,
+# descomentar; si no aparece, borrar este bloque.
+#
+# eva360.cl {
+#     reverse_proxy https://127.0.0.1:8444 {
+#         transport http {
+#             tls_insecure_skip_verify
+#         }
+#         header_up Host {host}
+#     }
+# }
+#
+# www.eva360.cl {
+#     redir https://eva360.cl{uri} permanent
+# }

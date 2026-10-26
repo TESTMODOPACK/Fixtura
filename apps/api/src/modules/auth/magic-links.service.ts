@@ -17,7 +17,13 @@ import { MagicLink, MagicLinkPurpose } from './entities/magic-link.entity';
  * abuso de un admin comprometido como cañón de spam; el límite por defecto
  * tolera el onboarding masivo real (plantillas completas de una liga).
  */
-const PURPOSES_CON_CUOTA: MagicLinkPurpose[] = ['INVITE_USER', 'PERSONAL_ONBOARDING'];
+// RESET_PASSWORD solo cuenta cuando viene con tenantId (invitación de
+// miembro nuevo); el "olvidé mi contraseña" del usuario va sin tenant.
+const PURPOSES_CON_CUOTA: MagicLinkPurpose[] = [
+  'INVITE_USER',
+  'PERSONAL_ONBOARDING',
+  'RESET_PASSWORD',
+];
 const CUOTA_DEFAULT_24H = 500;
 
 /**
@@ -153,6 +159,25 @@ export class MagicLinksService {
   }
 
   /**
+   * H6 (revisión F3) — invalida las invitaciones de MIEMBRO_ADMIN pendientes
+   * de un usuario en una liga. Se llama al reenviar (un solo link vivo) y al
+   * remover al miembro (un link pendiente no debe resucitar el rol).
+   */
+  async invalidarInvitacionesMiembro(tenantId: string, userId: string): Promise<number> {
+    const r = await this.repo
+      .createQueryBuilder()
+      .update()
+      .set({ usedAt: new Date() })
+      .where(
+        `tenant_id = :tenantId AND user_id = :userId AND purpose = 'INVITE_USER'
+         AND used_at IS NULL AND metadata->>'tipo' = 'MIEMBRO_ADMIN'`,
+        { tenantId, userId },
+      )
+      .execute();
+    return r.affected ?? 0;
+  }
+
+  /**
    * Cleanup: borra links expirados hace más de 7 días. Llamable desde
    * un cron de housekeeping cuando se quiera evitar acumular registros.
    */
@@ -163,10 +188,18 @@ export class MagicLinksService {
   }
 
   private async verificarCuotaTenant(tenantId: string): Promise<void> {
-    const limite = Number(
-      process.env.INVITACIONES_TENANT_DIA_MAX ?? CUOTA_DEFAULT_24H,
-    );
-    if (!Number.isFinite(limite) || limite <= 0) return;
+    const raw = process.env.INVITACIONES_TENANT_DIA_MAX;
+    const limite = Number(raw ?? CUOTA_DEFAULT_24H);
+    if (!Number.isFinite(limite) || limite <= 0) {
+      // Env con basura ("500 " con espacios, "quinientos") desactivaba la
+      // cuota sin decir nada.
+      if (raw !== undefined && raw !== '' && !Number.isFinite(limite)) {
+        this.log.warn(
+          `INVITACIONES_TENANT_DIA_MAX inválida ("${raw}") — cuota DESACTIVADA.`,
+        );
+      }
+      return;
+    }
     const desde = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const enviadas = await this.repo.count({
       where: {

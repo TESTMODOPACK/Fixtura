@@ -18,7 +18,7 @@ import { useTokenDeUrl } from '@/lib/token-url';
 function ActivarInner(): React.ReactElement {
   const router = useRouter();
   // T27 — token desde el fragment (#token=…), con fallback a ?token= viejo.
-  const { token } = useTokenDeUrl();
+  const { token, listo } = useTokenDeUrl();
   const { data: info, isLoading, error } = useActivarJugadorInfo(token);
   const activar = useActivarJugador();
   const [password, setPassword] = useState('');
@@ -59,6 +59,12 @@ function ActivarInner(): React.ReactElement {
         </div>
         <Card padding="roomy">
           {isLoading && <p className="text-ink-mute text-center">Validando invitación…</p>}
+
+          {listo && !token && (
+            <p className="text-danger font-semibold text-center">
+              Falta el token de la invitación. Abre el link completo desde tu email.
+            </p>
+          )}
 
           {error && (
             <div className="text-center">

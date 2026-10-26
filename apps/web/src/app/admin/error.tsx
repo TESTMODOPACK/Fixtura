@@ -30,7 +30,11 @@ export default function AdminError({
         },
         extra: {
           digest: error.digest,
-          url: typeof window !== 'undefined' ? window.location.href : '',
+          // Sin query ni fragment: ahí viajan tokens (#token= de T27).
+          url:
+            typeof window !== 'undefined'
+              ? window.location.origin + window.location.pathname
+              : '',
         },
       });
     } catch {

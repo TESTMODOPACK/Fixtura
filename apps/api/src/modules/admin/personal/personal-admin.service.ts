@@ -123,7 +123,7 @@ export class PersonalAdminService {
 
     if (usaEmail && personal.email) {
       try {
-        await this.email.send({
+        const enviado = await this.email.send({
           to: personal.email,
           subject: `[${tenantName}] Activación de cuenta — LigaPlus`,
           html: `
@@ -146,7 +146,13 @@ export class PersonalAdminService {
           `,
           text: `Hola ${personal.nombre}, ${tenantName} te invitó a LigaPlus. Activa tu cuenta en: ${link} (expira en 72h).`,
         });
-        algunEnviado = true;
+        // H3 (revisión F3) — send() devuelve false sin lanzar; antes se
+        // marcaba enviado igual y el admin veía éxito con el correo muerto.
+        if (enviado) {
+          algunEnviado = true;
+        } else {
+          errores.push('Email: el proveedor no aceptó el envío.');
+        }
       } catch (err) {
         errores.push(`Email: ${err instanceof Error ? err.message : String(err)}`);
       }

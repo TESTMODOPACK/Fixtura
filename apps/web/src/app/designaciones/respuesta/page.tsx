@@ -105,6 +105,22 @@ function RespuestaContent(): React.ReactElement {
           </div>
         )}
 
+        {/* H7 — el backend puede responder ok con otros estados (acta ya
+            cerrada, designación AUSENTE/PROPUESTA): antes quedaba en blanco. */}
+        {state.kind === 'ok' &&
+          !['CONFIRMADA', 'RECHAZADA', 'ASISTIO'].includes(state.estado) && (
+            <div className="text-center">
+              <CheckCircle2 size={48} className="mx-auto text-green-bright mb-4" />
+              <div className="font-display text-2xl text-green-deep tracking-display mb-2">
+                RESPUESTA REGISTRADA
+              </div>
+              <p className="font-serif italic text-ink-mute">
+                Estado actual de la designación: {state.estado}. Si algo no
+                calza, contacta al responsable de designaciones de la liga.
+              </p>
+            </div>
+          )}
+
         {state.kind === 'error' && (
           <div className="text-center">
             <AlertTriangle size={48} className="mx-auto text-danger mb-4" />

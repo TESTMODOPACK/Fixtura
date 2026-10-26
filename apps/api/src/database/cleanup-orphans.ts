@@ -239,6 +239,13 @@ async function main(): Promise<void> {
     await client.query(
       `CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash)`,
     );
+    // Revisión F3 (H1/H2): motivo de revocación (la detección de reuso
+    // escala solo ante 'ROTADO') + tenant elegido (el refresh lo preserva).
+    await client.query(`
+      ALTER TABLE refresh_tokens
+        ADD COLUMN IF NOT EXISTS revoked_reason VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL
+    `);
 
     // Sprint 12: tiebreakers configurables por torneo.
     await client.query(`

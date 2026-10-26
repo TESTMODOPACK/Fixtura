@@ -8,7 +8,7 @@ import type { InvitarPlantelMasivoResponse } from '@fixtura/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardLabel } from '@/components/ui/card';
 import { useInvitarPlantelMasivo } from '@/hooks/use-jugador';
-import { toastError, toastSuccess } from '@/lib/toast';
+import { toastError, toastSuccess, toastWarning } from '@/lib/toast';
 
 /**
  * Invitación masiva del plantel del club al portal del jugador (todas las
@@ -39,11 +39,20 @@ export function InvitarPlantelBoton({
     invitar.mutate(undefined, {
       onSuccess: (r) => {
         setResultado(r);
-        toastSuccess(
-          r.invitados > 0
-            ? `${r.invitados} invitación(es) enviada(s) por email.`
-            : 'No había jugadores nuevos con email para invitar.',
-        );
+        if (r.cuotaAlcanzada) {
+          // H4 — la cuota diaria del tenant cortó el lote: avisar fuerte.
+          toastWarning(
+            `Se alcanzó el límite diario de invitaciones de la liga: ` +
+              `${r.invitados} enviada(s) y ${r.sinProcesar ?? 0} quedaron pendientes. ` +
+              'Reintenta mañana para completar el plantel.',
+          );
+        } else {
+          toastSuccess(
+            r.invitados > 0
+              ? `${r.invitados} invitación(es) enviada(s) por email.`
+              : 'No había jugadores nuevos con email para invitar.',
+          );
+        }
       },
       onError: (e) => toastError(e),
     });
@@ -84,12 +93,18 @@ export function InvitarPlantelBoton({
                 Sin email — quedaron fuera: {resultado.sinEmail}
               </li>
             )}
+            {resultado.cuotaAlcanzada && (
+              <li className="text-orange-700 font-semibold">
+                Límite diario de invitaciones alcanzado — sin procesar:{' '}
+                {resultado.sinProcesar ?? 0}. Reintenta mañana.
+              </li>
+            )}
           </ul>
 
           {resultado.saltadosSinEmail.length > 0 && (
             <div className="mt-2 border-t border-line pt-2">
               <p className="text-ink-mute mb-1">
-                Completá el email de estos jugadores en su ficha para poder
+                Completa el email de estos jugadores en su ficha para poder
                 invitarlos:
               </p>
               <ul className="space-y-0.5">

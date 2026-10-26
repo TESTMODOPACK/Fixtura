@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { hash } from 'bcrypt';
@@ -450,6 +451,8 @@ export class AjustesAdminService {
           `Ese usuario ya tiene el rol ${input.rol} en esta liga`,
         );
       }
+      // H6 — reenvío: un solo link vivo por usuario+liga.
+      await this.magicLinks.invalidarInvitacionesMiembro(tenantId, existente.id);
       await this.enviarInvitacionAceptacion(existente, tenantId, input.rol, grantedBy);
       return { tipo: 'INVITACION_ENVIADA', email: emailNorm, rol: input.rol };
     }
@@ -495,7 +498,7 @@ export class AjustesAdminService {
     );
 
     if (!input.passwordTemporal) {
-      await this.enviarInvitacionMagicLink(user);
+      await this.enviarInvitacionMagicLink(user, tenantId);
     }
 
     return {
@@ -536,7 +539,7 @@ export class AjustesAdminService {
       createdByUserId: grantedBy,
     });
     const link = linkConToken('/invitacion', token);
-    await this.email.send({
+    const enviado = await this.email.send({
       to: user.email,
       subject: `Te invitaron a administrar ${liga} en LigaPlus`,
       html: `
@@ -559,6 +562,15 @@ export class AjustesAdminService {
       `,
       text: `Te invitaron como ${rol} de ${liga} en LigaPlus. Acepta (expira en 72h): ${link}`,
     });
+    // H3 (revisión F3) — send() devuelve false sin lanzar (Resend caído o
+    // sin API key). El link es el ÚNICO camino al rol: fallar fuerte hace
+    // rollback del magic link (y de la cuota) y el admin ve el error en vez
+    // de un toast de éxito falso.
+    if (!enviado) {
+      throw new ServiceUnavailableException(
+        'No se pudo enviar el email de invitación. Reintenta en unos minutos.',
+      );
+    }
   }
 
   /** Datos para la página pública de aceptación (sin consumir el link). */
@@ -620,21 +632,22 @@ export class AjustesAdminService {
 
   /**
    * Sprint TRI — email de invitación con magic link para que el miembro nuevo
-   * cree su propia contraseña (reusa el flujo RESET_PASSWORD, 72h). Best-effort:
-   * si el email falla, la cuenta + rol ya quedaron creados y el miembro puede
-   * usar "olvidé mi contraseña".
+   * cree su propia contraseña (reusa el flujo RESET_PASSWORD, 72h).
+   * H3 (revisión F3): si el email no sale, FALLA fuerte — el rollback del
+   * request deshace cuenta + rol + link y el admin reintenta; antes quedaba
+   * una cuenta sin contraseña comunicada y un toast de éxito falso.
    */
-  private async enviarInvitacionMagicLink(user: User): Promise<void> {
-    try {
-      const { token } = await this.magicLinks.crear({
-        purpose: 'RESET_PASSWORD',
-        tenantId: null,
-        email: user.email,
-        userId: user.id,
-        ttlMinutos: 72 * 60,
-      });
-      const link = linkConToken('/reset-password', token);
-      await this.email.send({
+  private async enviarInvitacionMagicLink(user: User, tenantId: string): Promise<void> {
+    const { token } = await this.magicLinks.crear({
+      purpose: 'RESET_PASSWORD',
+      // El tenant que invita (cuenta para su cuota de invitaciones).
+      tenantId,
+      email: user.email,
+      userId: user.id,
+      ttlMinutos: 72 * 60,
+    });
+    const link = linkConToken('/reset-password', token);
+    const enviado = await this.email.send({
         to: user.email,
         subject: 'Te invitaron a administrar una liga en LigaPlus',
         html: `
@@ -655,9 +668,10 @@ export class AjustesAdminService {
         `,
         text: `Te invitaron a administrar una liga en LigaPlus. Crea tu contraseña (expira en 72h): ${link}`,
       });
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[Ajustes] Falló el envío del email de invitación:', err);
+    if (!enviado) {
+      throw new ServiceUnavailableException(
+        'No se pudo enviar el email de invitación. Reintenta en unos minutos.',
+      );
     }
   }
 
@@ -703,6 +717,9 @@ export class AjustesAdminService {
     // T24 — mismo offboarding que delegado/jugador/personal: se matan las
     // sesiones y el próximo login emite tokens ya sin el rol revocado.
     await this.auth.revocarRefreshTokens(role.userId);
+    // H6 — una invitación pendiente aceptada DESPUÉS del remove resucitaba
+    // el rol sin que nadie lo viera.
+    await this.magicLinks.invalidarInvitacionesMiembro(tenantId, role.userId);
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────

@@ -28,6 +28,24 @@ export class RefreshToken {
   @Column({ name: 'revoked_at', type: 'timestamptz', nullable: true })
   revokedAt!: Date | null;
 
+  /**
+   * H1 (revisión F3) — POR QUÉ se revocó: 'ROTADO' (reemplazado por un
+   * refresh nuevo), 'LOGOUT' o 'SEGURIDAD' (revocación masiva: reset,
+   * offboarding, reuso). La detección de reuso escala SOLO ante 'ROTADO';
+   * sin esto, un dispositivo viejo reintentando tras un reset mataba las
+   * sesiones nuevas del dueño en loop.
+   */
+  @Column({ name: 'revoked_reason', type: 'varchar', length: 20, nullable: true })
+  revokedReason!: string | null;
+
+  /**
+   * H2 (revisión F3) — tenant elegido al emitir el par (login single-tenant
+   * o switch-tenant). El refresh lo reusa si la membresía sigue vigente;
+   * sin esto, el usuario multi-liga perdía la liga elegida a los 15 min.
+   */
+  @Column({ name: 'tenant_id', type: 'uuid', nullable: true })
+  tenantId!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

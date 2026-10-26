@@ -45,6 +45,10 @@ export const InvitarPlantelMasivoResponseSchema = z.object({
   yaActivos: z.number().int(), // ya tenían cuenta → saltados
   sinEmail: z.number().int(), // sin email en la ficha → no se puede invitar
   fallidos: z.number().int(), // el email no pudo enviarse (best-effort)
+  // H4 (revisión F3) — la cuota de invitaciones del tenant (24h) cortó el
+  // lote: cuántos quedaron sin siquiera intentarse.
+  cuotaAlcanzada: z.boolean().optional(),
+  sinProcesar: z.number().int().optional(),
   saltadosSinEmail: z.array(
     z.object({
       jugadorId: z.uuid(),

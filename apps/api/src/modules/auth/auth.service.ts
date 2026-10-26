@@ -3,13 +3,14 @@ import { randomBytes, createHash } from 'node:crypto';
 import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { IsNull, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 
 import type { AuthTokens, UserContext } from '@fixtura/types';
 import { validarPasswordSegura } from '@fixtura/domain';
 
+import { fijarBypassLocal, runComoSistema } from '../../common/rls/rls-context';
 import { linkConToken } from '../../common/utils/frontend-url';
 import { EmailService } from '../email/email.service';
 import { UsersService } from '../users/users.service';
@@ -32,6 +33,7 @@ export class AuthService {
     @InjectRepository(RefreshToken) private readonly refreshRepo: Repository<RefreshToken>,
     private readonly magicLinks: MagicLinksService,
     private readonly email: EmailService,
+    @InjectDataSource() private readonly ds: DataSource,
   ) {}
 
   /**
@@ -127,10 +129,10 @@ export class AuthService {
    * en TODO flujo que fije o cambie credenciales (reset, activaciones por
    * magic link): una sesión abierta antes del cambio no debe sobrevivirlo.
    */
-  async revocarRefreshTokens(userId: string): Promise<void> {
+  async revocarRefreshTokens(userId: string, motivo = 'SEGURIDAD'): Promise<void> {
     await this.refreshRepo.update(
       { userId, revokedAt: IsNull() },
-      { revokedAt: new Date() },
+      { revokedAt: new Date(), revokedReason: motivo },
     );
   }
 
@@ -195,6 +197,12 @@ export class AuthService {
     tenantId: string,
     meta: { userAgent?: string; ipAddress?: string } = {},
   ): Promise<AuthTokens> {
+    // H2 (revisión F3) — el request llega autenticado SIN tenant (multi-liga),
+    // así que el interceptor fijó el tenant "nadie" y user_roles queda
+    // invisible bajo RLS: getTenantsDisponibles devolvía [] y esto era un 401
+    // incondicional. Mismo precedente que me.service: bypass local para leer
+    // las membresías cross-tenant del propio usuario.
+    await fijarBypassLocal(this.ds);
     const user = await this.users.findByIdOrFail(userId);
     if (!user.isActive) {
       throw new UnauthorizedException('Usuario desactivado');
@@ -222,14 +230,24 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token inválido o expirado');
     }
 
-    // REUSO: un token ya rotado que vuelve a presentarse es la firma de un
+    // REUSO: un token ROTADO que vuelve a presentarse es la firma de un
     // robo (el ladrón o la víctima llegan segundos tarde con la copia
     // vieja). Respuesta: revocar TODAS las sesiones del usuario.
+    //
+    // Revisión F3 (H1):
+    //  - La revocación corre en una transacción INDEPENDIENTE (REQUIRES_NEW):
+    //    el throw de abajo hace rollback de la tx del request y se llevaba
+    //    puesta la revocación — el log decía "revocadas" y no lo estaban.
+    //  - Solo escala cuando revoked_reason='ROTADO'. Un refresh revocado por
+    //    LOGOUT/SEGURIDAD (reset, offboarding) que reintenta NO es un robo:
+    //    escalar ahí mataba en loop las sesiones nuevas del dueño.
     if (row.revokedAt) {
-      await this.revocarRefreshTokens(row.userId);
-      this.log.warn(
-        `[auth] REUSO de refresh token detectado user=${row.userId} ip=${meta.ipAddress ?? '-'} — todas sus sesiones fueron revocadas.`,
-      );
+      if (row.revokedReason === 'ROTADO') {
+        await runComoSistema(this.ds, () => this.revocarRefreshTokens(row.userId));
+        this.log.warn(
+          `[auth] REUSO de refresh token detectado user=${row.userId} ip=${meta.ipAddress ?? '-'} — todas sus sesiones fueron revocadas.`,
+        );
+      }
       throw new UnauthorizedException('Sesión inválida — vuelve a iniciar sesión.');
     }
     if (row.expiresAt.getTime() <= Date.now()) {
@@ -241,10 +259,11 @@ export class AuthService {
     // mismo token) — el frontend debe single-flightear su refresh.
     const rotacion = await this.refreshRepo.update(
       { id: row.id, revokedAt: IsNull() },
-      { revokedAt: new Date() },
+      { revokedAt: new Date(), revokedReason: 'ROTADO' },
     );
     if ((rotacion.affected ?? 0) === 0) {
-      await this.revocarRefreshTokens(row.userId);
+      // H1: misma transacción independiente — el throw no debe deshacerla.
+      await runComoSistema(this.ds, () => this.revocarRefreshTokens(row.userId));
       this.log.warn(
         `[auth] Rotación concurrente del mismo refresh user=${row.userId} — todas sus sesiones fueron revocadas.`,
       );
@@ -266,19 +285,28 @@ export class AuthService {
     // personal scope PERSONAL) no aportan tenant por scopeId. Sin esto el
     // usuario quedaba con tenantId=null → RLS en bypass (leak). Usamos el
     // tenant único de sus user_roles.
-    const defaultTenantId =
+    let tenantId =
       tenantRoles.length === 1
         ? (tenantRoles[0]!.scopeId ?? null)
         : await this.users.getSoleTenantId(user.id);
+    // H2 (revisión F3) — el multi-liga elige tenant en switch-tenant y el
+    // par emitido lo recuerda: el refresh lo preserva mientras la
+    // membresía siga vigente (si se la revocaron, cae al default).
+    if (row.tenantId && row.tenantId !== tenantId) {
+      const disponibles = await this.users.getTenantsDisponibles(user.id);
+      if (disponibles.some((t) => t.id === row.tenantId)) {
+        tenantId = row.tenantId;
+      }
+    }
     const tokens = await this.issueTokens({
       userId: user.id,
       email: user.email,
-      tenantId: defaultTenantId,
+      tenantId,
       roles,
       impersonatorId: null,
     }, meta);
     // T25 — igual que en login: multi-liga sin default → opciones al front.
-    if (!defaultTenantId) {
+    if (!tenantId) {
       const tenants = await this.users.getTenantsDisponibles(user.id);
       if (tenants.length > 0) tokens.tenantsDisponibles = tenants;
     }
@@ -287,7 +315,10 @@ export class AuthService {
 
   async logout(refreshToken: string): Promise<void> {
     const tokenHash = sha256(refreshToken);
-    await this.refreshRepo.update({ tokenHash, revokedAt: IsNull() }, { revokedAt: new Date() });
+    await this.refreshRepo.update(
+      { tokenHash, revokedAt: IsNull() },
+      { revokedAt: new Date(), revokedReason: 'LOGOUT' },
+    );
   }
 
   /**
@@ -317,6 +348,8 @@ export class AuthService {
       ipAddress: meta.ipAddress ?? null,
       expiresAt,
       revokedAt: null,
+      // H2 — el par recuerda la liga para la que fue emitido.
+      tenantId: ctx.tenantId ?? null,
     });
 
     return {

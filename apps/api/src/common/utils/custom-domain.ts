@@ -93,9 +93,18 @@ export async function verificarTxtDominio(
   let registros: string[][];
   try {
     registros = await resolveTxt(host);
-  } catch {
+  } catch (err) {
+    // ENOTFOUND/ENODATA = el TXT no existe; otros códigos (SERVFAIL,
+    // ETIMEOUT) son problemas del DNS, no del dueño — distinguirlos evita
+    // mandar al usuario a "crear" un registro que ya creó.
+    const code = (err as NodeJS.ErrnoException).code ?? 'DNS';
+    if (code === 'ENOTFOUND' || code === 'ENODATA') {
+      throw new BadRequestException(
+        `No encontramos el registro TXT "${host}". Crea un TXT ahí con el valor "${valor}" y reintenta (la propagación DNS puede tardar).`,
+      );
+    }
     throw new BadRequestException(
-      `No encontramos el registro TXT "${host}". Crea un TXT ahí con el valor "${valor}" y reintenta (la propagación DNS puede tardar).`,
+      `No se pudo consultar el DNS de "${host}" (${code}). Reintenta en unos minutos.`,
     );
   }
   const valores = registros.map((r) => r.join('').trim());

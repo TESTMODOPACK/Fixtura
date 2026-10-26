@@ -72,9 +72,13 @@ if (dsn) {
     beforeSend: (event) => limpiarEvento(event),
     beforeSendTransaction: (event) => {
       limpiarEvento(event);
-      // Los spans HTTP llevan la URL completa en sus atributos.
-      for (const span of event.spans ?? []) {
-        const data = span.data as Record<string, unknown> | undefined;
+      // Los spans HTTP llevan la URL completa en sus atributos. El span
+      // RAÍZ (http.server) NO está en event.spans: sus atributos viajan en
+      // contexts.trace.data (H5, revisión F3) — sin esto, ?token= seguía
+      // llegando en el 10% muestreado.
+      const trace = event.contexts?.trace?.data as Record<string, unknown> | undefined;
+      const datas = [trace, ...(event.spans ?? []).map((s) => s.data as Record<string, unknown> | undefined)];
+      for (const data of datas) {
         if (!data) continue;
         for (const clave of ['http.url', 'url.full', 'http.target', 'url.query']) {
           if (clave in data) data[clave] = sinQuery(data[clave]);

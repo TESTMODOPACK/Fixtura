@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -221,6 +222,17 @@ export class JugadorInviteService {
         if (enviado) resp.invitados++;
         else resp.fallidos++;
       } catch (err) {
+        // H4 (revisión F3) — cuota del tenant alcanzada: cortar el lote y
+        // reportarlo como tal. NO relanzar: el rollback del request
+        // borraría los links de los correos YA enviados (quedarían muertos).
+        if (err instanceof HttpException && err.getStatus() === 429) {
+          resp.cuotaAlcanzada = true;
+          resp.sinProcesar = resp.total - resp.invitados - resp.yaActivos - resp.sinEmail - resp.fallidos;
+          this.logger.warn(
+            `[invitarMasivo] cuota de invitaciones alcanzada tenant=${tenantId}; cortado con ${resp.sinProcesar} sin procesar.`,
+          );
+          break;
+        }
         resp.fallidos++;
         this.logger.warn(
           `[invitarMasivo] falló jugador=${j.id}: ${(err as Error).message}`,
