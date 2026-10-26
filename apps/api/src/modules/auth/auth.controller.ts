@@ -14,7 +14,10 @@ import type { Request, Response } from 'express';
 import type { AuthTokens, UserContext } from '@fixtura/types';
 
 import { Audited } from '../audit';
-import { NoImpersonation } from '../impersonation';
+// OJO: import DIRECTO al decorator, no al barrel. El barrel arrastra
+// ImpersonationModule → AuthModule y ese ciclo dejaba AuthModule undefined
+// en el imports[] de ImpersonationModule al bootear (crash-loop en prod).
+import { NoImpersonation } from '../impersonation/no-impersonation.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { AuthService } from './auth.service';
